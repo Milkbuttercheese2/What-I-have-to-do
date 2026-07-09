@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>뭐해야 했더라 — 전화받고 잊어버리기 전에</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+ <div class="header-inner">
+  <div class="brand"><h1>뭐해야 했더라</h1><span class="sub">전화받고 잊어버리기 전에 던져두는 곳</span></div>
+  <nav class="tabs">
+    <button class="tab on" data-view="board">보드</button>
+    <button class="tab" data-view="cal">캘린더</button>
+    <button class="tab" data-view="done">완료</button>
+  </nav>
+  <div class="head-right">
+    <span id="saveStatus" class="save-local" title="">⚠ JSON파일 수동저장 필요</span>
+    <button class="btn btn-tool" id="alarmToggle" title="알람 켜기/끄기">🔔 알람</button>
+    <button class="btn btn-tool" id="bkExp">JSON파일 백업</button>
+    <button class="btn btn-tool" id="bkImp">JSON파일 불러오기</button>
+    <button class="btn btn-tool" id="xlsx">XLSX 다운로드</button>
+    <input type="file" id="bkFile" hidden accept=".json">
+    <div class="clock"><div class="t mono" id="clock">--:--</div><div id="today">—</div></div>
+  </div>
+ </div>
+</header>
+
+<section class="capture" id="capture">
+  <div class="cap-box">
+    <div class="cap-row">
+      <textarea id="inp" placeholder="바로 입력 — 메모를 자유롭게 적고 Ctrl+Enter. '분류 대기'에 쌓입니다"></textarea>
+      <div class="cap-btns">
+        <button class="btn btn-inbox" id="toInbox">바로 입력</button>
+        <button class="btn btn-form" id="blankForm">양식 입력</button>
+      </div>
+    </div>
+    <div class="presets" id="presets"></div>
+    <div class="hint"><b>Ctrl+Enter</b> = 분류 대기로 · 프리셋 = 세부 할일까지 채워진 양식 · 카드 위치는 시각 기준 자동 결정</div>
+
+    <!-- 양식 패널 -->
+    <div class="form-panel" id="formPanel">
+     <div class="fm-inner">
+      <h3 id="fm-title">양식 입력</h3>
+
+      <div class="fm-memo-wrap">
+        <label class="fm-label">메모</label>
+        <textarea id="fm-memo" class="fm-memo" placeholder="업무 내용을 자유롭게 적으세요"></textarea>
+      </div>
+
+      <div class="fm-contacts">
+        <div class="t-head">관련인 · 관련소속 · 연락처 (여러 명 추가 가능)</div>
+        <div id="fm-contacts"></div>
+        <button class="btn fsub-add" id="fm-contactadd">＋ 관련인</button>
+      </div>
+
+      <div class="fm-grid" id="fm-grid"></div>
+
+      <div class="fm-ids">
+        <div class="t-head">식별번호 (명칭 + 번호)</div>
+        <div id="fm-ids"></div>
+        <button class="btn fsub-add" id="fm-idadd">＋ 식별번호</button>
+      </div>
+
+      <div class="fm-subs">
+        <div class="t-head">세부 할 일 (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가)</div>
+        <div id="fm-subs"></div>
+        <button class="btn fsub-add" id="fm-subadd">＋ 세부 항목</button>
+      </div>
+
+      <div class="fm-actions">
+        <span class="fm-place" id="fm-place"></span>
+        <button class="btn btn-cancel" id="fm-cancel">취소</button>
+        <button class="btn btn-ok" id="fm-save">저장</button>
+      </div>
+     </div>
+    </div>
+  </div>
+</section>
+
+<div class="strip" id="strip">
+  <span class="s-pill warn" id="st-late-wrap" style="display:none">기한 지남 <b id="st-late">0</b></span>
+  <input class="s-search" id="search" placeholder="검색: 관련인 · 관련소속 · 연락처 · 식별번호" autocomplete="off">
+</div>
+
+<main id="view-board">
+  <div class="col">
+    <div class="col-head"><span class="dot dot-inbox" aria-hidden="true"></span><h2>분류 대기</h2><span class="count" id="c-inbox">0</span></div>
+    <div class="col-desc">바로 입력 보관함</div>
+    <div class="cards" id="col-inbox"></div>
+  </div>
+  <div class="col">
+    <div class="col-head"><span class="dot dot-today" aria-hidden="true"></span><h2>오늘 처리</h2><span class="count" id="c-today">0</span></div>
+    <div class="col-desc">마감·점검일이 오늘이거나 이미 지난 것</div>
+    <div class="cards" id="col-today"></div>
+  </div>
+  <div class="col">
+    <div class="col-head"><span class="dot dot-doing" aria-hidden="true"></span><h2>진행 중</h2><span class="count" id="c-doing">0</span></div>
+    <div class="col-desc">손을 댄 업무</div>
+    <div class="cards" id="col-doing"></div>
+  </div>
+  <div class="col">
+    <div class="col-head"><span class="dot dot-planned" aria-hidden="true"></span><h2>예정 · 대기</h2><span class="count" id="c-planned">0</span></div>
+    <div class="col-desc">마감이 내일 이후거나 시간이 지정되지 않은 것</div>
+    <div class="cards" id="col-planned"></div>
+  </div>
+</main>
+
+<section id="view-cal">
+  <div class="cal-head">
+    <h2 id="cal-title">—</h2>
+    <div class="cal-nav">
+      <button id="cal-prev">◀</button><button id="cal-today">오늘</button><button id="cal-next">▶</button>
+    </div>
+    <div class="cal-legend">
+      <span><i class="lg" style="background:var(--slate)"></i>세부 할일(점검)</span>
+      <span><i class="lg" style="background:var(--red)"></i>세부 없는 업무(마감일)</span>
+    </div>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+  <div class="cal-detail" id="cal-detail">
+    <h3 id="cal-detail-title"></h3>
+    <div class="cards" id="cal-detail-cards"></div>
+  </div>
+</section>
+
+<section id="view-done">
+  <div class="done-head">
+    <h2>완료 업무 <span id="done-count" class="done-cnt">0</span></h2>
+    <div class="done-tools">
+      <input class="s-search" id="done-search" placeholder="검색: 관련인 · 관련소속 · 연락처 · 식별번호" autocomplete="off">
+    </div>
+  </div>
+  <div class="cards" id="col-done"></div>
+</section>
+
+<!-- 업무 프리셋 설정 -->
+<div class="modal-bg" id="presetModal">
+  <div class="modal modal-wide modal-split">
+    <div class="modal-body">
+    <h3>업무 프리셋 설정</h3>
+    <div class="m-sub">자주 쓰는 업무를 프리셋으로 저장하면 입력창 아래 버튼으로 바로 불러옵니다. ○○ 는 입력 시 커서가 자동으로 잡히는 자리표시자입니다.</div>
+    <div class="ps-list" id="presetList"></div>
+    <div class="ps-new">
+      <div class="ps-new-head" id="np-new-head">＋ 새 프리셋 만들기</div>
+      <div class="ps-new-grid">
+        <div class="fm-field"><label>버튼 이름</label><input type="text" id="np-label" placeholder="예: 계약변경, 선금 지급"></div>
+        <div class="fm-field"><label>메모 기본값 (○○ 자리표시자 사용 가능)</label><input type="text" id="np-sum" placeholder="예: ○○ 사업 계약변경"></div>
+      </div>
+      <div class="ps-subs-head">세부 할 일 (선택)</div>
+      <div id="np-subs"></div>
+      <button class="btn fsub-add" id="np-subadd">＋ 세부 항목</button>
+      <div class="m-actions">
+        <button class="btn btn-cancel" id="np-cancel-edit" style="display:none">수정 취소</button>
+        <button class="btn btn-ok" id="np-save">프리셋 저장</button>
+      </div>
+    </div>
+    <div class="ps-new" style="margin-top:14px">
+      <div class="ps-new-head">식별번호 명칭 관리</div>
+      <div class="m-sub" style="margin:0 0 8px">업무 입력 시 식별번호 드롭다운에 나타날 명칭입니다. ('기타'는 항상 마지막에 자동 포함)</div>
+      <div id="idKindList"></div>
+      <div class="idk-add">
+        <input type="text" id="idk-new" placeholder="새 명칭 (예: 계약번호)" autocomplete="off">
+        <button class="btn fsub-add" id="idk-add">＋ 추가</button>
+      </div>
+    </div>
+    </div><!-- /modal-body -->
+    <div class="m-actions modal-foot">
+      <button class="btn btn-ok" id="presetClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 알람 -->
+<div class="alarm-bg" id="alarmBg">
+  <div class="alarm">
+    <h3>⏰ 시각 도래 알림</h3>
+    <div id="alarmList"></div>
+    <div class="a-actions">
+      <button class="btn btn-snooze" id="alarmSnooze">10분 뒤 다시</button>
+      <button class="btn btn-ok" id="alarmOk">확인</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-undo">실행취소</button></div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
