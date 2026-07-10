@@ -7,12 +7,18 @@ import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateS
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
 
-/* (1) 바로 입력 → 분류 대기 (자유 입력 = 메모) */
-export function toInbox(){
-  const t=$('inp').value.trim(); if(!t){$('inp').focus();return;}
+/* (1) 메모 텍스트 → 분류 대기. 바로 입력 버튼과 미니 캡처 창(capture-bridge)이 공용 */
+export function captureMemo(t){
+  t=String(t||'').trim(); if(!t) return false;
   S.items.push({id:newId(), memo:t, done:false, staged:true,
     f:{received:new Date().toISOString()}, contacts:[], ids:[], subs:[], al:{}});
-  $('inp').value=''; persist(); $('inp').focus();
+  persist(); return true;
+}
+/* 바로 입력 버튼/Ctrl+Enter — #inp 를 읽어 captureMemo 로 위임 */
+export function toInbox(){
+  const t=$('inp').value.trim(); if(!t){$('inp').focus();return;}
+  captureMemo(t);
+  $('inp').value=''; $('inp').focus();
 }
 
 /* (2) 양식 패널 */

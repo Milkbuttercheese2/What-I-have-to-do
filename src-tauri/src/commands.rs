@@ -2,6 +2,7 @@ use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
 use crate::config::{self, AppConfig};
 use crate::db;
@@ -189,6 +190,88 @@ pub fn focus_main_window(app: AppHandle) -> Result<(), String> {
         win.set_focus().map_err(to_err)?;
     }
     Ok(())
+}
+
+/// JS 쪽 DEFAULT_SETTINGS.captureShortcut 과 문자열이 반드시 동일해야 한다 —
+/// 새 DB에는 settings 행이 없어 양쪽이 각자 이 기본값을 파생하기 때문.
+/// (Ctrl+Space 는 한/영 전환, Alt+Space 는 시스템 메뉴와 충돌해서 피했다.)
+pub const DEFAULT_CAPTURE_SHORTCUT: &str = "Ctrl+Alt+Space";
+
+/// 전역 단축키 핸들러 본체 — 메인 창은 절대 건드리지 않는다(사용자 필수 요구:
+/// 다른 앱 작업 중 미니 팝업만 비침습적으로 떴다가 사라져야 한다).
+/// 이미 보이면 숨김(토글), 아니면 커서가 있는 모니터 중앙 상단에 표시.
+pub fn show_capture_window(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("capture") else { return };
+    if win.is_visible().unwrap_or(false) {
+        let _ = win.hide();
+        return;
+    }
+    let monitor = app
+        .cursor_position()
+        .ok()
+        .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten());
+    if let Some(m) = monitor {
+        let sz = win.outer_size().unwrap_or(tauri::PhysicalSize::new(560, 64));
+        let x = m.position().x + (m.size().width as i32 - sz.width as i32) / 2;
+        let y = m.position().y + (m.size().height as f64 * 0.2) as i32;
+        let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+    }
+    let _ = win.show();
+    let _ = win.set_focus();
+}
+
+fn capture_hotkey_handler(app: &AppHandle, _sc: &Shortcut, ev: ShortcutEvent) {
+    if ev.state() == ShortcutState::Pressed {
+        show_capture_window(app);
+    }
+}
+
+/// 등록만 담당 — setup(시작 시)과 set_capture_shortcut(변경 시)이 공용.
+pub fn register_capture_shortcut(app: &AppHandle, shortcut: &str) -> Result<(), String> {
+    let sc: Shortcut = shortcut.parse().map_err(to_err)?;
+    app.global_shortcut()
+        .on_shortcut(sc, capture_hotkey_handler)
+        .map_err(to_err)
+}
+
+/// 캡처 단축키 라이브 재등록. 실패 시 이전 단축키를 복구(롤백)하고 Err —
+/// 프론트는 Err를 받으면 설정값을 바꾸지 않는다.
+#[tauri::command]
+pub fn set_capture_shortcut(
+    app: AppHandle,
+    cur: State<crate::CaptureShortcut>,
+    shortcut: String,
+) -> Result<(), String> {
+    let mut cur = cur.0.lock().map_err(to_err)?;
+    // 파싱 검증을 먼저 — 기존 등록을 풀기 전에 실패해야 롤백조차 필요 없다
+    let _: Shortcut = shortcut
+        .parse()
+        .map_err(|e| format!("단축키 형식 오류: {e}"))?;
+    let gs = app.global_shortcut();
+    if let Ok(old) = cur.parse::<Shortcut>() {
+        let _ = gs.unregister(old); // 시작 시 등록 실패했던 유령 값이면 조용히 무시
+    }
+    if let Err(e) = register_capture_shortcut(&app, &shortcut) {
+        let _ = register_capture_shortcut(&app, &cur); // 롤백: 이전 단축키 복구
+        return Err(format!("단축키를 등록할 수 없습니다: {e}"));
+    }
+    *cur = shortcut;
+    Ok(())
+}
+
+/// Windows 시작 시 자동 실행 켜기/끄기 (HKCU Run 키 — 관리자 권한 불필요).
+#[tauri::command]
+pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let al = app.autolaunch();
+    if enabled {
+        al.enable().map_err(to_err)
+    } else if al.is_enabled().unwrap_or(false) {
+        al.disable().map_err(to_err)
+    } else {
+        Ok(()) // 이미 꺼져 있음 — 멱등
+    }
 }
 
 /// Opens a native "save as" dialog and writes `content` to wherever the

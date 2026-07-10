@@ -12,9 +12,11 @@ import {JSDOM} from 'jsdom';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const HTML = readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
 
-export function setupEnv(){
+export function setupEnv({html} = {}){
   // 스크립트는 기본적으로 실행되지 않는다 — vendor/xlsx와 main.js는 비활성 상태
-  const dom = new JSDOM(HTML, {url: 'http://localhost/'});
+  // html 옵션: 'capture.html' 등 다른 src 페이지 위에서 테스트할 때
+  const dom = new JSDOM(html ? readFileSync(path.join(ROOT, 'src', html), 'utf8') : HTML,
+    {url: 'http://localhost/'});
   const {window} = dom;
 
   /* ---- Tauri IPC 가짜 ---- */
@@ -25,7 +27,23 @@ export function setupEnv(){
     try { const h = handlers.get(cmd); return Promise.resolve(h ? h(args) : undefined); }
     catch (e) { return Promise.reject(e); }
   };
-  window.__TAURI__ = {core: {invoke: fakeInvoke}, app: {getVersion: async () => '2.21.0'}};
+  /* ---- Tauri 이벤트/창 가짜 (capture-bridge.js·capture-win.js용) ---- */
+  const eventListeners = new Map();            // name -> [fn]
+  const emitted = [];                          // [{target?, name, payload}] + [{hide:true}]
+  window.__TAURI__ = {
+    core: {invoke: fakeInvoke},
+    app: {getVersion: async () => '2.23.0'},
+    event: {
+      listen: async (name, fn) => {
+        if(!eventListeners.has(name)) eventListeners.set(name, []);
+        eventListeners.get(name).push(fn);
+        return () => {};
+      },
+      emit:   async (name, payload) => { emitted.push({name, payload}); },
+      emitTo: async (target, name, payload) => { emitted.push({target, name, payload}); },
+    },
+    window: {getCurrentWindow: () => ({hide: async () => { emitted.push({hide:true}); }})},
+  };
 
   /* ---- 제어 가능한 다이얼로그 (jsdom 기본은 미구현 스텁) ---- */
   const alerts = [];
@@ -48,9 +66,13 @@ export function setupEnv(){
 
   return {
     window, document: window.document,
-    invokeCalls, alerts,
+    invokeCalls, alerts, emitted,
     onInvoke: (cmd, fn) => handlers.set(cmd, fn),
     answerConfirm: (...a) => confirmQueue.push(...a),
+    /* 등록된 listen 콜백에 이벤트 주입 — Rust/다른 웹뷰가 보낸 것처럼 */
+    fireEvent: (name, payload) => {
+      (eventListeners.get(name) || []).forEach(fn => fn({event: name, payload}));
+    },
     /* 테스트 간 S 싱글턴 복원 (state.js가 아직 import 전이어도 되도록 async) */
     async resetS(){
       const {S, CORE_FIELDS, DEFAULT_ID_KINDS, DEFAULT_SETTINGS} = await import('../../src/state.js');
@@ -59,10 +81,10 @@ export function setupEnv(){
       S.settings = Object.assign({}, DEFAULT_SETTINGS);
       S.loaded = false; S.lastId = 0;
       S.imported = {fields:null, presets:null, idKinds:null, settings:null};
-      invokeCalls.length = 0; alerts.length = 0; confirmQueue.length = 0;
+      invokeCalls.length = 0; alerts.length = 0; confirmQueue.length = 0; emitted.length = 0;
       // 파일 내 이전 테스트가 남긴 UI 상태 정리
       const g = id => window.document.getElementById(id);
-      for(const id of ['formPanel','alarmBg','presetModal']){ const el=g(id); if(el) el.classList.remove('on'); }
+      for(const id of ['formPanel','alarmBg','presetModal','capKeyModal']){ const el=g(id); if(el) el.classList.remove('on'); }
     },
     /* async 클릭 핸들러(backup.js 등) 완료 대기 — setImmediate는 mock.timers
        모킹 목록에 없어 모의 타이머 아래에서도 실제로 동작한다 */

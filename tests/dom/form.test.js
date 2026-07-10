@@ -7,7 +7,7 @@ mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
 const {S, newId} = await import('../../src/state.js');
 const {isoToDateStr, isoToTimeStr} = await import('../../src/datetime.js');
-const {toInbox, openForm, closeForm, initForm} = await import('../../src/form.js');
+const {toInbox, captureMemo, openForm, closeForm, initForm} = await import('../../src/form.js');
 initForm();
 
 const $ = id => env.document.getElementById(id);
@@ -42,6 +42,27 @@ test('toInbox: staged 아이템 생성 + save_all + 입력창 클리어', async 
   assert.ok(!isNaN(new Date(it.f.received)));
   assert.equal($('inp').value, '');
   assert.ok(env.invokeCalls.some(c=>c.cmd==='save_all'));
+});
+
+test('captureMemo: trim된 staged 아이템 생성 + save_all (toInbox·캡처 창 공용 코어)', async () => {
+  await env.resetS(); S.loaded = true;
+  assert.equal(captureMemo('  통화 메모  '), true);
+  await env.flush();
+  assert.equal(S.items.length, 1);
+  assert.equal(S.items[0].memo, '통화 메모');
+  assert.equal(S.items[0].staged, true);
+  assert.deepEqual(S.items[0].al, {});
+  assert.ok(!isNaN(new Date(S.items[0].f.received)));
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_all'));
+});
+
+test('captureMemo: 빈/공백 텍스트는 false — 아이템도 저장도 없음', async () => {
+  await env.resetS(); S.loaded = true;
+  assert.equal(captureMemo('   '), false);
+  assert.equal(captureMemo(null), false);
+  await env.flush();
+  assert.equal(S.items.length, 0);
+  assert.ok(!env.invokeCalls.some(c=>c.cmd==='save_all'));
 });
 
 test('openForm: 풀 아이템 렌더 — dt·관련인·식별번호(기타 포함)·세부 data-subid', async () => {

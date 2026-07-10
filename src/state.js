@@ -7,7 +7,17 @@ export const CORE_FIELDS = [
   {key:'due',      label:'마감시각', type:'datetime', on:true, builtin:true},
 ];
 export const DEFAULT_ID_KINDS = ['입찰공고번호','계약체결번호','공사관리번호','SR번호','국민신문고번호'];
-export const DEFAULT_SETTINGS = { alarmOn:true };
+/* captureShortcut·closeToTray·autostartMinimized 기본값은 Rust 쪽
+   (commands.rs DEFAULT_CAPTURE_SHORTCUT, lib.rs sget_bool 기본 인자)과
+   반드시 동일해야 한다 — 새 DB에는 settings 행이 없어 양쪽이 각자 파생한다. */
+export const DEFAULT_SETTINGS = {
+  alarmOn:true,
+  captureShortcut:'Ctrl+Alt+Space',   // 미니 캡처 창 전역 단축키
+  closeToTray:true,                   // 메인 창 X = 종료 대신 트레이로
+  autostart:false,                    // Windows 시작 시 자동 실행 (레지스트리 쓰기라 기본 꺼짐)
+  autostartMinimized:true,            // 자동 실행 시 창 없이 트레이로만
+  trayNoticeShown:false,              // "트레이에서 계속 실행" 첫 안내를 이미 봤는가
+};
 export const DEFAULT_PRESETS = [];
 
 export const S = {
