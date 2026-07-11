@@ -52,6 +52,15 @@ function dueTagHtml(it){
   // '대기'(ad-wait) 상태의 투명 배경이 pill 색과 겹쳐 항상 칠해진 것처럼 보인다.
   return `${alarmDot(it,'due')}<span class="tag time ${m.cls}"><span class="k">#마감:</span>${esc(m.label)}</span>`;
 }
+const DOW_SHORT=['일','월','화','수','목','금','토'];
+/* 반복 배지: 매일 / 매주(요일 지정 시 매주 월·수) / 매월 */
+function recurBadge(it){
+  const r=it.recur; if(!r||!r.freq) return '';
+  let label = r.freq==='daily'?'매일' : r.freq==='monthly'?'매월' : '매주';
+  if(r.freq==='weekly' && Array.isArray(r.dow) && r.dow.length)
+    label += ' '+r.dow.slice().sort((a,b)=>a-b).map(d=>DOW_SHORT[d]).join('·');
+  return `<span class="recur-badge" title="반복 일정">🔁 ${esc(label)}</span>`;
+}
 export function cardHtml(it,place){
   const subs=it.subs||[];
   const memo=(it.memo||'').trim();
@@ -69,7 +78,7 @@ export function cardHtml(it,place){
       <div class="card-body">
         <div class="card-memo">${memoHtml}</div>
         ${subLine}
-        <div class="card-meta">${dueTagHtml(it)}${progress}</div>
+        <div class="card-meta">${dueTagHtml(it)}${recurBadge(it)}${progress}</div>
       </div>
       <button class="del" data-del="${it.id}" title="삭제">×</button>
     </div></div>`;

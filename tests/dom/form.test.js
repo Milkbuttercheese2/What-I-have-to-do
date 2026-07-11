@@ -169,6 +169,49 @@ test('세부 제목에서 Enter → 마지막 행이면 새 행 추가', async (
   closeForm();
 });
 
+test('반복 UI: openForm이 매주+요일을 렌더 (select·요일칩 체크)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); it.recur = {freq:'weekly', dow:[1,3]}; S.items.push(it);
+  openForm(it);
+  assert.equal($('fm-recur-freq').value, 'weekly');
+  assert.notEqual($('fm-recur-dow').style.display, 'none');   // 매주 → 요일 노출
+  const checked = [...$('fm-recur-dow').querySelectorAll('input:checked')].map(c=>Number(c.value));
+  assert.deepEqual(checked, [1,3]);
+  closeForm();
+});
+
+test('반복 UI 왕복: 매주+요일 저장 → item.recur 보존', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); it.recur = {freq:'weekly', dow:[2,5]}; S.items.push(it);
+  openForm(it);
+  $('fm-save').click();
+  await env.flush();
+  assert.deepEqual(S.items[0].recur, {freq:'weekly', dow:[2,5]});
+});
+
+test('반복 UI: 매일 선택 시 dow 숨김 + recur={freq:daily}', async () => {
+  await env.resetS(); S.loaded = true;
+  openForm({});
+  $('fm-memo').value = '매일 반복 업무';
+  $('fm-recur-freq').value = 'daily';
+  $('fm-recur-freq').dispatchEvent(new env.window.Event('change', {bubbles:true}));
+  assert.equal($('fm-recur-dow').style.display, 'none');
+  $('fm-save').click();
+  await env.flush();
+  assert.deepEqual(S.items[0].recur, {freq:'daily'});
+});
+
+test('반복 UI: 반복 없음 저장 → recur null', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); it.recur = {freq:'monthly'}; S.items.push(it);
+  openForm(it);
+  $('fm-recur-freq').value = '';
+  $('fm-recur-freq').dispatchEvent(new env.window.Event('change', {bubbles:true}));
+  $('fm-save').click();
+  await env.flush();
+  assert.equal(S.items[0].recur, null);
+});
+
 test('closeForm 후에는 편집 대상이 리셋됨 — 새 저장은 새 아이템', async () => {
   await env.resetS(); S.loaded = true;
   const it = fullItem(); S.items.push(it);

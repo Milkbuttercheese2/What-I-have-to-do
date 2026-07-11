@@ -48,6 +48,10 @@ fn sample_items() -> Vec<Item> {
         done_at: None,
         staged: true,
         al: al1,
+        recur: Some(Recur {
+            freq: "weekly".into(),
+            dow: vec![1, 3, 5],
+        }),
     };
 
     let item2 = Item {
@@ -61,6 +65,7 @@ fn sample_items() -> Vec<Item> {
         done_at: Some(1_752_000_000_000),
         staged: false,
         al: AlarmMap::new(),
+        recur: None,
     };
 
     vec![item1, item2]
@@ -98,6 +103,16 @@ fn items_round_trip() {
         Some(AlarmState::Fired(true)) => {}
         other => panic!("expected fired due alarm, got {other:?}"),
     }
+
+    // Recurrence rule survives the round trip; a one-off item stays None.
+    match &loaded[0].recur {
+        Some(r) => {
+            assert_eq!(r.freq, "weekly");
+            assert_eq!(r.dow, vec![1, 3, 5]);
+        }
+        None => panic!("expected weekly recur on item1"),
+    }
+    assert!(loaded[1].recur.is_none());
 }
 
 #[test]

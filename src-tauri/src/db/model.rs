@@ -48,6 +48,17 @@ pub struct SubTask {
     pub al: AlarmMap,
 }
 
+/// Recurrence rule (v2.3, minimal). `freq` is "daily" | "weekly" | "monthly";
+/// `dow` (0=Sun..6=Sat) applies to weekly only and, when empty, means "reuse
+/// the anchor due's weekday". The anchor is the item's `f.due`. Stored as one
+/// JSON blob in `items.recur`; absent/NULL means a one-off task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Recur {
+    pub freq: String,
+    #[serde(default)]
+    pub dow: Vec<i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     pub id: i64,
@@ -74,6 +85,10 @@ pub struct Item {
     pub staged: bool,
     #[serde(default)]
     pub al: AlarmMap,
+    /// Recurrence rule, or None for a one-off task. Skipped from the wire when
+    /// absent so existing frontend items without `recur` round-trip unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recur: Option<Recur>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

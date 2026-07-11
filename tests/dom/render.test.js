@@ -66,6 +66,20 @@ test('체크박스 클릭 → done 토글 + doneAt + save_all', async () => {
   assert.ok(env.invokeCalls.some(c=>c.cmd==='save_all'));
 });
 
+test('반복 항목 체크 → 완료 대신 다음 회차로 이월 + 배지 렌더', async () => {
+  await env.resetS(); S.loaded = true;
+  const due = new Date(Date.now() + 60*60e3); due.setSeconds(0,0);
+  S.items.push(mk({memo:'매일 반복', recur:{freq:'daily'}, f:{due:due.toISOString()}}));
+  render();
+  assert.ok($('col-today').innerHTML.includes('recur-badge'));   // 🔁 배지
+  const prevDue = S.items[0].f.due;
+  $('col-today').querySelector('.chk[data-id]').click();
+  await env.flush();
+  assert.equal(S.items[0].done, false);                          // 완료되지 않음
+  assert.equal(new Date(S.items[0].f.due) - new Date(prevDue), 86400000);  // +1일 이월
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_all'));
+});
+
 test('삭제 클릭 → splice + 실행취소 토스트 + save_all', async () => {
   await env.resetS(); S.loaded = true;
   S.items.push(mk({memo:'삭제 대상', staged:true}));

@@ -89,7 +89,7 @@ Split from the former single-file `app.js` in v2.21 along single-responsibility 
 
 ## Data model
 
-An item (`it`) has: `id`, `memo`, `f` (field values, keyed by `FIELDS[].key`, e.g. `f.received`, `f.due`), `contacts[]` (`{who, org, phone}`), `ids[]` (`{kind, val}` — identifier numbers like 입찰공고번호/SR번호), `subs[]` (sub-tasks: `{id, title, mid, done, al}`), `done`, `staged` (true = still in 분류 대기/inbox), and `al` (per-item alarm-fired state keyed by field name).
+An item (`it`) has: `id`, `memo`, `f` (field values, keyed by `FIELDS[].key`, e.g. `f.received`, `f.due`), `contacts[]` (`{who, org, phone}`), `ids[]` (`{kind, val}` — identifier numbers like 입찰공고번호/SR번호), `subs[]` (sub-tasks: `{id, title, mid, done, al}`), `done`, `staged` (true = still in 분류 대기/inbox), `al` (per-item alarm-fired state keyed by field name), and `recur` (v2.3 반복 일정: `null` for one-off, or `{freq:'daily'|'weekly'|'monthly', dow?:number[]}` — anchored on `f.due`; checking a recurring item's checkbox advances it to the next occurrence via `advanceRecur()` instead of completing it, so `placeOf()` is untouched).
 
 Board placement is **always derived**, never stored: `placeOf(it)` recomputes the column every render from `done`/`staged`/`f.due`/sub-task `mid` timestamps relative to "now" and to today's day-boundaries (`dayBounds()`). If you change scheduling behavior, change `placeOf()`, not per-item state.
 

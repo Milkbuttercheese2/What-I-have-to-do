@@ -76,7 +76,7 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
     }
 
     let mut stmt = conn.prepare(
-        "SELECT id, memo, received_at, due_at, staged, done, done_at, due_alarm FROM items ORDER BY id",
+        "SELECT id, memo, received_at, due_at, staged, done, done_at, due_alarm, recur FROM items ORDER BY id",
     )?;
     let mut rows = stmt.query([])?;
     let mut items = Vec::new();
@@ -85,6 +85,12 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
         let received_at: Option<String> = row.get(2)?;
         let due_at: Option<String> = row.get(3)?;
         let due_alarm: Option<String> = row.get(7)?;
+        let recur_json: Option<String> = row.get(8)?;
+        // Bad JSON in the column degrades to "no recurrence" rather than
+        // failing the whole load — a corrupt rule shouldn't hide every item.
+        let recur = recur_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<super::model::Recur>(s).ok());
 
         let mut f = fields_by_item.remove(&id).unwrap_or_default();
         if let Some(r) = received_at {
@@ -105,6 +111,7 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
             done_at: row.get(6)?,
             staged: row.get::<_, i64>(4)? != 0,
             al: alarm::decode(due_alarm.as_deref(), "due"),
+            recur,
         });
     }
     Ok(items)
@@ -119,8 +126,8 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
     tx.execute("DELETE FROM items", [])?; // cascades to item_fields/contacts/identifiers/subtasks
     {
         let mut ins_item = tx.prepare(
-            "INSERT INTO items (id, memo, received_at, due_at, staged, done, done_at, due_alarm, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+            "INSERT INTO items (id, memo, received_at, due_at, staged, done, done_at, due_alarm, recur, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
         )?;
         let mut ins_field =
             tx.prepare("INSERT INTO item_fields (item_id, field_key, value) VALUES (?1, ?2, ?3)")?;
@@ -138,6 +145,10 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
             let received = it.f.get("received").cloned();
             let due = it.f.get("due").cloned();
             let due_alarm = alarm::encode(&it.al, "due");
+            let recur = it
+                .recur
+                .as_ref()
+                .and_then(|r| serde_json::to_string(r).ok());
             ins_item.execute(params![
                 it.id,
                 it.memo,
@@ -147,6 +158,7 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
                 it.done as i64,
                 it.done_at,
                 due_alarm,
+                recur,
             ])?;
 
             for (k, v) in it

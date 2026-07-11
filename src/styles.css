@@ -79,6 +79,14 @@
   .fm-field input{font-family:inherit;font-size:12.5px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
   .fm-field input:focus{outline:none;border-color:var(--focus)}
   .fm-subs{margin:4px 0 12px}
+  .fm-recur{margin:4px 0 12px}
+  .fm-recur .t-head{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.04em}
+  .fm-recur-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .fm-recur-row select{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);width:130px}
+  .fm-recur-dow{display:flex;gap:5px}
+  .dow-chip{font-size:12px;padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink-soft);cursor:pointer;user-select:none;transition:background .12s,color .12s,border-color .12s}
+  .dow-chip input{display:none}
+  .dow-chip:has(input:checked){background:var(--slate-bg);color:var(--slate);border-color:var(--slate)}
   .fm-ids{margin:4px 0 12px}
   .fm-ids .t-head{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.04em}
   .fid-row{display:flex;align-items:center;gap:7px;padding:3px 0}
@@ -337,3 +345,4 @@
   .adot{flex:none}
   @keyframes adotpulse{0%,100%{opacity:1}50%{opacity:.35}}
   .mini-prog{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);background:var(--line-soft);padding:1px 7px;border-radius:6px}
+  .recur-badge{font-size:11px;color:var(--slate);background:var(--slate-bg);padding:1px 7px;border-radius:6px;letter-spacing:.01em}

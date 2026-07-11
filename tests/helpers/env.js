@@ -32,7 +32,7 @@ export function setupEnv({html} = {}){
   const emitted = [];                          // [{target?, name, payload}] + [{hide:true}]
   window.__TAURI__ = {
     core: {invoke: fakeInvoke},
-    app: {getVersion: async () => '2.23.0'},
+    app: {getVersion: async () => '2.3.0'},
     event: {
       listen: async (name, fn) => {
         if(!eventListeners.has(name)) eventListeners.set(name, []);

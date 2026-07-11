@@ -61,6 +61,19 @@
 
       <div class="fm-grid" id="fm-grid"></div>
 
+      <div class="fm-recur">
+        <div class="t-head">반복 (마감시각 기준 · 완료하면 다음 회차로 넘어갑니다)</div>
+        <div class="fm-recur-row">
+          <select id="fm-recur-freq">
+            <option value="">반복 없음</option>
+            <option value="daily">매일</option>
+            <option value="weekly">매주</option>
+            <option value="monthly">매월</option>
+          </select>
+          <div id="fm-recur-dow" class="fm-recur-dow" style="display:none"></div>
+        </div>
+      </div>
+
       <div class="fm-ids">
         <div class="t-head">식별번호 (명칭 + 번호)</div>
         <div id="fm-ids"></div>

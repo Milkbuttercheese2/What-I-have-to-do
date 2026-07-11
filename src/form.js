@@ -24,6 +24,21 @@ export function toInbox(){
 let editingId=null;
 const enabled = () => S.fields.filter(f=>f.on);
 
+/* 반복 UI — 요일 칩(0=일..6=토) · freq 선택 · 규칙 읽기 */
+const DOW_LABELS=['일','월','화','수','목','금','토'];
+function renderRecurDow(sel){
+  const set=new Set(Array.isArray(sel)?sel:[]);
+  $('fm-recur-dow').innerHTML = DOW_LABELS.map((lb,i)=>
+    `<label class="dow-chip"><input type="checkbox" value="${i}"${set.has(i)?' checked':''}>${lb}</label>`).join('');
+}
+function syncRecurUI(){ $('fm-recur-dow').style.display = $('fm-recur-freq').value==='weekly' ? 'flex' : 'none'; }
+function readRecur(){
+  const freq=$('fm-recur-freq').value; if(!freq) return null;
+  const r={freq};
+  if(freq==='weekly') r.dow=[...$('fm-recur-dow').querySelectorAll('input:checked')].map(c=>Number(c.value)).sort((a,b)=>a-b);
+  return r;
+}
+
 export function openForm(pre){
   pre=pre||{};
   editingId=pre.id||null;
@@ -38,6 +53,11 @@ export function openForm(pre){
       `<div class="fm-field"><label>${esc(f.label)}</label>${dtInputHtml('fm-dt', v, `data-fkey="${f.key}"`)}</div>`);
   });
   g.querySelectorAll('.dt-inp').forEach(refreshDow);
+
+  // 반복 규칙
+  $('fm-recur-freq').value = (pre.recur && pre.recur.freq) || '';
+  renderRecurDow(pre.recur && pre.recur.dow);
+  syncRecurUI();
 
   // 관련인 세트
   const cw=$('fm-contacts'); cw.innerHTML='';
@@ -143,7 +163,7 @@ function collectForm(){
       if(prev){ al = (prev.mid===mid) ? (prev.al||{}) : {}; } }
     return {id, title:t, mid, done, al};
   }).filter(Boolean);
-  return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs};
+  return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs, recur:readRecur()};
 }
 function updatePlacePreview(){ try{ const d=collectForm(); const p=placeOf({staged:false,f:d.f,subs:d.subs}); $('fm-place').innerHTML=`저장 위치: <b>${PLACE_NAME[p]}</b>`; }catch{} }
 
@@ -157,6 +177,7 @@ export function initForm(){
     addFormIdRow(S.idKinds[0]||'기타','');
   });
   $('fm-subadd').addEventListener('click',()=>addFormSubRow('','',true));
+  $('fm-recur-freq').addEventListener('change',syncRecurUI);
   enableDragReorder($('fm-subs'), '.fsub-row', '.drag-handle');
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t)$('inp').value=''; });
   $('fm-cancel').addEventListener('click',closeForm);
@@ -173,12 +194,12 @@ export function initForm(){
       const it=S.items.find(x=>x.id===editingId);
       if(it){
         const oldDue=(it.f||{}).due;
-        it.memo=d.memo; it.f=d.f; it.contacts=d.contacts; it.ids=d.ids; it.subs=d.subs; it.staged=false;
+        it.memo=d.memo; it.f=d.f; it.contacts=d.contacts; it.ids=d.ids; it.subs=d.subs; it.recur=d.recur; it.staged=false;
         it.al = it.al || {};
         if(oldDue !== d.f.due) delete it.al.due;   // F2: 마감이 바뀌면 알람 재무장
       }
     }else{
-      S.items.push(makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs}));
+      S.items.push(makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs, recur:d.recur}));
     }
     closeForm(); persist();
   });

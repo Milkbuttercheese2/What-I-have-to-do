@@ -47,15 +47,58 @@ export function newId(){
    partial에 id가 없으면 newId()를 부여. Rust Item 구조체(model.rs)와 형태가 짝이다. */
 export function makeItem(partial={}){
   const it = Object.assign(
-    {memo:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], al:{}},
+    {memo:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], al:{}, recur:null},
     partial);
   if(it.id==null) it.id = newId();
   return it;
 }
 
+/* =========================================================================
+   반복 일정 (v2.3, 최소 범위) — recur = null 또는 {freq, dow?}
+     freq: 'daily'|'weekly'|'monthly', dow: 매주에서 선택 요일(0=일..6=토, 비면 마감 요일)
+   앵커는 f.due. 완료 체크 시 '다음 회차로 이월'(advance-in-place)한다.
+   ========================================================================= */
+/* 주어진 ISO 시각을 규칙에 따라 '다음 도래' ISO로. 시:분은 보존. */
+export function nextRecurDate(iso, recur){
+  const d = new Date(iso);
+  if(isNaN(d) || !recur) return iso;
+  if(recur.freq === 'daily'){ d.setDate(d.getDate()+1); return d.toISOString(); }
+  if(recur.freq === 'weekly'){
+    const dow = (Array.isArray(recur.dow) && recur.dow.length) ? recur.dow : [d.getDay()];
+    for(let i=1;i<=7;i++){ const c=new Date(d); c.setDate(d.getDate()+i); if(dow.includes(c.getDay())) return c.toISOString(); }
+    return iso;   // 이론상 도달 안 함
+  }
+  if(recur.freq === 'monthly'){
+    const day=d.getDate(), t=new Date(d); t.setDate(1); t.setMonth(t.getMonth()+1);
+    const dim=new Date(t.getFullYear(), t.getMonth()+1, 0).getDate();   // 다음 달 총 일수
+    t.setDate(Math.min(day, dim));                                       // 짧은 달 클램프(1/31 → 2/28)
+    t.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+    return t.toISOString();
+  }
+  return iso;
+}
+/* 다음 회차로 이월 — 마감·세부 점검시각을 같은 간격만큼 전진, 세부/알람 리셋.
+   항목은 완료되지 않고 계속 활성으로 남는다(완료 탭 오염 방지). */
+export function advanceRecur(it){
+  const oldDue = (it.f||{}).due;
+  if(!oldDue) return it;                                    // 앵커 없으면 이월 불가
+  const nd = nextRecurDate(oldDue, it.recur);
+  const delta = new Date(nd) - new Date(oldDue);
+  it.f = Object.assign({}, it.f, {due:nd});
+  it.al = it.al || {}; delete it.al.due;                    // 마감 알람 재무장
+  it.subs = (it.subs||[]).map(s=>{
+    const t = Object.assign({}, s, {done:false, al:{}});    // 세부 체크·알람 초기화
+    if(s.mid){ const m=new Date(s.mid); if(!isNaN(m)) t.mid = new Date(m.getTime()+delta).toISOString(); }
+    return t;
+  });
+  it.done=false; it.doneAt=null;
+  return it;
+}
+
 /* 완료 상태 토글 — 도메인 연산(순수 변경, persist/render는 호출부 책임).
-   반복 일정의 '완료 시 다음 인스턴스 생성' 훅이 향후 여기에 붙는다. */
+   반복 항목을 완료 체크하면 완료 대신 다음 회차로 이월한다. */
 export function toggleDone(it){
+  if(!it.done && it.recur && (it.f||{}).due) return advanceRecur(it);
   it.done = !it.done;
   it.doneAt = it.done ? Date.now() : null;
   return it;
