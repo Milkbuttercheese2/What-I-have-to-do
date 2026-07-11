@@ -20,25 +20,30 @@
 
     /* 내부망 배포 대상: 웹폰트 금지, 전부 시스템 폰트 (Windows 기본 탑재분) */
     --font-mono:'Cascadia Mono','Consolas','D2Coding',ui-monospace,monospace;
+
+    /* ===== 레이아웃 사이징 토큰 (가변형 UI) ===== */
+    --content-max:1440px;   /* 밴드 최대 폭 — 그 이상은 중앙 정렬 */
+    --gutter:28px;          /* 좌우 여백(기존 header/.capture 패딩과 동일) */
+    --col-min:300px;        /* 컬럼이 이보다 좁아지기 전에 재배치 */
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:'Pretendard','Malgun Gothic','맑은 고딕',system-ui,-apple-system,sans-serif;
        font-size:14px;background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;
-       min-width:1460px}
+       min-width:320px}
   .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
   .btn{font-family:inherit;font-weight:600;border:none;border-radius:9px;cursor:pointer;white-space:nowrap}
 
   header{padding:12px 28px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:30}
-  .header-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;width:1460px;margin:0 auto}
+  .header-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;width:100%;max-width:var(--content-max);margin-inline:auto}
   .brand{display:flex;align-items:baseline;gap:12px;flex:none}
   .brand h1{font-size:19px;font-weight:700;letter-spacing:-.02em}
   .brand .sub{font-size:12.5px;color:var(--ink-soft)}
   nav.tabs{display:flex;gap:4px;background:var(--line-soft);padding:3px;border-radius:9px}
   .tab{font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 18px;border:none;border-radius:6px;background:transparent;color:var(--ink-soft);cursor:pointer}
   .tab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(20,27,36,.1)}
-  .head-right{display:flex;align-items:center;gap:10px}
+  .head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
   .btn-tool{font-size:12.5px;padding:7px 13px;background:var(--line-soft);color:var(--ink-soft)}
   .btn-tool:hover{background:var(--line);color:var(--ink)}
   .clock{font-size:12.5px;color:var(--ink-soft);text-align:right;line-height:1.3}
@@ -47,7 +52,7 @@
 
   /* ---- 입력부 ---- */
   .capture{padding:14px 28px 12px;background:var(--card);border-bottom:1px solid var(--line)}
-  .cap-box{width:1460px;margin:0 auto}
+  .cap-box{width:100%;max-width:var(--content-max);margin-inline:auto}
   .cap-row{display:flex;gap:8px;align-items:flex-start}
   .btn-inbox{font-size:14px;height:42px;padding:0 18px;background:var(--amber);color:#fff}
   .btn-inbox:hover{background:#9c6120}
@@ -109,7 +114,7 @@
   .btn-cancel{font-size:14px;padding:8px 16px;background:var(--line-soft);color:var(--ink-soft)}
 
   /* ---- 요약 스트립 ---- */
-  .strip{display:flex;align-items:center;gap:8px;width:1460px;margin:0 auto;padding:12px 28px 0;font-size:12.5px;flex-wrap:wrap}
+  .strip{display:flex;align-items:center;gap:8px;width:100%;max-width:var(--content-max);margin-inline:auto;padding:12px 28px 0;font-size:12.5px;flex-wrap:wrap}
   .s-pill{display:flex;align-items:center;gap:6px;padding:4px 13px;border-radius:9px;background:var(--card);border:1px solid var(--line);font-weight:600;color:var(--ink-soft)}
   .s-pill b{font-family:var(--font-mono);color:var(--ink)}
   .s-pill.warn{border-color:#e0b9b4;color:var(--red);background:var(--red-bg)}
@@ -118,9 +123,10 @@
   .s-search:focus{outline:none;border-color:var(--focus)}
 
   /* ---- 보드 (4열) ---- */
-  /* 컬럼 폭 절대 고정: grid/flex 아이템의 기본 min-width:auto 를 모든 단계에서 차단 */
-  main{display:grid;grid-template-columns:repeat(4,365px);width:1460px;margin:0 auto;min-height:calc(100vh - 250px)}
-  .col{width:365px;min-width:0;max-width:365px;padding:18px 18px;border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+  /* 유동폭 4열: 창에 맞춰 신축, 좁아지면 아래 미디어쿼리에서 2열→1열 재배치.
+     min-width:auto 를 차단해야 긴 카드가 컬럼을 밀어내지 않음(방어 사슬과 함께 동작) */
+  main{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;max-width:var(--content-max);margin-inline:auto;padding-inline:var(--gutter);min-height:calc(100vh - 250px)}
+  .col{min-width:0;padding:18px 18px;border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
   .col:last-child{border-right:none}
   .col-head{display:flex;align-items:center;gap:8px;margin-bottom:3px}
   .dot{width:9px;height:9px;border-radius:50%;flex:none}
@@ -174,8 +180,8 @@
 
   #view-cal{display:none;max-width:1180px;margin:0 auto;padding:22px 28px 40px}
   #view-cal.on{display:block}
-  .cal-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
-  .cal-head h2{font-size:19px;font-weight:700}
+  .cal-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+  .cal-head h2{font-size:19px;font-weight:700;white-space:nowrap}
   .cal-nav{display:flex;gap:4px}
   .cal-nav button{font-family:inherit;font-size:12.5px;padding:5px 12px;border:1px solid var(--line);background:var(--card);border-radius:6px;cursor:pointer;color:var(--ink-soft)}
   .cal-nav button:hover{border-color:var(--focus);color:var(--focus)}
@@ -267,9 +273,26 @@
   .toast button:hover{background:#2a333d}
   footer .mono{color:var(--focus)}
   footer a{color:var(--focus)}
-  /* 메인 영역은 폭 고정 — 좁은 화면에서는 가로 스크롤 */
+  /* ===== 반응형: 창 폭에 따라 보드/입력부 재배치 (콘텐츠 기준 브레이크포인트) ===== */
+  /* 태블릿/반쪽 창: 보드 4열 → 2열. 각 행의 우측 끝(2·4번) 구분선 제거 */
+  @media(max-width:1024px){
+    main{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .col:nth-child(2n){border-right:none}
+  }
+  /* 폼 그리드 2열 (기존 규칙 유지) */
   @media(max-width:720px){
     .fm-grid{grid-template-columns:1fr 1fr}
+  }
+  /* 좁은 창: 보드 1열, 입력 행(메모+버튼) 세로 배치 */
+  @media(max-width:680px){
+    main{grid-template-columns:1fr}
+    .col{border-right:none}
+    .cap-row{flex-wrap:wrap}
+    .cap-btns{width:100%;flex-direction:row;flex-wrap:wrap}
+  }
+  /* 매우 좁은 창: 폼 그리드 1열 */
+  @media(max-width:480px){
+    .fm-grid{grid-template-columns:1fr}
   }
   /* ---- v5 추가 ---- */
   textarea#inp{flex:1;min-width:0;resize:vertical;height:210px;font-family:inherit;font-size:14px;line-height:1.5;padding:11px 14px;border:1.5px solid var(--line);border-radius:9px;background:#fcfcfb;color:var(--ink)}
