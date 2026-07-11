@@ -15,7 +15,7 @@ Branch-protection rules on `main` (require PR, block direct push) have **not** b
 
 ## Versioning convention (user-defined)
 
-User-facing version: current release = **v2.3**. Big updates bump +0.1 (v2.3), small updates +0.01 (v2.22). Manifest mapping: `vX.Y` ↔ `"X.Y.0"`, `vX.YZ` ↔ `"X.YZ.0"` in all THREE manifests together (`src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `package.json`). The UI header shows the version via `getVersion()` with a trailing `.0` stripped. A structural analysis lives in `구조 분석 보고서.md`; the built exe ships in `최종 프로그램 산출물/` and IS committed to git per user request.
+User-facing version: current release = **v2.3** (the release AFTER v2.23 — versions are read as decimal magnitudes: v2.2 → v2.21 → v2.22 → v2.23 → v2.3(=2.30) → v2.31 → … → v2.4). Big updates bump +0.1, small updates +0.01. Note this makes manifest semver non-monotonic (2.3.0 sorts below 2.23.0 for npm/cargo) — harmless here since there is no auto-updater or version-comparison logic anywhere, but do not add tooling that assumes semver ordering. Manifest mapping: `vX.Y` ↔ `"X.Y.0"`, `vX.YZ` ↔ `"X.YZ.0"` in all THREE manifests together (`src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `package.json`). The UI header shows the version via `getVersion()` with a trailing `.0` stripped. A structural analysis lives in `구조 분석 보고서.md`; the built exe ships in `최종 프로그램 산출물/` and IS committed to git per user request.
 
 **Changelog rule (user-defined, since v2.3):** every update pushed to GitHub must add an entry to `CHANGELOG.md` describing what changed (Korean, grouped 변경/추가/수정). Started at the v2.2→v2.3 transition — write the entry as part of the same PR/commit that makes the change.
 
