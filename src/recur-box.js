@@ -130,8 +130,7 @@ function saveParent(){
 
 export function initRecurBox(){
   document.body.appendChild($('recurModal'));   // 어느 탭에서든 뜨도록 body 직속
-  $('recurOpen').addEventListener('click', openRecurModal);
-  $('recurManageBtn').addEventListener('click', openRecurModal);
+  $('recurManageBtn').addEventListener('click', openRecurModal);   // [설정] 메뉴에서 진입
   $('recurClose').addEventListener('click', closeRecurModal);
   $('recurModal').addEventListener('click',e=>{ if(e.target.id==='recurModal') closeRecurModal(); });
   $('rc-type').addEventListener('change', refreshTypeVis);

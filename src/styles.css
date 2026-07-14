@@ -53,8 +53,6 @@
   .btn-inbox:hover{background:#9c6120}
   .btn-form{font-size:14px;height:42px;padding:0 18px;background:var(--ink);color:#fff}
   .btn-form:hover{background:#000}
-  .btn-recur{font-size:14px;height:42px;padding:0 18px;background:var(--slate);color:#fff}
-  .btn-recur:hover{filter:brightness(.92)}
   .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
   .preset{font-family:inherit;font-size:11px;padding:3px 11px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink-soft);cursor:pointer}
   .preset:hover{border-color:var(--slate);color:var(--slate);background:var(--slate-bg)}
