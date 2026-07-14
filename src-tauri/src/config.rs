@@ -5,10 +5,13 @@ use serde::{Deserialize, Serialize};
 
 /// Name of the dedicated subfolder created under whatever *location* the
 /// user picks (first-run dialog or the 저장 위치 button) — e.g. picking
-/// "D:\" results in "D:\뭐해야했더라_데이터\". The user only ever points at
+/// "D:\" results in "D:\뭐하려했더라_데이터\". The user only ever points at
 /// a location, never at a specific empty folder; our own subfolder is
 /// always created fresh so it can't collide with pre-existing files.
-pub const DATA_FOLDER_NAME: &str = "뭐해야했더라_데이터";
+/// (v3.0.0 rename: existing installs are unaffected — config.json stores the
+/// absolute data_dir path, and this constant is only used when creating a
+/// NEW folder on first run or via the 저장 위치 button.)
+pub const DATA_FOLDER_NAME: &str = "뭐하려했더라_데이터";
 
 /// Tiny app-level config, kept deliberately separate from the SQLite
 /// database it points at (a chicken-and-egg problem otherwise: we need to

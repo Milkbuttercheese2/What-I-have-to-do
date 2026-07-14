@@ -84,6 +84,27 @@
   .fid-row input.fid-etc{flex:none;width:110px}
   .fid-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
   .fm-subs .t-head{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.04em}
+  /* 설정 드롭다운 */
+  .settings-wrap{position:relative}
+  .settings-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--card);
+    border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);
+    padding:6px;z-index:60;min-width:236px;flex-direction:column}
+  .settings-menu.on{display:flex}
+  .menu-item{text-align:left;font-family:inherit;font-size:12.5px;padding:8px 10px;background:none;
+    border:0;border-radius:7px;cursor:pointer;color:var(--ink)}
+  .menu-item:hover{background:var(--slate-bg)}
+  .menu-sep{height:1px;background:var(--line);margin:5px 4px}
+  .menu-check{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:7px 10px;cursor:pointer;color:var(--ink)}
+  /* 반복(주기 업무) 입력 */
+  .fm-recur-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:3px 0;font-size:12.5px}
+  .fm-recur-row select{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  .fm-recur-row input[type=number]{width:52px;font-family:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(--line);border-radius:6px}
+  #fm-recur-time{width:64px;font-family:var(--font-mono);font-size:12.5px;padding:5px 6px;border:1px solid var(--line);border-radius:6px}
+  .recur-dow-btn{cursor:pointer;font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink-soft)}
+  .recur-dow-btn.on{background:var(--slate-bg);color:var(--slate);border-color:var(--slate);font-weight:600}
+  .ffile-row{display:flex;align-items:center;gap:7px;padding:3px 0}
+  .ffile-row input[type=text]{flex:1;min-width:0;font-family:var(--font-mono);font-size:12px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
+  .ffile-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
   .fsub-row{display:flex;align-items:center;gap:7px;padding:3px 0}
   .fsub-chk{flex:none;cursor:pointer}
   .drag-handle{flex:none;cursor:grab;color:var(--line);font-size:12.5px;line-height:1;padding:0 2px;user-select:none;letter-spacing:-2px}
@@ -116,6 +137,11 @@
   .s-pill.warn b{color:var(--red)}
   .s-search{margin-left:auto;font-family:inherit;font-size:12.5px;padding:6px 13px;border:1px solid var(--line);border-radius:9px;background:var(--card);min-width:230px}
   .s-search:focus{outline:none;border-color:var(--focus)}
+  /* Everything 파일검색 결과 스트립 (서버 응답 시에만 표시) */
+  .ev-strip{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:1460px;max-width:100%;margin:6px auto 0;padding:0 28px;font-size:12px}
+  .ev-head{color:var(--ink-soft);font-weight:600;flex:none}
+  .ev-item{cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:3px 9px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ev-item:hover{border-color:var(--focus)}
 
   /* ---- 보드 (4열) ---- */
   /* 컬럼 폭 절대 고정: grid/flex 아이템의 기본 min-width:auto 를 모든 단계에서 차단 */
@@ -327,3 +353,9 @@
   .adot{flex:none}
   @keyframes adotpulse{0%,100%{opacity:1}50%{opacity:.35}}
   .mini-prog{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);background:var(--line-soft);padding:1px 7px;border-radius:6px}
+  /* 카드 파일 링크 */
+  .card-files{display:flex;flex-wrap:wrap;gap:3px 5px;margin-top:5px;align-items:center;min-width:0}
+  .file-link{cursor:pointer;font-size:11.5px;color:var(--slate);background:var(--slate-bg);border-radius:6px;padding:1px 7px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-link:hover{text-decoration:underline}
+  .file-reveal{cursor:pointer;font-size:11.5px;opacity:.55;padding:1px 2px}
+  .file-reveal:hover{opacity:1}

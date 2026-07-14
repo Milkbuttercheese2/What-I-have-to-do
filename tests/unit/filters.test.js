@@ -28,3 +28,12 @@ test('textMatch: 빈 검색어는 전체 통과, 부분일치, 불일치', () =>
   assert.equal(textMatch(it, 'sr-99'), true);       // 소문자 needle 부분일치
   assert.equal(textMatch(it, '없는말'), false);
 });
+
+test('haystack: 파일 링크는 파일명만 포함(경로 폴더명은 제외)', () => {
+  const withFiles = Object.assign({}, it, {files:['C:\\비밀폴더\\계약서.HWP','\\\\share\\양식\\보고서.xlsx']});
+  const h = haystack(withFiles);
+  assert.ok(h.includes('계약서.hwp'));
+  assert.ok(h.includes('보고서.xlsx'));
+  assert.ok(!h.includes('비밀폴더'));               // 경로 중간 폴더명으로는 안 걸림
+  assert.equal(textMatch(withFiles, '계약서'), true);
+});

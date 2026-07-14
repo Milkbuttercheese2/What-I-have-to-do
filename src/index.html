@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>뭐해야 했더라 — 전화받고 잊어버리기 전에</title>
+<title>뭐하려 했더라 — 전화받고 잊어버리기 전에</title>
 <!-- 외부(인터넷) 리소스 금지: 내부망(air-gapped) 배포 대상이므로 폰트도
      시스템 폰트만 사용한다. SheetJS를 인라인해둔 것과 같은 이유. -->
 <link rel="stylesheet" href="styles.css">
@@ -12,18 +12,28 @@
 
 <header>
  <div class="header-inner">
-  <div class="brand"><h1>뭐해야 했더라</h1><span class="sub">전화받고 잊어버리기 전에 던져두는 곳</span></div>
+  <div class="brand"><h1>뭐하려 했더라</h1><span class="sub">전화받고 잊어버리기 전에 던져두는 곳</span></div>
   <nav class="tabs">
     <button class="tab on" data-view="board">보드</button>
     <button class="tab" data-view="cal">캘린더</button>
     <button class="tab" data-view="done">완료</button>
   </nav>
   <div class="head-right">
-    <button class="btn btn-tool" id="alarmToggle" title="알람 켜기/끄기">🔔 알람</button>
-    <button class="btn btn-tool" id="dataDirBtn" title="데이터 저장 위치 확인·변경">💾 저장 위치</button>
-    <button class="btn btn-tool" id="bkExp">JSON파일 백업</button>
-    <button class="btn btn-tool" id="bkImp" title="JSON 백업 파일 또는 자동 백업(.sqlite) 등 DB 파일에서 복원">JSON·DB파일 불러오기</button>
-    <button class="btn btn-tool" id="xlsx">XLSX 다운로드</button>
+    <button class="btn btn-tool" id="alarmToggle" title="알람 켜기/끄기">알람</button>
+    <div class="settings-wrap">
+      <button class="btn btn-tool" id="settingsBtn" title="백업·저장 위치·프리셋·연동 설정">설정</button>
+      <div class="settings-menu" id="settingsMenu">
+        <button class="menu-item" id="dataDirBtn" title="데이터 저장 위치 확인·변경">저장 위치 확인·변경</button>
+        <button class="menu-item" id="bkExp">JSON파일 백업</button>
+        <button class="menu-item" id="bkImp" title="JSON 백업 파일 또는 자동 백업(.sqlite) 등 DB 파일에서 복원">JSON·DB파일 불러오기</button>
+        <button class="menu-item" id="xlsx">XLSX 다운로드</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" id="presetManageBtn">프리셋·식별번호 관리</button>
+        <div class="menu-sep"></div>
+        <label class="menu-check"><input type="checkbox" id="opt-ev-autostart"> 실행 시 Everything 자동 실행</label>
+        <label class="menu-check"><input type="checkbox" id="opt-ev-quick"> 빠른 검색 시 Everything 사용</label>
+      </div>
+    </div>
     <div class="clock"><div class="t mono" id="clock">--:--</div><div id="today">—</div><div class="ver mono" id="appVer"></div></div>
   </div>
  </div>
@@ -59,6 +69,21 @@
 
       <div class="fm-grid" id="fm-grid"></div>
 
+      <div class="fm-recur">
+        <div class="t-head">반복 (주기 업무 — 켜면 마감시각이 자동 계산됩니다)</div>
+        <div class="fm-recur-row">
+          <select id="fm-recur-type">
+            <option value="">반복 안 함</option>
+            <option value="dow">매주 요일</option>
+            <option value="every">며칠마다</option>
+          </select>
+          <span id="fm-recur-dow" style="display:none"></span>
+          <span id="fm-recur-every" style="display:none">매 <input type="number" id="fm-recur-days" min="1" value="3"> 일</span>
+          <span id="fm-recur-time-wrap" style="display:none">시각 <input type="text" id="fm-recur-time" value="09:00" placeholder="09:00"></span>
+        </div>
+        <div class="m-sub" id="fm-recur-hint" style="display:none">완료 체크하면 완료 기록은 [완료] 탭에 남고, 다음 회차가 자동으로 다시 올라옵니다.</div>
+      </div>
+
       <div class="fm-ids">
         <div class="t-head">식별번호 (명칭 + 번호)</div>
         <div id="fm-ids"></div>
@@ -69,6 +94,12 @@
         <div class="t-head">세부 할 일 (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가)</div>
         <div id="fm-subs"></div>
         <button class="btn fsub-add" id="fm-subadd">＋ 세부 항목</button>
+      </div>
+
+      <div class="fm-files-wrap">
+        <div class="t-head">파일 링크 (관련 문서를 연결 — 카드에서 클릭하면 바로 열립니다)</div>
+        <div id="fm-files"></div>
+        <button class="btn fsub-add" id="fm-fileadd">＋ 파일 찾아보기</button>
       </div>
 
       <div class="fm-actions">
@@ -83,8 +114,10 @@
 
 <div class="strip" id="strip">
   <span class="s-pill warn" id="st-late-wrap" style="display:none">기한 지남 <b id="st-late">0</b></span>
-  <input class="s-search" id="search" placeholder="검색: 관련인 · 관련소속 · 연락처 · 식별번호" autocomplete="off">
+  <input class="s-search" id="search" placeholder="검색: 관련인 · 관련소속 · 연락처 · 식별번호 · 파일명" autocomplete="off">
 </div>
+<!-- Everything(로컬 파일검색) 결과 — Everything HTTP 서버가 응답할 때만 표시 -->
+<div class="ev-strip" id="ev-results" style="display:none"></div>
 
 <main id="view-board">
   <div class="col">
@@ -116,8 +149,8 @@
       <button id="cal-prev">◀</button><button id="cal-today">오늘</button><button id="cal-next">▶</button>
     </div>
     <div class="cal-legend">
-      <span><i class="lg" style="background:var(--slate)"></i>세부 할일(점검)</span>
-      <span><i class="lg" style="background:var(--red)"></i>세부 없는 업무(마감일)</span>
+      <span><i class="lg" style="background:var(--slate)"></i>세부 할일(지정 시각)</span>
+      <span><i class="lg" style="background:var(--red)"></i>업무 마감일</span>
     </div>
   </div>
   <div class="cal-grid" id="cal-grid"></div>
@@ -177,7 +210,7 @@
 <!-- 알람 -->
 <div class="alarm-bg" id="alarmBg">
   <div class="alarm">
-    <h3>⏰ 시각 도래 알림</h3>
+    <h3>시각 도래 알림</h3>
     <div id="alarmList"></div>
     <div class="a-actions">
       <button class="btn btn-snooze" id="alarmSnooze">10분 뒤 다시</button>

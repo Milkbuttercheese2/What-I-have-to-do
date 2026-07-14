@@ -30,7 +30,7 @@ export function checkAlarms(){
   $('alarmBg').classList.add('on'); beep(); try{window.focus();}catch{} startTitleFlash(fire.length);
   invoke('focus_main_window').catch(()=>{}); // window.focus() can't steal OS focus from another app; this can
   if('Notification'in window&&Notification.permission==='granted'){ fire.forEach(a=>{try{
-    const nt=new Notification('뭐해야 했더라 — '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
+    const nt=new Notification('뭐하려 했더라 — '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
     nt.onclick=()=>{ try{window.focus();}catch{} try{nt.close();}catch{} };
   }catch{}}); }
 }
@@ -38,12 +38,12 @@ let _titleFlash=null, _baseTitle='';
 function startTitleFlash(n){
   stopTitleFlash();
   let on=false;
-  _titleFlash=setInterval(()=>{ on=!on; document.title = on ? `🔔 알림 ${n}건 — 확인하세요` : _baseTitle; },900);
+  _titleFlash=setInterval(()=>{ on=!on; document.title = on ? `알림 ${n}건 — 확인하세요` : _baseTitle; },900);
 }
 function stopTitleFlash(){ if(_titleFlash){ clearInterval(_titleFlash); _titleFlash=null; } document.title=_baseTitle; }
 export function renderAlarmToggle(){
   const b=$('alarmToggle'); if(!b)return;
-  b.textContent = S.settings.alarmOn ? '🔔 알람 켜짐' : '🔕 알람 꺼짐';
+  b.textContent = S.settings.alarmOn ? '알람 켜짐' : '알람 꺼짐';
   b.classList.toggle('alarm-off', !S.settings.alarmOn);
   b.title = S.settings.alarmOn ? '클릭하면 알람을 끕니다' : '클릭하면 알람을 켭니다';
 }

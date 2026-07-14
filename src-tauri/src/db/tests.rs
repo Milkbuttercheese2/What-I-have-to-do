@@ -44,11 +44,16 @@ fn sample_items() -> Vec<Item> {
             done: false,
             al: sub_al,
         }],
+        files: vec![
+            "C:\\업무\\재발급 안내.hwp".to_string(),
+            "\\\\share\\민원\\양식.xlsx".to_string(),
+        ],
         done: false,
         done_at: None,
         staged: true,
         al: al1,
         recur_id: Some(3001),
+        recur: Some(serde_json::json!({"type":"dow","dow":[1,3],"time":"09:00"})),
     };
 
     let item2 = Item {
@@ -58,11 +63,13 @@ fn sample_items() -> Vec<Item> {
         contacts: vec![],
         ids: vec![],
         subs: vec![],
+        files: vec![],
         done: true,
         done_at: Some(1_752_000_000_000),
         staged: false,
         al: AlarmMap::new(),
         recur_id: None,
+        recur: None,
     };
 
     vec![item1, item2]
@@ -104,6 +111,25 @@ fn items_round_trip() {
     // recur_id (soft link to a recur_def) survives; a hand-made item stays None.
     assert_eq!(loaded[0].recur_id, Some(3001));
     assert_eq!(loaded[1].recur_id, None);
+
+    // v3.0.0 파일 링크: 경로 문자열과 순서가 그대로 왕복 (UNC 경로 포함).
+    assert_eq!(loaded[0].files, original[0].files);
+    assert!(loaded[1].files.is_empty());
+
+    // v3.1.0 주기 업무: recur JSON이 손대지 않고 왕복, 없는 아이템은 None.
+    assert_eq!(loaded[0].recur, original[0].recur);
+    assert_eq!(loaded[1].recur, None);
+
+    // 빠른 검색: 메모·세부 제목·식별번호 어느 쪽으로도 걸리고 LIKE 특수문자는 이스케이프
+    let hits = items::quick_search(&conn, "재발급", 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].0, 1001);
+    let hits = items::quick_search(&conn, "서류 확인", 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    let hits = items::quick_search(&conn, "SR-2026", 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    let hits = items::quick_search(&conn, "%", 10).unwrap(); // 리터럴 % — 와일드카드로 새지 않음
+    assert_eq!(hits.len(), 0);
 }
 
 #[test]

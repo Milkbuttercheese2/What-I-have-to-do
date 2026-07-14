@@ -9,20 +9,15 @@ import {cardHtml} from './render.js';
 
 let calY=new Date().getFullYear(), calM=new Date().getMonth(), calSel=null;
 
-/* 캘린더 이벤트: 세부 할일 우선. 세부 할일이 없으면 그 업무의 메모를 마감일에 표기.
-   접수·마감 자체는 별도 표시하지 않음. */
+/* 캘린더 이벤트: 그날이 마감일인 업무 + 그날이 시각(점검·마감)인 세부 할일만 표시.
+   그 외(마감 없는 업무, 시각 없는 세부, 접수시각 등)는 표시하지 않음. */
 function dayEvents(){
   const map={};
   const push=(iso,payload)=>{ if(!iso)return; const d=new Date(iso); if(isNaN(d))return;
     const key=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; (map[key]=map[key]||[]).push(Object.assign({iso},payload)); };
   S.items.forEach(it=>{
-    const timed=(it.subs||[]).filter(s=>s.mid);
-    if(timed.length){
-      timed.forEach(s=>push(s.mid,{it,fkey:'mid',label:'점검',subTitle:s.title,subDone:s.done}));
-    }else{
-      // 세부 할일(시각 있는 것)이 없으면 메모를 마감일에
-      push((it.f||{}).due,{it,fkey:'memo',label:'업무'});
-    }
+    push((it.f||{}).due,{it,fkey:'due',label:'마감'});
+    (it.subs||[]).filter(s=>s.mid).forEach(s=>push(s.mid,{it,fkey:'mid',label:'세부',subTitle:s.title,subDone:s.done}));
   });
   return map;
 }

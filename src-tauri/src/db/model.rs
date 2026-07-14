@@ -91,6 +91,11 @@ pub struct Item {
     pub ids: Vec<Identifier>,
     #[serde(default)]
     pub subs: Vec<SubTask>,
+    /// Absolute file paths linked to this item (v3.0.0 파일 링크). Plain
+    /// strings, order-preserving; pre-v3 backups simply lack the key and
+    /// default to empty, and the legacy app ignores it on import.
+    #[serde(default)]
+    pub files: Vec<String>,
     #[serde(default)]
     pub done: bool,
     /// Epoch-ms when marked done (null when not done / re-opened). Used by
@@ -106,6 +111,11 @@ pub struct Item {
     /// round-trip unchanged.
     #[serde(rename = "recurId", default, skip_serializing_if = "Option::is_none")]
     pub recur_id: Option<i64>,
+    /// v3.1.0 주기 업무: recurrence definition owned by the item itself
+    /// ({type,dow/days,time} — see src/recur.js). Opaque JSON to Rust; the
+    /// frontend owns the semantics. Stored as JSON text in items.recur.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recur: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

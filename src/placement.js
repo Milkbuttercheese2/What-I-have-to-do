@@ -22,10 +22,10 @@ export function placeOf(it){
   if(nextMid&&nextMid>=t0&&nextMid<t1) return 'today';
 
   const subs=it.subs||[];
-  // '진행 중' = 실제로 손을 댄 업무
-  const started = subs.length>0 && subs.some(s=>s.done) && subs.some(s=>!s.done);  // 세부 일부 완료
-  const wrapUp  = mids.length===0 && subs.some(s=>s.mid) && vd && due>=t1;         // 점검 모두 끝, 마감만 남음
-  if(started||wrapUp) return 'doing';
+  // '진행 중' = 실제로 손을 댄 업무 — 세부를 하나라도 완료했으면 해당.
+  // 전부 완료해도 상위 업무를 완료 체크하기 전까지는 마무리만 남은 '진행 중'이다
+  // ('예정 · 대기'로 떨어지던 버그 수정 — 예정·대기는 손 안 댄 업무 전용).
+  if(subs.length>0 && subs.some(s=>s.done)) return 'doing';
   // 아직 손대지 않았고 내일 이후 점검/마감만 있는 것은 '예정 · 대기'
   return 'planned';
 }
