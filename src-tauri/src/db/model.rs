@@ -91,6 +91,11 @@ pub struct Item {
     pub ids: Vec<Identifier>,
     #[serde(default)]
     pub subs: Vec<SubTask>,
+    /// Absolute file paths linked to this item (v3.0.0 파일 링크). Plain
+    /// strings, order-preserving; pre-v3 backups simply lack the key and
+    /// default to empty, and the legacy app ignores it on import.
+    #[serde(default)]
+    pub files: Vec<String>,
     #[serde(default)]
     pub done: bool,
     /// Epoch-ms when marked done (null when not done / re-opened). Used by

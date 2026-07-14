@@ -15,6 +15,7 @@ import {initCalendar, renderCal} from './calendar.js';
 import {initAlarms} from './alarms.js';
 import {initBackup, reconcileImported} from './backup.js';
 import {initCapture} from './capture-bridge.js';
+import {initEverything} from './everything.js';
 
 reconcileCore();
 /* 콘솔 디버깅용 전역 미러 (읽기 전용 용도 — 코드는 항상 S를 본다) */
@@ -23,6 +24,7 @@ window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 
 initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
+initEverything();
 renderPresets();
 
 /* 탭 */
@@ -31,6 +33,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   const v=t.dataset.view;
   $('view-board').style.display=v==='board'?'grid':'none';
   $('strip').style.display=v==='board'?'flex':'none';
+  if(v!=='board')$('ev-results').style.display='none';
   $('view-cal').classList.toggle('on',v==='cal');
   $('view-done').classList.toggle('on',v==='done');
   $('capture').style.display=v==='board'?'block':'none';
@@ -80,7 +83,6 @@ setInterval(tickClock,1000); tickClock();
     console.error('initial load failed', e);
     alert('저장된 데이터를 불러오지 못했습니다.\n\n'+e+'\n\n앱은 열려 있지만 데이터 유실 방지를 위해 저장이 차단된 상태입니다.\n[JSON·DB파일 불러오기]로 백업에서 복원하거나, 앱을 다시 시작해보세요.');
   }
-  /* 버전 표기 규칙: 매니페스트 "2.2.0"→"v2.2", "2.21.0"→"v2.21"
-     (큰 업데이트 +0.1 = 가운데 자리, 사소한 업데이트 +0.01 = 가운데 자리 두번째 숫자) */
-  try{ const v=await window.__TAURI__.app.getVersion(); $('appVer').textContent='v'+v.replace(/\.0$/,''); }catch{}
+  /* 버전 표기: v3.0.0부터 X.Y.Z semver 그대로 표시 (구 십진수 규칙의 ".0" 절삭 폐지) */
+  try{ const v=await window.__TAURI__.app.getVersion(); $('appVer').textContent='v'+v; }catch{}
 })();

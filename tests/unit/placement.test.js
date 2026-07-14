@@ -26,9 +26,9 @@ test('오늘 안 마감 → today', () => {
   assert.equal(placeOf(base({f:{due:dueToday}})), 'today');
 });
 
-test('지난 미완료 세부 점검 → today / 완료 sub의 지난 mid는 무시', () => {
+test('지난 미완료 세부 점검 → today / 완료 sub의 지난 mid는 무시(전부 완료 → doing)', () => {
   assert.equal(placeOf(base({subs:[{title:'a', mid:iso(-30), done:false}]})), 'today');
-  assert.equal(placeOf(base({subs:[{title:'a', mid:iso(-30), done:true}]})), 'planned');
+  assert.equal(placeOf(base({subs:[{title:'a', mid:iso(-30), done:true}]})), 'doing');
 });
 
 test('오늘 안 도래할 세부 점검 → today', () => {
@@ -50,6 +50,14 @@ test('점검 모두 끝나고 마감만 내일 이후 → doing (wrapUp)', () =>
     f:{due:iso(60*26)},
     subs:[{title:'점검끝', done:true, mid:iso(-60)}],   // mid는 있으나 pending 아님
   });
+  assert.equal(placeOf(it), 'doing');
+});
+
+test('세부 전부 완료(마감·시각 없음) → doing — 예정·대기로 떨어지지 않음', () => {
+  const it = base({subs:[
+    {title:'a', done:true},
+    {title:'b', done:true},
+  ]});
   assert.equal(placeOf(it), 'doing');
 });
 

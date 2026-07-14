@@ -2,7 +2,7 @@
    렌더 — 보드/완료 카드 재생성 + persist()
    ========================================================================= */
 import {S, toggleDone} from './state.js';
-import {STORE} from './store.js';
+import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast, askNotify} from './dom-utils.js';
 import {fmtDue} from './datetime.js';
 import {placeOf} from './placement.js';
@@ -63,6 +63,11 @@ export function cardHtml(it,place){
     const m=es.mid?fmtDue(es.mid):null;
     subLine=`<div class="card-subline">▸ <span class="sub-title">${esc(es.title)}</span>${m?`${alarmDot(es,'mid')}<span class="sub-when ${m.cls==='late'?'late':''}">${esc(m.label)}</span>`:''}</div>`;
   }
+  const files=it.files||[];
+  const fileLine=files.length?`<div class="card-files">${files.map(p=>{
+    const n=String(p).split(/[\\/]/).filter(Boolean).pop()||p;
+    return `<span class="file-link" data-fopen="${escAttr(p)}" title="${escAttr('열기: '+p)}">📄 ${esc(n)}</span><span class="file-reveal" data-freveal="${escAttr(p)}" title="폴더에서 보기">📂</span>`;
+  }).join('')}</div>`:'';
   return `<div class="card p-${place}${it.done?' done':''}" data-open="${it.id}">
     <div class="card-top">
       <div class="chk ${it.done?'on':''}" data-id="${it.id}"></div>
@@ -70,6 +75,7 @@ export function cardHtml(it,place){
         <div class="card-memo">${memoHtml}</div>
         ${subLine}
         <div class="card-meta">${dueTagHtml(it)}${progress}</div>
+        ${fileLine}
       </div>
       <button class="del" data-del="${it.id}" title="삭제">×</button>
     </div></div>`;
@@ -115,6 +121,11 @@ export async function persist(){ window.items=S.items; await STORE.saveAll(S.ite
 export function initRender(){
   /* 카드 상호작용 */
   document.body.addEventListener('click',e=>{
+    /* 파일 링크 — 카드 안·Everything 결과 공용. 카드 열기(data-open)보다 먼저 */
+    const fo=e.target.closest('[data-fopen]');
+    if(fo){ e.stopPropagation(); invoke('open_file_path',{path:fo.dataset.fopen}).catch(err=>alert('파일을 열 수 없습니다:\n'+fo.dataset.fopen+'\n\n'+err)); return; }
+    const fr=e.target.closest('[data-freveal]');
+    if(fr){ e.stopPropagation(); invoke('reveal_file_path',{path:fr.dataset.freveal}).catch(err=>alert('폴더를 열 수 없습니다:\n'+err)); return; }
     const chk=e.target.closest('.chk');
     if(chk&&chk.dataset.id){ e.stopPropagation(); const it=S.items.find(x=>x.id==chk.dataset.id); if(it){toggleDone(it); persist();} return; }
     const del=e.target.closest('.del');

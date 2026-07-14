@@ -19,8 +19,16 @@ test('makeItem: 기본 모양 채움 + id 자동 부여', () => {
   assert.deepEqual(it.contacts, []);
   assert.deepEqual(it.ids, []);
   assert.deepEqual(it.subs, []);
+  assert.deepEqual(it.files, []);      // v3.0.0 파일 링크 기본값
   assert.deepEqual(it.al, {});
   assert.equal(typeof it.id, 'number');
+});
+
+test('migrateItem: 구버전(files 없음) 아이템에 files 배열 보정, 기존 값은 보존', () => {
+  const old = migrateItem({id:7, memo:'m'});
+  assert.deepEqual(old.files, []);
+  const withFiles = migrateItem({id:8, memo:'m', files:['C:\\a\\b.hwp']});
+  assert.deepEqual(withFiles.files, ['C:\\a\\b.hwp']);
 });
 
 test('makeItem: partial이 기본값을 이기고, 명시 id는 보존', () => {

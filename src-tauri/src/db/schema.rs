@@ -15,6 +15,7 @@ static MIGRATIONS: LazyLock<Migrations<'static>> = LazyLock::new(|| {
     Migrations::new(vec![
         M::up(include_str!("migrations/001_init.sql")),
         M::up(include_str!("migrations/002_recurrence.sql")),
+        M::up(include_str!("migrations/003_item_files.sql")),
     ])
 });
 

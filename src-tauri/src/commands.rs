@@ -138,7 +138,7 @@ pub fn get_data_dir(state: State<AppDb>) -> String {
 use crate::config::DATA_FOLDER_NAME;
 
 /// Opens a native folder picker for a *location*; if the user chooses one,
-/// creates `<location>/뭐해야했더라_데이터/` and points config.json at it,
+/// creates `<location>/뭐하려했더라_데이터/` and points config.json at it,
 /// with `pending_move_from` recording where the data still physically is.
 ///
 /// Deliberately does NOT copy any data here. An earlier version copied at
@@ -361,4 +361,142 @@ pub fn cancel_pending_import(state: State<AppDb>) -> Result<(), String> {
         std::fs::remove_file(&pending).map_err(to_err)?;
     }
     Ok(())
+}
+
+/* ===== v3.0.0 파일 링크 + Everything(voidtools) 연동 ===== */
+
+/// 파일 링크용 네이티브 파일 선택창 — 선택한 파일의 절대경로만 돌려준다
+/// (복사·이동 없음: 링크는 경로 문자열일 뿐이다).
+#[tauri::command]
+pub async fn pick_file_path(app: AppHandle) -> Result<Option<String>, String> {
+    let Some(picked) = app.dialog().file().blocking_pick_file() else {
+        return Ok(None);
+    };
+    Ok(Some(picked.into_path().map_err(to_err)?.to_string_lossy().into_owned()))
+}
+
+/// 카드의 파일 링크 클릭 → 기본 연결 프로그램으로 파일 열기.
+#[tauri::command]
+pub fn open_file_path(app: AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_path(&path, None::<String>).map_err(to_err)
+}
+
+/// 파일 링크의 📂 버튼 → 탐색기에서 해당 파일이 선택된 폴더 열기.
+#[tauri::command]
+pub fn reveal_file_path(app: AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().reveal_item_in_dir(&path).map_err(to_err)
+}
+
+/// 로컬에서 실행 중인 Everything(voidtools)의 HTTP 서버에 파일명 검색을
+/// 위임한다. 응답 JSON 본문을 문자열 그대로 돌려주고 해석은 프론트가 한다
+/// (Rust는 IO만 담당한다는 이 저장소의 역할 분담 그대로). Everything이
+/// 미실행이거나 HTTP 서버 옵션이 꺼져 있으면 연결이 즉시 실패하며, 프론트는
+/// 그것을 "기능 비활성" 신호로 삼아 UI를 숨긴다. 접속지는 127.0.0.1 고정 —
+/// 바깥 네트워크로는 절대 나가지 않는다 (내부망 방침 유지).
+#[tauri::command]
+pub fn everything_search(query: String, port: u16, count: u32) -> Result<String, String> {
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream =
+        TcpStream::connect_timeout(&addr, Duration::from_millis(400)).map_err(to_err)?;
+    stream.set_read_timeout(Some(Duration::from_millis(1500))).map_err(to_err)?;
+    stream.set_write_timeout(Some(Duration::from_millis(1500))).map_err(to_err)?;
+
+    // HTTP/1.0 + Connection: close — 청크 인코딩 없이 EOF까지 읽으면 끝이라
+    // 외부 HTTP 클라이언트 크레이트 없이도 안전하게 파싱된다.
+    let q = url_encode(&query);
+    let count = count.clamp(1, 100);
+    let req = format!(
+        "GET /?search={q}&json=1&path_column=1&count={count} HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(req.as_bytes()).map_err(to_err)?;
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).map_err(to_err)?;
+    let text = String::from_utf8_lossy(&buf);
+    let (head, body) = text.split_once("\r\n\r\n").ok_or("잘못된 HTTP 응답")?;
+    let status = head.lines().next().unwrap_or("");
+    if !status.contains(" 200") {
+        return Err(format!("Everything HTTP 응답 오류: {status}"));
+    }
+    Ok(body.to_string())
+}
+
+/// RFC 3986 percent-encoding (unreserved 문자만 통과) — 검색어의 한글·공백·
+/// 특수문자를 쿼리스트링에 안전하게 싣기 위한 최소 구현.
+fn url_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for b in s.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    #[test]
+    fn url_encode_passes_unreserved_and_encodes_hangul_and_space() {
+        assert_eq!(url_encode("abc-123_.~"), "abc-123_.~");
+        assert_eq!(url_encode("계약 a"), "%EA%B3%84%EC%95%BD%20a");
+    }
+
+    /// 가짜 로컬 HTTP 서버로 요청 라인·본문 파싱을 검증 — 실제 Everything의
+    /// 응답 형식(HTTP/1.0 + JSON 본문)을 흉내낸다.
+    #[test]
+    fn everything_search_sends_expected_request_and_returns_body() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut req = [0u8; 2048];
+            let n = sock.read(&mut req).unwrap();
+            let req = String::from_utf8_lossy(&req[..n]).into_owned();
+            sock.write_all(
+                b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n{\"totalResults\":1,\"results\":[{\"type\":\"file\",\"name\":\"a.hwp\",\"path\":\"C:\\\\docs\"}]}",
+            )
+            .unwrap();
+            req
+        });
+        let body = everything_search("계약 a".into(), port, 10).unwrap();
+        let req = server.join().unwrap();
+        assert!(
+            req.starts_with("GET /?search=%EA%B3%84%EC%95%BD%20a&json=1&path_column=1&count=10 HTTP/1.0\r\n"),
+            "unexpected request line: {req}"
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed["results"][0]["name"], "a.hwp");
+    }
+
+    #[test]
+    fn everything_search_errors_fast_when_nothing_listens() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener); // 이 포트엔 아무도 없다
+        assert!(everything_search("x".into(), port, 10).is_err());
+    }
+
+    #[test]
+    fn everything_search_rejects_non_200() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut req = [0u8; 2048];
+            let _ = sock.read(&mut req).unwrap();
+            sock.write_all(b"HTTP/1.0 401 Unauthorized\r\n\r\n").unwrap();
+        });
+        assert!(everything_search("x".into(), port, 10).is_err());
+    }
 }

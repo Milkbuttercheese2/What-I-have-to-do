@@ -12,7 +12,7 @@ import {persist} from './render.js';
 /* [JSON파일 백업] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
    한 번 지정하면 그 파일 핸들을 기억해 이후엔 같은 파일에 조용히 저장. */
 function backupPayload(){ return JSON.stringify({v:5,exported:new Date().toISOString(),fields:S.fields,presets:S.presets,idKinds:S.idKinds,settings:S.settings,recurDefs:S.recurDefs,items:S.items},null,1); }
-function backupName(){ const n=new Date(); return `뭐해야했더라_백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.json`; }
+function backupName(){ const n=new Date(); return `뭐하려했더라_백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.json`; }
 async function doBackup(){
   const text=backupPayload();
   // Tauri 창은 브라우저가 아니라 blob+<a download> 클릭을 받아줄 다운로드
@@ -57,14 +57,15 @@ export function initBackup(){
         '마감시각':fx((it.f||{}).due),
         '식별번호':(it.ids||[]).map(x=>`${x.kind}: ${x.val}`).join(' · '),
         '세부진행':subs.length?`${subs.filter(s=>s.done).length}/${subs.length}`:'',
-        '세부내역':subs.map(s=>(s.done?'[완료] ':'')+s.title+(s.mid?` (점검 ${fx(s.mid)})`:'')).join(' · ')
+        '세부내역':subs.map(s=>(s.done?'[완료] ':'')+s.title+(s.mid?` (점검 ${fx(s.mid)})`:'')).join(' · '),
+        '파일링크':(it.files||[]).join(' · ')
       };
     });
     const ws=XLSX.utils.json_to_sheet(rows); const cols=Object.keys(rows[0]);
     ws['!cols']=cols.map(c=>({wch:Math.max(10,Math.min(46,rows.reduce((m,r)=>Math.max(m,String(r[c]||'').length*1.7),c.length*2)))}));
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'업무목록');
     const n=new Date();
-    const name=`뭐해야했더라_업무목록_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.xlsx`;
+    const name=`뭐하려했더라_업무목록_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.xlsx`;
     // XLSX.writeFile()은 브라우저의 blob+<a download> 다운로드에 의존하는데,
     // Tauri 창은 그걸 받아줄 다운로드 관리자가 없어 조용히 아무 일도 안 일어난다
     // (JSON 백업도 같은 이유로 안 됐던 것과 동일한 원인) — 바이트를 직접 뽑아

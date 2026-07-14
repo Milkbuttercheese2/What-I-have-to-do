@@ -118,7 +118,7 @@ test('JSON 백업 내보내기: 파일명 패턴 + 내용이 유효한 v5 payloa
   env.onInvoke('save_text_file', args => { captured = args; return true; });
   $('bkExp').click();
   await env.flush(8);
-  assert.match(captured.suggestedName, /^뭐해야했더라_백업_\d{8}\.json$/);
+  assert.match(captured.suggestedName, /^뭐하려했더라_백업_\d{8}\.json$/);
   const parsed = JSON.parse(captured.content);
   assert.equal(parsed.v, 5);
   assert.equal(parsed.items[0].memo, '백업될 것');

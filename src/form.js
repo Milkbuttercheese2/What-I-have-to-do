@@ -2,6 +2,7 @@
    바로 입력 + 양식 패널
    ========================================================================= */
 import {S, newId, makeItem} from './state.js';
+import {invoke} from './store.js';
 import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
@@ -52,6 +53,10 @@ export function openForm(pre){
   const sw=$('fm-subs'); sw.innerHTML='';
   (pre.subs||[]).forEach(s=>addFormSubRow(s.title,s.mid,false,s));
   if(!(pre.subs||[]).length) addFormSubRow('','');
+
+  // 파일 링크
+  const fw=$('fm-files'); fw.innerHTML='';
+  (pre.files||[]).forEach(p=>addFormFileRow(p));
 
   updatePlacePreview();
   $('formPanel').classList.add('on');
@@ -122,6 +127,14 @@ function addFormSubRow(title,mid,focusIt,sub){
   if(focusIt) titleInput.focus();
 }
 
+/* 파일 링크 행 — 경로는 문자열 그대로 (직접 붙여넣기도 허용) */
+function addFormFileRow(path){
+  const row=document.createElement('div'); row.className='ffile-row';
+  row.innerHTML=`<input type="text" class="ffile-path" placeholder="파일 경로 (직접 붙여넣기 가능)" value="${escAttr(path||'')}"><button class="rm" title="삭제">×</button>`;
+  row.querySelector('.rm').addEventListener('click',()=>row.remove());
+  $('fm-files').appendChild(row);
+}
+
 function collectForm(){
   const f={};
   $('fm-grid').querySelectorAll('[data-fkey]').forEach(sp=>{ const v=readDtInput(sp); f[sp.dataset.fkey] = (v===null?'':v); });
@@ -143,7 +156,8 @@ function collectForm(){
       if(prev){ al = (prev.mid===mid) ? (prev.al||{}) : {}; } }
     return {id, title:t, mid, done, al};
   }).filter(Boolean);
-  return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs};
+  const files=[...$('fm-files').querySelectorAll('.ffile-path')].map(i=>i.value.trim()).filter(Boolean);
+  return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs, files};
 }
 function updatePlacePreview(){ try{ const d=collectForm(); const p=placeOf({staged:false,f:d.f,subs:d.subs}); $('fm-place').innerHTML=`저장 위치: <b>${PLACE_NAME[p]}</b>`; }catch{} }
 
@@ -158,6 +172,12 @@ export function initForm(){
   });
   $('fm-subadd').addEventListener('click',()=>addFormSubRow('','',true));
   enableDragReorder($('fm-subs'), '.fsub-row', '.drag-handle');
+  $('fm-fileadd').addEventListener('click', async ()=>{
+    let p=null;
+    try{ p=await invoke('pick_file_path'); }
+    catch(e){ alert('파일 선택 실패: '+e); return; }
+    if(p) addFormFileRow(p);
+  });
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t)$('inp').value=''; });
   $('fm-cancel').addEventListener('click',closeForm);
   $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); });
@@ -173,12 +193,12 @@ export function initForm(){
       const it=S.items.find(x=>x.id===editingId);
       if(it){
         const oldDue=(it.f||{}).due;
-        it.memo=d.memo; it.f=d.f; it.contacts=d.contacts; it.ids=d.ids; it.subs=d.subs; it.staged=false;
+        it.memo=d.memo; it.f=d.f; it.contacts=d.contacts; it.ids=d.ids; it.subs=d.subs; it.files=d.files; it.staged=false;
         it.al = it.al || {};
         if(oldDue !== d.f.due) delete it.al.due;   // F2: 마감이 바뀌면 알람 재무장
       }
     }else{
-      S.items.push(makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs}));
+      S.items.push(makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs, files:d.files}));
     }
     closeForm(); persist();
   });

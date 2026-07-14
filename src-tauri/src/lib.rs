@@ -132,7 +132,7 @@ pub fn run() {
                         let _ = app
                             .dialog()
                             .message(
-                                "처음 실행합니다.\n\n확인을 누르면 폴더 선택창이 열립니다.\n업무 데이터를 보관할 위치를 선택해주세요 — 선택한 위치 안에 '뭐해야했더라_데이터' 폴더가 만들어집니다.\n\n(선택을 취소하면 Windows 기본 앱 데이터 폴더에 저장하며, 이후 [저장 위치] 버튼으로 언제든 옮길 수 있습니다.)",
+                                "처음 실행합니다.\n\n확인을 누르면 폴더 선택창이 열립니다.\n업무 데이터를 보관할 위치를 선택해주세요 — 선택한 위치 안에 '뭐하려했더라_데이터' 폴더가 만들어집니다.\n\n(선택을 취소하면 Windows 기본 앱 데이터 폴더에 저장하며, 이후 [저장 위치] 버튼으로 언제든 옮길 수 있습니다.)",
                             )
                             .kind(MessageDialogKind::Info)
                             .title("데이터 저장 위치 선택")
@@ -315,7 +315,7 @@ pub fn run() {
             let mut tray = TrayIconBuilder::with_id("wmhh-tray")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
-                .tooltip("뭐해야 했더라")
+                .tooltip("뭐하려 했더라")
                 .on_menu_event(|app, ev| match ev.id().as_ref() {
                     "open" => open_main_window(app),
                     "quit" => app.exit(0),
@@ -379,6 +379,10 @@ pub fn run() {
             commands::save_binary_file,
             commands::import_backup_file,
             commands::cancel_pending_import,
+            commands::pick_file_path,
+            commands::open_file_path,
+            commands::reveal_file_path,
+            commands::everything_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

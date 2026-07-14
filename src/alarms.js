@@ -30,7 +30,7 @@ export function checkAlarms(){
   $('alarmBg').classList.add('on'); beep(); try{window.focus();}catch{} startTitleFlash(fire.length);
   invoke('focus_main_window').catch(()=>{}); // window.focus() can't steal OS focus from another app; this can
   if('Notification'in window&&Notification.permission==='granted'){ fire.forEach(a=>{try{
-    const nt=new Notification('뭐해야 했더라 — '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
+    const nt=new Notification('뭐하려 했더라 — '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
     nt.onclick=()=>{ try{window.focus();}catch{} try{nt.close();}catch{} };
   }catch{}}); }
 }

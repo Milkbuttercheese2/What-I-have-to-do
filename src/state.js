@@ -48,7 +48,7 @@ export function newId(){
    partial에 id가 없으면 newId()를 부여. Rust Item 구조체(model.rs)와 형태가 짝이다. */
 export function makeItem(partial={}){
   const it = Object.assign(
-    {memo:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], al:{}, recurId:null},
+    {memo:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}, recurId:null},
     partial);
   if(it.id==null) it.id = newId();
   return it;
@@ -78,6 +78,7 @@ export function migrateItem(o){
   it.contacts=Array.isArray(o.contacts)?o.contacts:[];
   it.ids=Array.isArray(o.ids)?o.ids.slice():[];
   it.subs=Array.isArray(o.subs)?o.subs:[];
+  it.files=Array.isArray(o.files)?o.files.slice():[];   // v3.0.0 파일 링크 (구버전 데이터엔 없음)
   // 메모 승계
   if(it.memo==null) it.memo = o.memo || o.title || '';
   // 관련인 승계

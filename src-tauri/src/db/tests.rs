@@ -44,6 +44,10 @@ fn sample_items() -> Vec<Item> {
             done: false,
             al: sub_al,
         }],
+        files: vec![
+            "C:\\업무\\재발급 안내.hwp".to_string(),
+            "\\\\share\\민원\\양식.xlsx".to_string(),
+        ],
         done: false,
         done_at: None,
         staged: true,
@@ -58,6 +62,7 @@ fn sample_items() -> Vec<Item> {
         contacts: vec![],
         ids: vec![],
         subs: vec![],
+        files: vec![],
         done: true,
         done_at: Some(1_752_000_000_000),
         staged: false,
@@ -104,6 +109,10 @@ fn items_round_trip() {
     // recur_id (soft link to a recur_def) survives; a hand-made item stays None.
     assert_eq!(loaded[0].recur_id, Some(3001));
     assert_eq!(loaded[1].recur_id, None);
+
+    // v3.0.0 파일 링크: 경로 문자열과 순서가 그대로 왕복 (UNC 경로 포함).
+    assert_eq!(loaded[0].files, original[0].files);
+    assert!(loaded[1].files.is_empty());
 }
 
 #[test]

@@ -54,6 +54,17 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
         }
     }
 
+    let mut files_by_item: HashMap<i64, Vec<String>> = HashMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT item_id, path FROM item_files ORDER BY item_id, sort_order, id")?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let item_id: i64 = row.get(0)?;
+            files_by_item.entry(item_id).or_default().push(row.get(1)?);
+        }
+    }
+
     let mut subs_by_item: HashMap<i64, Vec<SubTask>> = HashMap::new();
     {
         let mut stmt = conn.prepare(
@@ -102,6 +113,7 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
             contacts: contacts_by_item.remove(&id).unwrap_or_default(),
             ids: ids_by_item.remove(&id).unwrap_or_default(),
             subs: subs_by_item.remove(&id).unwrap_or_default(),
+            files: files_by_item.remove(&id).unwrap_or_default(),
             done: row.get::<_, i64>(5)? != 0,
             done_at: row.get(6)?,
             staged: row.get::<_, i64>(4)? != 0,
@@ -135,6 +147,8 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
         let mut ins_sub = tx.prepare(
             "INSERT INTO subtasks (id, item_id, title, mid_at, done, alarm, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )?;
+        let mut ins_file = tx
+            .prepare("INSERT INTO item_files (item_id, path, sort_order) VALUES (?1, ?2, ?3)")?;
 
         for it in items {
             let received = it.f.get("received").cloned();
@@ -169,6 +183,9 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
                 let mid = if s.mid.is_empty() { None } else { Some(s.mid.clone()) };
                 let sub_alarm = alarm::encode(&s.al, "mid");
                 ins_sub.execute(params![s.id, it.id, s.title, mid, s.done as i64, sub_alarm, i as i64])?;
+            }
+            for (i, p) in it.files.iter().enumerate() {
+                ins_file.execute(params![it.id, p, i as i64])?;
             }
         }
     }
