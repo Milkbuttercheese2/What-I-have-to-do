@@ -15,7 +15,20 @@ Branch-protection rules on `main` (require PR, block direct push) have **not** b
 
 ## Versioning convention (user-defined)
 
-Current release = **v2.4.0**. (The v3.0.0/v3.1.0 work was an *unreleased* rework done on another account; per the repo owner it was consolidated into **v2.4.0** for the actual release — the continuation of the old v2.31 line. So v3.x never shipped; treat it as internal history and read its CHANGELOG entries as such. Version numbers going 3.1.0 → 2.4.0 is harmless because no auto-updater or version-comparison logic exists.) **The project uses standard X.Y.Z semver** (X = 큰 개편/호환성 변화, Y = 기능 추가, Z = 버그 수정·소규모 조정), and the same `"X.Y.Z"` string goes into all THREE manifests together (`src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `package.json`). The UI header shows `getVersion()` verbatim (v3.0.0에서 구 십진수 규칙의 trailing-`.0` 절삭을 폐지 — `main.js`). The app was also renamed at v3.0.0: **'뭐하려 했더라'** (formerly '뭐해야 했더라'); the internal `productName`/crate name stay `wmhh-desktop` and the bundle identifier stays `com.wooseongkyun.wmhh` on purpose — changing the identifier would move `app_local_data_dir()` and orphan existing users' config/data. Legacy versions (≤ v2.31) used a decimal-magnitude scheme (v2.2 → v2.21 → … → v2.3(=2.30) → v2.31): read old CHANGELOG entries with that rule, and note those old manifest versions sort non-monotonically as semver (harmless — no auto-updater or version-comparison logic exists; don't add tooling that assumes semver ordering across the v2 era). A structural analysis lives in `구조 분석 보고서.md`; the built exe ships in `최종 프로그램 산출물/뭐하려 했더라.exe` and IS committed to git per user request.
+Current release = **v2.4.0**.
+
+> ⚠️ **버전 이력 주의 (반드시 읽을 것 — 과거에 여기서 혼선이 있었다):** 저장소 git 히스토리에는
+> `v3.0.0`·`v3.1.0` 커밋과 CHANGELOG 항목이 남아 있지만, **v3.x는 실제로 배포된 적이 없다.**
+> 그 작업은 *다른 계정에서 진행되던 미배포 개편*이었고, 당시 파일 링크·이름 변경 정도의 변화를
+> 두고 **대규모 개편(major)도 아닌데 버전을 3.0.0으로 임의 상향**해 버린 것이다(잘못된 범프).
+> 저장소 소유자 결정으로 이를 바로잡아, 실제 정식 배포는 **구 v2.31 라인을 잇는 `v2.4.0`**
+> 으로 되돌렸다. 따라서:
+> - **현재/실제 배포 버전 = v2.4.0.** 세 매니페스트(package.json·Cargo.toml·tauri.conf.json)도 2.4.0.
+> - v3.0.0·v3.1.0 CHANGELOG 항목은 *내부 이력*으로만 읽고, 실 배포 번호로 착각하지 말 것.
+> - **다음 버전은 v2.4.x(버그) / v2.5.0(기능 추가)로 이어간다.** 진짜 호환성 깨지는 대규모 개편이
+>   아닌 한 다시 3.x로 올리지 말 것. (자동 업데이터·버전 비교 로직이 없어 3.1.0 → 2.4.0 역전은 무해.)
+
+**The project uses standard X.Y.Z semver** (X = 큰 개편/호환성 변화, Y = 기능 추가, Z = 버그 수정·소규모 조정), and the same `"X.Y.Z"` string goes into all THREE manifests together (`src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `package.json`). The UI header shows `getVersion()` verbatim (v3.0.0에서 구 십진수 규칙의 trailing-`.0` 절삭을 폐지 — `main.js`). The app was also renamed at v3.0.0: **'뭐하려 했더라'** (formerly '뭐해야 했더라'); the internal `productName`/crate name stay `wmhh-desktop` and the bundle identifier stays `com.wooseongkyun.wmhh` on purpose — changing the identifier would move `app_local_data_dir()` and orphan existing users' config/data. Legacy versions (≤ v2.31) used a decimal-magnitude scheme (v2.2 → v2.21 → … → v2.3(=2.30) → v2.31): read old CHANGELOG entries with that rule, and note those old manifest versions sort non-monotonically as semver (harmless — no auto-updater or version-comparison logic exists; don't add tooling that assumes semver ordering across the v2 era). A structural analysis lives in `구조 분석 보고서.md`; the built exe ships in `최종 프로그램 산출물/뭐하려 했더라.exe` and IS committed to git per user request.
 
 **Changelog rule (user-defined, since v2.3):** every update pushed to GitHub must add an entry to `CHANGELOG.md` describing what changed (Korean, grouped 변경/추가/수정). Started at the v2.2→v2.3 transition — write the entry as part of the same PR/commit that makes the change.
 
