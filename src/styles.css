@@ -180,7 +180,11 @@
   .tag.who{background:var(--amber-bg);color:var(--amber)}
   .tag.mid{background:var(--slate-bg);color:var(--slate)}
   .tag.time{background:var(--slate-bg);color:var(--slate)}
-  .tag.time.late,.tag.time.soon,.tag.mid.late{background:var(--red-bg);color:var(--red)}
+  /* 마감·세부 시각 긴급도 5단계 배경색 (fmtDue → cls) */
+  .tag.time.u-imm,.tag.mid.u-imm{background:#fbe3dd;color:#c0392b}
+  .tag.time.u-today,.tag.mid.u-today{background:#fbe8d4;color:#b5651c}
+  .tag.time.u-tmr,.tag.mid.u-tmr{background:#faf1d4;color:#8f7118}
+  .tag.time.u-2d,.tag.mid.u-2d{background:#f1f0dc;color:#6f6b3a}
   .tag.custom{background:var(--gray-bg);color:var(--gray-fg)}
   .tag.idnum{background:#e9e4f2;color:#5b4a86}
   .tag .k{opacity:.72;margin-right:2px;font-weight:600}
@@ -345,7 +349,10 @@
   .card.done .card-memo{text-decoration:line-through;color:var(--done)}
   .card-subline{font-size:11px;color:var(--slate);margin-top:5px;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .card-subline .sub-when{font-family:var(--font-mono);font-size:11px;background:var(--slate-bg);padding:0 6px;border-radius:6px}
-  .card-subline .sub-when.late{background:var(--red-bg);color:var(--red)}
+  .card-subline .sub-when.u-imm{background:#fbe3dd;color:#c0392b}
+  .card-subline .sub-when.u-today{background:#fbe8d4;color:#b5651c}
+  .card-subline .sub-when.u-tmr{background:#faf1d4;color:#8f7118}
+  .card-subline .sub-when.u-2d{background:#f1f0dc;color:#6f6b3a}
   /* 알람 점 — 울림 여부 3단계(v2.4.4): ○ 대기 / ● 울림(빨강·깜빡임) / ● 확인함(초록) */
   .adot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;vertical-align:middle;margin-right:1px}
   .adot.ad-wait{border:1.5px solid var(--slate);background:transparent}
