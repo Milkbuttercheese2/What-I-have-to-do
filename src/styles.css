@@ -8,12 +8,6 @@
     --stage-today:#cf6a55;    /* 오늘 처리 — 적색 */
     --stage-doing:#c69a52;    /* 진행 중 — 노랑(황토) */
     --stage-planned:#5aa08f;  /* 예정 · 대기 — 녹색 */
-    /* 시간·담당자 5열 전용 색 (v2.5.4) — 기존 단계색(회/적/황/녹)과 겹치지 않는
-       남색(본인)·자주(타인) 계열. 오늘=진하게, 오늘 외=연하게로 그룹이 한눈에 구분된다. */
-    --own-metoday:#3f6cae;    /* 본인 · 오늘 — 진한 남색 */
-    --own-othtoday:#a1548f;   /* 타인 · 오늘 — 진한 자주 */
-    --own-meplan:#7ea3d6;     /* 본인 · 오늘 외 — 연한 남색 */
-    --own-othplan:#cf93c2;    /* 타인 · 오늘 외 — 연한 자주 */
 
     /* UI 액센트 (태그 · 버튼 · 프리셋 등) — 기존 청록 유지 */
     --amber:#4d938a; --amber-bg:#eef2f0;
@@ -198,21 +192,8 @@
   /* ---- 시간·담당자 모드 보드 (5열, v2.5.0) — main 공통 규칙 뒤에서 열 폭만 덮어씀 ---- */
   #view-board5{display:none;grid-template-columns:repeat(5,minmax(200px,292px));width:auto;max-width:1460px;justify-content:center;margin:0 auto;min-height:calc(100vh - 250px)}
   #view-board5 .col{width:auto;min-width:0;max-width:none;padding:16px 12px}
-  /* v2.5.4: 5개 구분 영역별 색 — 카드 좌측 세그먼트 + 컬럼 헤더 밑줄 + 점 */
-  .card.p-metoday::before{background:var(--own-metoday)}
-  .card.p-othtoday::before{background:var(--own-othtoday)}
-  .card.p-meplan::before{background:var(--own-meplan)}
-  .card.p-othplan::before{background:var(--own-othplan)}
-  #view-board5 .col-head{border-bottom:2px solid transparent;padding-bottom:4px;margin-bottom:8px}
-  #view-board5 .col:nth-child(1) .col-head{border-bottom-color:var(--stage-inbox)}
-  #view-board5 .col:nth-child(2) .col-head{border-bottom-color:var(--own-metoday)}
-  #view-board5 .col:nth-child(3) .col-head{border-bottom-color:var(--own-othtoday)}
-  #view-board5 .col:nth-child(4) .col-head{border-bottom-color:var(--own-meplan)}
-  #view-board5 .col:nth-child(5) .col-head{border-bottom-color:var(--own-othplan)}
-  #view-board5 .col:nth-child(2) .dot{background:var(--own-metoday)}
-  #view-board5 .col:nth-child(3) .dot{background:var(--own-othtoday)}
-  #view-board5 .col:nth-child(4) .dot{background:var(--own-meplan)}
-  #view-board5 .col:nth-child(5) .dot{background:var(--own-othplan)}
+  .card.p-metoday::before,.card.p-othtoday::before{background:var(--stage-today)}
+  .card.p-meplan::before,.card.p-othplan::before{background:var(--stage-planned)}
   .col:last-child{border-right:none}
   .col-head{display:flex;align-items:center;gap:8px;margin-bottom:3px}
   .dot{width:9px;height:9px;border-radius:50%;flex:none}
@@ -417,7 +398,7 @@
   .card.done .card-memo{text-decoration:line-through;color:var(--done)}
   /* v2.5.1: 세부 제목 글자는 메모와 동일 크기(14px), 점검 시각 칩은 메타 줄의 점검: 태그로 이동 */
   .card-subline{font-size:14px;color:var(--slate);margin-top:5px;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* v2.5.4: 세부(▸)·시각(알람점) 두 줄의 들여쓰기를 통일 — 앞 마커를 알람점과 같은 9px 폭 슬롯으로.
+  /* v2.5.4: 세부(▸)·시각(알람점) 두 줄의 들여쓰기 통일 — 앞 마커를 알람점과 같은 9px 폭 슬롯으로.
      세부: 9px 마커 + gap5 = 14px, 시각: 알람점 9px + margin1 + meta gap4 = 14px → 뒤 텍스트가 정렬된다. */
   .card-subline .sub-mark{display:inline-block;width:9px;flex:none;text-align:center;color:var(--slate)}
   /* 알람 점 — 울림 여부 3단계(v2.4.4): ○ 대기 / ● 울림(빨강·깜빡임) / ● 확인함(초록) */
