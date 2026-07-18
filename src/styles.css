@@ -420,9 +420,12 @@
     #view-board5{grid-template-columns:repeat(2,1fr)}
   }
   @media(max-width:900px){
-    .cap-row{flex-direction:column}
+    /* 세로 배치에서 입력칸이 절반 폭으로 쪼그라들지 않게 stretch + 폭 100%.
+       높이도 낮춰 좁은 창에서 입력부가 화면을 다 먹지 않게. */
+    .cap-row{flex-direction:column;align-items:stretch}
+    textarea#inp{width:100%;height:110px}
     .cap-btns{flex-direction:row;width:100%}
-    .cap-btns .btn{flex:1}
+    .cap-btns .btn{flex:1;height:38px}
   }
   @media(max-width:620px){
     main{grid-template-columns:1fr}
