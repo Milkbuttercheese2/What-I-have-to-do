@@ -89,9 +89,10 @@ test('fmtDue: 긴급도 5단계 (지남=임박 동일 · 오늘/내일/이틀 ·
   assert.equal(fmtDue(iso(-5)).cls, 'u-imm');                 // 마감 지남 → 임박색
   assert.ok(!fmtDue(iso(-5)).label.endsWith('지남'));          // '지남' 텍스트는 여전히 안 붙임
   assert.equal(fmtDue(iso(30)).cls, 'u-imm');
-  assert.ok(fmtDue(iso(30)).label.includes('분후'));
+  assert.ok(!fmtDue(iso(30)).label.includes('분후'));          // v2.5.1: 남은 시간 꼬리표 제거
   assert.equal(fmtDue(iso(90)).cls, 'u-imm');                 // 2시간 이내 → 임박
-  assert.ok(fmtDue(iso(90)).label.includes('시간후'));
+  assert.ok(!fmtDue(iso(90)).label.includes('시간후'));
+  assert.match(fmtDue(iso(30)).label, /^\d{1,2}\/\d{1,2}\([일월화수목금토]\) \d{2}:\d{2}$/);   // 날짜·시각만
   // 달력일 기준 (정오로 고정해 자정 경계 흔들림 방지)
   assert.equal(fmtDue(dayAt(1,12)).cls, 'u-tmr');             // 내일까지
   assert.equal(fmtDue(dayAt(2,12)).cls, 'u-2d');              // 이틀 안까지
