@@ -210,11 +210,8 @@
   .tag.who{background:var(--amber-bg);color:var(--amber)}
   .tag.mid{background:var(--slate-bg);color:var(--slate)}
   .tag.time{background:var(--slate-bg);color:var(--slate)}
-  /* 마감·세부 시각 긴급도 5단계 배경색 (fmtDue → cls) */
+  /* 마감·세부 시각 긴급도 배경색 — v2.5.1: 임박(지남~2시간내)만 강조, 나머지는 중립 */
   .tag.time.u-imm,.tag.mid.u-imm{background:#fbe3dd;color:#c0392b}
-  .tag.time.u-today,.tag.mid.u-today{background:#fbe8d4;color:#b5651c}
-  .tag.time.u-tmr,.tag.mid.u-tmr{background:#faf1d4;color:#8f7118}
-  .tag.time.u-2d,.tag.mid.u-2d{background:#f1f0dc;color:#6f6b3a}
   /* v2.5.1: 담당 태그는 다른 태그가 안 쓰는 뮤트 블루 — 시각(청록)·식별번호(보라)와 구분 */
   .tag.owner{background:#e3ebf6;color:#3c6c9e;font-weight:600}
   .tag.custom{background:var(--gray-bg);color:var(--gray-fg)}
