@@ -166,6 +166,29 @@ await capture('preset',     COMPACT, openPreset);
 await capture('boardmode',  COMPACT, openBoardMode);
 await capture('recur',      COMPACT, openRecur);
 
+/* 560px 양식 세부할일 줄 검증 — overflow 검사는 '줄바꿈'을 못 잡으므로 별도 확인.
+   기대: 제목(1줄) 아래 담당·날짜·시각이 '같은 줄(2줄째)'. Windows에서 컨트롤이 넓어
+   시각이 다음 줄로 밀리면(3줄) 여기서 잡는다. */
+{
+  const page = await browser.newPage({viewport: COMPACT, deviceScaleFactor: 1});
+  await page.addInitScript(INIT);
+  await page.goto(`http://127.0.0.1:${port}/index.html`, {waitUntil: 'networkidle'});
+  await page.waitForTimeout(900);
+  await openForm(page);
+  const rows = await page.evaluate(() => {
+    const top = s => { const el = document.querySelector(s); if (!el) return null; const r = el.getBoundingClientRect(); return Math.round(r.top); };
+    return {title: top('.fsub-row .fsub-title'), owner: top('.fsub-row .sub-owner'), dt: top('.fsub-row .fsub-dt'),
+            cOrg: top('.contact-row .c-org'), cPhone: top('.contact-row .c-phone')};
+  });
+  const sameLine = (a, b) => a != null && b != null && Math.abs(a - b) <= 8;
+  const subTwoLine = rows.title != null && rows.owner != null && rows.owner > rows.title + 8 && sameLine(rows.owner, rows.dt);
+  const contactTwoLine = rows.cPhone == null || rows.cOrg == null || rows.cPhone > rows.cOrg + 8;
+  console.log(`[${platformTag}] form-line-check  세부={title:${rows.title},담당:${rows.owner},날짜시각:${rows.dt}}  담당·날짜·시각 한 줄=${subTwoLine}  관련인 2줄=${contactTwoLine}`);
+  if (!subTwoLine) findings.push({shot: 'form-line-check', viewport: 560, sel: '세부할일 담당·날짜·시각이 한 줄이 아님(3줄로 밀림)', over: 0});
+  if (!contactTwoLine) findings.push({shot: 'form-line-check', viewport: 560, sel: '관련인 연락처가 별도 줄이 아님', over: 0});
+  await page.close();
+}
+
 await browser.close();
 server.close();
 

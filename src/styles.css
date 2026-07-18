@@ -469,13 +469,22 @@
     /* 좁은 창(560px 컴팩트) 가로 넘침 방지 (v2.5.6) — 필드를 다음 줄로 내리거나 1열로 접는다 */
     .fm-grid{grid-template-columns:1fr}          /* 접수시각·마감시각 세로로 쌓기 */
     .ps-new-grid{grid-template-columns:1fr}      /* 새 프리셋 버튼이름·메모 1열로 */
-    /* 세부 할 일: 첫 줄 = 할 일 제목(+체크·삭제), 둘째 줄 = 담당·날짜·시각 한 줄 (v2.5.6).
-       order 0 그룹(⠿·체크·제목·×) 뒤에 flex-basis:100% 브레이크를 넣어 order 1 그룹(담당·시각)을
-       강제로 다음 줄로 내린다 — 폭이 남아도 항상 두 줄. */
+    /* 세부 할 일: 1줄 제목 / 2줄 담당·날짜·시각 (v2.5.9).
+       날짜칸을 112px 고정으로 줄여 담당(112)+날짜(112)+시각(64)+아이콘이 한 줄에 들어간다.
+       ::after(order:0)로 제목 뒤 강제 개행 → 담당·날짜·시각은 order:1로 둘째 줄에 함께. */
     .fsub-row{flex-wrap:wrap;row-gap:5px}
-    .fsub-row::after{content:"";flex:0 0 100%;height:0;order:0}
-    .fsub-row .fsub-title{flex:1 1 auto;min-width:0}                 /* 첫 줄: 제목이 남는 폭 채움, × 는 그 뒤 */
-    .fsub-row input.sub-owner{order:1;flex:0 0 auto;width:84px;margin-left:43px}  /* 둘째 줄 시작 = 제목칸 시작선(⠿11+7+체크18+7=43) */
-    .fsub-row .fsub-dt{order:1;flex:1 1 auto;min-width:0}            /* 둘째 줄: 담당 옆에 날짜·시각 */
-    .fsub-row .fsub-dt .dt-date{flex:1 1 auto;min-width:0}           /* 남는 폭을 날짜칸이 흡수 */
+    .fsub-row::after{content:"";flex:0 0 100%;height:0;order:0}               /* 1줄(제목) 끝 강제 개행 */
+    .fsub-row .fsub-title{flex:1 1 auto;min-width:0}                          /* 1줄: 제목(남는 폭 채움) */
+    .fsub-row input.sub-owner{order:1;flex:0 0 auto;width:112px;margin-left:43px}  /* 2줄: 담당 (날짜칸과 동일 폭 112px) */
+    .fsub-row .fsub-dt{order:1;flex:0 1 auto;min-width:0}                     /* 2줄: 담당 옆 날짜·시각 */
+    .fsub-row .fsub-dt .dt-date{flex:0 0 auto;width:112px}                    /* 날짜칸 112px — 담당칸과 동일 폭 */
+    /* 관련인: 1줄 관련소속·관련인 / 2줄 연락처 (v2.5.9). ⠿·× 는 1줄에 유지. */
+    .contact-row{flex-wrap:wrap;row-gap:5px}
+    .contact-row .c-org,.contact-row .c-who{flex:1 1 0;min-width:0}           /* 1줄: 소속·이름 */
+    .contact-row .c-phone{order:1;flex:1 1 100%;min-width:0;margin-left:43px}  /* 2줄: 연락처 (x=85 정렬) */
+    /* 좌측 정렬 통일 (v2.5.9): 모든 입력행의 필드 시작선을 세부할일 기준 x≈85(행+43)로 맞춘다.
+       ⠿ 핸들만 있는 행(식별·관련인)은 핸들 뒤 여백을 줘 필드를 같은 선에서 시작시키고,
+       접수·마감(핸들 없음)은 dt-inp 자체를 43 들여쓴다. */
+    .fm-grid .dt-inp{margin-left:43px}
+    .fid-row .drag-handle,.contact-row .drag-handle{margin-right:25px}
   }
