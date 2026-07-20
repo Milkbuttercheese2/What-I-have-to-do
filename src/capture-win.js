@@ -15,7 +15,7 @@
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search'
 let draftTimer=null, searchTimer=null, searchSeq=0;
-let uiScale=100;                            // v2.6.0 화면 크기(%) — get_ui_scale로 채움
+let uiScale=100;                            // v2.5.15 화면 크기(%) — get_ui_scale로 채움
 
 const hideWin=()=>window.__TAURI__.window.getCurrentWindow().hide();   // 지연 접근 (테스트 하네스 제약)
 const invoke=(cmd,args)=>window.__TAURI__.core.invoke(cmd,args);
@@ -31,14 +31,14 @@ function sendDraft(text){
   window.__TAURI__.event.emitTo('main','wmhh://capture-draft',{text:String(text??'')}).catch(()=>{});
 }
 
-/* 화면 크기 적용 (v2.6.0) — 메인 창의 settings.uiScale 을 그대로 따른다.
+/* 화면 크기 적용 (v2.5.15) — 메인 창의 settings.uiScale 을 그대로 따른다.
    캡처 웹뷰는 메인 앱 모듈(store.js)을 못 쓰므로 settings 를 직접 못 읽는다:
    대신 좁게 열어둔 get_ui_scale 커맨드로 읽는다.
    내용 확대(zoom)와 네이티브 창 크기(resize_capture)는 반드시 함께 바꿔야 한다 —
    한쪽만 하면 글자가 창 밖으로 잘리거나 반대로 빈 여백이 남는다. */
 async function applyCaptureScale(){
   const n=Number(await invoke('get_ui_scale').catch(()=>100));
-  uiScale=(n>=100&&n<=130)?Math.round(n):100;
+  uiScale=(n>=80&&n<=150)?Math.round(n):100;
   document.body.style.zoom = uiScale===100 ? '' : String(uiScale/100);
   invoke('resize_capture',{height:mode==='search'?406:126,scale:uiScale}).catch(()=>{});
 }

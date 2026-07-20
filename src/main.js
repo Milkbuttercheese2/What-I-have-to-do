@@ -19,7 +19,7 @@ import {initSettingsMenu} from './settings-menu.js';
 import {initRecurBox, runRecurSpawn} from './recur-box.js';
 import {makeItem} from './state.js';
 import {setPlaceMode, placeMode} from './placement.js';
-import {initUiScale, applyUiScale, closeUiScaleModal} from './ui-scale.js';
+import {initUiScale, applyUiScale} from './ui-scale.js';
 
 reconcileCore();
 /* 콘솔 디버깅용 전역 미러 (읽기 전용 용도 — 코드는 항상 S를 본다) */
@@ -94,7 +94,6 @@ document.addEventListener('keydown',e=>{
   if($('formPanel').classList.contains('on')){ closeForm(); return; }
   if($('presetModal').classList.contains('on')){ $('presetModal').classList.remove('on'); return; }
   if($('boardModeModal').classList.contains('on')){ closeBoardModeModal(); return; }
-  if($('uiScaleModal').classList.contains('on')){ closeUiScaleModal(); return; }
 });
 
 function tickClock(){ const n=new Date();
