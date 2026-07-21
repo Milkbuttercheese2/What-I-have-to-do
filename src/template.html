@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LawEverything — 조달 법령 관계 그래프</title>
+<title>LawEverything — 조달 법령 즉시검색</title>
 <style>
   :root{
     --bg:#0f1420; --panel:#171d2b; --panel2:#1e2537; --line:#2b3346;
@@ -13,280 +13,423 @@
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
-  #app{display:grid;grid-template-columns:320px 1fr;height:100vh}
-  aside{background:var(--panel);border-right:1px solid var(--line);
-    display:flex;flex-direction:column;min-height:0}
-  header{padding:14px 16px;border-bottom:1px solid var(--line)}
-  header h1{margin:0;font-size:15px;letter-spacing:.2px}
-  header p{margin:4px 0 0;font-size:11px;color:var(--muted);line-height:1.5}
-  .search{padding:12px 14px;border-bottom:1px solid var(--line)}
-  .search input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
-    background:var(--panel2);color:var(--text);font-size:13px;outline:none}
-  .search input:focus{border-color:var(--accent)}
-  .toggles{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
-  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
-  .results{overflow:auto;flex:1;min-height:0}
-  .ritem{padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}
+  body{overflow:hidden}
+
+  /* ───────── 스포틀라이트 (초기 화면) ───────── */
+  #spot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+    padding:0 20px;z-index:20;background:var(--bg)}
+  #spot.docked{background:transparent}
+  #spot .brand{margin-top:18vh;text-align:center;transition:opacity .15s}
+  #spot .brand h1{margin:0;font-size:26px;letter-spacing:-.4px;font-weight:650}
+  #spot .brand p{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+  #spot.typing .brand{display:none}
+  #spot.typing{padding-top:6vh}
+  .qwrap{width:100%;max-width:680px;margin-top:26px;position:relative}
+  #spot.typing .qwrap{margin-top:0}
+  #q{width:100%;padding:15px 17px;border-radius:13px;border:1px solid var(--line);
+    background:var(--panel);color:var(--text);font-size:16px;outline:none;
+    box-shadow:0 6px 26px rgba(0,0,0,.35)}
+  #q:focus{border-color:var(--accent)}
+  .hint{margin-top:9px;font-size:11.5px;color:var(--muted);text-align:center}
+  .hint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-family:inherit;font-size:10.5px}
+
+  .results{width:100%;max-width:680px;margin-top:12px;overflow:auto;flex:1;min-height:0;
+    padding-bottom:24px}
+  .ritem{padding:10px 13px;border-radius:10px;cursor:pointer;display:flex;gap:10px;align-items:baseline}
+  .ritem.sel{background:var(--panel2);outline:1px solid var(--line)}
   .ritem:hover{background:var(--panel2)}
-  .ritem .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
-  .ritem .g{color:var(--muted);font-size:11px}
-  .ritem b{font-weight:600}
-  main{position:relative;min-width:0}
-  svg{width:100%;height:100%;display:block;cursor:grab}
-  svg:active{cursor:grabbing}
-  .edge{stroke-width:1.6;fill:none}
+  .ritem .dot{width:8px;height:8px;border-radius:50%;flex:none;align-self:center}
+  .ritem .main{flex:1;min-width:0}
+  .ritem .ttl{font-size:13.5px}
+  .ritem .ttl b{color:var(--accent);font-weight:600}
+  .ritem .sub{font-size:11.5px;color:var(--muted);margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ritem .badge{font-size:10px;color:var(--muted);background:var(--panel2);
+    border-radius:20px;padding:2px 8px;flex:none}
+  .none{color:var(--muted);font-size:13px;text-align:center;padding:30px}
+
+  /* ───────── 원문 뷰 ───────── */
+  #reader{position:fixed;inset:0;display:none;grid-template-rows:auto 1fr;z-index:10}
+  #reader.on{display:grid}
+  .topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;
+    border-bottom:1px solid var(--line);background:var(--panel)}
+  .topbar button{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+  .topbar button:hover{border-color:var(--accent)}
+  .topbar .grow{flex:1;min-width:0}
+  .topbar .metaline{font-size:11px;color:var(--muted);text-align:right;line-height:1.5}
+  .topbar .metaline.warn{color:var(--wimim)}
+
+  .cols{display:grid;grid-template-columns:1fr 380px;min-height:0}
+  .doc{overflow:auto;padding:26px 34px 60px}
+  .doc .crumb{font-size:12px;color:var(--muted)}
+  .doc h2{margin:6px 0 2px;font-size:22px;letter-spacing:-.3px}
+  .doc .subt{font-size:13px;color:var(--muted)}
+  .stamp{margin-top:10px;font-size:11px;color:var(--muted);padding:4px 9px;
+    border-radius:6px;background:var(--panel2);display:inline-block}
+  .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
+  .body{margin-top:20px;font-size:14.5px;line-height:1.95;color:#dbe3f0;
+    white-space:pre-wrap;max-width:74ch}
+  .body a.cite{color:var(--inyong);text-decoration:none;
+    border-bottom:1px dashed rgba(92,200,255,.5);cursor:pointer}
+  .body a.cite:hover{background:rgba(92,200,255,.12)}
+  .body mark{background:rgba(76,154,255,.28);color:inherit;border-radius:3px}
+
+  .side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
+  .side h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.6px}
+  #mini{width:100%;height:260px;display:block;border-bottom:1px solid var(--line)}
+  .rel{font-size:12.5px;padding:7px 15px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
+  .rel:hover{background:var(--panel2)}
+  .rel .k{font-size:9.5px;padding:1px 6px;border-radius:20px;flex:none}
+  .rel .k.위임{background:rgba(246,169,74,.18);color:var(--wimim)}
+  .rel .k.인용{background:rgba(92,200,255,.16);color:var(--inyong)}
+  .rel .k.소속{background:#2a3247;color:var(--muted)}
+  .rel .ev{color:var(--muted);font-size:11px}
+  .relempty{padding:6px 15px 14px;font-size:12px;color:var(--muted)}
+
+  /* 국소 그래프 */
+  .edge{stroke-width:1.5;fill:none}
   .edge.위임{stroke:var(--wimim)}
   .edge.인용{stroke:var(--inyong);stroke-dasharray:5 4}
-  .edge.소속{stroke:#39425a;stroke-width:1;opacity:.5}
-  .edge.dim{opacity:.06}
+  .edge.소속{stroke:var(--sosok);stroke-width:1;opacity:.55}
   .node{cursor:pointer}
-  .node circle,.node rect{stroke:#0c111c;stroke-width:1.5}
+  .node circle{stroke:#0c111c;stroke-width:1.5}
   .node.ext circle{stroke-dasharray:3 3;stroke:#6b7690}
-  .node text{font-size:11px;fill:var(--text);pointer-events:none;paint-order:stroke;
+  .node.focus circle{stroke:#fff;stroke-width:2.5}
+  .node text{font-size:10px;fill:var(--text);pointer-events:none;paint-order:stroke;
     stroke:#0c111c;stroke-width:3px}
-  .node.dim{opacity:.12}
-  .node.match circle,.node.match rect{stroke:#fff;stroke-width:2.5}
-  .legend{position:absolute;left:14px;bottom:14px;background:rgba(23,29,43,.9);
-    border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted)}
-  .legend .row{display:flex;align-items:center;gap:7px;margin:3px 0}
-  .legend .ln{width:22px;height:0;border-top:2px solid}
-  .detail{position:absolute;right:14px;top:14px;width:300px;max-height:calc(100% - 28px);
-    overflow:auto;background:rgba(23,29,43,.97);border:1px solid var(--line);border-radius:12px;
-    padding:0;display:none;box-shadow:0 8px 30px rgba(0,0,0,.4)}
-  .detail.on{display:block}
-  .detail .dh{padding:13px 15px;border-bottom:1px solid var(--line)}
-  .detail .tag{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--panel2);color:var(--muted)}
-  .detail h2{margin:8px 0 2px;font-size:15px}
-  .detail .sub{font-size:12px;color:var(--muted)}
-  .detail .stamp{margin-top:7px;font-size:10.5px;color:var(--muted);
-    padding:3px 7px;border-radius:5px;background:var(--panel2);display:inline-block}
-  .detail .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
-  .detail .body{padding:12px 15px}
-  .detail .txt{font-size:12px;line-height:1.65;color:#cdd6e6;background:var(--panel2);
-    border-radius:8px;padding:10px;white-space:pre-wrap}
-  .detail .relhead{font-size:11px;color:var(--muted);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.5px}
-  .detail .rel{font-size:12px;padding:6px 8px;border-radius:7px;cursor:pointer;display:flex;gap:6px;align-items:center}
-  .detail .rel:hover{background:var(--panel2)}
-  .detail .rel .k{font-size:10px;padding:1px 6px;border-radius:20px}
-  .detail .rel .k.위임{background:rgba(246,169,74,.18);color:var(--wimim)}
-  .detail .rel .k.인용{background:rgba(92,200,255,.16);color:var(--inyong)}
-  .detail .rel .k.소속{background:#2a3247;color:var(--muted)}
-  .detail .close{position:absolute;right:11px;top:11px;cursor:pointer;color:var(--muted);font-size:16px}
-  .empty{color:var(--muted);font-size:12px;padding:16px 14px}
 </style>
 </head>
 <body>
-<div id="app">
-  <aside>
-    <header>
-      <h1>LawEverything · 조달 법령 관계</h1>
-      <p id="meta"></p>
-    </header>
-    <div class="search">
-      <input id="q" placeholder="법령·조문·키워드 즉시검색  (예: 수의계약, 제7조, 보증금)" autocomplete="off"/>
-      <div class="toggles">
-        <label><input type="checkbox" id="t-위임" checked/> 위임</label>
-        <label><input type="checkbox" id="t-인용" checked/> 인용</label>
-        <label><input type="checkbox" id="t-소속" checked/> 소속</label>
-      </div>
-    </div>
-    <div class="results" id="results"></div>
-  </aside>
-  <main>
-    <svg id="svg"></svg>
-    <div class="legend">
-      <div class="row"><span class="ln" style="border-color:var(--wimim)"></span> 위임 (법→시행령→규칙)</div>
-      <div class="row"><span class="ln" style="border-color:var(--inyong);border-top-style:dashed"></span> 인용 (조문→조문)</div>
-      <div class="row"><span class="ln" style="border-color:#39425a"></span> 소속 (법령→조문)</div>
-    </div>
-    <div class="detail" id="detail"></div>
-  </main>
+
+<!-- 검색 (초기 화면 = 본체) -->
+<div id="spot">
+  <div class="brand">
+    <h1>LawEverything</h1>
+    <p id="meta"></p>
+  </div>
+  <div class="qwrap">
+    <input id="q" autocomplete="off" spellcheck="false"
+      placeholder="조문·키워드 검색   예) 수의계약 · 7조 보증금 · ㅅㅇㄱㅇ" />
+  </div>
+  <div class="hint" id="hint">
+    <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 원문 · <kbd>Esc</kbd> 닫기 · 초성 검색 가능
+  </div>
+  <div class="results" id="results"></div>
 </div>
+
+<!-- 원문 -->
+<div id="reader">
+  <div class="topbar">
+    <button id="back">← 뒤로</button>
+    <button id="tosearch">검색 <kbd>/</kbd></button>
+    <div class="grow"></div>
+    <div class="metaline" id="rmeta"></div>
+  </div>
+  <div class="cols">
+    <div class="doc" id="doc"></div>
+    <div class="side">
+      <h3>관계 그래프 (2단계)</h3>
+      <svg id="mini"></svg>
+      <div id="rels"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 const GRAPH = /*__GRAPH__*/;
 </script>
 <script>
+/*__SEARCH__*/
+</script>
+<script>
 (function(){
   const {nodes,edges,meta}=GRAPH;
+  const byId=new Map(nodes.map(n=>[n.id,n]));
+  const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-  // ---- 법령 확인일 배너 ----
-  // 폐쇄망에서는 데이터가 늘 과거다. "언제 기준인지"를 숨기면 실무자가
-  // 낡은 조문을 현행으로 착각한다. 항상 보이게 하고, 낡으면 색으로 경고한다.
-  (function(){
-    const v=meta.확인요약, el=document.getElementById('meta');
-    const base=`${meta.domain||''} · 스냅샷 ${meta.snapshotDate||meta.기준일||''}`.replace(/^ · /,'');
-    if(!v){el.textContent=base;return;}
-    const parts=[base];
-    if(meta.기준일) parts.push(`기준일 ${meta.기준일}`);
-    if(v.현행) parts.push(`현행 ${v.현행}건`);
-    if(v.시행예정) parts.push(`시행예정 ${v.시행예정}건 (인용 제외)`);
-    if(v.최고경과일!=null) parts.push(`최종확인 ${v.최고경과일}일 전`);
-    el.textContent=parts.join(' · ');
-    if(v.낡음>0){
-      el.style.color='var(--wimim)';
-      el.textContent+=` · ⚠ ${v.낡음}건 재수집 필요`;
-    }
-  })();
+  // 나가는/들어오는 관계 미리 묶기
+  const outs=new Map(), ins=new Map();
+  for(const e of edges){
+    if(!outs.has(e.source))outs.set(e.source,[]); outs.get(e.source).push(e);
+    if(!ins.has(e.target))ins.set(e.target,[]);   ins.get(e.target).push(e);
+  }
+  const adj=new Map();
+  for(const e of edges){
+    if(!adj.has(e.source))adj.set(e.source,new Set());
+    if(!adj.has(e.target))adj.set(e.target,new Set());
+    adj.get(e.source).add(e.target); adj.get(e.target).add(e.source);
+  }
 
   // ---- 색상: 법령 가문(hue) × 유형(명도) ----
-  const HUE={};let hueSeed=[210,145,275,25,330,190];
+  const HUE={};const hueSeed=[210,145,275,25,330,190,55];
   nodes.forEach(n=>{if(n.family&&!(n.family in HUE))HUE[n.family]=hueSeed[Object.keys(HUE).length%hueSeed.length];});
-  const light={ "법률":46,"시행령":58,"시행규칙":68 };
-  function color(n){
-    if(n.kind==='외부법') return 'hsl(220,8%,55%)';
-    const h=HUE[n.family]??220; return `hsl(${h},55%,${light[n.type]||55}%)`;
-  }
+  const light={"법률":46,"시행령":58,"시행규칙":66,"계약예규":72};
+  const color=n=>n.kind==='외부법'?'hsl(220,8%,55%)':`hsl(${HUE[n.family]??220},55%,${light[n.type]||60}%)`;
 
-  const byId=new Map(nodes.map(n=>[n.id,n]));
-  const adj=new Map(nodes.map(n=>[n.id,new Set()]));
-  edges.forEach(e=>{adj.get(e.source).add(e.target);adj.get(e.target).add(e.source);});
+  const nameOf=n=>n.kind==='조문'?`${n.group} ${n.label}`:n.label;
+  const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:'';
 
-  // ---- 포스 시뮬레이션 (바닐라) ----
-  const svg=document.getElementById('svg');
-  let W=svg.clientWidth,H=svg.clientHeight;
-  nodes.forEach(n=>{n.x=W/2+(Math.random()-.5)*300;n.y=H/2+(Math.random()-.5)*300;n.vx=0;n.vy=0;});
-  const R=n=>n.kind==='법령'?13:n.kind==='외부법'?9:8;
-  let alpha=1;
-  function tick(){
-    // 반발
-    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-      const a=nodes[i],b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y;let d2=dx*dx+dy*dy||1;
-      let f=2600/d2;let d=Math.sqrt(d2);dx/=d;dy/=d;
-      a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;
+  // ───────── 확인일 배너 ─────────
+  // 폐쇄망에서는 데이터가 늘 과거다. "언제 기준인지"를 숨기면 낡은 조문을 현행으로 착각한다.
+  const v=meta.확인요약;
+  const metaText=(()=>{
+    const p=[];
+    if(meta.기준일)p.push(`기준일 ${ymd(meta.기준일)}`);
+    if(v){
+      if(v.현행)p.push(`현행 ${v.현행}건`);
+      if(v.시행예정)p.push(`시행예정 ${v.시행예정}건 · 인용 제외`);
+      if(v.최고경과일!=null)p.push(`최종확인 ${v.최고경과일}일 전`);
+      if(v.낡음>0)p.push(`⚠ ${v.낡음}건 재수집 필요`);
     }
-    // 스프링
-    edges.forEach(e=>{const a=byId.get(e.source),b=byId.get(e.target);
-      const target=e.kind==='소속'?70:120;let dx=b.x-a.x,dy=b.y-a.y;let d=Math.hypot(dx,dy)||1;
-      let f=(d-target)*0.02;dx/=d;dy/=d;a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;});
-    // 중심 중력
-    nodes.forEach(n=>{n.vx+=(W/2-n.x)*0.002;n.vy+=(H/2-n.y)*0.002;});
-    // 적분
-    nodes.forEach(n=>{if(n.fx!=null){n.x=n.fx;n.y=n.fy;n.vx=n.vy=0;return;}
-      n.vx*=0.82;n.vy*=0.82;n.x+=n.vx*alpha;n.y+=n.vy*alpha;
-      n.x=Math.max(24,Math.min(W-24,n.x));n.y=Math.max(24,Math.min(H-24,n.y));});
-    alpha*=0.995;if(alpha<0.03)alpha=0.03;
-    render();
-    requestAnimationFrame(tick);
+    return p.join(' · ');
+  })();
+  document.getElementById('meta').textContent=metaText;
+  const rmeta=document.getElementById('rmeta');
+  rmeta.textContent=metaText;
+  if(v&&v.낡음>0)rmeta.classList.add('warn');
+
+  // ───────── 검색 ─────────
+  const idx=LawSearch.create(nodes);
+  const q=document.getElementById('q'), results=document.getElementById('results');
+  const spot=document.getElementById('spot'), hint=document.getElementById('hint');
+  let hits=[], cur=0;
+
+  function highlight(text,raw){
+    const t=String(raw||'').trim();
+    if(!t)return esc(text);
+    const i=text.toLowerCase().indexOf(t.toLowerCase());
+    if(i<0)return esc(text);
+    return esc(text.slice(0,i))+'<b>'+esc(text.slice(i,i+t.length))+'</b>'+esc(text.slice(i+t.length));
   }
 
-  // ---- 렌더 ----
-  const NS='http://www.w3.org/2000/svg';
-  svg.innerHTML=`<defs>
-    <marker id="a-위임" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="var(--wimim)"/></marker>
-    <marker id="a-인용" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="var(--inyong)"/></marker>
-  </defs><g id="edges"></g><g id="nodes"></g>`;
-  const gE=svg.querySelector('#edges'),gN=svg.querySelector('#nodes');
-  const eEls=edges.map(e=>{const p=document.createElementNS(NS,'line');
-    p.setAttribute('class','edge '+e.kind);
-    if(e.kind!=='소속')p.setAttribute('marker-end',`url(#a-${e.kind})`);
-    gE.appendChild(p);return p;});
-  const nEls=nodes.map(n=>{const g=document.createElementNS(NS,'g');
-    g.setAttribute('class','node'+(n.kind==='외부법'?' ext':''));
-    const c=document.createElementNS(NS,'circle');
-    c.setAttribute('r',R(n));c.setAttribute('fill',color(n));
-    if(n.kind==='법령'){c.setAttribute('r',R(n));}
-    const t=document.createElementNS(NS,'text');
-    t.setAttribute('text-anchor','middle');t.setAttribute('dy',R(n)+13);
-    t.textContent=n.kind==='조문'?`${n.group} ${n.label}`:n.label;
-    if(n.kind==='조문')t.setAttribute('dy',R(n)+12);
-    g.appendChild(c);g.appendChild(t);gN.appendChild(g);
-    g.addEventListener('click',ev=>{ev.stopPropagation();select(n.id);});
-    enableDrag(g,n);
-    return g;});
-  function render(){
-    edges.forEach((e,i)=>{const a=byId.get(e.source),b=byId.get(e.target);
-      const rb=R(b);const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
-      const ex=b.x-dx/d*(rb+2),ey=b.y-dy/d*(rb+2);
-      eEls[i].setAttribute('x1',a.x);eEls[i].setAttribute('y1',a.y);
-      eEls[i].setAttribute('x2',ex);eEls[i].setAttribute('y2',ey);});
-    nodes.forEach((n,i)=>nEls[i].setAttribute('transform',`translate(${n.x},${n.y})`));
-  }
-
-  // ---- 드래그 ----
-  function enableDrag(g,n){
-    let down=false;
-    g.addEventListener('pointerdown',e=>{down=true;n.fx=n.x;n.fy=n.y;g.setPointerCapture(e.pointerId);alpha=.6;});
-    g.addEventListener('pointermove',e=>{if(!down)return;const r=svg.getBoundingClientRect();
-      n.fx=e.clientX-r.left;n.fy=e.clientY-r.top;});
-    g.addEventListener('pointerup',e=>{down=false;n.fx=n.fy=null;});
-  }
-
-  // ---- 하이라이트 / 선택 ----
-  let selected=null;
-  function highlight(id){
-    const keep=new Set([id,...adj.get(id)]);
-    nEls.forEach((el,i)=>el.classList.toggle('dim',!keep.has(nodes[i].id)));
-    eEls.forEach((el,i)=>el.classList.toggle('dim',edges[i].source!==id&&edges[i].target!==id));
-  }
-  function clearHi(){nEls.forEach(el=>el.classList.remove('dim'));eEls.forEach(el=>el.classList.remove('dim'));}
-  svg.addEventListener('click',()=>{selected=null;clearHi();document.getElementById('detail').classList.remove('on');});
-
-  function select(id){
-    selected=id;highlight(id);renderDetail(id);
-    const n=byId.get(id);alpha=.5;
-  }
-  function renderDetail(id){
-    const n=byId.get(id);const d=document.getElementById('detail');
-    const out=edges.filter(e=>e.source===id),inc=edges.filter(e=>e.target===id);
-    const relRow=(e,dir)=>{const other=byId.get(dir==='out'?e.target:e.source);
-      return `<div class="rel" data-go="${other.id}"><span class="k ${e.kind}">${e.kind}</span>
-        <span>${dir==='out'?'→':'←'} ${other.kind==='조문'?other.group+' '+other.label:other.label}
-        ${e.evidence?`<span style="color:var(--muted)"> ⟨${e.evidence}⟩</span>`:''}</span></div>`;};
-    // 조문을 근거로 인용하려면 "언제 기준 조문인지"를 알아야 한다.
-    const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:'';
-    const stamp=n.확인일||n.시행일
-      ? `<div class="stamp${n.낡음?' old':''}">${[
-          n.시행일?`시행 ${ymd(n.시행일)}`:'',
-          n.확인일?`확인 ${ymd(n.확인일)}`:'',
-          n.상태&&n.상태!=='현행'?n.상태:'',
-          n.낡음?'⚠ 재수집 필요':'',
-        ].filter(Boolean).join(' · ')}</div>`
-      : '';
-
-    d.innerHTML=`<span class="close">✕</span>
-      <div class="dh"><span class="tag">${n.type} · ${n.kind}</span>
-        <h2>${n.kind==='조문'?n.group+' '+n.label:n.label}</h2>
-        <div class="sub">${n.kind==='조문'?(n.title||''):(n.name||'')}</div>
-        ${stamp}</div>
-      <div class="body">
-        ${n.text?`<div class="txt">${n.text}</div>`:''}
-        ${out.length?`<div class="relhead">이 조문이 향하는 곳 (${out.length})</div>${out.map(e=>relRow(e,'out')).join('')}`:''}
-        ${inc.length?`<div class="relhead">이곳을 가리키는 것 (${inc.length})</div>${inc.map(e=>relRow(e,'in')).join('')}`:''}
+  function renderResults(){
+    if(!hits.length){
+      results.innerHTML=q.value.trim()?'<div class="none">결과 없음</div>':'';
+      return;
+    }
+    results.innerHTML=hits.map((h,i)=>{
+      const n=h.node;
+      const title=n.kind==='조문'?(n.title||n.label):n.label;
+      const sub=n.kind==='조문'?`${n.group} ${n.label}`:(n.name||n.type);
+      return `<div class="ritem${i===cur?' sel':''}" data-i="${i}">
+        <span class="dot" style="background:${color(n)}"></span>
+        <span class="main">
+          <span class="ttl">${highlight(title,q.value)}</span>
+          <div class="sub">${esc(sub)}</div>
+        </span>
+        <span class="badge">${esc(n.type)}</span>
       </div>`;
-    d.classList.add('on');
-    d.querySelector('.close').onclick=()=>{d.classList.remove('on');selected=null;clearHi();};
-    d.querySelectorAll('.rel').forEach(el=>el.onclick=()=>select(el.dataset.go));
+    }).join('');
+    const sel=results.querySelector('.ritem.sel');
+    if(sel)sel.scrollIntoView({block:'nearest'});
   }
 
-  // ---- 검색 ----
-  const q=document.getElementById('q'),results=document.getElementById('results');
-  function textOf(n){return [n.label,n.group,n.title,n.name,n.text,n.type].filter(Boolean).join(' ');}
-  function search(){
+  function doSearch(){
     const s=q.value.trim();
-    const matches=s?nodes.filter(n=>textOf(n).toLowerCase().includes(s.toLowerCase())):[];
-    const mset=new Set(matches.map(n=>n.id));
-    nEls.forEach((el,i)=>el.classList.toggle('match',s&&mset.has(nodes[i].id)));
-    if(s&&!selected){nEls.forEach((el,i)=>el.classList.toggle('dim',!mset.has(nodes[i].id)));
-      eEls.forEach(el=>el.classList.add('dim'));}
-    else if(!selected){clearHi();nEls.forEach(el=>el.classList.remove('match'));if(s)nEls.forEach((el,i)=>el.classList.toggle('match',mset.has(nodes[i].id)));}
-    results.innerHTML=matches.length?matches.map(n=>
-      `<div class="ritem" data-go="${n.id}"><span class="dot" style="background:${color(n)}"></span>
-       <b>${n.kind==='조문'?n.group+' '+n.label:n.label}</b>
-       <div class="g">${n.kind==='조문'?(n.title||''):n.kind==='외부법'?'외부 인용 법령':n.name}</div></div>`).join('')
-      :`<div class="empty">${s?'일치하는 법령·조문이 없습니다.':'노드를 클릭하거나 위에서 검색하세요. 조문을 클릭하면 위임·인용 관계가 펼쳐집니다.'}</div>`;
-    results.querySelectorAll('.ritem').forEach(el=>el.onclick=()=>{select(el.dataset.go);});
+    spot.classList.toggle('typing',!!s);
+    hint.style.display=s?'none':'';
+    hits=s?idx.search(s,60):[];
+    cur=0;
+    renderResults();
   }
-  q.addEventListener('input',search);
-
-  // ---- 엣지 유형 토글 ----
-  ['위임','인용','소속'].forEach(k=>{
-    document.getElementById('t-'+k).addEventListener('change',e=>{
-      edges.forEach((ed,i)=>{if(ed.kind===k)eEls[i].style.display=e.target.checked?'':'none';});
-    });
+  q.addEventListener('input',doSearch);
+  results.addEventListener('click',e=>{
+    const it=e.target.closest('.ritem'); if(!it)return;
+    open(hits[+it.dataset.i].node.id);
   });
 
-  window.addEventListener('resize',()=>{W=svg.clientWidth;H=svg.clientHeight;alpha=.4;});
-  search();tick();
+  // ───────── 원문 뷰 ─────────
+  const reader=document.getElementById('reader'), docEl=document.getElementById('doc'),
+        relsEl=document.getElementById('rels');
+  const stack=[];
+  let focusId=null;
+
+  /**
+   * 원문 안의 인용 표기를 클릭 가능한 링크로.
+   * evidence 는 추출 단계에서 항·호를 덧붙여 만든 문자열이라 원문과 띄어쓰기가 다를 수 있다.
+   * 그래서 공백을 제거한 사본에서 위치를 찾고 원문 좌표로 되돌린다.
+   */
+  function linkify(text,outEdges){
+    let bare='';const map=[];
+    for(let i=0;i<text.length;i++){ if(!/\s/.test(text[i])){bare+=text[i];map.push(i);} }
+    const marks=[];
+    const seen=new Set();
+    for(const e of outEdges){
+      if(e.kind==='소속'||!e.evidence)continue;
+      const ev=e.evidence.replace(/\s/g,'');
+      if(!ev)continue;
+      let from=0;
+      while(true){
+        const at=bare.indexOf(ev,from);
+        if(at<0)break;
+        const s=map[at], en=map[at+ev.length-1]+1;
+        const key=s+':'+en;
+        if(!seen.has(key)){ seen.add(key); marks.push({s,e:en,target:e.target}); }
+        from=at+ev.length;
+        break; // 같은 근거는 첫 등장만
+      }
+    }
+    marks.sort((a,b)=>a.s-b.s||b.e-a.e);
+    let out='',pos=0;
+    for(const m of marks){
+      if(m.s<pos)continue; // 겹치면 건너뜀
+      out+=esc(text.slice(pos,m.s));
+      const t=byId.get(m.target);
+      out+=`<a class="cite" data-go="${esc(m.target)}" title="${esc(t?nameOf(t):'')}">${esc(text.slice(m.s,m.e))}</a>`;
+      pos=m.e;
+    }
+    return out+esc(text.slice(pos));
+  }
+
+  function relRow(e,dir){
+    const other=byId.get(dir==='out'?e.target:e.source);
+    if(!other)return '';
+    return `<div class="rel" data-go="${esc(other.id)}">
+      <span class="k ${e.kind}">${e.kind}</span>
+      <span>${dir==='out'?'→':'←'} ${esc(nameOf(other))}
+      ${e.evidence?`<span class="ev"> ⟨${esc(e.evidence)}⟩</span>`:''}</span></div>`;
+  }
+
+  function open(id,push){
+    const n=byId.get(id); if(!n)return;
+    if(push!==false&&focusId&&focusId!==id)stack.push(focusId);
+    focusId=id;
+
+    const o=(outs.get(id)||[]).filter(e=>e.kind!=='소속');
+    const i=(ins.get(id)||[]).filter(e=>e.kind!=='소속');
+    const stamp=(n.확인일||n.시행일)?`<div class="stamp${n.낡음?' old':''}">${
+      [n.시행일?`시행 ${ymd(n.시행일)}`:'',n.확인일?`확인 ${ymd(n.확인일)}`:'',
+       n.상태&&n.상태!=='현행'?n.상태:'',n.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`:'';
+
+    docEl.innerHTML=`
+      <div class="crumb">${esc(n.kind==='조문'?n.group:n.type)}</div>
+      <h2>${esc(n.kind==='조문'?n.label:n.label)}${n.kind==='조문'&&n.title?` <span class="subt">(${esc(n.title)})</span>`:''}</h2>
+      ${n.kind!=='조문'&&n.name?`<div class="subt">${esc(n.name)}</div>`:''}
+      ${stamp}
+      <div class="body">${n.text?linkify(n.text,outs.get(id)||[]):'<span style="color:var(--muted)">원문 없음 — 이 노드는 법령/외부법 단위입니다.</span>'}</div>`;
+    docEl.scrollTop=0;
+
+    relsEl.innerHTML=
+      (o.length?`<h3>이 조문이 향하는 곳 (${o.length})</h3>`+o.map(e=>relRow(e,'out')).join(''):'')+
+      (i.length?`<h3>이곳을 가리키는 것 (${i.length})</h3>`+i.map(e=>relRow(e,'in')).join(''):'')+
+      (!o.length&&!i.length?'<div class="relempty">연결된 관계가 없습니다.</div>':'');
+
+    drawMini(id);
+    reader.classList.add('on');
+    spot.style.display='none';
+    document.getElementById('back').style.visibility=stack.length?'visible':'hidden';
+  }
+
+  document.addEventListener('click',e=>{
+    const g=e.target.closest('[data-go]');
+    if(g){ open(g.dataset.go); }
+  });
+  document.getElementById('back').onclick=()=>{
+    const prev=stack.pop(); if(prev)open(prev,false);
+    document.getElementById('back').style.visibility=stack.length?'visible':'hidden';
+  };
+  document.getElementById('tosearch').onclick=toSearch;
+  function toSearch(){
+    reader.classList.remove('on');
+    spot.style.display='';
+    q.focus(); q.select();
+  }
+
+  // ───────── 국소 그래프 (2단계 이웃만) ─────────
+  // 전역 1,354노드는 O(n²) 포스 시뮬레이션이라 브라우저에서 돌지 않는다.
+  // 실무 질문은 "이 조문이 뭐랑 엮였나"라서 2홉이면 충분하다.
+  const MAX_NODES=48;
+  const svg=document.getElementById('mini');
+  let sim=null;
+
+  function neighborhood(id){
+    const keep=new Set([id]);
+    let frontier=[id];
+    for(let hop=0;hop<2&&keep.size<MAX_NODES;hop++){
+      const next=[];
+      for(const x of frontier){
+        for(const y of (adj.get(x)||[])){
+          if(keep.has(y))continue;
+          keep.add(y); next.push(y);
+          if(keep.size>=MAX_NODES)break;
+        }
+        if(keep.size>=MAX_NODES)break;
+      }
+      frontier=next;
+    }
+    return keep;
+  }
+
+  function drawMini(id){
+    if(sim)cancelAnimationFrame(sim);
+    const keep=neighborhood(id);
+    const ns=[...keep].map(x=>({...byId.get(x)}));
+    const nmap=new Map(ns.map(n=>[n.id,n]));
+    const es=edges.filter(e=>keep.has(e.source)&&keep.has(e.target));
+
+    const W=svg.clientWidth||360,H=svg.clientHeight||260;
+    ns.forEach((n,i)=>{const a=i/ns.length*Math.PI*2;
+      n.x=W/2+Math.cos(a)*Math.min(W,H)*0.3;n.y=H/2+Math.sin(a)*Math.min(W,H)*0.3;n.vx=0;n.vy=0;});
+    const me=nmap.get(id); me.x=W/2; me.y=H/2;
+
+    let alpha=1;
+    function tick(){
+      for(let i=0;i<ns.length;i++)for(let j=i+1;j<ns.length;j++){
+        const a=ns[i],b=ns[j];let dx=a.x-b.x,dy=a.y-b.y;let d2=dx*dx+dy*dy||1;
+        const f=900/d2,d=Math.sqrt(d2);dx/=d;dy/=d;
+        a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;
+      }
+      for(const e of es){
+        const a=nmap.get(e.source),b=nmap.get(e.target);
+        const target=e.kind==='소속'?42:66;
+        let dx=b.x-a.x,dy=b.y-a.y;const d=Math.hypot(dx,dy)||1;
+        const f=(d-target)*0.03;dx/=d;dy/=d;
+        a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;
+      }
+      for(const n of ns){
+        n.vx+=(W/2-n.x)*0.004;n.vy+=(H/2-n.y)*0.004;
+        if(n.id===id){n.x=W/2;n.y=H/2;n.vx=n.vy=0;continue;}
+        n.vx*=0.8;n.vy*=0.8;n.x+=n.vx*alpha;n.y+=n.vy*alpha;
+        n.x=Math.max(16,Math.min(W-16,n.x));n.y=Math.max(14,Math.min(H-14,n.y));
+      }
+      alpha*=0.985;
+      svg.innerHTML=
+        es.map(e=>{const a=nmap.get(e.source),b=nmap.get(e.target);
+          return `<line class="edge ${e.kind}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;}).join('')+
+        ns.map(n=>`<g class="node ${n.kind==='외부법'?'ext':''} ${n.id===id?'focus':''}" data-go="${esc(n.id)}">
+          <circle cx="${n.x}" cy="${n.y}" r="${n.id===id?9:n.kind==='법령'?7:5}" fill="${color(n)}"/>
+          ${n.id===id||n.kind==='법령'?`<text x="${n.x+11}" y="${n.y+3.5}">${esc(n.kind==='조문'?n.label:n.label)}</text>`:''}
+        </g>`).join('');
+      // 레이아웃이 잦아들면 멈춘다. 계속 돌리면 읽는 내내 CPU를 태운다.
+      sim=alpha>0.03?requestAnimationFrame(tick):null;
+    }
+    tick();
+  }
+
+  // ───────── 키보드 ─────────
+  document.addEventListener('keydown',e=>{
+    // 한글 IME 조합 중의 Enter 는 "조합 확정"이지 "선택"이 아니다.
+    // 이걸 거르지 않으면 "수의계약" 치고 Enter 한 번에 엉뚱한 항목이 열린다.
+    if(e.isComposing||e.keyCode===229)return;
+    const inReader=reader.classList.contains('on');
+    if(e.key==='/'&&document.activeElement!==q){e.preventDefault();toSearch();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();toSearch();return;}
+    if(e.key==='Escape'){
+      if(inReader){toSearch();}
+      else if(q.value){q.value='';doSearch();}
+      return;
+    }
+    if(inReader)return;
+    if(!hits.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();cur=Math.min(cur+1,hits.length-1);renderResults();}
+    else if(e.key==='ArrowUp'){e.preventDefault();cur=Math.max(cur-1,0);renderResults();}
+    else if(e.key==='Enter'){e.preventDefault();open(hits[cur].node.id);}
+  });
+
+  q.focus();
 })();
 </script>
 </body>

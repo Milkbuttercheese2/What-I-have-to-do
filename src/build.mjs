@@ -30,7 +30,13 @@ const template = readFileSync(join(root, "src/template.html"), "utf8");
 
 // 감사 정보는 빌드 산출물에 실을 필요가 없다 (내부망 페이지는 가볍게 유지).
 const { audit, ...page } = graph;
-const html = template.replace("/*__GRAPH__*/", JSON.stringify(page));
+
+// 검색 런타임을 인라인. 브라우저와 테스트가 같은 파일을 쓰도록 별도 파일로 두고 여기서 끼워넣는다.
+const searchRuntime = readFileSync(join(root, "src/search-runtime.js"), "utf8");
+
+const html = template
+  .replace("/*__SEARCH__*/", () => searchRuntime)
+  .replace("/*__GRAPH__*/", () => JSON.stringify(page));
 
 mkdirSync(join(root, "web"), { recursive: true });
 writeFileSync(join(root, "web/index.html"), html);
