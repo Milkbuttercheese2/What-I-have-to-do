@@ -58,6 +58,9 @@
   .detail .tag{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--panel2);color:var(--muted)}
   .detail h2{margin:8px 0 2px;font-size:15px}
   .detail .sub{font-size:12px;color:var(--muted)}
+  .detail .stamp{margin-top:7px;font-size:10.5px;color:var(--muted);
+    padding:3px 7px;border-radius:5px;background:var(--panel2);display:inline-block}
+  .detail .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
   .detail .body{padding:12px 15px}
   .detail .txt{font-size:12px;line-height:1.65;color:#cdd6e6;background:var(--panel2);
     border-radius:8px;padding:10px;white-space:pre-wrap}
@@ -105,8 +108,25 @@ const GRAPH = /*__GRAPH__*/;
 <script>
 (function(){
   const {nodes,edges,meta}=GRAPH;
-  document.getElementById('meta').textContent =
-    `${meta.domain} · 스냅샷 ${meta.snapshotDate} · ${meta.source.split('—')[0].trim()}`;
+
+  // ---- 법령 확인일 배너 ----
+  // 폐쇄망에서는 데이터가 늘 과거다. "언제 기준인지"를 숨기면 실무자가
+  // 낡은 조문을 현행으로 착각한다. 항상 보이게 하고, 낡으면 색으로 경고한다.
+  (function(){
+    const v=meta.확인요약, el=document.getElementById('meta');
+    const base=`${meta.domain||''} · 스냅샷 ${meta.snapshotDate||meta.기준일||''}`.replace(/^ · /,'');
+    if(!v){el.textContent=base;return;}
+    const parts=[base];
+    if(meta.기준일) parts.push(`기준일 ${meta.기준일}`);
+    if(v.현행) parts.push(`현행 ${v.현행}건`);
+    if(v.시행예정) parts.push(`시행예정 ${v.시행예정}건 (인용 제외)`);
+    if(v.최고경과일!=null) parts.push(`최종확인 ${v.최고경과일}일 전`);
+    el.textContent=parts.join(' · ');
+    if(v.낡음>0){
+      el.style.color='var(--wimim)';
+      el.textContent+=` · ⚠ ${v.낡음}건 재수집 필요`;
+    }
+  })();
 
   // ---- 색상: 법령 가문(hue) × 유형(명도) ----
   const HUE={};let hueSeed=[210,145,275,25,330,190];
@@ -212,10 +232,22 @@ const GRAPH = /*__GRAPH__*/;
       return `<div class="rel" data-go="${other.id}"><span class="k ${e.kind}">${e.kind}</span>
         <span>${dir==='out'?'→':'←'} ${other.kind==='조문'?other.group+' '+other.label:other.label}
         ${e.evidence?`<span style="color:var(--muted)"> ⟨${e.evidence}⟩</span>`:''}</span></div>`;};
+    // 조문을 근거로 인용하려면 "언제 기준 조문인지"를 알아야 한다.
+    const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:'';
+    const stamp=n.확인일||n.시행일
+      ? `<div class="stamp${n.낡음?' old':''}">${[
+          n.시행일?`시행 ${ymd(n.시행일)}`:'',
+          n.확인일?`확인 ${ymd(n.확인일)}`:'',
+          n.상태&&n.상태!=='현행'?n.상태:'',
+          n.낡음?'⚠ 재수집 필요':'',
+        ].filter(Boolean).join(' · ')}</div>`
+      : '';
+
     d.innerHTML=`<span class="close">✕</span>
       <div class="dh"><span class="tag">${n.type} · ${n.kind}</span>
         <h2>${n.kind==='조문'?n.group+' '+n.label:n.label}</h2>
-        <div class="sub">${n.kind==='조문'?(n.title||''):(n.name||'')}</div></div>
+        <div class="sub">${n.kind==='조문'?(n.title||''):(n.name||'')}</div>
+        ${stamp}</div>
       <div class="body">
         ${n.text?`<div class="txt">${n.text}</div>`:''}
         ${out.length?`<div class="relhead">이 조문이 향하는 곳 (${out.length})</div>${out.map(e=>relRow(e,'out')).join('')}`:''}
