@@ -1,0 +1,12 @@
+{
+  "name": "laweverything",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "조달청 실무자용 법령 즉시검색 + 위임·인용 관계 그래프 (내부망/오프라인)",
+  "scripts": {
+    "extract": "node src/extract.mjs",
+    "build": "node src/build.mjs",
+    "serve": "node --version >/dev/null && python3 -m http.server 8080 --directory web"
+  }
+}
