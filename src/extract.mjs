@@ -54,6 +54,8 @@ const CITE_RE = new RegExp(
 // 인용 뒤에 붙는 항·호 — 엣지 근거를 정밀하게 남기기 위해서만 쓴다(노드는 조문 단위).
 const SUBUNIT_RE = /^\s*(?:제(\d+)항)?\s*(?:제(\d+)호)?\s*(?:([가-힣])목)?/;
 
+import { assess, report as freshnessReport, DEFAULT_MAX_AGE_DAYS } from "./freshness.mjs";
+
 const norm = (s) => String(s ?? "").replace(/\s+/g, "");
 const extId = (name) => `ext:${norm(name)}`;
 const joKey = (no, branch) => (branch ? `${no}의${branch}` : String(no));
@@ -63,10 +65,19 @@ const joLabel = (no) => {
   return branch ? `제${base}조의${branch}` : `제${base}조`;
 };
 
-export function buildGraph(snapshot) {
+export function buildGraph(snapshot, options = {}) {
   // 구 스키마(laws) 호환 — 프로토타입 스냅샷도 그대로 돌아간다.
   const docs = snapshot.documents ?? snapshot.laws ?? [];
   const byId = new Map(docs.map((d) => [d.id, d]));
+
+  // ── 신선도 ───────────────────────────────────────────────────────────────
+  // 시행예정본은 인용 대상에서 제외한다. 아직 효력이 없는 조문이 현행 조문을
+  // 대체해 보이면 실무자가 잘못된 근거를 든다 (src/freshness.mjs 참조).
+  const asOf = options.asOf ?? new Date();
+  const maxAgeDays = options.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+  const fresh = new Map(docs.map((d) => [d.id, assess(d, { asOf, maxAgeDays })]));
+  const citable = (docId) => fresh.get(docId)?.citable !== false;
+  const blocked = []; // 신선도 때문에 끊은 관계 — 조용히 버리지 않고 감사에 남긴다
 
   const isLaw = (d) => ["법률", "시행령", "시행규칙"].includes(d.docType ?? d.type);
   const typeOf = (d) => d.docType ?? d.type;
@@ -76,13 +87,18 @@ export function buildGraph(snapshot) {
   const resolveDoc = (name) => {
     const n = norm(name);
     if (!n) return null;
-    for (const d of docs) {
-      if (norm(d.name) === n || norm(d.shortName) === n) return d;
-      if ((d.aliases ?? []).some((a) => norm(a) === n)) return d;
-    }
+    // 같은 법령의 현행본과 시행예정본이 함께 들어올 수 있다. 항상 현행을 고른다.
+    const pick = (list) => list.find((d) => citable(d.id)) ?? list[0] ?? null;
+
+    const exact = docs.filter(
+      (d) => norm(d.name) === n || norm(d.shortName) === n || (d.aliases ?? []).some((a) => norm(a) === n),
+    );
+    if (exact.length) return pick(exact);
+
     // 부분일치는 오탐이 쉬우므로 충분히 긴 경우만
     if (n.length >= 6) {
-      for (const d of docs) if (norm(d.name).includes(n) || n.includes(norm(d.name))) return d;
+      const partial = docs.filter((d) => norm(d.name).includes(n) || n.includes(norm(d.name)));
+      if (partial.length) return pick(partial);
     }
     return null;
   };
@@ -130,8 +146,25 @@ export function buildGraph(snapshot) {
     if (!nodes.has(n.id)) nodes.set(n.id, n);
     return nodes.get(n.id);
   };
+  /** 노드 id("art:xxx:7" | "law:xxx" | "ext:...")에서 문서 id 추출 */
+  const docIdOf = (nodeId) => {
+    const [kind, id] = String(nodeId).split(":");
+    return kind === "ext" ? null : id;
+  };
+
   const addEdge = (source, target, kind, evidence) => {
     if (!source || !target || source === target) return false;
+
+    // ★ 최신 데이터만 인용 — 시행예정본을 가리키는 관계는 만들지 않는다.
+    //   소속(문서 내부 구조)은 신선도와 무관하므로 통과시킨다.
+    if (kind !== "소속") {
+      const td = docIdOf(target);
+      if (td && !citable(td)) {
+        blocked.push({ source, target, kind, evidence, 사유: "시행예정본" });
+        return false;
+      }
+    }
+
     const key = `${source}|${target}|${kind}`;
     if (seenEdge.has(key)) return false;
     seenEdge.add(key);
@@ -146,6 +179,11 @@ export function buildGraph(snapshot) {
 
   // ── 1) 노드 ──────────────────────────────────────────────────────────────
   for (const doc of docs) {
+    const f = fresh.get(doc.id);
+    // 확인일·시행일은 UI가 그대로 보여줘야 한다. 실무자가 근거로 쓰려면
+    // "언제 기준 데이터인지"를 볼 수 있어야 한다.
+    const stamp = { 확인일: f.확인일, 시행일: f.시행일, 상태: f.status, ...(f.stale ? { 낡음: true } : {}) };
+
     addNode({
       id: `law:${doc.id}`,
       kind: "법령",
@@ -153,6 +191,7 @@ export function buildGraph(snapshot) {
       family: familyOf(doc),
       label: doc.shortName,
       name: doc.name,
+      ...stamp,
     });
     for (const art of doc.articles ?? []) {
       addNode({
@@ -165,6 +204,7 @@ export function buildGraph(snapshot) {
         text: art.text,
         lawId: doc.id,
         group: doc.shortName,
+        ...stamp,
       });
       addEdge(`law:${doc.id}`, artId(doc, art.no), "소속");
     }
@@ -344,8 +384,14 @@ export function buildGraph(snapshot) {
   const adminDocs = docs.filter((d) => !isLaw(d));
   const linked = adminDocs.filter((d) => 근거.has(d.id));
 
+  const 신선도 = freshnessReport(snapshot, { asOf, maxAgeDays });
+
   return {
-    meta: snapshot.meta,
+    // 페이지가 "언제 기준 데이터인지" 항상 표시할 수 있도록 meta 에 박아 보낸다.
+    meta: { ...snapshot.meta, 기준일: 신선도.기준일, 확인요약: {
+      현행: 신선도.현행, 시행예정: 신선도.시행예정, 미확인: 신선도.미확인,
+      최고경과일: 신선도.최고경과일, 낡음: 신선도.낡음.length,
+    } },
     nodes: nodeArr,
     edges,
     stats: {
@@ -374,6 +420,10 @@ export function buildGraph(snapshot) {
       })),
       // 규칙이 못 잡은 잔여 위임 — 사람이 확인해 seed 에 반영하는 대상
       미매칭_행정규칙위임: pendingAdminDelegation,
+      // 법령 신선도 — 낡은 데이터를 최신인 것처럼 보여주지 않기 위한 근거
+      신선도,
+      // 시행예정본이라 끊어낸 관계 (조용히 버리지 않는다)
+      신선도차단: blocked,
     },
   };
 }

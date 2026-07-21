@@ -8,7 +8,8 @@
     "collect": "node src/collect.mjs",
     "extract": "node src/extract.mjs",
     "build": "node src/build.mjs",
-    "test": "node --test test/extract.test.mjs",
+    "test": "node --test test/*.test.mjs",
+    "smoke": "node test/smoke.mjs",
     "serve": "node --version >/dev/null && python3 -m http.server 8080 --directory web"
   }
 }

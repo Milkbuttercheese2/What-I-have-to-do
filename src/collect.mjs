@@ -39,7 +39,9 @@ async function cached(id, fn) {
   if (!refresh && existsSync(cachePath(id))) {
     return { ...JSON.parse(readFileSync(cachePath(id), "utf8")), _cached: true };
   }
-  const data = await fn();
+  // 확인일은 "법제처와 실제로 대조한 시각"이다. 캐시를 읽은 시각이 아니다.
+  // 캐시 안에 함께 저장해, 재빌드해도 확인일이 앞당겨지지 않게 한다.
+  const data = { ...(await fn()), 확인일: new Date().toISOString() };
   mkdirSync(cacheDir, { recursive: true });
   writeFileSync(cachePath(id), JSON.stringify(data, null, 2));
   return data;
@@ -69,7 +71,8 @@ async function main() {
           console.log(`  ℹ ${l.shortName}: MST 변경 감지 ${l.mst} → ${cur.mst} (seed.json 갱신 권장)`);
         }
         await sleep(200);
-        return fetchLaw({ mst: cur?.mst || l.mst, lawId: l.lawId });
+        const body = await fetchLaw({ mst: cur?.mst || l.mst, lawId: l.lawId });
+        return { ...body, 사용MST: cur?.mst || l.mst, 현행일치: cur?.mst ? cur.mst === l.mst : null, 효력: cur?.효력 ?? null };
       });
       documents.push({
         id: l.id,
@@ -80,7 +83,16 @@ async function main() {
         parent: l.parent,
         aliases: l.aliases ?? [],
         source: { kind: "law", mst: l.mst, lawId: l.lawId },
-        시행일: data.시행일 ?? null,
+        // 신선도 판정의 원재료 (src/freshness.mjs)
+        verification: {
+          확인일: data.확인일,
+          사용MST: data.사용MST ?? l.mst,
+          seedMST: l.mst,
+          현행일치: data.현행일치 ?? null,
+          효력: data.효력 ?? null,
+          시행일: data.시행일 ?? null,
+          공포일: data.공포일 ?? null,
+        },
         articles: data.articles,
       });
       console.log(`  ✅ ${l.shortName} — ${data.articles.length}개 조문${data._cached ? " (캐시)" : ""}`);
@@ -104,7 +116,14 @@ async function main() {
         parent: null,
         aliases: [r.shortName],
         source: { kind: "admrul", seq: r.seq, ruleId: r.ruleId },
-        발령일: data.발령일 ?? null,
+        verification: {
+          확인일: data.확인일,
+          seq: r.seq,
+          // 행정규칙은 발령일이 곧 시행일인 경우가 많으나 항상 그렇지는 않다.
+          // 별도 시행일이 없으면 null 로 두고 "현행"으로 다루되, 단정하지 않는다.
+          시행일: data.시행일 ?? null,
+          발령일: data.발령일 ?? null,
+        },
         articles: data.articles,
       });
       console.log(`  ✅ ${r.shortName} — ${data.articles.length}개 조문${data._cached ? " (캐시)" : ""}`);
