@@ -116,6 +116,8 @@ async function main() {
         parent: null,
         aliases: [r.shortName],
         source: { kind: "admrul", seq: r.seq, ruleId: r.ruleId },
+        // 본문에 위임근거가 없는 문서용 수기 매핑 (seed.json). 있으면 추출기가 최우선으로 쓴다.
+        ...(r.위임근거 ? { 위임근거: r.위임근거 } : {}),
         verification: {
           확인일: data.확인일,
           seq: r.seq,

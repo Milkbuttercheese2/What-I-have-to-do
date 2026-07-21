@@ -213,21 +213,56 @@ export function buildGraph(snapshot, options = {}) {
   // ── 2) Layer 3 먼저: 행정규칙 제1조 → 위임근거 역파싱 ────────────────────
   // 정방향("장관이 정하는")은 대상이 없으므로, 역방향을 먼저 확정한 뒤
   // 정방향 위임문구와 대조해 매칭 여부를 감사한다.
-  const 근거 = new Map(); // 행정규칙 id → { doc, jo, evidence }
+  // 근거는 세 경로로 확정된다. 위에서부터 우선한다.
+  //   ① 시드 수기 매핑   — 본문에 근거가 아예 없는 문서용 (아래 ③ 참고)
+  //   ② 조문 단위        — "「…시행령」 제72조에 의한 …" (가장 정확)
+  //   ③ 문서 단위        — "「…시행령」, 「…시행규칙」에서 위임된 사항" (조 번호 없음)
+  //
+  // 실데이터에서 드러난 한계: 계약조건 문서(공사계약일반조건·입찰유의서 등)는
+  // 제1조가 "계약당사자가 지켜야 할 조건을 정함"이라 근거를 아예 밝히지 않는다.
+  // 정방향(시행령이 예규를 지목)도 없다 — 시행령 본문에 "일반조건/유의서"라는 말이 없다.
+  // 즉 텍스트만으로는 원리적으로 도출 불가이며, 시드 수기 매핑이 유일한 정답이다.
+  const 근거 = new Map(); // 행정규칙 id → { doc, jo, evidence, 단위, 출처 }
   for (const doc of docs) {
     if (isLaw(doc)) continue;
     const first = (doc.articles ?? [])[0];
-    if (!first) continue;
     const aliases = localAliases(doc);
 
-    // 제1조(목적)에서 처음으로 해석되는 「법령」 제N조 인용이 곧 위임근거다.
-    const re = new RegExp(String.raw`「([^」]+)」[^。\n]{0,40}?${JO}`, "g");
-    let m;
-    while ((m = re.exec(first.text)) !== null) {
+    // ① 시드 수기 매핑
+    const seeded = doc.위임근거;
+    if (seeded?.doc) {
+      const target = byId.get(seeded.doc);
+      if (target && isLaw(target)) {
+        근거.set(doc.id, {
+          doc: target,
+          jo: seeded.jo ?? null,
+          evidence: seeded.비고 ?? "시드 수기 매핑",
+          단위: seeded.jo ? "조문" : "문서",
+          출처: "시드",
+        });
+        continue;
+      }
+    }
+    if (!first) continue;
+
+    // ② 조문 단위
+    const joRe = new RegExp(String.raw`「([^」]+)」[^。\n]{0,40}?${JO}`, "g");
+    let m, hit = false;
+    while ((m = joRe.exec(first.text)) !== null) {
       const target = resolveDoc(m[1]) ?? aliases.get(norm(m[1]));
       if (!target || !isLaw(target)) continue;
-      const jo = joKey(m[2], m[3]);
-      근거.set(doc.id, { doc: target, jo, evidence: m[0].trim() });
+      근거.set(doc.id, { doc: target, jo: joKey(m[2], m[3]), evidence: m[0].trim(), 단위: "조문", 출처: "본문" });
+      hit = true;
+      break;
+    }
+    if (hit) continue;
+
+    // ③ 문서 단위 — 조 번호 없이 법령만 지목하는 경우("…에서 위임된 사항")
+    const docRe = /「([^」]+)」/g;
+    while ((m = docRe.exec(first.text)) !== null) {
+      const target = resolveDoc(m[1]) ?? aliases.get(norm(m[1]));
+      if (!target || !isLaw(target)) continue;
+      근거.set(doc.id, { doc: target, jo: null, evidence: m[0].trim(), 단위: "문서", 출처: "본문" });
       break;
     }
   }
@@ -410,12 +445,20 @@ export function buildGraph(snapshot, options = {}) {
       위임근거_커버리지: {
         행정규칙수: adminDocs.length,
         근거도출: linked.length,
-        비율: adminDocs.length ? +(linked.length / adminDocs.length * 100).toFixed(1) : null,
+        비율: adminDocs.length ? +((linked.length / adminDocs.length) * 100).toFixed(1) : null,
+        // 조문 단위가 진짜 목표다. 문서 단위는 두 계층을 잇기는 하지만
+        // "몇 조에서 위임됐나"라는 실무 질문에는 답하지 못한다.
+        조문단위: linked.filter((d) => 근거.get(d.id).단위 === "조문").length,
+        문서단위: linked.filter((d) => 근거.get(d.id).단위 === "문서").length,
+        본문도출: linked.filter((d) => 근거.get(d.id).출처 === "본문").length,
+        시드매핑: linked.filter((d) => 근거.get(d.id).출처 === "시드").length,
         미도출: adminDocs.filter((d) => !근거.has(d.id)).map((d) => d.shortName),
       },
       근거목록: [...근거].map(([id, g]) => ({
         행정규칙: byId.get(id)?.shortName ?? id,
-        근거: `${g.doc.shortName} ${joLabel(g.jo)}`,
+        근거: g.jo ? `${g.doc.shortName} ${joLabel(g.jo)}` : `${g.doc.shortName} (문서 단위)`,
+        단위: g.단위,
+        출처: g.출처,
         원문: g.evidence,
       })),
       // 규칙이 못 잡은 잔여 위임 — 사람이 확인해 seed 에 반영하는 대상

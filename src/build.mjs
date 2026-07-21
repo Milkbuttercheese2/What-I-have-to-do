@@ -44,7 +44,11 @@ console.log(`  문서 ${s.documents} · 노드 ${s.nodes} (조문 ${s.articleNod
 console.log(`  엣지 ${s.edges} — 위임 ${s.위임} · 인용 ${s.인용} · 소속 ${s.소속}`);
 
 const c = audit.위임근거_커버리지;
-if (c.행정규칙수) console.log(`  ★ 위임근거 커버리지 ${c.근거도출}/${c.행정규칙수} (${c.비율}%)`);
+if (c.행정규칙수) {
+  console.log(`  ★ 위임근거 커버리지 ${c.근거도출}/${c.행정규칙수} (${c.비율}%)` +
+    ` — 조문단위 ${c.조문단위} · 문서단위 ${c.문서단위} (본문 ${c.본문도출} · 시드 ${c.시드매핑})`);
+  if (c.미도출.length) console.log(`     미도출: ${c.미도출.join(", ")}`);
+}
 if (audit.미매칭_행정규칙위임.length)
   console.log(`  ⚠️  미매칭 행정규칙 위임 ${audit.미매칭_행정규칙위임.length}건 → data/audit.json`);
 

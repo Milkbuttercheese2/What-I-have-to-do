@@ -101,3 +101,57 @@ test("구 스키마(laws/type/parent) 스냅샷도 그대로 돈다", () => {
   assert.equal(lg.stats.위임, 5, "위임 기준선 5");
   assert.equal(lg.stats.인용, 12, "인용 기준선 12");
 });
+
+test("문서 단위 근거 — 조 번호 없이 법령만 지목하는 경우", () => {
+  // 정부입찰계약집행기준 제1조: "「…시행령」, 「…시행규칙」 …에서 위임된 사항"
+  // 조 번호가 없으므로 조문이 아닌 문서 노드로 잇는다.
+  const s = structuredClone(snapshot);
+  s.documents.push({
+    id: "ye-doc", name: "(계약예규) 문서단위예규", shortName: "문서단위예규",
+    docType: "계약예규", family: null, parent: null, aliases: [],
+    articles: [{ no: "1", title: "목적",
+      text: '제1조(목적) 이 예규는 「국가를 당사자로 하는 계약에 관한 법률 시행령」에서 위임된 사항을 규정함을 목적으로 한다.' }],
+  });
+  const g2 = buildGraph(s);
+  assert.ok(
+    g2.edges.some((e) => e.source === "law:nca-e" && e.target === "law:ye-doc" && e.kind === "위임"),
+    "문서 단위 위임 엣지가 없다",
+  );
+  assert.equal(g2.audit.근거목록.find((r) => r.행정규칙 === "문서단위예규").단위, "문서");
+});
+
+test("시드 수기 매핑이 본문 파싱보다 우선한다", () => {
+  // 계약조건 문서(일반조건·유의서)는 제1조가 근거를 아예 밝히지 않는다.
+  // 정방향(시행령이 예규를 지목)도 없어 텍스트만으로는 원리적으로 불가 → 시드가 유일한 정답.
+  const s = structuredClone(snapshot);
+  s.documents.push({
+    id: "ye-manual", name: "(계약예규) 총칙형예규", shortName: "총칙형예규",
+    docType: "계약예규", family: null, parent: null, aliases: [],
+    위임근거: { doc: "nca-e", 비고: "수기 매핑" },
+    articles: [{ no: "1", title: "총칙",
+      text: "제1조(총칙) 계약담당공무원과 계약상대자는 신의와 성실의 원칙에 입각하여 이를 이행한다." }],
+  });
+  const g2 = buildGraph(s);
+  const row = g2.audit.근거목록.find((r) => r.행정규칙 === "총칙형예규");
+  assert.ok(row, "시드 매핑이 근거로 잡히지 않았다");
+  assert.equal(row.출처, "시드");
+  assert.ok(g2.edges.some((e) => e.source === "law:nca-e" && e.target === "law:ye-manual" && e.kind === "위임"));
+});
+
+test("근거가 잡히면 별칭 문맥이 열려 본문 인용이 살아난다", () => {
+  // 실데이터에서 확인된 연쇄효과: 근거 없이는 예규의 "시행령 제N조"를 해석할 수 없다.
+  const base = structuredClone(snapshot);
+  const doc = {
+    id: "ye-ctx", name: "(계약예규) 문맥예규", shortName: "문맥예규",
+    docType: "계약예규", family: null, parent: null, aliases: [],
+    articles: [{ no: "1", title: "총칙", text: "제1조(총칙) 시행령 제72조에 따라 처리한다." }],
+  };
+  const without = buildGraph({ ...base, documents: [...base.documents, doc] });
+  const withSeed = buildGraph({
+    ...base,
+    documents: [...base.documents, { ...doc, 위임근거: { doc: "nca-e" } }],
+  });
+  const cites = (g) => g.edges.filter((e) => e.source === "art:ye-ctx:1" && e.target === "art:nca-e:72").length;
+  assert.equal(cites(without), 0, "근거 없이 시행령 별칭이 해석됐다");
+  assert.equal(cites(withSeed), 1, "근거가 있는데도 시행령 별칭이 안 풀렸다");
+});
