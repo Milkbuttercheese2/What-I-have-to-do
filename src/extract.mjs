@@ -208,6 +208,35 @@ export function buildGraph(snapshot, options = {}) {
       });
       addEdge(`law:${doc.id}`, artId(doc, art.no), "소속");
     }
+
+    // 별표·서식 — 조달 실무의 핵심 표(제재기준·심사표·서식)가 여기 있다.
+    // 조문만 색인하면 "부정당업자 제재기준"을 아무리 검색해도 안 나온다.
+    for (const bx of doc.annexes ?? []) {
+      const id = `byl:${doc.id}:${bx.kind}:${bx.no}`;
+      addNode({
+        id,
+        kind: "별표",
+        type: typeOf(doc),
+        family: familyOf(doc),
+        label: `[${bx.kind} ${bx.no}]`,
+        title: bx.title,
+        text: bx.text,
+        lawId: doc.id,
+        group: doc.shortName,
+        ...stamp,
+      });
+      addEdge(`law:${doc.id}`, id, "소속");
+
+      // 별표 제목의 "(제76조 관련)" 표기가 근거 조문을 알려준다 — 규칙으로 바로 잇을 수 있다.
+      // 항·호가 끼거나("제77조의2제1항제1호 관련") 여러 조를 나열하는("제4조 및 제5조 관련")
+      // 경우가 흔하므로, 괄호 안에 '관련'이 있으면 그 안의 조 번호를 전부 뽑는다.
+      for (const par of String(bx.title ?? "").matchAll(/\(([^)]*관련[^)]*)\)/g)) {
+        for (const m of par[1].matchAll(/제(\d+)조(?:의(\d+))?/g)) {
+          const jo = joKey(m[1], m[2]);
+          if (hasArticle(doc, jo)) addEdge(artId(doc, jo), id, "별표", `${joLabel(jo)} 관련`);
+        }
+      }
+    }
   }
 
   // ── 2) Layer 3 먼저: 행정규칙 제1조 → 위임근거 역파싱 ────────────────────
@@ -433,11 +462,13 @@ export function buildGraph(snapshot, options = {}) {
       documents: docs.length,
       nodes: nodeArr.length,
       articleNodes: nodeArr.filter((n) => n.kind === "조문").length,
+      annexNodes: nodeArr.filter((n) => n.kind === "별표").length,
       externalNodes: nodeArr.filter((n) => n.kind === "외부법").length,
       edges: edges.length,
       소속: count("소속"),
       위임: count("위임"),
       인용: count("인용"),
+      별표: count("별표"),
     },
     audit: {
       // ★ Phase 1 핵심 지표 — 행정규칙이 근거 조문에 자동 연결된 비율.

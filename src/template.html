@@ -75,31 +75,25 @@
     border-bottom:1px dashed rgba(92,200,255,.5);cursor:pointer}
   .body a.cite:hover{background:rgba(92,200,255,.12)}
   .body mark{background:rgba(76,154,255,.28);color:inherit;border-radius:3px}
+  /* 별표는 고정폭(罫線) 레이아웃이라 등폭 글꼴 + 줄바꿈 금지라야 표가 맞는다 */
+  .body.fixed{font-family:"D2Coding","Consolas","Menlo",monospace;font-size:12.5px;
+    line-height:1.6;white-space:pre;overflow-x:auto;max-width:none;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .srcnote{margin-top:12px;font-size:11px;color:var(--muted)}
 
   .side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
   .side h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
     text-transform:uppercase;letter-spacing:.6px}
-  #mini{width:100%;height:260px;display:block;border-bottom:1px solid var(--line)}
   .rel{font-size:12.5px;padding:7px 15px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
   .rel:hover{background:var(--panel2)}
   .rel .k{font-size:9.5px;padding:1px 6px;border-radius:20px;flex:none}
   .rel .k.위임{background:rgba(246,169,74,.18);color:var(--wimim)}
   .rel .k.인용{background:rgba(92,200,255,.16);color:var(--inyong)}
   .rel .k.소속{background:#2a3247;color:var(--muted)}
+  .rel .k.별표{background:rgba(140,220,160,.16);color:#8cdca0}
   .rel .ev{color:var(--muted);font-size:11px}
   .relempty{padding:6px 15px 14px;font-size:12px;color:var(--muted)}
 
-  /* 국소 그래프 */
-  .edge{stroke-width:1.5;fill:none}
-  .edge.위임{stroke:var(--wimim)}
-  .edge.인용{stroke:var(--inyong);stroke-dasharray:5 4}
-  .edge.소속{stroke:var(--sosok);stroke-width:1;opacity:.55}
-  .node{cursor:pointer}
-  .node circle{stroke:#0c111c;stroke-width:1.5}
-  .node.ext circle{stroke-dasharray:3 3;stroke:#6b7690}
-  .node.focus circle{stroke:#fff;stroke-width:2.5}
-  .node text{font-size:10px;fill:var(--text);pointer-events:none;paint-order:stroke;
-    stroke:#0c111c;stroke-width:3px}
 </style>
 </head>
 <body>
@@ -131,8 +125,6 @@
   <div class="cols">
     <div class="doc" id="doc"></div>
     <div class="side">
-      <h3>관계 그래프 (2단계)</h3>
-      <svg id="mini"></svg>
       <div id="rels"></div>
     </div>
   </div>
@@ -156,20 +148,13 @@ const GRAPH = /*__GRAPH__*/;
     if(!outs.has(e.source))outs.set(e.source,[]); outs.get(e.source).push(e);
     if(!ins.has(e.target))ins.set(e.target,[]);   ins.get(e.target).push(e);
   }
-  const adj=new Map();
-  for(const e of edges){
-    if(!adj.has(e.source))adj.set(e.source,new Set());
-    if(!adj.has(e.target))adj.set(e.target,new Set());
-    adj.get(e.source).add(e.target); adj.get(e.target).add(e.source);
-  }
-
   // ---- 색상: 법령 가문(hue) × 유형(명도) ----
   const HUE={};const hueSeed=[210,145,275,25,330,190,55];
   nodes.forEach(n=>{if(n.family&&!(n.family in HUE))HUE[n.family]=hueSeed[Object.keys(HUE).length%hueSeed.length];});
   const light={"법률":46,"시행령":58,"시행규칙":66,"계약예규":72};
   const color=n=>n.kind==='외부법'?'hsl(220,8%,55%)':`hsl(${HUE[n.family]??220},55%,${light[n.type]||60}%)`;
 
-  const nameOf=n=>n.kind==='조문'?`${n.group} ${n.label}`:n.label;
+  const nameOf=n=>(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:n.label;
   const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:'';
 
   // ───────── 확인일 배너 ─────────
@@ -212,15 +197,15 @@ const GRAPH = /*__GRAPH__*/;
     }
     results.innerHTML=hits.map((h,i)=>{
       const n=h.node;
-      const title=n.kind==='조문'?(n.title||n.label):n.label;
-      const sub=n.kind==='조문'?`${n.group} ${n.label}`:(n.name||n.type);
+      const title=(n.kind==='조문'||n.kind==='별표')?(n.title||n.label):n.label;
+      const sub=(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:(n.name||n.type);
       return `<div class="ritem${i===cur?' sel':''}" data-i="${i}">
         <span class="dot" style="background:${color(n)}"></span>
         <span class="main">
           <span class="ttl">${highlight(title,q.value)}</span>
           <div class="sub">${esc(sub)}</div>
         </span>
-        <span class="badge">${esc(n.type)}</span>
+        <span class="badge">${esc(n.kind==='별표'?n.label.replace(/[\[\]]/g,'').split(' ')[0]:n.type)}</span>
       </div>`;
     }).join('');
     const sel=results.querySelector('.ritem.sel');
@@ -306,10 +291,12 @@ const GRAPH = /*__GRAPH__*/;
 
     docEl.innerHTML=`
       <div class="crumb">${esc(n.kind==='조문'?n.group:n.type)}</div>
-      <h2>${esc(n.kind==='조문'?n.label:n.label)}${n.kind==='조문'&&n.title?` <span class="subt">(${esc(n.title)})</span>`:''}</h2>
-      ${n.kind!=='조문'&&n.name?`<div class="subt">${esc(n.name)}</div>`:''}
+      <h2>${esc(n.label)}${n.title&&n.kind!=='별표'?` <span class="subt">(${esc(n.title)})</span>`:''}</h2>
+      ${n.kind==='별표'&&n.title?`<div class="subt">${esc(n.title)}</div>`:''}
+      ${n.kind==='법령'&&n.name?`<div class="subt">${esc(n.name)}</div>`:''}
       ${stamp}
-      <div class="body">${n.text?linkify(n.text,outs.get(id)||[]):'<span style="color:var(--muted)">원문 없음 — 이 노드는 법령/외부법 단위입니다.</span>'}</div>`;
+      <div class="body${n.kind==='별표'?' fixed':''}">${n.text?linkify(n.text,outs.get(id)||[]):'<span style="color:var(--muted)">원문 없음 — 이 노드는 법령/외부법 단위입니다.</span>'}</div>
+      ${n.kind==='별표'?'<div class="srcnote">※ 법제처 API가 제공하는 텍스트본입니다. 원문 줄바꿈을 그대로 두었습니다(고정폭 표).</div>':''}`;
     docEl.scrollTop=0;
 
     relsEl.innerHTML=
@@ -317,7 +304,6 @@ const GRAPH = /*__GRAPH__*/;
       (i.length?`<h3>이곳을 가리키는 것 (${i.length})</h3>`+i.map(e=>relRow(e,'in')).join(''):'')+
       (!o.length&&!i.length?'<div class="relempty">연결된 관계가 없습니다.</div>':'');
 
-    drawMini(id);
     reader.classList.add('on');
     spot.style.display='none';
     document.getElementById('back').style.visibility=stack.length?'visible':'hidden';
@@ -336,77 +322,6 @@ const GRAPH = /*__GRAPH__*/;
     reader.classList.remove('on');
     spot.style.display='';
     q.focus(); q.select();
-  }
-
-  // ───────── 국소 그래프 (2단계 이웃만) ─────────
-  // 전역 1,354노드는 O(n²) 포스 시뮬레이션이라 브라우저에서 돌지 않는다.
-  // 실무 질문은 "이 조문이 뭐랑 엮였나"라서 2홉이면 충분하다.
-  const MAX_NODES=48;
-  const svg=document.getElementById('mini');
-  let sim=null;
-
-  function neighborhood(id){
-    const keep=new Set([id]);
-    let frontier=[id];
-    for(let hop=0;hop<2&&keep.size<MAX_NODES;hop++){
-      const next=[];
-      for(const x of frontier){
-        for(const y of (adj.get(x)||[])){
-          if(keep.has(y))continue;
-          keep.add(y); next.push(y);
-          if(keep.size>=MAX_NODES)break;
-        }
-        if(keep.size>=MAX_NODES)break;
-      }
-      frontier=next;
-    }
-    return keep;
-  }
-
-  function drawMini(id){
-    if(sim)cancelAnimationFrame(sim);
-    const keep=neighborhood(id);
-    const ns=[...keep].map(x=>({...byId.get(x)}));
-    const nmap=new Map(ns.map(n=>[n.id,n]));
-    const es=edges.filter(e=>keep.has(e.source)&&keep.has(e.target));
-
-    const W=svg.clientWidth||360,H=svg.clientHeight||260;
-    ns.forEach((n,i)=>{const a=i/ns.length*Math.PI*2;
-      n.x=W/2+Math.cos(a)*Math.min(W,H)*0.3;n.y=H/2+Math.sin(a)*Math.min(W,H)*0.3;n.vx=0;n.vy=0;});
-    const me=nmap.get(id); me.x=W/2; me.y=H/2;
-
-    let alpha=1;
-    function tick(){
-      for(let i=0;i<ns.length;i++)for(let j=i+1;j<ns.length;j++){
-        const a=ns[i],b=ns[j];let dx=a.x-b.x,dy=a.y-b.y;let d2=dx*dx+dy*dy||1;
-        const f=900/d2,d=Math.sqrt(d2);dx/=d;dy/=d;
-        a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;
-      }
-      for(const e of es){
-        const a=nmap.get(e.source),b=nmap.get(e.target);
-        const target=e.kind==='소속'?42:66;
-        let dx=b.x-a.x,dy=b.y-a.y;const d=Math.hypot(dx,dy)||1;
-        const f=(d-target)*0.03;dx/=d;dy/=d;
-        a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;
-      }
-      for(const n of ns){
-        n.vx+=(W/2-n.x)*0.004;n.vy+=(H/2-n.y)*0.004;
-        if(n.id===id){n.x=W/2;n.y=H/2;n.vx=n.vy=0;continue;}
-        n.vx*=0.8;n.vy*=0.8;n.x+=n.vx*alpha;n.y+=n.vy*alpha;
-        n.x=Math.max(16,Math.min(W-16,n.x));n.y=Math.max(14,Math.min(H-14,n.y));
-      }
-      alpha*=0.985;
-      svg.innerHTML=
-        es.map(e=>{const a=nmap.get(e.source),b=nmap.get(e.target);
-          return `<line class="edge ${e.kind}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;}).join('')+
-        ns.map(n=>`<g class="node ${n.kind==='외부법'?'ext':''} ${n.id===id?'focus':''}" data-go="${esc(n.id)}">
-          <circle cx="${n.x}" cy="${n.y}" r="${n.id===id?9:n.kind==='법령'?7:5}" fill="${color(n)}"/>
-          ${n.id===id||n.kind==='법령'?`<text x="${n.x+11}" y="${n.y+3.5}">${esc(n.kind==='조문'?n.label:n.label)}</text>`:''}
-        </g>`).join('');
-      // 레이아웃이 잦아들면 멈춘다. 계속 돌리면 읽는 내내 CPU를 태운다.
-      sim=alpha>0.03?requestAnimationFrame(tick):null;
-    }
-    tick();
   }
 
   // ───────── 키보드 ─────────

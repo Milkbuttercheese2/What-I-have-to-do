@@ -46,8 +46,8 @@ writeFileSync(join(root, "data/audit.json"), JSON.stringify(audit, null, 2));
 
 const s = graph.stats;
 console.log(`빌드 완료 → web/index.html  (입력: ${src.replace(root, ".")})`);
-console.log(`  문서 ${s.documents} · 노드 ${s.nodes} (조문 ${s.articleNodes} · 외부법 ${s.externalNodes})`);
-console.log(`  엣지 ${s.edges} — 위임 ${s.위임} · 인용 ${s.인용} · 소속 ${s.소속}`);
+console.log(`  문서 ${s.documents} · 노드 ${s.nodes} (조문 ${s.articleNodes} · 별표 ${s.annexNodes} · 외부법 ${s.externalNodes})`);
+console.log(`  엣지 ${s.edges} — 위임 ${s.위임} · 인용 ${s.인용} · 별표 ${s.별표} · 소속 ${s.소속}`);
 
 const c = audit.위임근거_커버리지;
 if (c.행정규칙수) {

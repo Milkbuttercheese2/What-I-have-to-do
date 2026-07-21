@@ -53,8 +53,12 @@ var LawSearch = (function () {
     // 합쳐두면 법령명 매치가 조문제목 매치를 덮어버린다 —
     // "예정가격"을 치면 「예정가격작성기준」의 모든 조문이 상위를 점령하고
     // 정작 국가계약법 제8조의2(예정가격의 작성)가 밀린다.
-    var own = n.kind === "조문" ? n.title || "" : n.label || "";
-    var owner = n.kind === "조문" ? (n.group || "") + " " + (n.label || "") : n.name || "";
+    // 조문과 별표는 같은 구조로 다룬다 — 둘 다 "제목 + 소속 법령" 이다.
+    // 별표를 빼먹으면 「부정당업자 입찰참가자격 제한기준」 같은 실무 핵심 표가
+    // 본문 매치(60점)로만 걸려 조문에 밀린다.
+    var isUnit = n.kind === "조문" || n.kind === "별표";
+    var own = isUnit ? n.title || n.label || "" : n.label || "";
+    var owner = isUnit ? (n.group || "") + " " + (n.label || "") : n.name || "";
     return {
       ti: normalize(own), // 조문제목 (법령 노드는 법령명)
       t: normalize(owner), // 소속 법령명 + 조번호
@@ -111,7 +115,7 @@ var LawSearch = (function () {
 
     if (!matchedSomething) return 0;
     sc += TYPE_W[n.type] || 0;
-    if (n.kind === "조문") sc += 10;
+    if (n.kind === "조문" || n.kind === "별표") sc += 10;
     else if (n.kind === "법령") sc += 5;
     return sc;
   }
