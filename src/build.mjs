@@ -33,9 +33,11 @@ const { audit, ...page } = graph;
 
 // 검색 런타임을 인라인. 브라우저와 테스트가 같은 파일을 쓰도록 별도 파일로 두고 여기서 끼워넣는다.
 const searchRuntime = readFileSync(join(root, "src/search-runtime.js"), "utf8");
+const annexTable = readFileSync(join(root, "src/annex-table.js"), "utf8");
 
 const html = template
   .replace("/*__SEARCH__*/", () => searchRuntime)
+  .replace("/*__ANNEX__*/", () => annexTable)
   .replace("/*__GRAPH__*/", () => JSON.stringify(page));
 
 mkdirSync(join(root, "web"), { recursive: true });

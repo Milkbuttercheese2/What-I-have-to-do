@@ -76,10 +76,18 @@
   .body a.cite:hover{background:rgba(92,200,255,.12)}
   .body mark{background:rgba(76,154,255,.28);color:inherit;border-radius:3px}
   /* 별표는 고정폭(罫線) 레이아웃이라 등폭 글꼴 + 줄바꿈 금지라야 표가 맞는다 */
-  .body.fixed{font-family:"D2Coding","Consolas","Menlo",monospace;font-size:12.5px;
-    line-height:1.6;white-space:pre;overflow-x:auto;max-width:none;
-    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
-  .srcnote{margin-top:12px;font-size:11px;color:var(--muted)}
+  .srcnote{margin-top:14px;font-size:11px;color:var(--muted)}
+  .srcnote .copymd{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:6px}
+  .srcnote .copymd:hover{border-color:var(--accent);color:var(--text)}
+  .body.annex{max-width:none}
+  .body.annex .ann-text{white-space:pre-wrap;margin:6px 0 14px}
+  .body.annex .ann-tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:8px}
+  table.ann{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6}
+  table.ann th,table.ann td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
+  table.ann th{background:var(--panel2);color:var(--text);font-weight:600;white-space:nowrap}
+  table.ann td:last-child{white-space:nowrap;color:var(--muted)}
+  table.ann tbody tr:nth-child(2n){background:rgba(255,255,255,.02)}
 
   .side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
   .side h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
@@ -135,6 +143,9 @@ const GRAPH = /*__GRAPH__*/;
 </script>
 <script>
 /*__SEARCH__*/
+</script>
+<script>
+/*__ANNEX__*/
 </script>
 <script>
 (function(){
@@ -289,14 +300,29 @@ const GRAPH = /*__GRAPH__*/;
       [n.시행일?`시행 ${ymd(n.시행일)}`:'',n.확인일?`확인 ${ymd(n.확인일)}`:'',
        n.상태&&n.상태!=='현행'?n.상태:'',n.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`:'';
 
+    // 별표는 罫線 텍스트를 실제 표로 렌더한다. 산문 구간의 인용은 그대로 링크로.
+    let bodyHtml;
+    if(!n.text){
+      bodyHtml='<div class="body"><span style="color:var(--muted)">원문 없음 — 이 노드는 법령/외부법 단위입니다.</span></div>';
+    }else if(n.kind==='별표'){
+      const blocks=AnnexTable.parse(n.text);
+      const oe=outs.get(id)||[];
+      bodyHtml='<div class="body annex">'+AnnexTable.toHtml(blocks,t=>linkify(t,oe))+'</div>'+
+        '<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. '+
+        '<button class="copymd" data-md="1">표 마크다운 복사</button></div>';
+    }else{
+      bodyHtml=`<div class="body">${linkify(n.text,outs.get(id)||[])}</div>`;
+    }
     docEl.innerHTML=`
       <div class="crumb">${esc(n.kind==='조문'?n.group:n.type)}</div>
       <h2>${esc(n.label)}${n.title&&n.kind!=='별표'?` <span class="subt">(${esc(n.title)})</span>`:''}</h2>
       ${n.kind==='별표'&&n.title?`<div class="subt">${esc(n.title)}</div>`:''}
       ${n.kind==='법령'&&n.name?`<div class="subt">${esc(n.name)}</div>`:''}
       ${stamp}
-      <div class="body${n.kind==='별표'?' fixed':''}">${n.text?linkify(n.text,outs.get(id)||[]):'<span style="color:var(--muted)">원문 없음 — 이 노드는 법령/외부법 단위입니다.</span>'}</div>
-      ${n.kind==='별표'?'<div class="srcnote">※ 법제처 API가 제공하는 텍스트본입니다. 원문 줄바꿈을 그대로 두었습니다(고정폭 표).</div>':''}`;
+      ${bodyHtml}`;
+    const cp=docEl.querySelector('.copymd');
+    if(cp)cp.onclick=()=>{navigator.clipboard?.writeText(AnnexTable.toMarkdown(AnnexTable.parse(n.text)));
+      cp.textContent='복사됨';setTimeout(()=>cp.textContent='표 마크다운 복사',1500);};
     docEl.scrollTop=0;
 
     relsEl.innerHTML=

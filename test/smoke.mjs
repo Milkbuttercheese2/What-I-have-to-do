@@ -43,8 +43,9 @@ if (g.meta.확인요약?.현행 > 0) {
 }
 
 // 2) 검색 런타임이 인라인됐는가 (별도 파일이라 치환 실패해도 조용히 넘어갈 수 있다)
-if (!/var LawSearch\s*=/.test(html)) fail("검색 런타임이 인라인되지 않았습니다 (/*__SEARCH__*/ 치환 실패).");
-if (html.includes("__SEARCH__")) fail("치환되지 않은 __SEARCH__ 자리표시자가 남아 있습니다.");
+if (!/var LawSearch\s*=/.test(html)) fail("검색 런타임이 인라인되지 않았습니다 (검색 자리표시자 치환 실패).");
+if (!/var AnnexTable\s*=/.test(html)) fail("별표 표 변환기가 인라인되지 않았습니다 (표 자리표시자 치환 실패).");
+if (/\bSEARCH__\b|\bANNEX__\b/.test(html)) fail("치환되지 않은 자리표시자가 남아 있습니다.");
 console.log("✅ 검색 런타임 인라인");
 
 // 3) 인라인 스크립트 문법
