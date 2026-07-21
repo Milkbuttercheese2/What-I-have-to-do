@@ -1,0 +1,176 @@
+{
+  "_comment": [
+    "Phase 1 수집 대상 — 조달 핵심 30종 (법령 13 + 계약예규 17).",
+    "식별자는 korean-law MCP 실탐색(2026-07-21)으로 확보. docs/scope.md 참조.",
+    "법제처 API는 쿼리당 20건 상한이라 소관부처 기준 완전열거가 불가능 →",
+    "이 파일이 '무엇을 수집할지'의 단일 원천(single source of truth)이다. 수기 관리한다.",
+    "MST는 개정되면 바뀐다. collect.mjs가 법령명으로 현행 MST를 재확인한 뒤 본문을 받는다."
+  ],
+  "laws": [
+    {
+      "id": "nca",
+      "name": "국가를 당사자로 하는 계약에 관한 법률",
+      "shortName": "국가계약법",
+      "docType": "법률",
+      "family": "nca",
+      "parent": null,
+      "mst": "283877",
+      "lawId": "000695",
+      "aliases": ["국가계약법", "법률"]
+    },
+    {
+      "id": "nca-e",
+      "name": "국가를 당사자로 하는 계약에 관한 법률 시행령",
+      "shortName": "국가계약법 시행령",
+      "docType": "시행령",
+      "family": "nca",
+      "parent": "nca",
+      "mst": "285893",
+      "lawId": "002652",
+      "aliases": ["시행령", "영"]
+    },
+    {
+      "id": "nca-r",
+      "name": "국가를 당사자로 하는 계약에 관한 법률 시행규칙",
+      "shortName": "국가계약법 시행규칙",
+      "docType": "시행규칙",
+      "family": "nca",
+      "parent": "nca-e",
+      "mst": "282607",
+      "lawId": "006590",
+      "aliases": ["시행규칙", "규칙"]
+    },
+    {
+      "id": "nca-sp1-e",
+      "name": "특정물품등의조달에관한국가를당사자로하는계약에관한법률시행령특례규정",
+      "shortName": "특정물품 특례규정",
+      "docType": "시행령",
+      "family": "nca",
+      "parent": "nca",
+      "mst": "280907",
+      "lawId": "005325",
+      "aliases": []
+    },
+    {
+      "id": "nca-sp1-r",
+      "name": "특정물품등의조달에관한국가를당사자로하는계약에관한법률시행특례규칙",
+      "shortName": "특정물품 특례규칙",
+      "docType": "시행규칙",
+      "family": "nca",
+      "parent": "nca-sp1-e",
+      "mst": "282695",
+      "lawId": "008552",
+      "aliases": []
+    },
+    {
+      "id": "nca-sp2-e",
+      "name": "특정조달을 위한 국가를 당사자로 하는 계약에 관한 법률 시행령 특례규정",
+      "shortName": "특정조달 특례규정",
+      "docType": "시행령",
+      "family": "nca",
+      "parent": "nca",
+      "mst": "280909",
+      "lawId": "005336",
+      "aliases": []
+    },
+    {
+      "id": "nca-sp2-r",
+      "name": "특정조달을 위한 국가를 당사자로 하는 계약에 관한 법률 시행 특례규칙",
+      "shortName": "특정조달 특례규칙",
+      "docType": "시행규칙",
+      "family": "nca",
+      "parent": "nca-sp2-e",
+      "mst": "282697",
+      "lawId": "008556",
+      "aliases": []
+    },
+
+    {
+      "id": "psa",
+      "name": "조달사업에 관한 법률",
+      "shortName": "조달사업법",
+      "docType": "법률",
+      "family": "psa",
+      "parent": null,
+      "mst": "277155",
+      "lawId": "000705",
+      "aliases": ["조달사업법"]
+    },
+    {
+      "id": "psa-e",
+      "name": "조달사업에 관한 법률 시행령",
+      "shortName": "조달사업법 시행령",
+      "docType": "시행령",
+      "family": "psa",
+      "parent": "psa",
+      "mst": "280891",
+      "lawId": "004862",
+      "aliases": []
+    },
+    {
+      "id": "psa-r",
+      "name": "조달사업에 관한 법률 시행규칙",
+      "shortName": "조달사업법 시행규칙",
+      "docType": "시행규칙",
+      "family": "psa",
+      "parent": "psa-e",
+      "mst": "282675",
+      "lawId": "008200",
+      "aliases": []
+    },
+
+    {
+      "id": "epa",
+      "name": "전자조달의 이용 및 촉진에 관한 법률",
+      "shortName": "전자조달법",
+      "docType": "법률",
+      "family": "epa",
+      "parent": null,
+      "mst": "277153",
+      "lawId": "011778",
+      "aliases": ["전자조달법"]
+    },
+    {
+      "id": "epa-e",
+      "name": "전자조달의 이용 및 촉진에 관한 법률 시행령",
+      "shortName": "전자조달법 시행령",
+      "docType": "시행령",
+      "family": "epa",
+      "parent": "epa",
+      "mst": "280885",
+      "lawId": "011912",
+      "aliases": []
+    },
+    {
+      "id": "epa-r",
+      "name": "전자조달의 이용 및 촉진에 관한 법률 시행규칙",
+      "shortName": "전자조달법 시행규칙",
+      "docType": "시행규칙",
+      "family": "epa",
+      "parent": "epa-e",
+      "mst": "144133",
+      "lawId": "011913",
+      "aliases": []
+    }
+  ],
+
+  "adminRules": [
+    { "id": "ye-jibhaeng",   "name": "(계약예규) 정부 입찰·계약 집행기준",        "shortName": "정부입찰계약집행기준",   "docType": "계약예규", "seq": "2100000276688", "ruleId": "34470" },
+    { "id": "ye-yejeong",    "name": "(계약예규) 예정가격 작성기준",              "shortName": "예정가격작성기준",       "docType": "계약예규", "seq": "2100000272430", "ruleId": "27944" },
+    { "id": "ye-jeokgyeok",  "name": "(계약예규) 적격심사기준",                   "shortName": "적격심사기준",           "docType": "계약예규", "seq": "2100000274732", "ruleId": "27941" },
+    { "id": "ye-pq",         "name": "(계약예규) 입찰참가자격사전심사요령",       "shortName": "입찰참가자격사전심사요령", "docType": "계약예규", "seq": "2100000275554", "ruleId": "27939" },
+    { "id": "ye-gongdong",   "name": "(계약예규) 공동계약운용요령",               "shortName": "공동계약운용요령",       "docType": "계약예규", "seq": "2100000275812", "ruleId": "27945" },
+    { "id": "ye-hyeopsang",  "name": "(계약예규) 협상에 의한 계약체결기준",       "shortName": "협상에의한계약체결기준", "docType": "계약예규", "seq": "2100000272436", "ruleId": "27946" },
+    { "id": "ye-daehwa",     "name": "(계약예규) 경쟁적대화에 의한 계약체결기준", "shortName": "경쟁적대화계약체결기준", "docType": "계약예규", "seq": "2100000272426", "ruleId": "65935" },
+    { "id": "ye-gongsa-gen", "name": "(계약예규) 공사계약일반조건",               "shortName": "공사계약일반조건",       "docType": "계약예규", "seq": "2100000276690", "ruleId": "27874" },
+    { "id": "ye-gongsa-bid", "name": "(계약예규) 공사입찰유의서",                 "shortName": "공사입찰유의서",         "docType": "계약예규", "seq": "2100000271122", "ruleId": "27940" },
+    { "id": "ye-gongsa-js",  "name": "(계약예규) 공사계약 종합심사낙찰제 심사기준", "shortName": "공사종합심사기준",     "docType": "계약예규", "seq": "2100000274730", "ruleId": "51116" },
+    { "id": "ye-mulpum-gen", "name": "(계약예규) 물품구매(제조)계약일반조건",     "shortName": "물품구매계약일반조건",   "docType": "계약예규", "seq": "2100000276692", "ruleId": "27947" },
+    { "id": "ye-mulpum-bid", "name": "(계약예규) 물품구매(제조)입찰유의서",       "shortName": "물품구매입찰유의서",     "docType": "계약예규", "seq": "2100000272402", "ruleId": "27948" },
+    { "id": "ye-yongyeok-gen", "name": "(계약예규) 용역계약일반조건",             "shortName": "용역계약일반조건",       "docType": "계약예규", "seq": "2100000276694", "ruleId": "27949" },
+    { "id": "ye-yongyeok-bid", "name": "(계약예규) 용역입찰유의서",               "shortName": "용역입찰유의서",         "docType": "계약예규", "seq": "2100000271132", "ruleId": "27950" },
+    { "id": "ye-yongyeok-js",  "name": "(계약예규) 용역계약 종합심사낙찰제 심사기준", "shortName": "용역종합심사기준",   "docType": "계약예규", "seq": "2100000272404", "ruleId": "65936" },
+    { "id": "ye-ilgwal",     "name": "(계약예규) 일괄입찰 등에 의한 낙찰자 결정기준", "shortName": "일괄입찰낙찰자결정기준", "docType": "계약예규", "seq": "2100000244202", "ruleId": "27942" },
+    { "id": "ye-jonghap",    "name": "(계약예규) 종합계약집행요령",               "shortName": "종합계약집행요령",       "docType": "계약예규", "seq": "2100000272410", "ruleId": "34485" }
+  ]
+}

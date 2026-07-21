@@ -2,3 +2,12 @@ node_modules/
 package-lock.json
 web/graph.json
 web/preview-*.png
+
+# 빌드 산출물 — 매 빌드마다 재생성된다
+data/audit.json
+
+# 법제처 오픈API 자격증명 — 절대 커밋하지 말 것
+.env
+
+# 수집 캐시 (문서별 원본 응답). 재수집으로 항상 복원 가능.
+.cache/
