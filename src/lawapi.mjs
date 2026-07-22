@@ -212,6 +212,11 @@ export function tidyAnnexText(raw) {
  * 조달 실무에서 가장 자주 찾는 표들이 여기 있는데 조문 검색만으로는 절대 안 걸린다.
  */
 function normalizeAnnexes(raw) {
+  // 응답의 링크는 "/LSW/flDownload.do?flSeq=..." 형태의 상대경로다.
+  const abs = (p) => {
+    const s = clean(p ?? "");
+    return s ? (/^https?:/.test(s) ? s : `https://www.law.go.kr${s}`) : null;
+  };
   const out = [];
   for (const b of asArray(raw)) {
     if (!b || typeof b !== "object") continue;
@@ -232,10 +237,20 @@ function normalizeAnnexes(raw) {
       no: key,
       title: title || null,
       text,
-      // 파일 링크는 참고용으로만 남긴다. 인증정보가 섞여 나오는 경우가 있어 OC 파라미터는 제거한다.
+      // 원본 파일 링크.
+      //
+      // `별표HWP파일명`/`별표PDF파일명` 을 읽고 있었는데 그건 **파일명일 뿐이고 3%에만 있다**.
+      // 실제 내려받을 수 있는 경로는 `별표서식파일링크`(HWP)·`별표서식PDF파일링크`(PDF) 이고
+      // 이쪽은 100% 온다(실측: 국가계약법 시행규칙 20/20).
+      // 罫線 텍스트 복원이 깨지는 별표는 결국 원본을 봐야 하므로 이 링크가 생명줄이다.
       files: {
-        hwp: clean(findKey(b, "별표HWP파일명") ?? "") || null,
-        pdf: clean(findKey(b, "별표PDF파일명") ?? "") || null,
+        hwp: abs(findKey(b, "별표서식파일링크")),
+        pdf: abs(findKey(b, "별표서식PDF파일링크")),
+        images: String(clean(findKey(b, "별표서식이미지파일링크") ?? ""))
+          .split(",").map((s) => abs(s)).filter(Boolean),
+        // 파일명도 같이 남긴다 — 내려받을 때 사람이 알아볼 이름이 된다.
+        hwpName: clean(findKey(b, "별표HWP파일명") ?? "") || null,
+        pdfName: clean(findKey(b, "별표PDF파일명") ?? "") || null,
       },
     });
   }
