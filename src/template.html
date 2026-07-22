@@ -24,6 +24,7 @@
     /* 관계 배지 색 — 위임=경고색, 인용=시행령색 계열로 맞춘다 */
     --wimim:var(--warn); --inyong:var(--ord); --sosok:#39425a;
     --zebra:rgba(255,255,255,.02);
+    --fav:#ffd23f; /* 즐겨찾기 별 — 또렷한 노랑 */
   }
   :root[data-theme="light"]{
     color-scheme:light;
@@ -35,6 +36,7 @@
     --law:#4d938a; --ord:#3e6fa8; --rule:#2c7a4b; --ye:#b07d24; --adm:#7a45b0;
     --wimim:var(--warn); --inyong:var(--ord); --sosok:#d8dde3;
     --zebra:rgba(0,0,0,.025);
+    --fav:#e6a800; /* 라이트에서는 조금 짙게 — 흰 배경에 노랑은 안 보인다 */
   }
   /* Pretendard 가변폰트 — 로컬 번들(빌드 시 data-URI로 임베드). 외부 웹폰트 금지(내부망). */
   @font-face{
@@ -233,14 +235,12 @@
   .ritem{padding:8px 10px;border-radius:9px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
   .ritem.sel{background:var(--panel2);outline:1px solid var(--line)}
   .ritem:hover{background:var(--panel2)}
-  .ritem .dot{width:8px;height:8px;border-radius:50%;flex:none;align-self:center}
   .ritem .main{flex:1;min-width:0}
   .ritem .ttl{font-size:12.5px}
   .ritem .ttl b{color:var(--accent);font-weight:600}
   .ritem .sub{font-size:11.5px;color:var(--muted);margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ritem .badge{font-size:10px;color:var(--muted);background:var(--panel2);
-    border-radius:20px;padding:2px 8px;flex:none}
+  .ritem .starslot{flex:none;align-self:center}
   .none{color:var(--muted);font-size:13px;text-align:center;padding:30px}
 
   /* ───────── 브라우즈 (검색어 없을 때) ───────── */
@@ -257,12 +257,13 @@
   .fav:hover{background:var(--panel2)}
   .fav .lbl{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .fav .sub{font-size:11px;color:var(--muted);flex:none}
+  .fav .tag{align-self:center}
 
   /* ★ 토글 — 트리 행과 원문 제목에 함께 쓴다 */
   .star{flex:none;background:none;border:none;cursor:pointer;font-size:13px;line-height:1;
     color:var(--line);padding:2px 4px;font-family:inherit}
-  .star:hover{color:var(--ye)}
-  .star.on{color:var(--ye)}
+  .star:hover{color:var(--fav)}
+  .star.on{color:var(--fav)}
   h2 .star{font-size:18px;vertical-align:middle;margin-left:8px}
 
   /* ── 계단형 트리 ── */
@@ -281,10 +282,9 @@
   .trow.chap{color:var(--faint);font-weight:600;font-size:12px}
   .trow.leaf{font-size:12px}
   .trow.leaf .lbl{color:var(--text2)}
-  .trow .tdot{flex:none;width:7px;height:7px;border-radius:2px}
-  .tdot.법률{background:var(--law)} .tdot.시행령{background:var(--ord)}
-  .tdot.시행규칙{background:var(--rule)} .tdot.계약예규{background:var(--ye)}
-  .tdot.훈령,.tdot.예규,.tdot.지침,.tdot.고시,.tdot.공고,.tdot.행정규칙{background:var(--adm)}
+  /* 위계 태그 — 검색 결과·트리·즐겨찾기가 같은 모양을 쓴다 */
+  .tag{flex:none;font-size:10px;color:var(--muted);background:var(--panel2);
+    border-radius:4px;padding:1px 5px;white-space:nowrap;align-self:center}
   .tchildren[hidden]{display:none}
 
   /* ───────── 원문 (가운데) ───────── */
@@ -311,8 +311,8 @@
   /* 마우스가 놓인 조 — 오른쪽 관계 패널이 이 조를 따라간다 */
   .unit.active{border-left-color:var(--accent);background:var(--hl)}
   /* 클릭해 고정한 조. 마우스가 떠나도 관계 패널이 이 조에 머문다. */
-  .unit.pin{border-left-color:var(--ye);border-left-width:3px}
-  .unit.pin .uhead .uno::after{content:' 📌';font-size:11px}
+  /* 고정한 조 — 강조는 왼쪽 막대 하나로 충분하다. 이모티콘은 글자 흐름을 흔든다. */
+  .unit.pin{border-left-color:var(--accent);border-left-width:4px;background:var(--hl)}
   /* 사이드바에서 눌러 굴러왔을 때 잠깐 반짝 */
   .unit.jumped{background:var(--marktint)}
   .uhead{display:flex;align-items:baseline;gap:9px;margin-bottom:7px}
@@ -376,7 +376,6 @@
   .rel .k.별표{background:var(--panel2);color:var(--rule)}
   .rel .ev{color:var(--muted);font-size:11px}
   .relempty{padding:6px 15px 14px;font-size:12px;color:var(--muted)}
-  .pinnote{font-size:11px;color:var(--ye);padding:9px 15px 0}
 
 </style>
 </head>
@@ -537,19 +536,21 @@ const GRAPH = /*__GRAPH__*/;
       results.innerHTML=q.value.trim()?'<div class="none">결과 없음</div>':'';
       return;
     }
+    // 표기 순서는 어디서나 같다: 위계 → 제목 → ★
     results.innerHTML=hits.map((h,i)=>{
       const n=h.node;
       const title=(n.kind==='조문'||n.kind==='별표')?(n.title||n.label):n.label;
-      const sub=(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:(n.name||n.type);
+      const sub=(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:(n.name||'');
       return `<div class="ritem${i===cur?' sel':''}" data-i="${i}">
-        <span class="dot" style="background:${color(n)}"></span>
+        <span class="tag">${esc(tierOf(n))}</span>
         <span class="main">
           <span class="ttl">${highlight(title,q.value)}</span>
-          <div class="sub">${esc(sub)}</div>
+          ${sub?`<div class="sub">${esc(sub)}</div>`:''}
         </span>
-        <span class="badge">${esc(n.kind==='별표'?n.label.replace(/[\[\]]/g,'').split(' ')[0]:n.type)}</span>
+        <span class="starslot" data-id="${esc(n.id)}"></span>
       </div>`;
     }).join('');
+    fillStarSlots(results);
     const sel=results.querySelector('.ritem.sel');
     if(sel)sel.scrollIntoView({block:'nearest'});
   }
@@ -596,18 +597,34 @@ const GRAPH = /*__GRAPH__*/;
     document.querySelectorAll(`[data-star="${CSS.escape(id)}"]`).forEach(b=>paintStar(b,on));
   }
 
+  /**
+   * 위계 표시. 색 점 대신 글자로 적는다 —
+   * 색은 범례를 외워야 읽히지만 "훈령" 은 그냥 읽힌다.
+   * (소관부처 약칭이 수집되면 여기에 함께 붙인다.)
+   */
+  function tierOf(n){
+    if(n.kind==='별표')return String(n.label||'').replace(/[\[\]]/g,'').split(' ')[0]||'별표';
+    if(n.kind==='조문')return '조문';
+    return n.type||'법령';
+  }
+  /** 검색 결과처럼 HTML 로 그린 곳에 ★ 버튼을 끼워넣는다. */
+  function fillStarSlots(root){
+    root.querySelectorAll('.starslot').forEach(sl=>{
+      if(sl.firstChild)return;
+      sl.appendChild(starBtn(sl.dataset.id));
+    });
+  }
+
+  // 즐겨찾기도 검색 결과와 같은 표기법을 쓴다 — 같은 것이 같아 보여야 한다.
   function favRow(n){
     const d=document.createElement('div');
     d.className='fav'; d.dataset.go=n.id;
-    const dot=document.createElement('span');
-    dot.className='tdot '+(n.type||''); d.appendChild(dot);
+    const tag=document.createElement('span');
+    tag.className='tag'; tag.textContent=tierOf(n); d.appendChild(tag);
     const l=document.createElement('span');
     l.className='lbl';
     l.textContent=n.kind==='법령'?(n.label||n.name):`${n.group||''} ${n.label}`.trim();
     d.appendChild(l);
-    if(n.kind!=='법령'&&n.title){
-      const s=document.createElement('span'); s.className='sub'; s.textContent=n.title; d.appendChild(s);
-    }
     d.appendChild(starBtn(n.id));
     return d;
   }
@@ -659,7 +676,8 @@ const GRAPH = /*__GRAPH__*/;
     const arrow=document.createElement('span');
     arrow.className='arrow'; arrow.textContent=expandable?'▶':'';
     row.appendChild(arrow);
-    if(dot!=null){const t=document.createElement('span');t.className='tdot '+dot;row.appendChild(t);}
+    // 색 점 대신 위계를 글자로. 색은 범례를 외워야 읽히고, 색맹이면 아예 안 읽힌다.
+    if(dot!=null){const t=document.createElement('span');t.className='tag';t.textContent=dot;row.appendChild(t);}
     const l=document.createElement('span'); l.className='lbl'; l.textContent=label; row.appendChild(l);
     if(cnt!=null){const c=document.createElement('span');c.className='cnt';c.textContent=cnt;row.appendChild(c);}
     if(favId){row.dataset.unit=favId;row.appendChild(starBtn(favId));}
@@ -671,7 +689,8 @@ const GRAPH = /*__GRAPH__*/;
       if(open_&&!built&&build){built=true;build(kids);}
     }
     arrow.addEventListener('click',e=>{e.stopPropagation();if(expandable)toggle();});
-    row.addEventListener('click',()=>{ if(onOpen)onOpen(row); if(expandable&&!open_)toggle(true); });
+    // 행을 누르면 펼쳐지고 다시 누르면 닫힌다. 닫으려고 화살표를 겨냥할 필요가 없다.
+    row.addEventListener('click',()=>{ if(onOpen)onOpen(row); if(expandable)toggle(); });
     wrap.append(row,kids);
     wrap._toggle=toggle;
     return wrap;
@@ -931,25 +950,14 @@ const GRAPH = /*__GRAPH__*/;
     if(pinned===id){                        // 같은 조를 다시 누르면 해제
       pinned=null;
       s.classList.remove('pin');
-      setPinNote(null);
     }else{
       docEl.querySelectorAll('.unit.pin').forEach(x=>x.classList.remove('pin'));
       pinned=id;
       s.classList.add('pin');
       setActive(id);
-      setPinNote(byId.get(id));
     }
   });
 
-  /** 고정 상태를 오른쪽 패널 머리에 알린다 — 왜 안 따라오는지 몰라 헤매지 않도록. */
-  function setPinNote(n){
-    const old=relsEl.querySelector('.pinnote'); if(old)old.remove();
-    if(!n)return;
-    const d=document.createElement('div');
-    d.className='pinnote';
-    d.textContent='📌 고정됨 — 다시 클릭하면 해제';
-    relsEl.insertBefore(d,relsEl.firstChild);
-  }
 
   // ───────── 인용 미리보기 ─────────
   // 인용을 눌렀다고 읽던 화면을 통째로 갈아끼우면, 확인하고 돌아왔을 때 어디였는지를 잃는다.
@@ -1275,7 +1283,7 @@ const GRAPH = /*__GRAPH__*/;
 
   // 아무것도 안 고른 상태에서 ③ 이 텅 비어 있으면 고장난 것처럼 보인다.
   relsEl.innerHTML='<div class="relempty">조문 위에 마우스를 올리면 그 조의 위임·인용 관계가 여기 나옵니다. '+
-    '클릭하면 📌 로 고정됩니다.</div>';
+    '클릭하면 그 조에 고정됩니다.</div>';
 
   // 시작 화면 — 빈 원문 자리에 무엇을 하면 되는지만 적어둔다.
   docEl.innerHTML='<div class="blank">왼쪽 <b>검색창</b>에 조문·키워드를 치거나, '+
