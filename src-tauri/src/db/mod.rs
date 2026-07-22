@@ -74,17 +74,30 @@ pub fn open_with_recovery(
         db_path.display()
     );
 
-    if let Some(backup) = newest_backup(backups_dir) {
+    // Try backups newest-first, but ONLY adopt one that passes its OWN
+    // integrity check. A subtly corrupt newest backup must not be restored
+    // over an older good one — the manual `.sqlite` import path already
+    // probes integrity before staging (see commands::import_backup_file);
+    // this makes the automatic recovery path symmetric instead of blindly
+    // trusting the newest file.
+    for backup in backups_newest_first(backups_dir) {
+        if !backup_is_healthy(&backup) {
+            eprintln!(
+                "backup {} failed its integrity probe — skipping to an older one",
+                backup.display()
+            );
+            continue;
+        }
         match fs::copy(&backup, db_path).and_then(|_| open(db_path).map_err(std::io::Error::other))
         {
             Ok(conn) => {
                 let note = format!(
-                    "원본 데이터베이스 파일을 열 수 없어({primary_err}) 가장 최근 자동 백업({})으로 복구했습니다.",
+                    "원본 데이터베이스 파일을 열 수 없어({primary_err}) 가장 최근의 정상 자동 백업({})으로 복구했습니다.",
                     backup.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
                 );
                 return Ok((conn, Some(note)));
             }
-            Err(e) => eprintln!("backup {} also failed to restore/open: {e}", backup.display()),
+            Err(e) => eprintln!("backup {} restore/open failed: {e}", backup.display()),
         }
     }
 
@@ -173,17 +186,30 @@ fn stamp_key(p: &Path) -> String {
     name
 }
 
-fn newest_backup(backups_dir: &Path) -> Option<PathBuf> {
-    let mut entries: Vec<PathBuf> = fs::read_dir(backups_dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| p.extension().map(|ext| ext == "sqlite").unwrap_or(false))
-        .collect();
-    // Sort by embedded timestamp, NOT filename — prefixes (wmhh_/preimport_/prerestore_)
-    // break a raw lexical sort. See stamp_key.
-    entries.sort_by(|a, b| stamp_key(a).cmp(&stamp_key(b)));
-    entries.pop()
+/// All `.sqlite` files in `backups_dir`, newest first by embedded timestamp
+/// (NOT filename — mixed prefixes wmhh_/preimport_/prerestore_/presave_ break
+/// a raw lexical sort; see stamp_key).
+fn backups_newest_first(backups_dir: &Path) -> Vec<PathBuf> {
+    let mut entries: Vec<PathBuf> = match fs::read_dir(backups_dir) {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|ext| ext == "sqlite").unwrap_or(false))
+            .collect(),
+        Err(_) => return Vec::new(),
+    };
+    entries.sort_by(|a, b| stamp_key(b).cmp(&stamp_key(a)));
+    entries
+}
+
+/// True if `path` opens as SQLite and passes `PRAGMA integrity_check`.
+/// Used to vet a backup before adopting it during recovery, so a corrupt
+/// snapshot is skipped rather than restored over good data.
+fn backup_is_healthy(path: &Path) -> bool {
+    Connection::open(path)
+        .and_then(|c| c.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)))
+        .map(|s| s == "ok")
+        .unwrap_or(false)
 }
 
 /// Filesystem-safe timestamp when no connection is at hand (pre-open code
@@ -265,6 +291,45 @@ pub fn rotate_backup_throttled(
     }
     rotate_backup(db_path, backups_dir, stamp, keep)?;
     Ok(true)
+}
+
+/// Had at least this many rows AND the new set is at most half → force a
+/// pre-save safety snapshot. Tuned to ignore routine one/two-item deletions
+/// while catching a mass delete or an accidental whole-array truncation
+/// (e.g. a frontend bug shipping a partial S.items to save_all).
+const SHRINK_SNAPSHOT_FLOOR: i64 = 5;
+
+/// Saves `items` as usual, but when the item count drops drastically (see
+/// `SHRINK_SNAPSHOT_FLOOR`) first takes an UNCONDITIONAL timestamped snapshot
+/// of the current file *before* the destructive delete+reinsert — so a
+/// pre-shrink restore point always exists even if the throttled after-save
+/// rotation would have skipped it. Because the whole-dataset save replaces
+/// every row, a single bad save could otherwise wipe everything with the
+/// most recent auto-backup being <30 min old and already reflecting the loss.
+/// Returns whether a snapshot was taken (best-effort — a snapshot failure is
+/// logged but never blocks the save itself).
+pub fn save_items_guarded(
+    conn: &mut Connection,
+    db_path: &Path,
+    backups_dir: &Path,
+    items: &[model::Item],
+    keep: usize,
+) -> DbResult<bool> {
+    let prev: i64 = conn
+        .query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0))
+        .unwrap_or(0);
+    let new = items.len() as i64;
+    let mut snapshotted = false;
+    if prev >= SHRINK_SNAPSHOT_FLOOR && new <= prev / 2 {
+        match now_stamp(conn).and_then(|stamp| {
+            rotate_backup(db_path, backups_dir, &format!("presave_{stamp}"), keep)
+        }) {
+            Ok(()) => snapshotted = true,
+            Err(e) => eprintln!("pre-save safety snapshot failed (saving anyway): {e}"),
+        }
+    }
+    self::items::save_items(conn, items)?;
+    Ok(snapshotted)
 }
 
 /// Deletes old backups, keeping (a) the newest `keep` files and (b) the

@@ -647,3 +647,94 @@ fn now_stamp_and_fs_stamp_share_format_and_timezone() {
         assert!(same_minute(&a2, &b2), "now_stamp {a2} vs fs_stamp {b2} — 시각대 불일치");
     }
 }
+
+// A/B (v2.5.20): save_items_guarded 는 항목 수가 급격히 줄 때(대량 삭제·통째 절단)
+// 덮어쓰기 '전에' 강제 스냅샷을 남겨야 한다 — 사소한 축소(10→9)는 스냅샷하지 않는다.
+#[test]
+fn save_items_guarded_snapshots_only_on_drastic_shrink() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_guarded_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let mut conn = super::open(&db_path).unwrap();
+    // 10건 저장(스냅샷 없음 — prev=0).
+    let ten: Vec<Item> = (0..10)
+        .map(|i| {
+            let mut it = sample_items()[1].clone();
+            it.id = 5000 + i;
+            it
+        })
+        .collect();
+    assert!(!super::save_items_guarded(&mut conn, &db_path, &backups_dir, &ten, 20).unwrap());
+
+    // 사소한 축소 10→9: 스냅샷 없음.
+    let nine = ten[..9].to_vec();
+    assert!(
+        !super::save_items_guarded(&mut conn, &db_path, &backups_dir, &nine, 20).unwrap(),
+        "작은 축소(10→9)는 스냅샷하지 않아야 함"
+    );
+
+    // 급격한 축소 9→2: 덮어쓰기 전 스냅샷.
+    let two = nine[..2].to_vec();
+    assert!(
+        super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20).unwrap(),
+        "대량 축소(9→2)는 덮어쓰기 전에 스냅샷해야 함"
+    );
+
+    let presave: Vec<_> = std::fs::read_dir(&backups_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains("presave_"))
+        .collect();
+    assert_eq!(presave.len(), 1, "presave 스냅샷이 정확히 하나 있어야 함");
+    // 스냅샷은 '축소 이전' 상태(9건)를 담아야 한다 — 새 2건이 아니라.
+    let snap = Connection::open(presave[0].path()).unwrap();
+    assert_eq!(
+        items::load_items(&snap).unwrap().len(),
+        9,
+        "스냅샷은 축소 직전(9건) 상태를 담아야 함"
+    );
+    // 실제 DB에는 축소 결과(2건)가 반영돼 있어야 한다.
+    assert_eq!(items::load_items(&conn).unwrap().len(), 2);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// D (v2.5.20): 최신 백업이 손상됐으면 복구는 그걸 건너뛰고 더 오래된 '정상' 백업을
+// 골라야 한다 — 예전엔 최신 하나만 보고 그게 손상이면 백업이 있어도 새로 시작(유실)했다.
+#[test]
+fn recovery_skips_corrupt_newest_backup_and_uses_older_good_one() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_skipcorrupt_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&backups_dir).unwrap();
+
+    // 오래된(1월) 정상 백업 — 2건.
+    {
+        let mut good = super::open(&db_path).unwrap();
+        items::save_items(&mut good, &sample_items()).unwrap();
+        drop(good);
+        std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_120000.sqlite")).unwrap();
+    }
+    // 최신(7월) 손상 백업 — 타임스탬프상 먼저 선택되지만 무결성 검사에서 걸러져야 한다.
+    std::fs::write(
+        backups_dir.join("wmhh_20260718_120000.sqlite"),
+        b"garbage, not a sqlite database",
+    )
+    .unwrap();
+
+    // 원본 손상 → 복구 발동.
+    std::fs::write(&db_path, b"garbage primary").unwrap();
+
+    let (conn, note) = super::open_with_recovery(&db_path, &backups_dir).unwrap();
+    assert!(note.is_some(), "recovery should report what happened");
+    assert_eq!(
+        items::load_items(&conn).unwrap().len(),
+        2,
+        "최신 백업이 손상됐으면 건너뛰고 더 오래된 정상 백업(2건)으로 복구해야 함"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
