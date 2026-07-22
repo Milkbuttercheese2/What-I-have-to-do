@@ -4,94 +4,132 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>LawEverything — 조달 법령 원문 리더</title>
+<script>
+  /* 페인트 전에 테마 확정(플래시 방지): 저장값 → 없으면 시스템 설정 */
+  (function(){try{
+    var t=localStorage.getItem('law-theme');
+    if(!t) t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+    document.documentElement.dataset.theme=t;
+  }catch(e){document.documentElement.dataset.theme='dark';}})();
+</script>
 <style>
+  /* 다크 = 기본. 라이트는 [data-theme="light"]로 덮어쓴다(head 스크립트가 시스템/저장값으로 선택). */
   :root{
-    --bg:#0f1420; --panel:#161c29; --panel2:#1e2537; --line:#2b3346;
-    --text:#e8ecf4; --muted:#93a0b8; --accent:#4c9aff; --warn:#f6a94a;
+    color-scheme:dark;
+    --bg:#0f1420; --panel:#161c29; --panel2:#1e2537; --line:#2b3346; --divider:#1c2333;
+    --text:#e8ecf4; --text2:#d7deec; --faint:#aeb9cf; --muted:#93a0b8;
+    --accent:#5bb3a6; --warn:#f6a94a;
+    --hl:rgba(91,179,166,.14); --marktint:rgba(91,179,166,.34);
+    --law:#5bb3a6; --ord:#5cc8ff; --rule:#7fd6a0; --ye:#e7c98a; --adm:#c79bf0;
+  }
+  :root[data-theme="light"]{
+    color-scheme:light;
+    /* 참조: What-I-have-to-do 라이트 팔레트(따뜻한 종이톤) */
+    --bg:#f4f3f0; --panel:#ffffff; --panel2:#eef0f3; --line:#e4e7ea; --divider:#eceef0;
+    --text:#1f2a33; --text2:#2b3640; --faint:#5a6472; --muted:#68717c;
+    --accent:#4d938a; --warn:#b26a1f;
+    --hl:rgba(77,147,138,.10); --marktint:rgba(77,147,138,.22);
+    --law:#4d938a; --ord:#3e6fa8; --rule:#2c7a4b; --ye:#b07d24; --adm:#7a45b0;
+  }
+  /* Pretendard 가변폰트 — 로컬 번들(빌드 시 data-URI로 임베드). 외부 웹폰트 금지(내부망). */
+  @font-face{
+    font-family:'Pretendard';
+    src:url('/*__FONT__*/') format('woff2-variations');
+    font-weight:45 920; font-style:normal; font-display:swap;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-    font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
-  #app{display:grid;grid-template-columns:270px 240px 1fr;height:100vh;min-height:0}
-  .col{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
+    font-family:'Pretendard','Malgun Gothic','맑은 고딕',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums}
+  #app{display:grid;grid-template-columns:340px 1fr;height:100vh;min-height:0}
+  .side{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
   .scroll{overflow:auto;flex:1;min-height:0}
   header{padding:13px 15px;border-bottom:1px solid var(--line)}
+  header .htop{display:flex;align-items:center;justify-content:space-between;gap:8px}
   header h1{margin:0;font-size:14px;letter-spacing:.2px}
+  .themebtn{flex:none;background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:7px;width:30px;height:26px;cursor:pointer;font-size:14px;line-height:1;display:flex;
+    align-items:center;justify-content:center}
+  .themebtn:hover{border-color:var(--accent);color:var(--accent)}
   header p{margin:5px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
   header p.warn{color:var(--warn)}
   .search{padding:11px 13px;border-bottom:1px solid var(--line)}
   .search input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
     background:var(--panel2);color:var(--text);font-size:13px;outline:none}
   .search input:focus{border-color:var(--accent)}
-  .grp{font-size:10.5px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;
-    padding:11px 15px 5px;position:sticky;top:0;background:var(--panel)}
-  .doc{padding:8px 15px;font-size:12.5px;cursor:pointer;border-left:2px solid transparent;line-height:1.4}
-  .doc:hover{background:var(--panel2)}
-  .doc.on{background:var(--panel2);border-left-color:var(--accent)}
-  .doc .t{font-size:10px;color:var(--muted)}
-  .doc.hit .h{color:var(--accent)}
-  .doc .snip{font-size:11px;color:var(--muted);margin-top:2px}
-  .tochead{padding:12px 14px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:600;
-    line-height:1.4}
-  .tochead .t{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:3px}
-  .tocfilter{padding:8px 12px;border-bottom:1px solid var(--line)}
-  .tocfilter input{width:100%;padding:6px 9px;border-radius:6px;border:1px solid var(--line);
-    background:var(--panel2);color:var(--text);font-size:12px;outline:none}
-  .tocitem{padding:6px 14px;font-size:12px;cursor:pointer;border-left:2px solid transparent;
-    color:#c2cbdd;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tocitem:hover{background:var(--panel2)}
-  .tocitem.on{background:var(--panel2);border-left-color:var(--accent);color:var(--text)}
-  .tocitem.struct{color:var(--muted);font-weight:600;margin-top:4px}
-  main{background:var(--bg);border-right:none}
-  .reader-inner{max-width:840px;margin:0 auto;padding:26px 34px 120px}
+
+  /* ── 계단형 트리 ── */
+  .trow{display:flex;align-items:center;gap:5px;padding:4px 10px 4px 0;cursor:pointer;
+    font-size:12.5px;line-height:1.35;border-left:2px solid transparent;white-space:nowrap;
+    overflow:hidden}
+  .trow:hover{background:var(--panel2)}
+  .trow.on{background:var(--panel2);border-left-color:var(--accent)}
+  .arrow{flex:none;width:12px;text-align:center;color:var(--muted);font-size:9px;transition:none}
+  .ic{flex:none;font-size:11px;width:13px;text-align:center}
+  .lbl{overflow:hidden;text-overflow:ellipsis}
+  .cnt{flex:none;color:var(--muted);font-size:10.5px;margin-left:auto;padding-left:8px}
+  .trow.group{font-size:10.5px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;font-weight:600}
+  .trow.doc .lbl{font-weight:500}
+  .trow.leaf{font-size:12px}
+  .trow.leaf .lbl{color:var(--text2)}
+  .trow.struct{color:var(--muted);font-weight:600}
+  .dot{flex:none;width:7px;height:7px;border-radius:2px}
+  .dot.법률{background:var(--law)} .dot.시행령{background:var(--ord)} .dot.시행규칙{background:var(--rule)}
+  .dot.계약예규{background:var(--ye)} .dot.훈령,.dot.예규,.dot.지침,.dot.고시,.dot.공고,.dot.행정규칙{background:var(--adm)}
+  .tchildren[hidden]{display:none}
+  .shelf{font-size:10.5px;color:var(--muted);padding:8px 15px;border-top:1px solid var(--line)}
+  .snip{color:var(--muted);font-size:11px;padding-left:4px}
+
+  /* ── 원문 ── */
+  main{background:var(--bg)}
+  .reader-inner{max-width:840px;margin:0 auto;padding:26px 34px 140px}
   .rhead{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:8px}
   .rhead h2{margin:0;font-size:22px;line-height:1.3}
+  .rhead .crumb{font-size:11.5px;color:var(--muted);margin-bottom:8px}
   .rhead .meta{margin-top:8px;font-size:12px;color:var(--muted)}
   .stamp{display:inline-block;margin-top:9px;font-size:11.5px;color:var(--muted);
     padding:4px 9px;border-radius:6px;background:var(--panel2)}
   .stamp.old{color:var(--warn);background:rgba(246,169,74,.13)}
-  .art{padding:18px 0;border-bottom:1px solid #1c2333;scroll-margin-top:14px}
-  .art h3{margin:0 0 8px;font-size:15px;color:var(--text)}
+  .art{padding:18px 0;border-bottom:1px solid var(--divider);scroll-margin-top:14px}
+  .art.hl{background:var(--hl)}
+  .art h3{margin:0 0 8px;font-size:15px}
   .art h3 .no{color:var(--accent);margin-right:7px}
   .art h3 .ti{color:var(--muted);font-weight:400;font-size:13px}
-  .art .atext{font-size:13.5px;line-height:1.85;color:#d7deec;white-space:pre-wrap;word-break:break-word}
-  .struct-h{margin:26px 0 2px;font-size:14px;font-weight:700;color:#aeb9cf;
+  .art .atext{font-size:13.5px;line-height:1.85;color:var(--text2);white-space:pre-wrap;word-break:break-word}
+  .struct-h{margin:26px 0 2px;font-size:14px;font-weight:700;color:var(--faint);
     border-top:1px solid var(--line);padding-top:16px}
   .byul{margin-top:30px;border-top:2px solid var(--line);padding-top:16px}
-  .byul h3{font-size:15px;margin:20px 0 8px;color:#e7c98a}
+  .byul h3{font-size:15px;margin:20px 0 8px;color:var(--ye)}
   .byul .lnk{font-size:12px;margin:6px 0}
   .byul .lnk a{color:var(--accent);text-decoration:none;margin-right:12px}
-  .byul .lnk a:hover{text-decoration:underline}
-  table.tbl{border-collapse:collapse;width:100%;margin:8px 0 4px;font-size:12.5px;overflow:auto;display:block}
-  table.tbl td,table.tbl th{border:1px solid var(--line);padding:6px 9px;text-align:left;
-    vertical-align:top;color:#d7deec;white-space:pre-wrap}
+  table.tbl{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px;display:block;overflow:auto}
+  table.tbl td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top;
+    color:var(--text2);white-space:pre-wrap}
   table.tbl tr:first-child td{background:var(--panel2);font-weight:600}
   .empty{color:var(--muted);font-size:13px;padding:40px 34px;line-height:1.7;max-width:640px}
-  mark{background:rgba(76,154,255,.3);color:#fff;border-radius:2px}
-  .shelf{font-size:10.5px;color:var(--muted);padding:8px 15px;border-top:1px solid var(--line)}
+  mark{background:var(--marktint);color:var(--text);border-radius:2px}
 </style>
 </head>
 <body>
 <div id="app">
-  <div class="col docs">
+  <div class="side">
     <header>
-      <h1>LawEverything · 조달 법령 원문</h1>
+      <div class="htop">
+        <h1>LawEverything · 조달 법령 원문</h1>
+        <button id="themeBtn" class="themebtn" type="button" title="다크/라이트 전환" aria-label="테마 전환">◐</button>
+      </div>
       <p id="meta"></p>
     </header>
     <div class="search">
-      <input id="q" placeholder="법령·조문 원문 즉시검색 (예: 수의계약, 특수조건)" autocomplete="off"/>
+      <input id="q" placeholder="법령·조문 원문 즉시검색 (예: 수의계약)" autocomplete="off"/>
     </div>
-    <div class="scroll" id="doclist"></div>
-    <div class="shelf">그래프 관계도는 잠정 보류 — 데이터는 유지됩니다.</div>
-  </div>
-  <div class="col toc">
-    <div class="tochead" id="tochead">문서를 선택하세요</div>
-    <div class="tocfilter"><input id="tocq" placeholder="조문 목차 내 검색" autocomplete="off"/></div>
-    <div class="scroll" id="toc"></div>
+    <div class="scroll" id="tree"></div>
+    <div class="scroll" id="results" hidden></div>
+    <div class="shelf">폴더를 펼치면 시행령·시행규칙·조문이 계단형으로 이어집니다. 그래프는 잠정 보류.</div>
   </div>
   <main class="scroll" id="reader">
-    <div class="empty">왼쪽에서 법령·행정규칙을 선택하면 원문이 여기에 표시됩니다.<br/>
-      가운데 목차에서 조를 클릭하면 해당 조문 위치로 이동합니다.</div>
+    <div class="empty">왼쪽 트리에서 법령을 펼쳐 조문까지 내려가거나, 문서를 클릭해 원문을 여세요.</div>
   </main>
 </div>
 <script>
@@ -102,164 +140,172 @@ const PAGE = /*__GRAPH__*/;
   const {documents:docs,meta}=PAGE;
   const byId=new Map(docs.map(d=>[d.id,d]));
 
-  // ---- 상단 메타/신선도 배너 ----
+  // ---- 테마 토글 ----
   (function(){
-    const el=document.getElementById('meta');
-    const parts=[];
-    if(meta.title) parts.push(meta.title);
-    parts.push(`문서 ${meta.documents} · 조문 ${meta.articles}`);
-    const v=meta.확인요약;
-    if(v){ if(v.최고경과일!=null) parts.push(`최종확인 ${v.최고경과일}일 전`); }
-    const stale=docs.filter(d=>d.stamp&&d.stamp.낡음).length;
-    el.textContent=parts.join(' · ');
-    if(stale>0){ el.className='warn'; el.textContent+=` · ⚠ ${stale}건 재수집 필요`; }
+    const root=document.documentElement, btn=document.getElementById('themeBtn');
+    const sync=()=>{ const dark=root.dataset.theme!=='light'; btn.textContent=dark?'☀':'☾';
+      btn.title=(dark?'라이트':'다크')+' 모드로 전환'; };
+    sync();
+    btn.addEventListener('click',()=>{ root.dataset.theme=root.dataset.theme==='light'?'dark':'light';
+      try{localStorage.setItem('law-theme',root.dataset.theme);}catch(e){} sync(); });
   })();
 
-  // ---- 문서 분류 ----
-  const bucket=d=>{
-    if(["법률","시행령","시행규칙"].includes(d.docType)) return "법령";
-    if(d.docType==="계약예규") return "계약예규";
-    return "행정규칙";
-  };
-  const GROUPS=["법령","계약예규","행정규칙"];
   const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:"";
+  const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
 
-  // ---- 좌측: 문서 목록 / 검색 결과 ----
-  const doclist=document.getElementById('doclist');
-  let current=null;
+  // ---- 메타 배너 ----
+  (function(){
+    const m=document.getElementById('meta');const parts=[];
+    if(meta.title)parts.push(meta.title);
+    parts.push(`문서 ${meta.documents} · 조문 ${meta.articles}`);
+    if(meta.확인요약&&meta.확인요약.최고경과일!=null)parts.push(`최종확인 ${meta.확인요약.최고경과일}일 전`);
+    const stale=docs.filter(d=>d.stamp&&d.stamp.낡음).length;
+    m.textContent=parts.join(' · ');
+    if(stale){m.className='warn';m.textContent+=` · ⚠ ${stale}건 재수집 필요`;}
+  })();
 
-  function renderDocList(){
-    let html="";
-    for(const g of GROUPS){
-      const items=docs.filter(d=>bucket(d)===g).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-      if(!items.length) continue;
-      html+=`<div class="grp">${g} (${items.length})</div>`;
-      for(const d of items){
-        html+=`<div class="doc${current===d.id?' on':''}" data-doc="${d.id}">
-          <div class="h">${esc(d.shortName||d.name)}</div>
-          <div class="t">${esc(d.docType)} · 조문 ${d.articles.length}${d.별표?.length?` · 별표 ${d.별표.length}`:''}</div></div>`;
-      }
+  // ---- 분류 ----
+  // 법률·시행령·시행규칙은 같은 레벨(형제)로 나란히 둔다. 계단형은 '문서 → 조문'에만 적용.
+  const isLaw=d=>["법률","시행령","시행규칙"].includes(d.docType);
+  const byName=(a,b)=>a.name.localeCompare(b.name,'ko');
+  const typeRank={법률:0,시행령:1,시행규칙:2};
+  const lawDocs=docs.filter(isLaw).sort((a,b)=>
+    a.family===b.family ? (typeRank[a.docType]-typeRank[b.docType]||byName(a,b))
+                        : String(a.family).localeCompare(String(b.family)));
+  const GROUPS=[
+    {key:"법령", docs:lawDocs},
+    {key:"계약예규", docs:docs.filter(d=>d.docType==="계약예규").sort(byName)},
+    {key:"조달청 행정규칙", docs:docs.filter(d=>!isLaw(d)&&d.docType!=="계약예규").sort(byName)},
+  ];
+  const arts=d=>d.articles.filter(a=>!a.structural);
+
+  // ---- 트리 ----
+  const tree=document.getElementById('tree');
+  let curRow=null;
+  function markRow(row){ if(curRow)curRow.classList.remove('on'); curRow=row; if(row)row.classList.add('on'); }
+
+  // 확장형 노드: arrow + row + lazy children container
+  function node(depth,{cls,icon,dot,label,cnt,expandable,onOpen,build}){
+    const wrap=el('div','tnode');
+    const row=el('div','trow '+(cls||''));
+    row.style.paddingLeft=(depth*15+8)+'px';
+    const arrow=el('span','arrow'); arrow.textContent=expandable?'▶':'';
+    row.appendChild(arrow);
+    if(dot){const dt=el('span','dot '+dot);row.appendChild(dt);} else if(icon){const ic=el('span','ic');ic.textContent=icon;row.appendChild(ic);}
+    const lbl=el('span','lbl'); lbl.innerHTML=label; row.appendChild(lbl);
+    if(cnt!=null){const c=el('span','cnt');c.textContent=cnt;row.appendChild(c);}
+    const kids=el('div','tchildren'); kids.hidden=true;
+    let open=false,built=false;
+    function toggle(force){
+      open=force==null?!open:force; kids.hidden=!open; arrow.textContent=expandable?(open?'▼':'▶'):'';
+      if(open&&!built&&build){built=true;build(kids);}
     }
-    doclist.innerHTML=html;
-    bindDocs();
-  }
-  function bindDocs(){
-    doclist.querySelectorAll('.doc').forEach(el=>el.onclick=()=>openDoc(el.dataset.doc,el.dataset.no));
+    arrow.addEventListener('click',e=>{e.stopPropagation();if(expandable)toggle();});
+    row.addEventListener('click',()=>{ if(onOpen)onOpen(row); if(expandable&&!open)toggle(true); });
+    wrap.append(row,kids);
+    wrap._toggle=toggle; wrap._row=row;
+    return wrap;
   }
 
-  // 전 문서 조문 검색
-  function renderSearch(q){
-    const s=q.toLowerCase();
-    const hits=[];
-    for(const d of docs){
-      if((d.name+d.shortName+d.docType).toLowerCase().includes(s)) hits.push({d});
-      for(const a of d.articles){
-        if(a.structural) continue;
-        if(((a.title||"")+a.text).toLowerCase().includes(s)){
-          const i=a.text.toLowerCase().indexOf(s);
-          const snip=i>=0?a.text.slice(Math.max(0,i-12),i+38):(a.title||"");
-          hits.push({d,a,snip});
-          if(hits.length>400) break;
-        }
-      }
-      if(hits.length>400) break;
+  function docNode(d,depth){
+    const aa=arts(d);
+    return node(depth,{
+      cls:'doc', dot:d.docType, label:esc(d.shortName||d.name),
+      cnt:`${aa.length}조${d.별표?.length?`·별표${d.별표.length}`:''}`,
+      expandable:aa.length>0,
+      onOpen:row=>openDoc(d.id,null,row),
+      // 계단형은 여기서만: 문서를 펼치면 그 문서의 조문(장/절 헤더 포함)이 다음 계단으로.
+      build:box=>d.articles.forEach(a=>box.appendChild(artNode(d,a,depth+1))),
+    });
+  }
+  function artNode(d,a,depth){
+    if(a.structural){
+      return node(depth,{cls:'struct',label:esc(a.text.split('\n')[0].slice(0,34)),expandable:false});
     }
-    doclist.innerHTML=hits.length?hits.map(h=>
-      `<div class="doc hit" data-doc="${h.d.id}"${h.a?` data-no="${h.a.no}"`:''}>
-        <div class="h">${esc(h.d.shortName)}${h.a?` <span class="no" style="color:var(--accent)">제${h.a.no}조</span>`:''}</div>
-        ${h.a?`<div class="snip">${esc(h.snip)}…</div>`:`<div class="t">${esc(h.d.docType)}</div>`}</div>`).join('')
-      :`<div class="empty" style="padding:20px 15px">일치하는 원문이 없습니다.</div>`;
-    bindDocs();
+    return node(depth,{cls:'leaf',label:`제${esc(a.no)}조${a.title?` <span style="color:var(--muted)">${esc(a.title)}</span>`:''}`,
+      expandable:false, onOpen:row=>openDoc(d.id,a.no,row)});
+  }
+  function groupNode(g){
+    return node(0,{cls:'group',label:`${g.key} (${g.docs.length})`,expandable:true,
+      build:box=>g.docs.forEach(d=>box.appendChild(docNode(d,1)))});
+  }
+  function renderTree(){
+    tree.innerHTML='';
+    GROUPS.forEach(g=>{ if(g.docs.length){const gn=groupNode(g); tree.appendChild(gn); gn._toggle(true);} });
   }
 
-  // ---- 가운데: 조 목차 ----
-  const tocEl=document.getElementById('toc'), tocHead=document.getElementById('tochead'), tocq=document.getElementById('tocq');
-  function renderToc(d,filter=""){
-    tocHead.innerHTML=`${esc(d.shortName||d.name)}<span class="t">${esc(d.name)}</span>`;
-    const f=filter.toLowerCase();
-    let html="";
-    for(const a of d.articles){
-      const label=a.structural?esc(a.text.split('\n')[0].slice(0,30)):`제${a.no}조${a.title?` (${esc(a.title)})`:''}`;
-      if(f && !label.toLowerCase().includes(f)) continue;
-      html+=`<div class="tocitem${a.structural?' struct':''}" data-no="${esc(a.no)}">${label}</div>`;
-    }
-    tocEl.innerHTML=html||`<div class="empty" style="padding:16px 14px">목차 항목이 없습니다.</div>`;
-    tocEl.querySelectorAll('.tocitem').forEach(el=>el.onclick=()=>scrollToArt(el.dataset.no,el));
-  }
-  tocq.addEventListener('input',()=>{ if(current) renderToc(byId.get(current),tocq.value.trim()); });
-
-  // ---- 우측: 본문 ----
+  // ---- 원문 ----
   const reader=document.getElementById('reader');
-  // API 별표내용은 (a) 제목 1행뿐이거나 (b) HWP 서식을 글자단위 격자로 쪼갠 지저분한 형태가 많다.
-  // 깨끗한 표(2~8열, 2행 이상, 셀에 실내용)만 렌더하고, 나머지는 제목·링크로만 안내한다.
   function isCleanTable(rows){
-    if(!rows||rows.length<2) return false;
-    const cols=Math.max(...rows.map(r=>r.length));
-    if(cols<2||cols>8) return false;
-    let cells=0,sum=0;
-    for(const r of rows) for(const c of r){ cells++; sum+=String(c).length; }
-    return cells>0 && sum/cells>=2;   // 셀 평균 길이 2 미만이면 글자단위 격자로 본다
+    if(!rows||rows.length<2)return false;
+    const cols=Math.max(...rows.map(r=>r.length)); if(cols<2||cols>8)return false;
+    let n=0,s=0; for(const r of rows)for(const c of r){n++;s+=String(c).length;} return n&&s/n>=2;
   }
-  function tableHtml(rows){
-    if(!isCleanTable(rows)) return "";
-    return `<table class="tbl"><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-  }
-  function openDoc(id,no){
-    current=id; const d=byId.get(id);
-    renderDocList();  // 선택 강조 갱신 (검색 중이 아니면)
-    if(document.getElementById('q').value.trim()) { /* 검색 결과 유지 */ }
-    renderToc(d, "");
-    tocq.value="";
+  const tableHtml=rows=>!isCleanTable(rows)?"":`<table class="tbl"><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  function stripHead(a){const t=a.text.replace(/^제\d+조(?:의\d+)?\s*[（(][^）)]*[）)]\s*/,'').trim();return t||a.text;}
+
+  function openDoc(id,no,row){
+    const d=byId.get(id);
+    if(row)markRow(row);
     const st=d.stamp;
-    const stamp=st&&(st.시행일||st.확인일)
-      ? `<div class="stamp${st.낡음?' old':''}">${[st.시행일?`시행 ${ymd(st.시행일)}`:'',st.확인일?`확인 ${ymd(st.확인일)}`:'',st.상태&&st.상태!=='현행'?st.상태:'',st.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`
-      : '';
+    const stamp=st&&(st.시행일||st.확인일)?`<div class="stamp${st.낡음?' old':''}">${[st.시행일?`시행 ${ymd(st.시행일)}`:'',st.확인일?`확인 ${ymd(st.확인일)}`:'',st.상태&&st.상태!=='현행'?st.상태:'',st.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`:'';
+    // 상위 경로(빵부스러기)
+    const path=[]; let c=d; while(c){path.unshift(c.shortName||c.name); c=c.parent?byId.get(c.parent):null;}
     let body=`<div class="reader-inner"><div class="rhead">
+      ${path.length>1?`<div class="crumb">${path.slice(0,-1).map(esc).join(' › ')} ›</div>`:''}
       <h2>${esc(d.name)}</h2>
-      <div class="meta">${esc(d.docType)} · 조문 ${d.articles.filter(a=>!a.structural).length}개${d.별표?.length?` · 별표 ${d.별표.length}개`:''}</div>
-      ${stamp}</div>`;
+      <div class="meta">${esc(d.docType)} · 조문 ${arts(d).length}개${d.별표?.length?` · 별표 ${d.별표.length}개`:''}</div>${stamp}</div>`;
     for(const a of d.articles){
-      if(a.structural){ body+=`<div class="struct-h" id="a-${esc(a.no)}">${esc(a.text.split('\n')[0])}</div>`; continue; }
-      body+=`<div class="art" id="a-${esc(a.no)}">
-        <h3><span class="no">제${esc(a.no)}조</span>${a.title?`<span class="ti">(${esc(a.title)})</span>`:''}</h3>
-        <div class="atext">${esc(stripHead(a))}</div></div>`;
+      if(a.structural){body+=`<div class="struct-h" id="a-${esc(a.no)}">${esc(a.text.split('\n')[0])}</div>`;continue;}
+      body+=`<div class="art" id="a-${esc(a.no)}"><h3><span class="no">제${esc(a.no)}조</span>${a.title?`<span class="ti">(${esc(a.title)})</span>`:''}</h3><div class="atext">${esc(stripHead(a))}</div></div>`;
     }
     if(d.별표?.length){
       body+=`<div class="byul"><h3 style="border:none;color:var(--muted);margin-top:0">별표 · 서식 (${d.별표.length})</h3>`;
       for(const b of d.별표){
-        body+=`<h3>${b.번호?`[별표 ${esc(b.번호)}] `:''}${esc(b.title||'별표')}</h3>`;
-        body+=tableHtml(b.rows);
-        if(b.hwp||b.pdf) body+=`<div class="lnk">${b.hwp?`<a href="${esc(b.hwp)}" target="_blank" rel="noopener">HWP 서식 내려받기</a>`:''}${b.pdf?`<a href="${esc(b.pdf)}" target="_blank" rel="noopener">PDF</a>`:''} <span style="color:var(--muted)">(전체 표는 kordoc 파싱 예정)</span></div>`;
+        body+=`<h3>${b.번호?`[별표 ${esc(b.번호)}] `:''}${esc(b.title||'별표')}</h3>`+tableHtml(b.rows);
+        if(b.hwp||b.pdf)body+=`<div class="lnk">${b.hwp?`<a href="${esc(b.hwp)}" target="_blank" rel="noopener">HWP 서식 내려받기</a>`:''}${b.pdf?`<a href="${esc(b.pdf)}" target="_blank" rel="noopener">PDF</a>`:''} <span style="color:var(--muted)">(전체 표는 kordoc 파싱 예정)</span></div>`;
       }
       body+=`</div>`;
     }
-    body+=`</div>`;
-    reader.innerHTML=body;
+    reader.innerHTML=body+`</div>`;
     reader.scrollTop=0;
-    if(no) requestAnimationFrame(()=>scrollToArt(no));
-  }
-  // 본문 앞의 "제N조(제목)" 표기는 제목 헤더로 이미 보여주므로 걷어낸다(같은 줄/다음 줄 모두).
-  function stripHead(a){
-    const t=a.text.replace(/^제\d+조(?:의\d+)?\s*[（(][^）)]*[）)]\s*/,'').trim();
-    return t||a.text;
-  }
-  function scrollToArt(no,el){
-    const t=document.getElementById('a-'+no);
-    if(t) t.scrollIntoView({behavior:'smooth',block:'start'});
-    tocEl.querySelectorAll('.tocitem').forEach(x=>x.classList.toggle('on',x.dataset.no===no));
-    if(el && !el.classList.contains('on')) el.classList.add('on');
+    if(no)requestAnimationFrame(()=>{const t=document.getElementById('a-'+no);if(t){t.scrollIntoView({behavior:'smooth',block:'start'});t.classList.add('hl');setTimeout(()=>t.classList.remove('hl'),1600);}});
   }
 
-  // ---- 검색 ----
-  const q=document.getElementById('q');
-  q.addEventListener('input',()=>{ const v=q.value.trim(); if(v) renderSearch(v); else renderDocList(); });
+  // ---- 검색 (전 문서 원문) ----
+  const q=document.getElementById('q'),results=document.getElementById('results');
+  function search(v){
+    const s=v.toLowerCase();const hits=[];
+    for(const d of docs){
+      if((d.name+d.shortName+d.docType).toLowerCase().includes(s))hits.push({d});
+      for(const a of d.articles){ if(a.structural)continue;
+        if(((a.title||"")+a.text).toLowerCase().includes(s)){
+          const i=a.text.toLowerCase().indexOf(s);
+          hits.push({d,a,snip:i>=0?a.text.slice(Math.max(0,i-10),i+40):(a.title||"")});
+          if(hits.length>400)break;
+        }
+      }
+      if(hits.length>400)break;
+    }
+    results.innerHTML='';
+    if(!hits.length){results.innerHTML=`<div class="empty" style="padding:20px 15px">일치하는 원문이 없습니다.</div>`;return;}
+    hits.forEach(h=>{
+      const r=node(0,{cls:'leaf',dot:h.d.docType,
+        label:`${esc(h.d.shortName)}${h.a?` <span style="color:var(--accent)">제${esc(h.a.no)}조</span>`:''}`,
+        expandable:false, onOpen:row=>openDoc(h.d.id,h.a?h.a.no:null,row)});
+      if(h.a&&h.snip)r._row.querySelector('.lbl').insertAdjacentHTML('beforeend',`<div class="snip">…${esc(h.snip)}…</div>`);
+      results.appendChild(r);
+    });
+  }
+  q.addEventListener('input',()=>{const v=q.value.trim();
+    if(v){tree.hidden=true;results.hidden=false;search(v);}
+    else{results.hidden=true;tree.hidden=false;}});
 
   // ---- 초기 ----
-  renderDocList();
-  // 첫 법령 자동 오픈
+  renderTree();
   const first=docs.find(d=>d.docType==="법률")||docs[0];
-  if(first) openDoc(first.id);
+  if(first)openDoc(first.id,null,null);
 })();
 </script>
 </body>

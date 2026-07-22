@@ -47,7 +47,15 @@ const page = {
   })),
 };
 const { audit } = graph;
-const html = template.replace("/*__GRAPH__*/", JSON.stringify(page));
+let html = template.replace("/*__GRAPH__*/", JSON.stringify(page));
+
+// Pretendard 폰트를 data-URI로 임베드(외부 웹폰트 금지 — 내부망 단일파일 원칙).
+const fontPath = join(root, "assets/PretendardVariable.woff2");
+const fontUri = existsSync(fontPath)
+  ? `data:font/woff2;base64,${readFileSync(fontPath).toString("base64")}`
+  : "";
+if (!fontUri) console.warn("⚠️  assets/PretendardVariable.woff2 없음 — 폰트 폴백(맑은 고딕)으로 빌드합니다.");
+html = html.replace("/*__FONT__*/", fontUri);
 
 mkdirSync(join(root, "web"), { recursive: true });
 writeFileSync(join(root, "web/index.html"), html);
