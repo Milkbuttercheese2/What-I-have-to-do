@@ -82,9 +82,9 @@ function addContactRow(c){
   c=c||{who:'',org:'',phone:''};
   const row=document.createElement('div'); row.className='contact-row';
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
-    <input type="text" class="c-org" placeholder="관련소속" value="${escAttr(c.org||'')}">
-    <input type="text" class="c-who" placeholder="관련인" value="${escAttr(c.who||'')}">
-    <input type="text" class="c-phone" placeholder="연락처" value="${escAttr(c.phone||'')}">
+    <input type="text" class="c-org" maxlength="100" placeholder="관련소속" value="${escAttr(c.org||'')}">
+    <input type="text" class="c-who" maxlength="100" placeholder="관련인" value="${escAttr(c.who||'')}">
+    <input type="text" class="c-phone" maxlength="40" placeholder="연락처" value="${escAttr(c.phone||'')}">
     <button class="rm" title="삭제">×</button>`;
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
   /* Enter → 다음 행 이동/추가 (세부 할 일과 동일 UX, v2.5.3) — 같은 칸(열)으로 포커스.
@@ -109,8 +109,8 @@ function addFormIdRow(kind,val){
   const sel = opts.map(k=>{ const s=(k===kind||(k==='기타'&&isEtc))?' selected':''; return `<option value="${escAttr(k)}"${s}>${esc(k)}</option>`; }).join('');
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>`
     + `<select class="fid-kind">${sel}</select>`
-    + `<input type="text" class="fid-etc" placeholder="명칭 직접입력" value="${isEtc?escAttr(kind):''}" style="${isEtc?'':'display:none'}">`
-    + `<input type="text" class="fid-val" placeholder="번호 입력" value="${escAttr(val||'')}">`
+    + `<input type="text" class="fid-etc" maxlength="100" placeholder="명칭 직접입력" value="${isEtc?escAttr(kind):''}" style="${isEtc?'':'display:none'}">`
+    + `<input type="text" class="fid-val" maxlength="100" placeholder="번호 입력" value="${escAttr(val||'')}">`
     + `<button class="rm" title="삭제">×</button>`;
   const selEl=row.querySelector('.fid-kind'), etcEl=row.querySelector('.fid-etc');
   selEl.addEventListener('change',()=>{ if(selEl.value==='기타'){etcEl.style.display='';etcEl.focus();} else etcEl.style.display='none'; });
@@ -127,8 +127,8 @@ function addFormSubRow(title,mid,focusIt,sub){
   const md=mid?{date:isoToDateStr(mid),time:isoToTimeStr(mid)}:{date:'',time:''};
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
     <div class="fsub-chk chk ${sub.done?'on':''}" title="완료 표시"></div>
-    <input type="text" class="fsub-title" placeholder="세부 할 일" value="${escAttr(title||'')}">
-    <input type="text" class="sub-owner" placeholder="담당" title="비우면 본인" value="${escAttr(sub.owner||'')}">
+    <input type="text" class="fsub-title" maxlength="500" placeholder="세부 할 일" value="${escAttr(title||'')}">
+    <input type="text" class="sub-owner" maxlength="100" placeholder="담당" title="비우면 본인" value="${escAttr(sub.owner||'')}">
     <span class="dt-inp fsub-dt">${dtInner(md.date, md.time)}</span>
     <button class="rm" title="삭제">×</button>`;
   const chk=row.querySelector('.fsub-chk');
@@ -160,7 +160,7 @@ function addFormFileRow(path, active){
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
     <button type="button" class="ffile-toggle chk ${active?'on':''}" title="활성화: 이름 클릭 시 파일 열기 · 비활성화: 경로 수정/찾기"></button>
     <span class="ffile-link" title="열기" style="${active?'':'display:none'}">${esc(fileName(path)||'(경로 없음)')}</span>
-    <input type="text" class="ffile-path" placeholder="파일 경로 (직접 붙여넣기 가능)" value="${escAttr(path||'')}" style="${active?'display:none':''}">
+    <input type="text" class="ffile-path" maxlength="1000" placeholder="파일 경로 (직접 붙여넣기 가능)" value="${escAttr(path||'')}" style="${active?'display:none':''}">
     <button type="button" class="ffile-browse" title="파일 찾기" style="${active?'display:none':''}">찾기</button>
     <button class="rm" title="삭제">×</button>`;
   const toggle=row.querySelector('.ffile-toggle'), link=row.querySelector('.ffile-link'),

@@ -52,7 +52,10 @@ const BACKUP_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(
 pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
     ensure_integrity(&state)?;
     let mut conn = state.conn.lock().map_err(to_err)?;
-    db::items::save_items(&mut conn, &items).map_err(to_err)?;
+    // A/B: 대량 축소(대량 삭제·통째 절단)를 감지하면 덮어쓰기 전에 강제 스냅샷을
+    // 남긴다 — 30분 스로틀에 걸려 최근 백업이 없더라도 축소 직전 복원점이 남도록.
+    db::save_items_guarded(&mut conn, &state.db_path, &state.backups_dir, &items, BACKUP_KEEP)
+        .map_err(to_err)?;
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
     // Best-effort: a failed backup rotation must not fail the save itself
     // (the save already committed by this point). The copy must run while
@@ -155,6 +158,18 @@ pub async fn choose_data_dir(app: AppHandle, state: State<'_, AppDb>) -> Result<
     let new_base = picked.into_path().map_err(to_err)?.join(DATA_FOLDER_NAME);
     if new_base == state.base_dir {
         return Ok(Some(new_base.to_string_lossy().into_owned())); // already there — nothing to do
+    }
+
+    // E: refuse to relocate INTO a folder that already holds this program's
+    // data (e.g. another install, or a folder used before). apply_pending_move
+    // copies the current DB over whatever is there at next launch, which would
+    // silently clobber that other dataset. Fail here with a clear message
+    // instead — nothing has been staged yet, so this is fully non-destructive.
+    if new_base.join("data").join("wmhh.sqlite").exists() {
+        return Err(
+            "선택한 위치에는 이미 이 프로그램의 데이터가 들어 있습니다.\n기존 데이터를 덮어쓰지 않기 위해 이동을 취소했습니다 — 비어 있는 다른 위치를 선택해주세요."
+                .into(),
+        );
     }
 
     // Create the folder now so the user sees it appear where they pointed,
