@@ -1,4 +1,4 @@
-// LawEverything — 수집: seed.json → 법제처 오픈API → data/snapshot.json
+// 몇 조항이더라 — 수집: seed.json → 법제처 오픈API → data/snapshot.json
 //
 // 온라인 빌드 단계의 첫 걸음. 인터넷 PC에서 실행한다.
 //   node src/collect.mjs            수집 (캐시 있으면 재사용)
@@ -155,8 +155,6 @@ async function main() {
         parent: null,
         aliases: [r.shortName],
         source: { kind: "admrul", seq: r.seq, ruleId: r.ruleId },
-        // 별표(본문 텍스트). 조문 텍스트엔 없는 별표를 리더에서 테이블로 렌더한다.
-        annexes: data.annexes ?? [],
         // 본문에 위임근거가 없는 문서용 수기 매핑 (seed.json). 있으면 추출기가 최우선으로 쓴다.
         ...(r.위임근거 ? { 위임근거: r.위임근거 } : {}),
         verification: {
@@ -168,6 +166,7 @@ async function main() {
           발령일: data.발령일 ?? null,
         },
         articles: data.articles,
+        // 별표(본문 텍스트). 조문 텍스트엔 없는 별표를 리더에서 테이블로 렌더한다.
         annexes: data.annexes ?? [],
       });
       console.log(`  ✅ ${r.shortName} — ${data.articles.length}개 조문${annexNote(data)}${data._cached ? " (캐시)" : ""}`);

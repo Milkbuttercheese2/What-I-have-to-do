@@ -1,4 +1,4 @@
-// LawEverything — 규칙기반 법령 관계 추출기 (AI 없음)
+// 몇 조항이더라 — 규칙기반 법령 관계 추출기 (AI 없음)
 //
 // 입력:  data/snapshot.json  { meta, documents[] }
 // 출력:  { nodes, edges, stats, audit } — 위임/인용 그래프

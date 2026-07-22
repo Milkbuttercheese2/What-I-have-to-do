@@ -1,4 +1,4 @@
-# AGENTS.md — LawEverything 프로젝트 메모리
+# AGENTS.md — 몇 조항이더라 프로젝트 메모리
 
 > lazycodex `$init-deep`가 소비하는 계층적 프로젝트 메모리. 이후 Codex/Claude로 이어서 개발할 때 컨텍스트 앵커.
 
