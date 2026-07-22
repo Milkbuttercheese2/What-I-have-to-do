@@ -3,290 +3,263 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LawEverything — 조달 법령 관계 그래프</title>
+<title>LawEverything — 조달 법령 원문 리더</title>
 <style>
   :root{
-    --bg:#0f1420; --panel:#171d2b; --panel2:#1e2537; --line:#2b3346;
-    --text:#e8ecf4; --muted:#93a0b8; --accent:#4c9aff;
-    --wimim:#f6a94a; --inyong:#5cc8ff; --sosok:#39425a;
+    --bg:#0f1420; --panel:#161c29; --panel2:#1e2537; --line:#2b3346;
+    --text:#e8ecf4; --muted:#93a0b8; --accent:#4c9aff; --warn:#f6a94a;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
-  #app{display:grid;grid-template-columns:320px 1fr;height:100vh}
-  aside{background:var(--panel);border-right:1px solid var(--line);
-    display:flex;flex-direction:column;min-height:0}
-  header{padding:14px 16px;border-bottom:1px solid var(--line)}
-  header h1{margin:0;font-size:15px;letter-spacing:.2px}
-  header p{margin:4px 0 0;font-size:11px;color:var(--muted);line-height:1.5}
-  .search{padding:12px 14px;border-bottom:1px solid var(--line)}
+  #app{display:grid;grid-template-columns:270px 240px 1fr;height:100vh;min-height:0}
+  .col{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
+  .scroll{overflow:auto;flex:1;min-height:0}
+  header{padding:13px 15px;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:14px;letter-spacing:.2px}
+  header p{margin:5px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
+  header p.warn{color:var(--warn)}
+  .search{padding:11px 13px;border-bottom:1px solid var(--line)}
   .search input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
     background:var(--panel2);color:var(--text);font-size:13px;outline:none}
   .search input:focus{border-color:var(--accent)}
-  .toggles{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
-  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
-  .results{overflow:auto;flex:1;min-height:0}
-  .ritem{padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}
-  .ritem:hover{background:var(--panel2)}
-  .ritem .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
-  .ritem .g{color:var(--muted);font-size:11px}
-  .ritem b{font-weight:600}
-  main{position:relative;min-width:0}
-  svg{width:100%;height:100%;display:block;cursor:grab}
-  svg:active{cursor:grabbing}
-  .edge{stroke-width:1.6;fill:none}
-  .edge.위임{stroke:var(--wimim)}
-  .edge.인용{stroke:var(--inyong);stroke-dasharray:5 4}
-  .edge.소속{stroke:#39425a;stroke-width:1;opacity:.5}
-  .edge.dim{opacity:.06}
-  .node{cursor:pointer}
-  .node circle,.node rect{stroke:#0c111c;stroke-width:1.5}
-  .node.ext circle{stroke-dasharray:3 3;stroke:#6b7690}
-  .node text{font-size:11px;fill:var(--text);pointer-events:none;paint-order:stroke;
-    stroke:#0c111c;stroke-width:3px}
-  .node.dim{opacity:.12}
-  .node.match circle,.node.match rect{stroke:#fff;stroke-width:2.5}
-  .legend{position:absolute;left:14px;bottom:14px;background:rgba(23,29,43,.9);
-    border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted)}
-  .legend .row{display:flex;align-items:center;gap:7px;margin:3px 0}
-  .legend .ln{width:22px;height:0;border-top:2px solid}
-  .detail{position:absolute;right:14px;top:14px;width:300px;max-height:calc(100% - 28px);
-    overflow:auto;background:rgba(23,29,43,.97);border:1px solid var(--line);border-radius:12px;
-    padding:0;display:none;box-shadow:0 8px 30px rgba(0,0,0,.4)}
-  .detail.on{display:block}
-  .detail .dh{padding:13px 15px;border-bottom:1px solid var(--line)}
-  .detail .tag{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--panel2);color:var(--muted)}
-  .detail h2{margin:8px 0 2px;font-size:15px}
-  .detail .sub{font-size:12px;color:var(--muted)}
-  .detail .stamp{margin-top:7px;font-size:10.5px;color:var(--muted);
-    padding:3px 7px;border-radius:5px;background:var(--panel2);display:inline-block}
-  .detail .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
-  .detail .body{padding:12px 15px}
-  .detail .txt{font-size:12px;line-height:1.65;color:#cdd6e6;background:var(--panel2);
-    border-radius:8px;padding:10px;white-space:pre-wrap}
-  .detail .relhead{font-size:11px;color:var(--muted);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.5px}
-  .detail .rel{font-size:12px;padding:6px 8px;border-radius:7px;cursor:pointer;display:flex;gap:6px;align-items:center}
-  .detail .rel:hover{background:var(--panel2)}
-  .detail .rel .k{font-size:10px;padding:1px 6px;border-radius:20px}
-  .detail .rel .k.위임{background:rgba(246,169,74,.18);color:var(--wimim)}
-  .detail .rel .k.인용{background:rgba(92,200,255,.16);color:var(--inyong)}
-  .detail .rel .k.소속{background:#2a3247;color:var(--muted)}
-  .detail .close{position:absolute;right:11px;top:11px;cursor:pointer;color:var(--muted);font-size:16px}
-  .empty{color:var(--muted);font-size:12px;padding:16px 14px}
+  .grp{font-size:10.5px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;
+    padding:11px 15px 5px;position:sticky;top:0;background:var(--panel)}
+  .doc{padding:8px 15px;font-size:12.5px;cursor:pointer;border-left:2px solid transparent;line-height:1.4}
+  .doc:hover{background:var(--panel2)}
+  .doc.on{background:var(--panel2);border-left-color:var(--accent)}
+  .doc .t{font-size:10px;color:var(--muted)}
+  .doc.hit .h{color:var(--accent)}
+  .doc .snip{font-size:11px;color:var(--muted);margin-top:2px}
+  .tochead{padding:12px 14px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:600;
+    line-height:1.4}
+  .tochead .t{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:3px}
+  .tocfilter{padding:8px 12px;border-bottom:1px solid var(--line)}
+  .tocfilter input{width:100%;padding:6px 9px;border-radius:6px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);font-size:12px;outline:none}
+  .tocitem{padding:6px 14px;font-size:12px;cursor:pointer;border-left:2px solid transparent;
+    color:#c2cbdd;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tocitem:hover{background:var(--panel2)}
+  .tocitem.on{background:var(--panel2);border-left-color:var(--accent);color:var(--text)}
+  .tocitem.struct{color:var(--muted);font-weight:600;margin-top:4px}
+  main{background:var(--bg);border-right:none}
+  .reader-inner{max-width:840px;margin:0 auto;padding:26px 34px 120px}
+  .rhead{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:8px}
+  .rhead h2{margin:0;font-size:22px;line-height:1.3}
+  .rhead .meta{margin-top:8px;font-size:12px;color:var(--muted)}
+  .stamp{display:inline-block;margin-top:9px;font-size:11.5px;color:var(--muted);
+    padding:4px 9px;border-radius:6px;background:var(--panel2)}
+  .stamp.old{color:var(--warn);background:rgba(246,169,74,.13)}
+  .art{padding:18px 0;border-bottom:1px solid #1c2333;scroll-margin-top:14px}
+  .art h3{margin:0 0 8px;font-size:15px;color:var(--text)}
+  .art h3 .no{color:var(--accent);margin-right:7px}
+  .art h3 .ti{color:var(--muted);font-weight:400;font-size:13px}
+  .art .atext{font-size:13.5px;line-height:1.85;color:#d7deec;white-space:pre-wrap;word-break:break-word}
+  .struct-h{margin:26px 0 2px;font-size:14px;font-weight:700;color:#aeb9cf;
+    border-top:1px solid var(--line);padding-top:16px}
+  .byul{margin-top:30px;border-top:2px solid var(--line);padding-top:16px}
+  .byul h3{font-size:15px;margin:20px 0 8px;color:#e7c98a}
+  .byul .lnk{font-size:12px;margin:6px 0}
+  .byul .lnk a{color:var(--accent);text-decoration:none;margin-right:12px}
+  .byul .lnk a:hover{text-decoration:underline}
+  table.tbl{border-collapse:collapse;width:100%;margin:8px 0 4px;font-size:12.5px;overflow:auto;display:block}
+  table.tbl td,table.tbl th{border:1px solid var(--line);padding:6px 9px;text-align:left;
+    vertical-align:top;color:#d7deec;white-space:pre-wrap}
+  table.tbl tr:first-child td{background:var(--panel2);font-weight:600}
+  .empty{color:var(--muted);font-size:13px;padding:40px 34px;line-height:1.7;max-width:640px}
+  mark{background:rgba(76,154,255,.3);color:#fff;border-radius:2px}
+  .shelf{font-size:10.5px;color:var(--muted);padding:8px 15px;border-top:1px solid var(--line)}
 </style>
 </head>
 <body>
 <div id="app">
-  <aside>
+  <div class="col docs">
     <header>
-      <h1>LawEverything · 조달 법령 관계</h1>
+      <h1>LawEverything · 조달 법령 원문</h1>
       <p id="meta"></p>
     </header>
     <div class="search">
-      <input id="q" placeholder="법령·조문·키워드 즉시검색  (예: 수의계약, 제7조, 보증금)" autocomplete="off"/>
-      <div class="toggles">
-        <label><input type="checkbox" id="t-위임" checked/> 위임</label>
-        <label><input type="checkbox" id="t-인용" checked/> 인용</label>
-        <label><input type="checkbox" id="t-소속" checked/> 소속</label>
-      </div>
+      <input id="q" placeholder="법령·조문 원문 즉시검색 (예: 수의계약, 특수조건)" autocomplete="off"/>
     </div>
-    <div class="results" id="results"></div>
-  </aside>
-  <main>
-    <svg id="svg"></svg>
-    <div class="legend">
-      <div class="row"><span class="ln" style="border-color:var(--wimim)"></span> 위임 (법→시행령→규칙)</div>
-      <div class="row"><span class="ln" style="border-color:var(--inyong);border-top-style:dashed"></span> 인용 (조문→조문)</div>
-      <div class="row"><span class="ln" style="border-color:#39425a"></span> 소속 (법령→조문)</div>
-    </div>
-    <div class="detail" id="detail"></div>
+    <div class="scroll" id="doclist"></div>
+    <div class="shelf">그래프 관계도는 잠정 보류 — 데이터는 유지됩니다.</div>
+  </div>
+  <div class="col toc">
+    <div class="tochead" id="tochead">문서를 선택하세요</div>
+    <div class="tocfilter"><input id="tocq" placeholder="조문 목차 내 검색" autocomplete="off"/></div>
+    <div class="scroll" id="toc"></div>
+  </div>
+  <main class="scroll" id="reader">
+    <div class="empty">왼쪽에서 법령·행정규칙을 선택하면 원문이 여기에 표시됩니다.<br/>
+      가운데 목차에서 조를 클릭하면 해당 조문 위치로 이동합니다.</div>
   </main>
 </div>
 <script>
-const GRAPH = /*__GRAPH__*/;
+const PAGE = /*__GRAPH__*/;
 </script>
 <script>
 (function(){
-  const {nodes,edges,meta}=GRAPH;
+  const {documents:docs,meta}=PAGE;
+  const byId=new Map(docs.map(d=>[d.id,d]));
 
-  // ---- 법령 확인일 배너 ----
-  // 폐쇄망에서는 데이터가 늘 과거다. "언제 기준인지"를 숨기면 실무자가
-  // 낡은 조문을 현행으로 착각한다. 항상 보이게 하고, 낡으면 색으로 경고한다.
+  // ---- 상단 메타/신선도 배너 ----
   (function(){
-    const v=meta.확인요약, el=document.getElementById('meta');
-    const base=`${meta.domain||''} · 스냅샷 ${meta.snapshotDate||meta.기준일||''}`.replace(/^ · /,'');
-    if(!v){el.textContent=base;return;}
-    const parts=[base];
-    if(meta.기준일) parts.push(`기준일 ${meta.기준일}`);
-    if(v.현행) parts.push(`현행 ${v.현행}건`);
-    if(v.시행예정) parts.push(`시행예정 ${v.시행예정}건 (인용 제외)`);
-    if(v.최고경과일!=null) parts.push(`최종확인 ${v.최고경과일}일 전`);
+    const el=document.getElementById('meta');
+    const parts=[];
+    if(meta.title) parts.push(meta.title);
+    parts.push(`문서 ${meta.documents} · 조문 ${meta.articles}`);
+    const v=meta.확인요약;
+    if(v){ if(v.최고경과일!=null) parts.push(`최종확인 ${v.최고경과일}일 전`); }
+    const stale=docs.filter(d=>d.stamp&&d.stamp.낡음).length;
     el.textContent=parts.join(' · ');
-    if(v.낡음>0){
-      el.style.color='var(--wimim)';
-      el.textContent+=` · ⚠ ${v.낡음}건 재수집 필요`;
-    }
+    if(stale>0){ el.className='warn'; el.textContent+=` · ⚠ ${stale}건 재수집 필요`; }
   })();
 
-  // ---- 색상: 법령 가문(hue) × 유형(명도) ----
-  const HUE={};let hueSeed=[210,145,275,25,330,190];
-  nodes.forEach(n=>{if(n.family&&!(n.family in HUE))HUE[n.family]=hueSeed[Object.keys(HUE).length%hueSeed.length];});
-  const light={ "법률":46,"시행령":58,"시행규칙":68 };
-  function color(n){
-    if(n.kind==='외부법') return 'hsl(220,8%,55%)';
-    const h=HUE[n.family]??220; return `hsl(${h},55%,${light[n.type]||55}%)`;
-  }
+  // ---- 문서 분류 ----
+  const bucket=d=>{
+    if(["법률","시행령","시행규칙"].includes(d.docType)) return "법령";
+    if(d.docType==="계약예규") return "계약예규";
+    return "행정규칙";
+  };
+  const GROUPS=["법령","계약예규","행정규칙"];
+  const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:"";
 
-  const byId=new Map(nodes.map(n=>[n.id,n]));
-  const adj=new Map(nodes.map(n=>[n.id,new Set()]));
-  edges.forEach(e=>{adj.get(e.source).add(e.target);adj.get(e.target).add(e.source);});
+  // ---- 좌측: 문서 목록 / 검색 결과 ----
+  const doclist=document.getElementById('doclist');
+  let current=null;
 
-  // ---- 포스 시뮬레이션 (바닐라) ----
-  const svg=document.getElementById('svg');
-  let W=svg.clientWidth,H=svg.clientHeight;
-  nodes.forEach(n=>{n.x=W/2+(Math.random()-.5)*300;n.y=H/2+(Math.random()-.5)*300;n.vx=0;n.vy=0;});
-  const R=n=>n.kind==='법령'?13:n.kind==='외부법'?9:8;
-  let alpha=1;
-  function tick(){
-    // 반발
-    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-      const a=nodes[i],b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y;let d2=dx*dx+dy*dy||1;
-      let f=2600/d2;let d=Math.sqrt(d2);dx/=d;dy/=d;
-      a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;
+  function renderDocList(){
+    let html="";
+    for(const g of GROUPS){
+      const items=docs.filter(d=>bucket(d)===g).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+      if(!items.length) continue;
+      html+=`<div class="grp">${g} (${items.length})</div>`;
+      for(const d of items){
+        html+=`<div class="doc${current===d.id?' on':''}" data-doc="${d.id}">
+          <div class="h">${esc(d.shortName||d.name)}</div>
+          <div class="t">${esc(d.docType)} · 조문 ${d.articles.length}${d.별표?.length?` · 별표 ${d.별표.length}`:''}</div></div>`;
+      }
     }
-    // 스프링
-    edges.forEach(e=>{const a=byId.get(e.source),b=byId.get(e.target);
-      const target=e.kind==='소속'?70:120;let dx=b.x-a.x,dy=b.y-a.y;let d=Math.hypot(dx,dy)||1;
-      let f=(d-target)*0.02;dx/=d;dy/=d;a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f;});
-    // 중심 중력
-    nodes.forEach(n=>{n.vx+=(W/2-n.x)*0.002;n.vy+=(H/2-n.y)*0.002;});
-    // 적분
-    nodes.forEach(n=>{if(n.fx!=null){n.x=n.fx;n.y=n.fy;n.vx=n.vy=0;return;}
-      n.vx*=0.82;n.vy*=0.82;n.x+=n.vx*alpha;n.y+=n.vy*alpha;
-      n.x=Math.max(24,Math.min(W-24,n.x));n.y=Math.max(24,Math.min(H-24,n.y));});
-    alpha*=0.995;if(alpha<0.03)alpha=0.03;
-    render();
-    requestAnimationFrame(tick);
+    doclist.innerHTML=html;
+    bindDocs();
+  }
+  function bindDocs(){
+    doclist.querySelectorAll('.doc').forEach(el=>el.onclick=()=>openDoc(el.dataset.doc,el.dataset.no));
   }
 
-  // ---- 렌더 ----
-  const NS='http://www.w3.org/2000/svg';
-  svg.innerHTML=`<defs>
-    <marker id="a-위임" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="var(--wimim)"/></marker>
-    <marker id="a-인용" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="var(--inyong)"/></marker>
-  </defs><g id="edges"></g><g id="nodes"></g>`;
-  const gE=svg.querySelector('#edges'),gN=svg.querySelector('#nodes');
-  const eEls=edges.map(e=>{const p=document.createElementNS(NS,'line');
-    p.setAttribute('class','edge '+e.kind);
-    if(e.kind!=='소속')p.setAttribute('marker-end',`url(#a-${e.kind})`);
-    gE.appendChild(p);return p;});
-  const nEls=nodes.map(n=>{const g=document.createElementNS(NS,'g');
-    g.setAttribute('class','node'+(n.kind==='외부법'?' ext':''));
-    const c=document.createElementNS(NS,'circle');
-    c.setAttribute('r',R(n));c.setAttribute('fill',color(n));
-    if(n.kind==='법령'){c.setAttribute('r',R(n));}
-    const t=document.createElementNS(NS,'text');
-    t.setAttribute('text-anchor','middle');t.setAttribute('dy',R(n)+13);
-    t.textContent=n.kind==='조문'?`${n.group} ${n.label}`:n.label;
-    if(n.kind==='조문')t.setAttribute('dy',R(n)+12);
-    g.appendChild(c);g.appendChild(t);gN.appendChild(g);
-    g.addEventListener('click',ev=>{ev.stopPropagation();select(n.id);});
-    enableDrag(g,n);
-    return g;});
-  function render(){
-    edges.forEach((e,i)=>{const a=byId.get(e.source),b=byId.get(e.target);
-      const rb=R(b);const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
-      const ex=b.x-dx/d*(rb+2),ey=b.y-dy/d*(rb+2);
-      eEls[i].setAttribute('x1',a.x);eEls[i].setAttribute('y1',a.y);
-      eEls[i].setAttribute('x2',ex);eEls[i].setAttribute('y2',ey);});
-    nodes.forEach((n,i)=>nEls[i].setAttribute('transform',`translate(${n.x},${n.y})`));
+  // 전 문서 조문 검색
+  function renderSearch(q){
+    const s=q.toLowerCase();
+    const hits=[];
+    for(const d of docs){
+      if((d.name+d.shortName+d.docType).toLowerCase().includes(s)) hits.push({d});
+      for(const a of d.articles){
+        if(a.structural) continue;
+        if(((a.title||"")+a.text).toLowerCase().includes(s)){
+          const i=a.text.toLowerCase().indexOf(s);
+          const snip=i>=0?a.text.slice(Math.max(0,i-12),i+38):(a.title||"");
+          hits.push({d,a,snip});
+          if(hits.length>400) break;
+        }
+      }
+      if(hits.length>400) break;
+    }
+    doclist.innerHTML=hits.length?hits.map(h=>
+      `<div class="doc hit" data-doc="${h.d.id}"${h.a?` data-no="${h.a.no}"`:''}>
+        <div class="h">${esc(h.d.shortName)}${h.a?` <span class="no" style="color:var(--accent)">제${h.a.no}조</span>`:''}</div>
+        ${h.a?`<div class="snip">${esc(h.snip)}…</div>`:`<div class="t">${esc(h.d.docType)}</div>`}</div>`).join('')
+      :`<div class="empty" style="padding:20px 15px">일치하는 원문이 없습니다.</div>`;
+    bindDocs();
   }
 
-  // ---- 드래그 ----
-  function enableDrag(g,n){
-    let down=false;
-    g.addEventListener('pointerdown',e=>{down=true;n.fx=n.x;n.fy=n.y;g.setPointerCapture(e.pointerId);alpha=.6;});
-    g.addEventListener('pointermove',e=>{if(!down)return;const r=svg.getBoundingClientRect();
-      n.fx=e.clientX-r.left;n.fy=e.clientY-r.top;});
-    g.addEventListener('pointerup',e=>{down=false;n.fx=n.fy=null;});
+  // ---- 가운데: 조 목차 ----
+  const tocEl=document.getElementById('toc'), tocHead=document.getElementById('tochead'), tocq=document.getElementById('tocq');
+  function renderToc(d,filter=""){
+    tocHead.innerHTML=`${esc(d.shortName||d.name)}<span class="t">${esc(d.name)}</span>`;
+    const f=filter.toLowerCase();
+    let html="";
+    for(const a of d.articles){
+      const label=a.structural?esc(a.text.split('\n')[0].slice(0,30)):`제${a.no}조${a.title?` (${esc(a.title)})`:''}`;
+      if(f && !label.toLowerCase().includes(f)) continue;
+      html+=`<div class="tocitem${a.structural?' struct':''}" data-no="${esc(a.no)}">${label}</div>`;
+    }
+    tocEl.innerHTML=html||`<div class="empty" style="padding:16px 14px">목차 항목이 없습니다.</div>`;
+    tocEl.querySelectorAll('.tocitem').forEach(el=>el.onclick=()=>scrollToArt(el.dataset.no,el));
   }
+  tocq.addEventListener('input',()=>{ if(current) renderToc(byId.get(current),tocq.value.trim()); });
 
-  // ---- 하이라이트 / 선택 ----
-  let selected=null;
-  function highlight(id){
-    const keep=new Set([id,...adj.get(id)]);
-    nEls.forEach((el,i)=>el.classList.toggle('dim',!keep.has(nodes[i].id)));
-    eEls.forEach((el,i)=>el.classList.toggle('dim',edges[i].source!==id&&edges[i].target!==id));
+  // ---- 우측: 본문 ----
+  const reader=document.getElementById('reader');
+  // API 별표내용은 (a) 제목 1행뿐이거나 (b) HWP 서식을 글자단위 격자로 쪼갠 지저분한 형태가 많다.
+  // 깨끗한 표(2~8열, 2행 이상, 셀에 실내용)만 렌더하고, 나머지는 제목·링크로만 안내한다.
+  function isCleanTable(rows){
+    if(!rows||rows.length<2) return false;
+    const cols=Math.max(...rows.map(r=>r.length));
+    if(cols<2||cols>8) return false;
+    let cells=0,sum=0;
+    for(const r of rows) for(const c of r){ cells++; sum+=String(c).length; }
+    return cells>0 && sum/cells>=2;   // 셀 평균 길이 2 미만이면 글자단위 격자로 본다
   }
-  function clearHi(){nEls.forEach(el=>el.classList.remove('dim'));eEls.forEach(el=>el.classList.remove('dim'));}
-  svg.addEventListener('click',()=>{selected=null;clearHi();document.getElementById('detail').classList.remove('on');});
-
-  function select(id){
-    selected=id;highlight(id);renderDetail(id);
-    const n=byId.get(id);alpha=.5;
+  function tableHtml(rows){
+    if(!isCleanTable(rows)) return "";
+    return `<table class="tbl"><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
-  function renderDetail(id){
-    const n=byId.get(id);const d=document.getElementById('detail');
-    const out=edges.filter(e=>e.source===id),inc=edges.filter(e=>e.target===id);
-    const relRow=(e,dir)=>{const other=byId.get(dir==='out'?e.target:e.source);
-      return `<div class="rel" data-go="${other.id}"><span class="k ${e.kind}">${e.kind}</span>
-        <span>${dir==='out'?'→':'←'} ${other.kind==='조문'?other.group+' '+other.label:other.label}
-        ${e.evidence?`<span style="color:var(--muted)"> ⟨${e.evidence}⟩</span>`:''}</span></div>`;};
-    // 조문을 근거로 인용하려면 "언제 기준 조문인지"를 알아야 한다.
-    const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:'';
-    const stamp=n.확인일||n.시행일
-      ? `<div class="stamp${n.낡음?' old':''}">${[
-          n.시행일?`시행 ${ymd(n.시행일)}`:'',
-          n.확인일?`확인 ${ymd(n.확인일)}`:'',
-          n.상태&&n.상태!=='현행'?n.상태:'',
-          n.낡음?'⚠ 재수집 필요':'',
-        ].filter(Boolean).join(' · ')}</div>`
+  function openDoc(id,no){
+    current=id; const d=byId.get(id);
+    renderDocList();  // 선택 강조 갱신 (검색 중이 아니면)
+    if(document.getElementById('q').value.trim()) { /* 검색 결과 유지 */ }
+    renderToc(d, "");
+    tocq.value="";
+    const st=d.stamp;
+    const stamp=st&&(st.시행일||st.확인일)
+      ? `<div class="stamp${st.낡음?' old':''}">${[st.시행일?`시행 ${ymd(st.시행일)}`:'',st.확인일?`확인 ${ymd(st.확인일)}`:'',st.상태&&st.상태!=='현행'?st.상태:'',st.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`
       : '';
-
-    d.innerHTML=`<span class="close">✕</span>
-      <div class="dh"><span class="tag">${n.type} · ${n.kind}</span>
-        <h2>${n.kind==='조문'?n.group+' '+n.label:n.label}</h2>
-        <div class="sub">${n.kind==='조문'?(n.title||''):(n.name||'')}</div>
-        ${stamp}</div>
-      <div class="body">
-        ${n.text?`<div class="txt">${n.text}</div>`:''}
-        ${out.length?`<div class="relhead">이 조문이 향하는 곳 (${out.length})</div>${out.map(e=>relRow(e,'out')).join('')}`:''}
-        ${inc.length?`<div class="relhead">이곳을 가리키는 것 (${inc.length})</div>${inc.map(e=>relRow(e,'in')).join('')}`:''}
-      </div>`;
-    d.classList.add('on');
-    d.querySelector('.close').onclick=()=>{d.classList.remove('on');selected=null;clearHi();};
-    d.querySelectorAll('.rel').forEach(el=>el.onclick=()=>select(el.dataset.go));
+    let body=`<div class="reader-inner"><div class="rhead">
+      <h2>${esc(d.name)}</h2>
+      <div class="meta">${esc(d.docType)} · 조문 ${d.articles.filter(a=>!a.structural).length}개${d.별표?.length?` · 별표 ${d.별표.length}개`:''}</div>
+      ${stamp}</div>`;
+    for(const a of d.articles){
+      if(a.structural){ body+=`<div class="struct-h" id="a-${esc(a.no)}">${esc(a.text.split('\n')[0])}</div>`; continue; }
+      body+=`<div class="art" id="a-${esc(a.no)}">
+        <h3><span class="no">제${esc(a.no)}조</span>${a.title?`<span class="ti">(${esc(a.title)})</span>`:''}</h3>
+        <div class="atext">${esc(stripHead(a))}</div></div>`;
+    }
+    if(d.별표?.length){
+      body+=`<div class="byul"><h3 style="border:none;color:var(--muted);margin-top:0">별표 · 서식 (${d.별표.length})</h3>`;
+      for(const b of d.별표){
+        body+=`<h3>${b.번호?`[별표 ${esc(b.번호)}] `:''}${esc(b.title||'별표')}</h3>`;
+        body+=tableHtml(b.rows);
+        if(b.hwp||b.pdf) body+=`<div class="lnk">${b.hwp?`<a href="${esc(b.hwp)}" target="_blank" rel="noopener">HWP 서식 내려받기</a>`:''}${b.pdf?`<a href="${esc(b.pdf)}" target="_blank" rel="noopener">PDF</a>`:''} <span style="color:var(--muted)">(전체 표는 kordoc 파싱 예정)</span></div>`;
+      }
+      body+=`</div>`;
+    }
+    body+=`</div>`;
+    reader.innerHTML=body;
+    reader.scrollTop=0;
+    if(no) requestAnimationFrame(()=>scrollToArt(no));
+  }
+  // 본문 앞의 "제N조(제목)" 표기는 제목 헤더로 이미 보여주므로 걷어낸다(같은 줄/다음 줄 모두).
+  function stripHead(a){
+    const t=a.text.replace(/^제\d+조(?:의\d+)?\s*[（(][^）)]*[）)]\s*/,'').trim();
+    return t||a.text;
+  }
+  function scrollToArt(no,el){
+    const t=document.getElementById('a-'+no);
+    if(t) t.scrollIntoView({behavior:'smooth',block:'start'});
+    tocEl.querySelectorAll('.tocitem').forEach(x=>x.classList.toggle('on',x.dataset.no===no));
+    if(el && !el.classList.contains('on')) el.classList.add('on');
   }
 
   // ---- 검색 ----
-  const q=document.getElementById('q'),results=document.getElementById('results');
-  function textOf(n){return [n.label,n.group,n.title,n.name,n.text,n.type].filter(Boolean).join(' ');}
-  function search(){
-    const s=q.value.trim();
-    const matches=s?nodes.filter(n=>textOf(n).toLowerCase().includes(s.toLowerCase())):[];
-    const mset=new Set(matches.map(n=>n.id));
-    nEls.forEach((el,i)=>el.classList.toggle('match',s&&mset.has(nodes[i].id)));
-    if(s&&!selected){nEls.forEach((el,i)=>el.classList.toggle('dim',!mset.has(nodes[i].id)));
-      eEls.forEach(el=>el.classList.add('dim'));}
-    else if(!selected){clearHi();nEls.forEach(el=>el.classList.remove('match'));if(s)nEls.forEach((el,i)=>el.classList.toggle('match',mset.has(nodes[i].id)));}
-    results.innerHTML=matches.length?matches.map(n=>
-      `<div class="ritem" data-go="${n.id}"><span class="dot" style="background:${color(n)}"></span>
-       <b>${n.kind==='조문'?n.group+' '+n.label:n.label}</b>
-       <div class="g">${n.kind==='조문'?(n.title||''):n.kind==='외부법'?'외부 인용 법령':n.name}</div></div>`).join('')
-      :`<div class="empty">${s?'일치하는 법령·조문이 없습니다.':'노드를 클릭하거나 위에서 검색하세요. 조문을 클릭하면 위임·인용 관계가 펼쳐집니다.'}</div>`;
-    results.querySelectorAll('.ritem').forEach(el=>el.onclick=()=>{select(el.dataset.go);});
-  }
-  q.addEventListener('input',search);
+  const q=document.getElementById('q');
+  q.addEventListener('input',()=>{ const v=q.value.trim(); if(v) renderSearch(v); else renderDocList(); });
 
-  // ---- 엣지 유형 토글 ----
-  ['위임','인용','소속'].forEach(k=>{
-    document.getElementById('t-'+k).addEventListener('change',e=>{
-      edges.forEach((ed,i)=>{if(ed.kind===k)eEls[i].style.display=e.target.checked?'':'none';});
-    });
-  });
-
-  window.addEventListener('resize',()=>{W=svg.clientWidth;H=svg.clientHeight;alpha=.4;});
-  search();tick();
+  // ---- 초기 ----
+  renderDocList();
+  // 첫 법령 자동 오픈
+  const first=docs.find(d=>d.docType==="법률")||docs[0];
+  if(first) openDoc(first.id);
 })();
 </script>
 </body>

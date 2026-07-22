@@ -28,14 +28,32 @@ const snapshot = JSON.parse(readFileSync(src, "utf8"));
 const graph = buildGraph(snapshot, { maxAgeDays });
 const template = readFileSync(join(root, "src/template.html"), "utf8");
 
-// 감사 정보는 빌드 산출물에 실을 필요가 없다 (내부망 페이지는 가볍게 유지).
-const { audit, ...page } = graph;
+// 리더 페이로드 — 화면은 "법령 원문 보기"에 충실. 그래프는 잠정 보류(데이터는 web/graph.json 에 남김).
+// 조문별 신선도 스탬프는 그래프 문서 노드에서 가져와 문서에 붙인다.
+const stampByDoc = {};
+for (const nd of graph.nodes) {
+  if (typeof nd.id === "string" && nd.id.startsWith("law:")) {
+    stampByDoc[nd.id.slice(4)] = { 확인일: nd.확인일, 시행일: nd.시행일, 상태: nd.상태, 낡음: nd.낡음 };
+  }
+}
+const page = {
+  meta: { ...graph.meta, documents: snapshot.documents.length,
+    articles: snapshot.documents.reduce((n, d) => n + (d.articles?.length ?? 0), 0) },
+  documents: snapshot.documents.map((d) => ({
+    id: d.id, name: d.name, shortName: d.shortName, docType: d.docType, family: d.family, parent: d.parent,
+    stamp: stampByDoc[d.id] ?? null,
+    articles: d.articles ?? [],
+    별표: d.별표 ?? [],
+  })),
+};
+const { audit } = graph;
 const html = template.replace("/*__GRAPH__*/", JSON.stringify(page));
 
 mkdirSync(join(root, "web"), { recursive: true });
 writeFileSync(join(root, "web/index.html"), html);
-// 그래프·감사 데이터는 별도 저장 (다른 도구/디버깅/커버리지 추적용)
-writeFileSync(join(root, "web/graph.json"), JSON.stringify(page, null, 2));
+// 그래프·감사 데이터는 별도 저장 (그래프는 잠정 보류지만 파이프라인은 유지 — 디버깅/커버리지)
+const { audit: _a, ...graphOut } = graph;
+writeFileSync(join(root, "web/graph.json"), JSON.stringify(graphOut, null, 2));
 writeFileSync(join(root, "data/audit.json"), JSON.stringify(audit, null, 2));
 
 const s = graph.stats;
