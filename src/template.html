@@ -136,6 +136,22 @@
   .noteview a.ref{color:var(--inyong);text-decoration:none;
     border-bottom:1px dashed var(--inyong);cursor:pointer}
   .noteview a.ref:hover{background:var(--hl)}
+
+  /* 노트 칸 아래 영역 — 노트에서 건 법령을 여기서 확인한다.
+     가운데 원문을 갈아끼우지 않는 이유는 ③ 미리보기와 같다:
+     적어둔 걸 보면서 근거를 확인하는 게 목적이라 노트가 화면에 남아야 한다. */
+  .noteref{flex:none;max-height:55%;display:flex;flex-direction:column;min-height:0;
+    border-top:1px solid var(--line);background:var(--bg)}
+  .nrhead{display:flex;align-items:center;gap:7px;padding:9px 13px 7px;
+    border-bottom:1px solid var(--divider);flex:none}
+  .nrhead .t{flex:1;min-width:0;font-size:12px;font-weight:650;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nrbody{overflow:auto;padding:10px 13px 14px;font-size:12.5px;line-height:1.8;
+    color:var(--text2);white-space:pre-wrap;min-height:0}
+  .nrbody .sub{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+  .nrsec{font-size:10px;letter-spacing:.5px;color:var(--muted);font-weight:600;
+    text-transform:uppercase;padding:8px 13px 3px;border-top:1px solid var(--divider);flex:none}
+  .nrrels{overflow:auto;max-height:38%;min-height:0;padding-bottom:8px}
   /* 못 찾은 참조 — 오타를 알아야 고친다 */
   .noteview .miss{color:var(--warn);border-bottom:1px dotted var(--warn)}
 
@@ -384,6 +400,8 @@
       <div class="noteview" id="noteView" hidden></div>
       <div class="ac" id="noteAc" hidden></div>
     </div>
+    <!-- 노트에서 법령 링크를 누르면 여기에 그 조문과 관련 규정이 뜬다 -->
+    <div class="noteref" id="noteRef" hidden></div>
   </aside>
 </div>
 
@@ -887,11 +905,15 @@ const GRAPH = /*__GRAPH__*/;
     pvEl.classList.add('on');
   }
 
-  // 인용 링크(.cite)는 미리보기로, 그 밖의 [data-go](검색결과·트리·관계·즐겨찾기)는 본문으로.
+  // 클릭 대상에 따라 목적지가 다르다:
+  //   .cite (원문 속 인용) → ③ 미리보기      · 읽던 자리를 잃지 않으려고
+  //   .ref  (노트 속 참조) → ④ 노트 아래 영역 · 적어둔 걸 보면서 확인하려고
+  //   그 밖(검색결과·트리·관계·즐겨찾기) → ② 원문
   document.addEventListener('click',e=>{
     const g=e.target.closest('[data-go]');
     if(!g)return;
     if(g.classList.contains('cite'))preview(g.dataset.go);
+    else if(g.classList.contains('ref'))showNoteRef(g.dataset.go);
     else open(g.dataset.go);
   });
   function toSearch(){ q.focus(); q.select(); }
@@ -1038,8 +1060,41 @@ const GRAPH = /*__GRAPH__*/;
     else if(e.key==='Escape'){e.preventDefault();hideAc();}
   });
 
-  // 노트의 참조 클릭은 전역 [data-go] 처리기가 받아 가운데 칸에 그 조를 연다.
-  // 노트 칸은 그대로 남는다 — 적어둔 걸 보면서 원문을 확인하는 게 목적이다.
+  // ── 노트 아래 참조 패널 ──
+  // 노트에서 건 법령을 이 칸 안에서 확인한다. 가운데 원문은 건드리지 않는다.
+  const nrEl=document.getElementById('noteRef');
+  function closeNoteRef(){nrEl.hidden=true;nrEl.innerHTML='';}
+  function showNoteRef(id){
+    const n=byId.get(id); if(!n)return;
+    const o=(outs.get(id)||[]).filter(e=>e.kind!=='소속');
+    const i=(ins.get(id)||[]).filter(e=>e.kind!=='소속');
+
+    nrEl.innerHTML='';
+    const head=document.createElement('div'); head.className='nrhead';
+    const t=document.createElement('span'); t.className='t'; t.textContent=nameOf(n);
+    const go=document.createElement('button'); go.type='button'; go.className='nb-btn';
+    go.textContent='본문으로'; go.onclick=()=>open(id);
+    const x=document.createElement('button'); x.type='button'; x.className='nb-btn';
+    x.textContent='✕'; x.title='닫기'; x.onclick=closeNoteRef;
+    head.append(t);
+    if(n.kind==='법령'||n.kind==='조문'||n.kind==='별표')head.appendChild(starBtn(id));
+    head.append(go,x);
+
+    const body=document.createElement('div'); body.className='nrbody';
+    if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
+    body.appendChild(document.createTextNode(n.text||'원문 없음 — 법령 단위입니다.'));
+    nrEl.append(head,body);
+
+    // 관련 규정 — 이게 "관련 규정이 보이게" 의 핵심이다
+    if(o.length||i.length){
+      const sec=document.createElement('div'); sec.className='nrsec';
+      sec.textContent=`관련 규정 ${o.length+i.length}`;
+      const rels=document.createElement('div'); rels.className='nrrels';
+      rels.innerHTML=o.map(e=>relRow(e,'out')).join('')+i.map(e=>relRow(e,'in')).join('');
+      nrEl.append(sec,rels);
+    }
+    nrEl.hidden=false;
+  }
 
   // 시작 화면 — 빈 원문 자리에 무엇을 하면 되는지만 적어둔다.
   docEl.innerHTML='<div class="blank">왼쪽 <b>검색창</b>에 조문·키워드를 치거나, '+
