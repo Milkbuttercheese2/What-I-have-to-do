@@ -41,13 +41,13 @@ var LawText = (function () {
   }
 
   /**
-   * 조문 본문에 계층 들여쓰기를 넣고, 항과 항 사이를 빈 줄로 벌린다.
+   * 조문 본문에 계층 들여쓰기를 넣는다.
    *   항 0칸 · 호 2칸 · 목 4칸 · 세목 6칸
    * 표시가 없는 줄(앞 줄에서 이어지는 문장)은 직전 줄의 깊이를 물려받아
    * 같은 블록으로 보이게 한다.
    *
-   * 항 앞에만 빈 줄을 넣는다. 호·목까지 벌리면 한 항이 화면을 다 차지해
-   * 오히려 덩어리가 안 보인다 — 끊어 읽을 단위는 항이다.
+   * 빈 줄은 넣지 않는다 — 들여쓰기만으로 계층이 읽히고, 항마다 벌리면
+   * 한 조가 화면을 너무 길게 차지해 오히려 훑기가 어려워진다.
    */
   function indent(text) {
     var src = String(text == null ? "" : text);
@@ -55,23 +55,17 @@ var LawText = (function () {
     var lines = src.split("\n");
     var out = [];
     var last = -1;
-    var seenBody = false; // 첫 줄(조문 머리) 앞에는 빈 줄을 넣지 않는다
     for (var i = 0; i < lines.length; i++) {
       var raw = lines[i];
       var body = raw.replace(/^[ \t]+/, ""); // 원문에 이미 있던 앞 공백은 걷어낸다
-      if (!body.trim()) { continue; }        // 원문의 빈 줄은 우리가 다시 넣는다
+      if (!body.trim()) { out.push(""); continue; }
 
       var d = depthOf(body);
-      var marked = d >= 0;
       if (d < 0) {
         // 조문 머리("제76조(…)")는 첫 줄이고 깊이 0 이다. 그 외 표시 없는 줄은 이어지는 문장.
         d = i === 0 ? 0 : (last < 0 ? 0 : last);
       }
-
-      // 새 항이 시작되면 앞에 빈 줄 하나
-      if (marked && d === 0 && seenBody) out.push("");
       last = d;
-      seenBody = true;
 
       var pad = "";
       for (var k = 0; k < d; k++) pad += STEP;

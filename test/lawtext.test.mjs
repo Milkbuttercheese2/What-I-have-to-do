@@ -19,22 +19,16 @@ const 실원문 = [
   "2.  계약의 적정한 이행을 해칠 염려가 있는 자",
 ].join("\n");
 
-test("항 0칸 · 호 2칸 · 목 4칸, 항 앞에는 빈 줄", () => {
+test("항 0칸 · 호 2칸 · 목 4칸", () => {
   const out = LawText.indent(실원문).split("\n");
   assert.equal(out[0], "제76조(부정당업자의 입찰참가자격 제한)", "조문 머리는 붙는다");
-  assert.equal(out[1], "", "조문 머리와 첫 항 사이에 빈 줄");
-  assert.ok(out[2].startsWith("① "), "항은 들여쓰지 않는다");
+  assert.ok(out[1].startsWith("① "), "항은 들여쓰지 않는다");
+  assert.ok(out[3].startsWith("  1."), "호는 2칸");
+  assert.ok(out[4].startsWith("    가."), "목은 4칸");
+  assert.ok(out[6].startsWith("  2."), "다음 호도 2칸");
 
-  // 빈 줄은 항 앞에만. 호·목까지 벌리면 한 항이 화면을 다 차지해 덩어리가 안 보인다.
-  const 항줄 = out.filter((l) => /^[①-⑮]/.test(l));
-  assert.ok(항줄.length >= 2, "항이 둘 이상인 실원문이어야 검증이 된다");
-  for (const 항 of 항줄) assert.equal(out[out.indexOf(항) - 1], "", "항 앞에 빈 줄이 없다");
-
-  const 호줄 = out.filter((l) => /^ {2}\d+\./.test(l));
-  const 목줄 = out.filter((l) => /^ {4}[가-힣]\./.test(l));
-  assert.ok(호줄.length > 0 && 목줄.length > 0, "호·목이 있어야 검증이 된다");
-  for (const 호 of 호줄) assert.notEqual(out[out.indexOf(호) - 1], "", "호 앞에는 빈 줄을 넣지 않는다");
-  for (const 목 of 목줄) assert.notEqual(out[out.indexOf(목) - 1], "", "목 앞에는 빈 줄을 넣지 않는다");
+  // 계층은 들여쓰기로만 드러낸다. 빈 줄로 벌리면 한 조가 너무 길어져 훑기가 어렵다.
+  assert.equal(out.filter((l) => l === "").length, 0, "빈 줄을 끼워넣지 않는다");
 });
 
 test("깊이 판정", () => {
@@ -69,13 +63,12 @@ test("빈 줄과 빈 입력을 안전하게 다룬다", () => {
   assert.equal(LawText.indent(""), "");
   assert.equal(LawText.indent(null), "");
   assert.equal(LawText.indent(undefined), "");
-  // 원문의 들쭉날쭉한 빈 줄은 걷어내고 우리 규칙(항 앞에만)으로 다시 넣는다.
   const out = LawText.indent("1.  가\n\n2.  나").split("\n");
-  assert.deepEqual(out, ["  1.  가", "  2.  나"], "호끼리는 빈 줄 없이 붙는다");
-  // 항이 섞이면 항 앞에만 벌어진다
+  assert.equal(out[1], "", "원문에 있던 빈 줄은 그대로 둔다");
   assert.deepEqual(
     LawText.indent("① 가\n1.  나\n② 다").split("\n"),
-    ["① 가", "  1.  나", "", "② 다"],
+    ["① 가", "  1.  나", "② 다"],
+    "우리가 빈 줄을 만들지는 않는다",
   );
 });
 

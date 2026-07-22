@@ -258,6 +258,10 @@
   .fav .lbl{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .fav .sub{font-size:11px;color:var(--muted);flex:none}
   .fav .tag{align-self:center}
+  /* 조문 명칭은 아랫줄로 흘린다 — 한 줄에 밀어넣으면 법령명이 잘려 뭘 담았는지 못 읽는다 */
+  .fav{flex-wrap:wrap}
+  .fav .fsub{flex-basis:100%;font-size:11px;color:var(--muted);
+    padding-left:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* ★ 토글 — 트리 행과 원문 제목에 함께 쓴다 */
   .star{flex:none;background:none;border:none;cursor:pointer;font-size:13px;line-height:1;
@@ -613,17 +617,6 @@ const GRAPH = /*__GRAPH__*/;
     return n.type||'법령';
   }
 
-  /** 정부조직 약칭 — 사이드바 한 줄에 정식명을 다 넣으면 법제목이 밀린다. */
-  const ORG={'기획재정부':'기재부','재정경제부':'기재부','국토교통부':'국토부',
-    '중소벤처기업부':'중기부','고용노동부':'고용부','과학기술정보통신부':'과기부',
-    '산업통상자원부':'산업부','행정안전부':'행안부','공정거래위원회':'공정위',
-    '환경부':'환경부','조달청':'조달청','국방부':'국방부','방위사업청':'방사청',
-    '교육부':'교육부','문화체육관광부':'문체부','보건복지부':'복지부',
-    '농림축산식품부':'농식품부','해양수산부':'해수부','금융위원회':'금융위',
-    '국가유산청':'유산청','법무부':'법무부','인사혁신처':'인사처','법제처':'법제처'};
-  const orgShort=s=>{const t=String(s||'').trim();return t?(ORG[t]||t.replace(/^대한민국\s*/,'')):'';};
-  /** 사이드바 법령 행에 붙일 꼬리표: 소관부처 약칭이 있으면 그것, 없으면 위계. */
-  const orgTag=n=>orgShort(n.소관부처)||tierOf(n);
   /** 검색 결과처럼 HTML 로 그린 곳에 ★ 버튼을 끼워넣는다. */
   function fillStarSlots(root){
     root.querySelectorAll('.starslot').forEach(sl=>{
@@ -642,6 +635,12 @@ const GRAPH = /*__GRAPH__*/;
     l.className='lbl';
     l.textContent=n.kind==='법령'?(n.label||n.name):`${n.group||''} ${n.label}`.trim();
     d.appendChild(l);
+    // 조문·별표는 번호만으로는 뭘 담아뒀는지 알 수 없다 — 명칭을 함께 적는다.
+    // ("국가계약법 제10조" 보다 "국가계약법 제10조 · 경쟁입찰에서의 낙찰자 결정")
+    if(n.kind!=='법령'&&n.title){
+      const t=document.createElement('span'); t.className='fsub'; t.textContent=n.title;
+      d.appendChild(t);
+    }
     d.appendChild(starBtn(n.id));
     return d;
   }
@@ -722,7 +721,7 @@ const GRAPH = /*__GRAPH__*/;
     const arts=units.filter(u=>u.kind==='조문');
     const byls=units.filter(u=>u.kind==='별표');
     return step(depth,{
-      cls:'lawrow',dot:orgTag(d),label:d.label,favId:d.id,
+      cls:'lawrow',dot:tierOf(d),label:d.label,favId:d.id,
       cnt:`${arts.length}조${byls.length?`·별표${byls.length}`:''}`,
       expandable:units.length>0,
       onOpen:()=>open(d.id),
