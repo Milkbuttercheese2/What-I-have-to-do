@@ -1,0 +1,24 @@
+[package]
+name = "myeot-johang-ideora"
+version = "0.1.0"
+description = "몇 조항이더라 — 조달 법령 오프라인 리더"
+authors = ["조달청 실무자"]
+edition = "2021"
+rust-version = "1.77.2"
+
+# main.rs 는 lib.rs 의 run() 을 부른다 — 데스크톱/모바일 진입점을 한곳에 둔다.
+[lib]
+name = "myeot_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# 배포 빌드에서 콘솔 창을 숨긴다(Windows).
+custom-protocol = ["tauri/custom-protocol"]
