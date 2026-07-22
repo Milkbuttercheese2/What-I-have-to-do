@@ -53,45 +53,61 @@
     display:flex;align-items:center;justify-content:center}
   .themebtn:hover{border-color:var(--accent);color:var(--accent)}
 
-  /* ───────── 3단 레이아웃 ─────────
-     왼쪽 사이드바(검색+전체 법령) │ 원문 │ 관계·미리보기.
-     실무 동선이 "찾는다 → 읽는다 → 근거를 확인한다" 라서 셋이 동시에 보여야 한다.
+  /* ───────── 4단 레이아웃 ─────────
+     ① 검색·선택 │ ② 원문 │ ③ 관계 법령 │ ④ 법령노트
+     실무 동선이 "찾는다 → 읽는다 → 근거를 확인한다 → 적어둔다" 라서 넷이 동시에 보여야 한다.
      화면을 갈아끼우면 어디 있었는지를 매번 다시 찾게 된다. */
   #app{display:grid;height:100vh;min-height:0;
-    grid-template-columns:320px minmax(0,1fr) 380px;
-    grid-template-areas:"side doc rail"}
-  .side{grid-area:side} .doc,.notepane{grid-area:doc} .rail{grid-area:rail}
+    grid-template-columns:300px minmax(0,1fr) 330px 330px;
+    grid-template-areas:"side doc rail note"}
+  .side{grid-area:side} .doc{grid-area:doc}
+  .rail{grid-area:rail} .notecol{grid-area:note}
   .scroll{overflow:auto;min-height:0}
 
-  /* 원문 ↔ 법률노트 전환 */
-  .modes{display:flex;gap:4px;margin-top:9px}
-  .modebtn{flex:1;background:none;border:1px solid var(--line);color:var(--muted);
-    border-radius:7px;padding:5px 0;font-size:11.5px;cursor:pointer;font-family:inherit}
-  .modebtn:hover{border-color:var(--accent);color:var(--text)}
-  .modebtn.on{background:var(--panel2);color:var(--accent);border-color:var(--accent);font-weight:600}
+  /* 좁아지면 폭을 줄이고, 더 좁으면 노트를 관계 아래로, 끝내 안 되면 원문 아래로 내린다.
+     네 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(3단에서 실측). */
+  @media (max-width:1560px){
+    #app{grid-template-columns:270px minmax(0,1fr) 300px 300px}
+    .doc{padding:22px 24px 70px}
+  }
+  @media (max-width:1340px){
+    #app{grid-template-columns:260px minmax(0,1fr) 320px;
+      grid-template-rows:minmax(0,1fr) minmax(0,1fr);
+      grid-template-areas:"side doc rail" "side doc note"}
+    .notecol{border-top:1px solid var(--line)}
+  }
+  @media (max-width:980px){
+    #app{grid-template-columns:240px minmax(0,1fr);
+      grid-template-rows:minmax(0,1fr) minmax(0,auto) minmax(0,auto);
+      grid-template-areas:"side doc" "side rail" "side note"}
+    .rail,.notecol{border-left:0;border-top:1px solid var(--line);max-height:32vh}
+    #preview{max-height:none}
+  }
 
-  /* ───────── 법률노트 ─────────
-     평범한 txt 다. 딱 하나 {[법령명-조항]} 만 링크가 된다. */
-  .notepane{display:flex;flex-direction:column;min-height:0;background:var(--bg)}
-  .notebar{display:flex;align-items:center;gap:10px;padding:10px 16px;
-    border-bottom:1px solid var(--line);background:var(--panel);flex:none}
-  .notebar .nb-t{font-size:13px;font-weight:650}
-  .notebar .nb-hint{font-size:11px;color:var(--muted)}
-  .notebar .nb-hint code{background:var(--panel2);border-radius:4px;padding:1px 5px;font-size:10.5px}
-  .notebar .nb-hint kbd{background:var(--panel2);border:1px solid var(--line);
-    border-radius:4px;padding:0 4px;font-family:inherit;font-size:10px}
+  /* ───────── ④ 법령노트 ─────────
+     평범한 txt 다. 딱 하나 {[법령명-조항]} 만 링크가 된다.
+     **어떤 법령을 열어두든 항상 같은 노트다** — 법에 종속되지 않는다.
+     실무 메모는 법 하나에 갇히지 않고 여러 법을 가로지르기 때문이다. */
+  .notecol{display:flex;flex-direction:column;min-height:0;
+    border-left:1px solid var(--line);background:var(--panel)}
+  .notebar{display:flex;align-items:center;gap:7px;padding:10px 13px 8px;
+    border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  .notebar .nb-t{font-size:11px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.6px;font-weight:600}
   .notebar .grow{flex:1}
-  .notebar .nb-save{font-size:11px;color:var(--muted)}
+  .notebar .nb-save{font-size:10.5px;color:var(--accent)}
   .nb-btn{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
-    border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-family:inherit;flex:none}
+    border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex:none}
   .nb-btn:hover{border-color:var(--accent);color:var(--text)}
   .nb-btn.on{color:var(--accent);border-color:var(--accent)}
+  .nb-hint{width:100%;font-size:10.5px;color:var(--muted);line-height:1.6}
+  .nb-hint code{background:var(--panel2);border-radius:4px;padding:1px 4px;font-size:10px}
 
   .notewrap{position:relative;flex:1;min-height:0;display:flex}
   #noteText{flex:1;width:100%;border:0;outline:none;resize:none;
-    background:var(--bg);color:var(--text2);font-family:inherit;
-    font-size:14px;line-height:1.9;padding:24px 34px 60px}
-  .noteview{flex:1;overflow:auto;padding:24px 34px 60px;font-size:14px;line-height:1.9;
+    background:var(--panel);color:var(--text2);font-family:inherit;
+    font-size:13px;line-height:1.85;padding:14px 15px 40px}
+  .noteview{flex:1;overflow:auto;padding:14px 15px 40px;font-size:13px;line-height:1.85;
     color:var(--text2);white-space:pre-wrap}
   .noteview a.ref{color:var(--inyong);text-decoration:none;
     border-bottom:1px dashed var(--inyong);cursor:pointer}
@@ -100,10 +116,11 @@
   .noteview .miss{color:var(--warn);border-bottom:1px dotted var(--warn)}
 
   /* 자동완성 드롭다운 */
-  .ac{position:absolute;z-index:30;min-width:280px;max-width:420px;max-height:260px;overflow:auto;
-    background:var(--panel);border:1px solid var(--line);border-radius:10px;
-    box-shadow:0 10px 30px rgba(0,0,0,.35);padding:5px}
-  .ac .acit{padding:7px 10px;border-radius:7px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
+  /* 자동완성은 노트 칸 안에 갇힌다 — 폭이 좁으니 칸 전체를 쓴다 */
+  .ac{position:absolute;z-index:30;left:8px;right:8px;top:8px;max-height:min(300px,60%);overflow:auto;
+    background:var(--panel2);border:1px solid var(--accent);border-radius:9px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);padding:4px}
+  .ac .acit{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
   .ac .acit.sel{background:var(--panel2);outline:1px solid var(--accent)}
   .ac .acit:hover{background:var(--panel2)}
   .ac .acit .l{font-size:12.5px;flex:none}
@@ -295,10 +312,6 @@
         <button id="themeBtn" class="themebtn" type="button"></button>
       </div>
       <p id="meta"></p>
-      <div class="modes">
-        <button type="button" class="modebtn on" data-mode="law">법령</button>
-        <button type="button" class="modebtn" data-mode="note">법률노트</button>
-      </div>
     </header>
     <div class="searchbar">
       <input id="q" autocomplete="off" spellcheck="false"
@@ -317,28 +330,30 @@
     </div>
   </aside>
 
-  <!-- ② 가운데: 원문 / 법률노트 -->
+  <!-- ② 가운데: 원문 -->
   <main class="doc scroll" id="doc"></main>
-  <section class="notepane" id="notepane" hidden>
-    <div class="notebar">
-      <span class="nb-t">법률노트</span>
-      <span class="nb-hint"><code>{[국가계약법-제7조]}</code> 처럼 쓰면 링크가 됩니다 · <kbd>{</kbd> 두 번이면 목록</span>
-      <span class="grow"></span>
-      <span class="nb-save" id="noteSaved"></span>
-      <button type="button" id="notePreview" class="nb-btn">미리보기</button>
-    </div>
-    <div class="notewrap">
-      <textarea id="noteText" spellcheck="false"
-        placeholder="여기에 자유롭게 적으세요.&#10;&#10;법령을 걸려면 {[ 를 열고 법령명을 치면 목록이 뜹니다.&#10;예)  낙찰자 결정은 {[국가계약법-제10조]} 기준"></textarea>
-      <div class="noteview" id="noteView" hidden></div>
-      <div class="ac" id="noteAc" hidden></div>
-    </div>
-  </section>
 
-  <!-- ③ 오른쪽: 인용 미리보기 + 관계 조문 -->
+  <!-- ③ 관계 법령: 인용 미리보기 + 관계 조문 -->
   <aside class="rail">
     <div id="preview"></div>
     <div class="scroll" id="rels"></div>
+  </aside>
+
+  <!-- ④ 법령노트 — 어떤 법령을 열어두든 항상 같은 노트다 -->
+  <aside class="notecol">
+    <div class="notebar">
+      <span class="nb-t">법령노트</span>
+      <span class="grow"></span>
+      <span class="nb-save" id="noteSaved"></span>
+      <button type="button" id="notePreview" class="nb-btn">미리보기</button>
+      <div class="nb-hint"><code>{[</code> 를 열면 법령 목록이 뜹니다 — 고르면 링크가 됩니다.</div>
+    </div>
+    <div class="notewrap">
+      <textarea id="noteText" spellcheck="false"
+        placeholder="자유롭게 적으세요. 특정 법령에 매이지 않는 내 노트입니다.&#10;&#10;예)  낙찰자 결정은 {[국가계약법-제10조]} 기준"></textarea>
+      <div class="noteview" id="noteView" hidden></div>
+      <div class="ac" id="noteAc" hidden></div>
+    </div>
   </aside>
 </div>
 
@@ -872,8 +887,10 @@ const GRAPH = /*__GRAPH__*/;
   });
 
   // ───────── 법률노트 ─────────
+  // 노트는 네 번째 칸에 항상 떠 있다. 열려 있는 법령과 무관한 단일 노트다 —
+  // 저장 키도 하나뿐이라(LawNotes.KEY) 법을 갈아타도 내용이 따라다니지 않는다.
   const noteEl=document.getElementById('noteText'), noteView=document.getElementById('noteView'),
-        notePane=document.getElementById('notepane'), acEl=document.getElementById('noteAc'),
+        acEl=document.getElementById('noteAc'),
         savedEl=document.getElementById('noteSaved'), pvBtn=document.getElementById('notePreview');
 
   noteEl.value=LawNotes.load();
@@ -931,12 +948,9 @@ const GRAPH = /*__GRAPH__*/;
         <span class="l">${esc(it.label)}</span><span class="s">${esc(it.sub||'')}</span></div>`).join('');
     acEl.hidden=false;
   }
-  function placeAc(){
-    // textarea 안의 캐럿 좌표를 정확히 구하려면 거울 엘리먼트가 필요하다.
-    // 노트는 줄 수가 많지 않아 과하다 — 입력창 좌상단 기준 고정 위치로 충분하다.
-    acEl.style.left='34px';
-    acEl.style.top='58px';
-  }
+  // 위치는 CSS 가 잡는다(노트 칸 상단에 폭을 꽉 채워 붙인다).
+  // 캐럿 좌표를 따라가려면 거울 엘리먼트가 필요한데, 칸이 좁아 어차피 폭을 다 쓰므로 과하다.
+  function placeAc(){}
   function acceptAc(i){
     const it=acItems[i]; if(!it||acFrom<0)return;
     const v=noteEl.value, pos=noteEl.selectionStart;
@@ -963,20 +977,8 @@ const GRAPH = /*__GRAPH__*/;
     else if(e.key==='Escape'){e.preventDefault();hideAc();}
   });
 
-  // ── 모드 전환 ──
-  function setMode(m){
-    const note=m==='note';
-    notePane.hidden=!note; docEl.hidden=note;
-    document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
-    if(note){noteEl.focus();}else{hideAc();}
-  }
-  document.querySelectorAll('.modebtn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
-
-  // 노트의 참조를 누르면 법령 모드로 돌아가 그 조를 연다.
-  noteView.addEventListener('click',e=>{
-    const a=e.target.closest('a.ref'); if(!a)return;
-    setMode('law');
-  });
+  // 노트의 참조 클릭은 전역 [data-go] 처리기가 받아 가운데 칸에 그 조를 연다.
+  // 노트 칸은 그대로 남는다 — 적어둔 걸 보면서 원문을 확인하는 게 목적이다.
 
   // 시작 화면 — 빈 원문 자리에 무엇을 하면 되는지만 적어둔다.
   docEl.innerHTML='<div class="blank">왼쪽 <b>검색창</b>에 조문·키워드를 치거나, '+
