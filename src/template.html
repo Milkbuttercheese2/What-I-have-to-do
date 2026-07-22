@@ -100,7 +100,7 @@
      네 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(3단에서 실측). */
   @media (max-width:1560px){
     #app{grid-template-columns:270px minmax(0,1fr) 300px 300px}
-    .doc{padding:22px 24px 70px}
+    #doc{padding:22px 24px 70px}
   }
   @media (max-width:1340px){
     #app{grid-template-columns:260px minmax(0,1fr) 320px;
@@ -180,7 +180,7 @@
      세 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(실측). */
   @media (max-width:1180px){
     #app{grid-template-columns:270px minmax(0,1fr) 300px}
-    .doc{padding:22px 24px 70px}
+    #doc{padding:22px 24px 70px}
   }
   @media (max-width:920px){
     #app{grid-template-columns:250px minmax(0,1fr);
@@ -253,7 +253,7 @@
   .trow .star{margin-left:auto}
   .trow.group{font-size:10.5px;letter-spacing:.6px;color:var(--muted);
     text-transform:uppercase;font-weight:600}
-  .trow.doc .lbl{font-weight:500}
+  .trow.lawrow .lbl{font-weight:500}
   .trow.chap{color:var(--faint);font-weight:600;font-size:12px}
   .trow.leaf{font-size:12px}
   .trow.leaf .lbl{color:var(--text2)}
@@ -264,10 +264,12 @@
   .tchildren[hidden]{display:none}
 
   /* ───────── 원문 (가운데) ───────── */
-  .doc{padding:26px 34px 80px}
-  .doc .crumb{font-size:12px;color:var(--muted)}
-  .doc h2{margin:6px 0 2px;font-size:22px;letter-spacing:-.3px}
-  .doc .subt{font-size:13px;color:var(--muted)}
+  #doc{padding:26px 34px 80px}
+  /* 원문 칸 전용 — id 로 못박는다. .doc 로 두면 트리 행(.trow.doc)이 주워먹는다.
+     실제로 그랬다: 트리의 법령 행이 padding 26/80 을 받아 123px 로 부풀었다. */
+  #doc .crumb{font-size:12px;color:var(--muted)}
+  #doc h2{margin:6px 0 2px;font-size:22px;letter-spacing:-.3px}
+  #doc .subt{font-size:13px;color:var(--muted)}
   .blank{color:var(--muted);font-size:13px;padding:60px 34px;line-height:1.8;max-width:52ch}
   .blank b{color:var(--text);font-weight:600}
 
@@ -653,7 +655,7 @@ const GRAPH = /*__GRAPH__*/;
     const arts=units.filter(u=>u.kind==='조문');
     const byls=units.filter(u=>u.kind==='별표');
     return step(depth,{
-      cls:'doc',dot:d.type,label:d.label,favId:d.id,
+      cls:'lawrow',dot:d.type,label:d.label,favId:d.id,
       cnt:`${arts.length}조${byls.length?`·별표${byls.length}`:''}`,
       expandable:units.length>0,
       onOpen:()=>open(d.id),
