@@ -3,7 +3,7 @@
 // 이 스크립트가 "온라인 빌드 단계"의 마지막 조립이다.
 // 산출물 web/index.html 은 외부 의존성 0 → 내부망에 반입해 더블클릭으로 연다.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { buildGraph } from "./extract.mjs";
@@ -37,13 +37,24 @@ const annexTable = readFileSync(join(root, "src/annex-table.js"), "utf8");
 const favorites = readFileSync(join(root, "src/favorites.js"), "utf8");
 const notes = readFileSync(join(root, "src/notes.js"), "utf8");
 const lawtext = readFileSync(join(root, "src/lawtext.js"), "utf8");
+const annexView = readFileSync(join(root, "src/annex-view.js"), "utf8");
+
+// web/annex 에 실제로 받아둔 별표 원본 파일 목록. 뷰어는 이 집합에 있는 것만 iframe 으로 연다.
+// (파일은 src/fetch-annexes.mjs 로 받는다. 없으면 뷰어는 다운로드 링크로 물러난다.)
+let annexAvail = [];
+const annexDir = join(root, "web/annex");
+if (existsSync(annexDir)) {
+  annexAvail = readdirSync(annexDir).filter((f) => /\.(pdf|hwp)$/i.test(f));
+}
 
 let html = template
   .replace("/*__SEARCH__*/", () => searchRuntime)
   .replace("/*__ANNEX__*/", () => annexTable)
+  .replace("/*__ANNEXVIEW__*/", () => annexView)
   .replace("/*__FAVS__*/", () => favorites)
   .replace("/*__NOTES__*/", () => notes)
   .replace("/*__LAWTEXT__*/", () => lawtext)
+  .replace("/*__ANNEX_AVAIL__*/", () => JSON.stringify(annexAvail))
   .replace("/*__GRAPH__*/", () => JSON.stringify(page));
 
 // Pretendard 폰트를 data-URI로 임베드(외부 웹폰트 금지 — 내부망 단일파일 원칙).

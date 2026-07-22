@@ -232,6 +232,14 @@ export function buildGraph(snapshot, options = {}) {
     // 조문만 색인하면 "부정당업자 제재기준"을 아무리 검색해도 안 나온다.
     for (const bx of doc.annexes ?? []) {
       const id = `byl:${doc.id}:${bx.kind}:${bx.no}`;
+      // 원본 파일 열쇠(flSeq)만 싣는다 — 전체 URL 은 프론트가 flSeq 로 조립한다.
+      // 표시는 원본 PDF, 검색은 아래 text 로. (src/fetch-annexes.mjs 가 파일을 받는다)
+      const flSeq = (u) => {
+        const m = String(u ?? "").match(/[?&]flSeq=(\d+)/);
+        return m ? m[1] : null;
+      };
+      const pdfSeq = flSeq(bx.files?.pdf);
+      const hwpSeq = flSeq(bx.files?.hwp);
       addNode({
         id,
         kind: "별표",
@@ -242,6 +250,10 @@ export function buildGraph(snapshot, options = {}) {
         text: bx.text,
         lawId: doc.id,
         group: doc.shortName,
+        ...(pdfSeq ? { pdfSeq } : {}),
+        ...(hwpSeq ? { hwpSeq } : {}),
+        ...(bx.files?.pdfName ? { pdfName: bx.files.pdfName } : {}),
+        ...(bx.files?.hwpName ? { hwpName: bx.files.hwpName } : {}),
         ...stamp,
       });
       addEdge(`law:${doc.id}`, id, "소속");

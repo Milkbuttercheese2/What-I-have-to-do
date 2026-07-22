@@ -344,6 +344,19 @@
   .srcnote .copymd{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
     border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:6px}
   .srcnote .copymd:hover{border-color:var(--accent);color:var(--text)}
+  /* 별표 원본 뷰어 — PDF 를 크게, 파싱표는 접어서 보조로 */
+  .body.annexview{max-width:none}
+  .annexview .pdfview{width:100%;height:min(72vh,900px);border:1px solid var(--line);
+    border-radius:8px;background:#fff}
+  .annexview .novip{font-size:12.5px;color:var(--muted);background:var(--panel2);
+    border:1px dashed var(--line);border-radius:8px;padding:14px 16px;line-height:1.7}
+  .annexview .dlrow{display:flex;gap:8px;margin:12px 0}
+  .annexview .dl{font-size:12px;color:var(--accent);text-decoration:none;
+    border:1px solid var(--line);border-radius:7px;padding:5px 12px}
+  .annexview .dl:hover{border-color:var(--accent);background:var(--hl)}
+  .annexview .parsed{margin-top:8px}
+  .annexview .parsed summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 0}
+  .annexview .parsed summary:hover{color:var(--text)}
   .body.annex{max-width:none}
   .body.annex .ann-text{white-space:pre-wrap;margin:6px 0 14px}
   .body.annex .ann-tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:8px}
@@ -465,10 +478,16 @@
 const GRAPH = /*__GRAPH__*/;
 </script>
 <script>
+const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
+</script>
+<script>
 /*__SEARCH__*/
 </script>
 <script>
 /*__ANNEX__*/
+</script>
+<script>
+/*__ANNEXVIEW__*/
 </script>
 <script>
 /*__FAVS__*/
@@ -866,9 +885,11 @@ const GRAPH = /*__GRAPH__*/;
     const oe=outs.get(n.id)||[];
     if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
     if(n.kind==='별표'){
-      return '<div class="body annex">'+AnnexTable.toHtml(AnnexTable.parse(n.text),t=>linkify(t,oe))+'</div>'+
-        '<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. '+
+      // 원본 PDF 를 본체로 보여주고, 파싱표는 접어서 검색·복사용으로 남긴다.
+      const tableHtml=AnnexTable.toHtml(AnnexTable.parse(n.text),t=>linkify(t,oe))+
+        `<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. `+
         `<button class="copymd" data-for="${esc(n.id)}">표 마크다운 복사</button></div>`;
+      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc,tableHtml});
     }
     // 화면에서만 계층 들여쓰기를 입힌다. 공백만 늘어나므로 인용 매칭은 영향이 없다
     // (linkify 는 공백을 지운 사본에서 위치를 찾는다).
