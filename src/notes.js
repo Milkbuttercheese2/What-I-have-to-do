@@ -212,12 +212,91 @@ var LawNotes = (function () {
     return out + esc(s.slice(pos));
   }
 
+  // ── 기록 보관함 ────────────────────────────────────────────────────────────
+  // 지금 쓰는 노트는 하나뿐이다(law-notes). 그걸 통째로 갈아엎기 전에 남겨두는 곳이
+  // 없으면 메모가 그냥 사라진다. 보관함은 그 안전망이다.
+
+  var ARCHIVE = "law-notes-archive";
+
+  function readArchive() {
+    var s = store();
+    if (!s) return [];
+    var raw;
+    try { raw = s.getItem(ARCHIVE); } catch (e) { return []; }
+    if (!raw) return [];
+    var v;
+    try { v = JSON.parse(raw); } catch (e) { return []; }
+    if (!Array.isArray(v)) return [];
+    var out = [];
+    for (var i = 0; i < v.length; i++) {
+      var r = v[i];
+      if (r && typeof r.text === "string") {
+        out.push({ id: String(r.id || ""), title: String(r.title || ""), text: r.text, at: String(r.at || "") });
+      }
+    }
+    return out;
+  }
+
+  function writeArchive(list) {
+    var s = store();
+    if (!s) return false;
+    try { s.setItem(ARCHIVE, JSON.stringify(list)); return true; } catch (e) { return false; }
+  }
+
+  /** 제목은 첫 줄에서 딴다 — 따로 입력받으면 저장이 귀찮아져 아무도 안 쓴다. */
+  function titleOf(text) {
+    var first = String(text == null ? "" : text).split("\n")[0].trim();
+    first = first.replace(/\{\[([^\]]*)\]\}/g, "$1"); // 참조 표기는 벗겨서 읽기 좋게
+    if (!first) return "(제목 없음)";
+    return first.length > 40 ? first.slice(0, 39) + "…" : first;
+  }
+
+  /** 현재 노트를 보관함에 넣는다. 빈 노트는 넣지 않는다. */
+  function archive(text, now) {
+    var t = String(text == null ? "" : text);
+    if (!t.trim()) return null;
+    var rec = {
+      id: String((now || new Date()).getTime()),
+      title: titleOf(t),
+      text: t,
+      at: (now || new Date()).toISOString(),
+    };
+    var list = readArchive();
+    list.unshift(rec); // 최근 것이 위
+    writeArchive(list);
+    return rec;
+  }
+
+  function archiveList() { return readArchive(); }
+
+  function archiveGet(id) {
+    var list = readArchive();
+    for (var i = 0; i < list.length; i++) if (list[i].id === String(id)) return list[i];
+    return null;
+  }
+
+  function archiveRemove(id) {
+    var list = readArchive(), out = [], hit = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === String(id)) { hit = true; continue; }
+      out.push(list[i]);
+    }
+    if (hit) writeArchive(out);
+    return hit;
+  }
+
   function useStore(s) { override = s || null; }
 
   return {
     KEY: KEY,
+    ARCHIVE: ARCHIVE,
     load: load,
     save: save,
+    titleOf: titleOf,
+    archive: archive,
+    archiveList: archiveList,
+    archiveGet: archiveGet,
+    archiveRemove: archiveRemove,
     parseRefs: parseRefs,
     splitRef: splitRef,
     joNo: joNo,

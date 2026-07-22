@@ -116,6 +116,48 @@ test("HTML 을 이스케이프한다 — 노트에 태그를 써도 안전해야
   assert.ok(!html.includes("<script>"), "생 태그가 새어나가면 안 된다");
 });
 
+test("기록 보관함 — 담기·불러오기·지우기", () => {
+  const data = new Map();
+  LawNotes.useStore({
+    getItem: (k) => (data.has(k) ? data.get(k) : null),
+    setItem: (k, v) => data.set(k, v),
+  });
+
+  assert.deepEqual(LawNotes.archiveList(), []);
+  const a = LawNotes.archive("첫 메모 {[국가계약법-제7조]}\n둘째 줄", new Date("2026-07-22T01:00:00Z"));
+  const b = LawNotes.archive("둘째 메모", new Date("2026-07-22T02:00:00Z"));
+
+  const list = LawNotes.archiveList();
+  assert.equal(list.length, 2);
+  assert.equal(list[0].id, b.id, "최근 것이 위로");
+  assert.equal(LawNotes.archiveGet(a.id).text, "첫 메모 {[국가계약법-제7조]}\n둘째 줄");
+
+  assert.equal(LawNotes.archiveRemove(a.id), true);
+  assert.equal(LawNotes.archiveList().length, 1);
+  assert.equal(LawNotes.archiveRemove("없는id"), false);
+});
+
+test("제목은 첫 줄에서 따되 참조 표기는 벗긴다", () => {
+  assert.equal(LawNotes.titleOf("근거 {[국가계약법-제7조]} 확인\n다음 줄"), "근거 국가계약법-제7조 확인");
+  assert.equal(LawNotes.titleOf(""), "(제목 없음)");
+  assert.equal(LawNotes.titleOf("   \n내용"), "(제목 없음)");
+  assert.ok(LawNotes.titleOf("가".repeat(60)).endsWith("…"));
+});
+
+test("빈 노트는 보관하지 않는다", () => {
+  const data = new Map();
+  LawNotes.useStore({ getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) });
+  assert.equal(LawNotes.archive("   \n  "), null);
+  assert.deepEqual(LawNotes.archiveList(), []);
+});
+
+test("보관함이 손상돼도 페이지가 죽지 않는다", () => {
+  const data = new Map([[LawNotes.ARCHIVE, "{망가진 JSON"]]);
+  LawNotes.useStore({ getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) });
+  assert.deepEqual(LawNotes.archiveList(), []);
+  assert.doesNotThrow(() => LawNotes.archive("새 메모"));
+});
+
 test("저장·복원과 저장소 실패 내성", () => {
   const data = new Map();
   LawNotes.useStore({

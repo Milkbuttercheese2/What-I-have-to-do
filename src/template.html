@@ -60,10 +60,14 @@
   /* 원문(②)만 고정이다. 나머지 셋은 접힌다 — 접으면 그 폭이 전부 원문으로 간다.
      완전히 숨기지 않고 36px 띠로 남긴다. 사라지면 다시 여는 법을 못 찾는다. */
   #app{display:grid;height:100vh;min-height:0;
-    --w1:300px; --w3:330px; --w4:330px;
+    --w1:300px; --wcol:330px; --w3:var(--wcol); --w4:var(--wcol);
     grid-template-columns:var(--w1) minmax(0,1fr) var(--w3) var(--w4);
     grid-template-areas:"side doc rail note"}
   #app.off1{--w1:36px} #app.off3{--w3:36px} #app.off4{--w4:36px}
+  /* ③④ 는 짝이다. 하나를 접으면 남은 하나가 그 자리를 가져간다 —
+     원문은 그대로 두고 옆 칸끼리만 주고받는다. 둘 다 접으면 둘 다 원문에 내준다. */
+  #app.off3:not(.off4){--w4:calc(var(--wcol)*2 - 36px)}
+  #app.off4:not(.off3){--w3:calc(var(--wcol)*2 - 36px)}
   .side{grid-area:side} .doc{grid-area:doc}
   .rail{grid-area:rail} .notecol{grid-area:note}
   .side,.rail,.notecol{position:relative}
@@ -98,8 +102,9 @@
 
   /* 좁아지면 폭을 줄이고, 더 좁으면 노트를 관계 아래로, 끝내 안 되면 원문 아래로 내린다.
      네 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(3단에서 실측). */
+  /* 폭만 줄인다. grid-template-columns 를 통째로 덮으면 접기 규칙이 무력화된다. */
   @media (max-width:1560px){
-    #app{grid-template-columns:270px minmax(0,1fr) 300px 300px}
+    #app{--w1:270px; --wcol:300px}
     #doc{padding:22px 24px 70px}
   }
   @media (max-width:1340px){
@@ -171,9 +176,16 @@
   .nrbody{overflow:auto;padding:10px 13px 14px;font-size:12.5px;line-height:1.8;
     color:var(--text2);white-space:pre-wrap;min-height:0}
   .nrbody .sub{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
-  .nrsec{font-size:10px;letter-spacing:.5px;color:var(--muted);font-weight:600;
-    text-transform:uppercase;padding:8px 13px 3px;border-top:1px solid var(--divider);flex:none}
-  .nrrels{overflow:auto;max-height:38%;min-height:0;padding-bottom:8px}
+  /* 기록 보관함 목록 */
+  .logit{display:flex;align-items:baseline;gap:8px;padding:8px 13px;cursor:pointer;
+    border-bottom:1px solid var(--divider)}
+  .logit:hover{background:var(--panel2)}
+  .logit .lt{flex:1;min-width:0;font-size:12.5px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .logit .ld{flex:none;font-size:10.5px;color:var(--muted)}
+  .logit .lx{flex:none;background:none;border:0;color:var(--muted);cursor:pointer;
+    font-size:11px;padding:0 2px;font-family:inherit}
+  .logit .lx:hover{color:var(--warn)}
   /* 못 찾은 참조 — 오타를 알아야 고친다 */
   .noteview .miss{color:var(--warn);border-bottom:1px dotted var(--warn)}
 
@@ -420,6 +432,8 @@
       <span class="nb-t">법령노트</span>
       <span class="grow"></span>
       <span class="nb-save" id="noteSaved"></span>
+      <button type="button" id="noteArchive" class="nb-btn" title="지금 노트를 기록으로 담기">담기</button>
+      <button type="button" id="noteLog" class="nb-btn" title="담아둔 기록 열기">기록</button>
       <button type="button" id="notePreview" class="nb-btn">미리보기</button>
       <button type="button" class="colbtn" data-col="4" title="접기">›</button>
       <div class="nb-hint"><code>{[</code> 를 열면 법령 목록이 뜹니다 — 고르면 링크가 됩니다.</div>
@@ -1106,6 +1120,63 @@ const GRAPH = /*__GRAPH__*/;
       (id,text)=>`<a class="ref" data-go="${esc(id)}">${esc(text)}</a>`,
       t=>`<span class="miss" title="찾지 못한 참조입니다">${esc(t)}</span>`);
   }
+  // ── 기록 보관함 ──
+  // 노트는 하나뿐이라 새로 쓰려면 지워야 한다. 지우기 전에 담아두는 곳.
+  const logBtn=document.getElementById('noteLog'), arcBtn=document.getElementById('noteArchive');
+  function fmtAt(iso){
+    const d=new Date(iso); if(isNaN(d))return '';
+    const p=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  arcBtn.onclick=()=>{
+    const rec=LawNotes.archive(noteVal());
+    savedEl.textContent=rec?'기록에 담았습니다':'빈 노트는 담지 않습니다';
+    setTimeout(()=>{savedEl.textContent='';},1800);
+    if(rec&&!nrEl.hidden)showLog();
+  };
+  logBtn.onclick=showLog;
+  function showLog(){
+    const list=LawNotes.archiveList();
+    nrEl.innerHTML='';
+    const head=document.createElement('div'); head.className='nrhead';
+    const t=document.createElement('span'); t.className='t';
+    t.textContent=`기록 ${list.length}건`;
+    const x=document.createElement('button'); x.type='button'; x.className='nb-btn';
+    x.textContent='✕'; x.title='닫기'; x.onclick=closeNoteRef;
+    head.append(t,x);
+    nrEl.appendChild(head);
+
+    if(!list.length){
+      const e=document.createElement('div'); e.className='nrbody';
+      e.style.color='var(--muted)';
+      e.textContent='아직 담아둔 기록이 없습니다. 노트를 쓰고 "담기" 를 누르면 여기에 쌓입니다.';
+      nrEl.appendChild(e);
+    }else{
+      const box=document.createElement('div'); box.className='nrbody';
+      box.style.whiteSpace='normal'; box.style.padding='0';
+      for(const rec of list){
+        const it=document.createElement('div'); it.className='logit';
+        const lt=document.createElement('span'); lt.className='lt'; lt.textContent=rec.title;
+        const ld=document.createElement('span'); ld.className='ld'; ld.textContent=fmtAt(rec.at);
+        const lx=document.createElement('button'); lx.type='button'; lx.className='lx';
+        lx.textContent='✕'; lx.title='이 기록 지우기';
+        lx.onclick=ev=>{ev.stopPropagation();LawNotes.archiveRemove(rec.id);showLog();};
+        // 불러오기 전에 지금 노트를 잃지 않도록 자동으로 담아둔다
+        it.onclick=()=>{
+          const cur=noteVal();
+          if(cur.trim()&&cur!==rec.text)LawNotes.archive(cur);
+          noteEl.textContent=rec.text; paintChips(); LawNotes.save(rec.text);
+          savedEl.textContent='불러왔습니다'; setTimeout(()=>{savedEl.textContent='';},1500);
+          showLog();
+        };
+        it.append(lt,ld,lx);
+        box.appendChild(it);
+      }
+      nrEl.appendChild(box);
+    }
+    nrEl.hidden=false;
+  }
+
   pvBtn.onclick=()=>{
     const on=noteView.hidden;
     if(on)renderNoteView();
@@ -1177,9 +1248,6 @@ const GRAPH = /*__GRAPH__*/;
   function closeNoteRef(){nrEl.hidden=true;nrEl.innerHTML='';}
   function showNoteRef(id){
     const n=byId.get(id); if(!n)return;
-    const o=(outs.get(id)||[]).filter(e=>e.kind!=='소속');
-    const i=(ins.get(id)||[]).filter(e=>e.kind!=='소속');
-
     nrEl.innerHTML='';
     const head=document.createElement('div'); head.className='nrhead';
     const t=document.createElement('span'); t.className='t'; t.textContent=nameOf(n);
@@ -1194,16 +1262,9 @@ const GRAPH = /*__GRAPH__*/;
     const body=document.createElement('div'); body.className='nrbody';
     if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
     body.appendChild(document.createTextNode(n.text||'원문 없음 — 법령 단위입니다.'));
+    // 관련 규정 목록은 넣지 않는다 — 노트에서 건 법령은 "그 조문이 뭐라 하는지"를
+    // 확인하려는 것이지 관계망을 타려는 게 아니다. 관계는 ③ 칸의 몫이다.
     nrEl.append(head,body);
-
-    // 관련 규정 — 이게 "관련 규정이 보이게" 의 핵심이다
-    if(o.length||i.length){
-      const sec=document.createElement('div'); sec.className='nrsec';
-      sec.textContent=`관련 규정 ${o.length+i.length}`;
-      const rels=document.createElement('div'); rels.className='nrrels';
-      rels.innerHTML=o.map(e=>relRow(e,'out')).join('')+i.map(e=>relRow(e,'in')).join('');
-      nrEl.append(sec,rels);
-    }
     nrEl.hidden=false;
   }
 
