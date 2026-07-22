@@ -467,6 +467,9 @@ const GRAPH = /*__GRAPH__*/;
 /*__NOTES__*/
 </script>
 <script>
+/*__LAWTEXT__*/
+</script>
+<script>
 (function(){
   // ---- 테마 토글 ----
   (function(){
@@ -802,7 +805,9 @@ const GRAPH = /*__GRAPH__*/;
         '<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. '+
         `<button class="copymd" data-for="${esc(n.id)}">표 마크다운 복사</button></div>`;
     }
-    return `<div class="body">${linkify(n.text,oe)}</div>`;
+    // 화면에서만 계층 들여쓰기를 입힌다. 공백만 늘어나므로 인용 매칭은 영향이 없다
+    // (linkify 는 공백을 지운 사본에서 위치를 찾는다).
+    return `<div class="body">${linkify(LawText.indent(n.text),oe)}</div>`;
   }
 
   const anchorOf=id=>'u_'+String(id).replace(/[^\w가-힣]/g,'_');
