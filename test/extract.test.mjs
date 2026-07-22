@@ -16,6 +16,40 @@ const has = (source, target, kind) => g.edges.some((e) => e.source === source &&
 const edge = (source, target, kind) => g.edges.find((e) => e.source === source && e.target === target && e.kind === kind);
 const node = (id) => g.nodes.find((n) => n.id === id);
 
+test("장 헤더가 조문을 가리지 않는다", () => {
+  // 법제처 API는 편/장/절 헤더에 *뒤따르는 조문의 번호*를 그대로 달아 보낸다
+  // ("제1장 총칙"의 조문번호 = 1). 헤더를 조문처럼 노드로 만들면 addNode 의 선착순
+  // 유지 규칙과 맞물려 진짜 제1조가 통째로 밀려난다.
+  // 실측으로 45개 조문(시행령 제10조 경쟁방법, 제33조 입찰공고 등)이 이렇게 덮여 있었고,
+  // 검색 색인도 같은 노드를 쓰므로 실제 내용으로는 검색조차 되지 않았다.
+  const s = structuredClone(snapshot);
+  s.documents.push({
+    id: "chap-doc", name: "장구분 있는 영", shortName: "장구분영",
+    docType: "시행령", family: null, parent: null, aliases: [],
+    articles: [
+      { no: "1", structural: true, text: "제1장 총칙" },
+      { no: "1", title: "목적", text: "제1조(목적) 이 영은 총칙적 사항을 규정한다." },
+      { no: "2", structural: true, text: "제2장 계약의 방법" },
+      { no: "2", title: "경쟁방법", text: "제2조(경쟁방법) 경쟁은 입찰방법에 의한다." },
+    ],
+  });
+  const g2 = buildGraph(s);
+  const a1 = g2.nodes.find((n) => n.id === "art:chap-doc:1");
+  const a2 = g2.nodes.find((n) => n.id === "art:chap-doc:2");
+
+  assert.ok(a1, "제1조 노드가 없다");
+  assert.match(a1.text, /^제1조\(목적\)/, "장 제목이 제1조 본문을 덮었다");
+  assert.match(a2.text, /경쟁은 입찰방법에 의한다/, "장 제목이 제2조 본문을 덮었다");
+
+  // 장은 노드가 아니라 조문에 붙는 꼬리표다 (리더 트리의 "법령 › 장 › 조" 중간 계단).
+  assert.equal(a1.chapter, "제1장 총칙");
+  assert.equal(a2.chapter, "제2장 계약의 방법");
+  assert.equal(
+    g2.nodes.filter((n) => n.lawId === "chap-doc" && n.kind === "조문").length, 2,
+    "장 헤더가 조문 노드로 새어 들어갔다",
+  );
+});
+
 test("연결형 위임 — '대통령령으로 정하는 바에 따라'를 잡는다", () => {
   // 종결형('정한다')만 잡던 규칙의 구멍. 실원문에는 연결형이 훨씬 흔하다.
   assert.ok(has("art:nca:7", "law:nca-e", "위임"), "국가계약법 제7조 → 시행령 위임이 없다");

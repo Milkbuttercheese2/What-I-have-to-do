@@ -4,8 +4,8 @@
     {
       "name": "web",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "web"],
-      "port": 8080
+      "runtimeArgs": ["-m", "http.server", "8081", "--directory", "web"],
+      "port": 8081
     }
   ]
 }

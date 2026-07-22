@@ -48,39 +48,57 @@
     -webkit-font-smoothing:antialiased}
   body{overflow:hidden}
 
-  /* 테마 토글 — 우상단 고정. 다크/라이트 전환(설정은 localStorage에 남는다). */
-  .themebtn{position:fixed;top:14px;right:16px;z-index:40;background:var(--panel2);
-    border:1px solid var(--line);color:var(--muted);border-radius:7px;width:30px;height:26px;
-    cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
+  .themebtn{flex:none;background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:7px;width:30px;height:26px;cursor:pointer;font-size:14px;line-height:1;
+    display:flex;align-items:center;justify-content:center}
   .themebtn:hover{border-color:var(--accent);color:var(--accent)}
 
-  /* ───────── 스포틀라이트 (초기 화면) ───────── */
-  #spot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
-    padding:0 20px;z-index:20;background:var(--bg)}
-  #spot.docked{background:transparent}
-  #spot .brand{margin-top:18vh;text-align:center;transition:opacity .15s}
-  #spot .brand h1{margin:0;font-size:26px;letter-spacing:-.4px;font-weight:650}
-  #spot .brand p{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
-  #spot.typing .brand{display:none}
-  #spot.typing{padding-top:6vh}
-  .qwrap{width:100%;max-width:680px;margin-top:26px;position:relative}
-  #spot.typing .qwrap{margin-top:0}
-  #q{width:100%;padding:15px 17px;border-radius:13px;border:1px solid var(--line);
-    background:var(--panel);color:var(--text);font-size:16px;outline:none;
-    box-shadow:0 6px 26px rgba(0,0,0,.35)}
-  #q:focus{border-color:var(--accent)}
-  .hint{margin-top:9px;font-size:11.5px;color:var(--muted);text-align:center}
-  .hint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
-    padding:1px 5px;font-family:inherit;font-size:10.5px}
+  /* ───────── 3단 레이아웃 ─────────
+     왼쪽 사이드바(검색+전체 법령) │ 원문 │ 관계·미리보기.
+     실무 동선이 "찾는다 → 읽는다 → 근거를 확인한다" 라서 셋이 동시에 보여야 한다.
+     화면을 갈아끼우면 어디 있었는지를 매번 다시 찾게 된다. */
+  #app{display:grid;height:100vh;min-height:0;
+    grid-template-columns:320px minmax(0,1fr) 380px;
+    grid-template-areas:"side doc rail"}
+  .side{grid-area:side} .doc{grid-area:doc} .rail{grid-area:rail}
+  .scroll{overflow:auto;min-height:0}
 
-  .results{width:100%;max-width:680px;margin-top:12px;overflow:auto;flex:1;min-height:0;
-    padding-bottom:24px}
-  .ritem{padding:10px 13px;border-radius:10px;cursor:pointer;display:flex;gap:10px;align-items:baseline}
+  /* 좁아지면 먼저 폭을 줄이고, 그래도 안 되면 관계 패널을 원문 아래로 내린다.
+     세 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(실측). */
+  @media (max-width:1180px){
+    #app{grid-template-columns:270px minmax(0,1fr) 300px}
+    .doc{padding:22px 24px 70px}
+  }
+  @media (max-width:920px){
+    #app{grid-template-columns:250px minmax(0,1fr);
+      grid-template-rows:minmax(0,1fr) minmax(0,auto);
+      grid-template-areas:"side doc" "side rail"}
+    .rail{border-left:0;border-top:1px solid var(--line);max-height:40vh}
+    #preview{max-height:none}
+  }
+
+  .side{display:flex;flex-direction:column;min-height:0;
+    border-right:1px solid var(--line);background:var(--panel)}
+  .side header{padding:13px 15px 11px;border-bottom:1px solid var(--line)}
+  .side .htop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .side h1{margin:0;font-size:14.5px;letter-spacing:-.2px;font-weight:650}
+  .side header p{margin:6px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
+  .side header p.warn{color:var(--warn)}
+  .searchbar{padding:11px 13px;border-bottom:1px solid var(--line)}
+  #q{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);font-size:13px;outline:none;font-family:inherit}
+  #q:focus{border-color:var(--accent)}
+  .hint{margin-top:7px;font-size:10.5px;color:var(--muted)}
+  .hint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-family:inherit;font-size:10px}
+
+  .results{padding:6px 8px 20px}
+  .ritem{padding:8px 10px;border-radius:9px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
   .ritem.sel{background:var(--panel2);outline:1px solid var(--line)}
   .ritem:hover{background:var(--panel2)}
   .ritem .dot{width:8px;height:8px;border-radius:50%;flex:none;align-self:center}
   .ritem .main{flex:1;min-width:0}
-  .ritem .ttl{font-size:13.5px}
+  .ritem .ttl{font-size:12.5px}
   .ritem .ttl b{color:var(--accent);font-weight:600}
   .ritem .sub{font-size:11.5px;color:var(--muted);margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -88,23 +106,61 @@
     border-radius:20px;padding:2px 8px;flex:none}
   .none{color:var(--muted);font-size:13px;text-align:center;padding:30px}
 
-  /* ───────── 원문 뷰 ───────── */
-  #reader{position:fixed;inset:0;display:none;grid-template-rows:auto 1fr;z-index:10}
-  #reader.on{display:grid}
-  .topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;
-    border-bottom:1px solid var(--line);background:var(--panel)}
-  .topbar button{background:var(--panel2);border:1px solid var(--line);color:var(--text);
-    border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit}
-  .topbar button:hover{border-color:var(--accent)}
-  .topbar .grow{flex:1;min-width:0}
-  .topbar .metaline{font-size:11px;color:var(--muted);text-align:right;line-height:1.5}
-  .topbar .metaline.warn{color:var(--wimim)}
+  /* ───────── 브라우즈 (검색어 없을 때) ───────── */
+  /* 사이드바는 평소엔 전체 법령 목록, 검색어를 치면 결과로 바뀐다. 자리는 하나다. */
+  #browse{padding:2px 8px 24px}
+  #app.searching #browse{display:none}
+  #app:not(.searching) .results{display:none}
+  .bsec{font-size:10.5px;letter-spacing:.6px;color:var(--muted);font-weight:600;
+    text-transform:uppercase;padding:14px 4px 6px}
+  .bempty{color:var(--muted);font-size:12px;padding:2px 6px 8px;line-height:1.6}
 
-  .cols{display:grid;grid-template-columns:1fr 380px;min-height:0}
-  .doc{overflow:auto;padding:26px 34px 60px}
+  /* 즐겨찾기 */
+  .fav{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:9px;cursor:pointer}
+  .fav:hover{background:var(--panel2)}
+  .fav .lbl{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fav .sub{font-size:11px;color:var(--muted);flex:none}
+
+  /* ★ 토글 — 트리 행과 원문 제목에 함께 쓴다 */
+  .star{flex:none;background:none;border:none;cursor:pointer;font-size:13px;line-height:1;
+    color:var(--line);padding:2px 4px;font-family:inherit}
+  .star:hover{color:var(--ye)}
+  .star.on{color:var(--ye)}
+  h2 .star{font-size:18px;vertical-align:middle;margin-left:8px}
+
+  /* ── 계단형 트리 ── */
+  .trow{display:flex;align-items:center;gap:5px;padding:4px 6px 4px 0;cursor:pointer;
+    font-size:12.5px;line-height:1.35;border-left:2px solid transparent;white-space:nowrap;
+    overflow:hidden;border-radius:0 7px 7px 0}
+  .trow:hover{background:var(--panel2)}
+  .trow.on{background:var(--panel2);border-left-color:var(--accent)}
+  .arrow{flex:none;width:12px;text-align:center;color:var(--muted);font-size:9px}
+  .lbl{overflow:hidden;text-overflow:ellipsis}
+  .cnt{flex:none;color:var(--muted);font-size:10.5px;padding-left:8px}
+  .trow .star{margin-left:auto}
+  .trow.group{font-size:10.5px;letter-spacing:.6px;color:var(--muted);
+    text-transform:uppercase;font-weight:600}
+  .trow.doc .lbl{font-weight:500}
+  .trow.chap{color:var(--faint);font-weight:600;font-size:12px}
+  .trow.leaf{font-size:12px}
+  .trow.leaf .lbl{color:var(--text2)}
+  .trow .tdot{flex:none;width:7px;height:7px;border-radius:2px}
+  .tdot.법률{background:var(--law)} .tdot.시행령{background:var(--ord)}
+  .tdot.시행규칙{background:var(--rule)} .tdot.계약예규{background:var(--ye)}
+  .tdot.훈령,.tdot.예규,.tdot.지침,.tdot.고시,.tdot.공고,.tdot.행정규칙{background:var(--adm)}
+  .tchildren[hidden]{display:none}
+
+  /* ───────── 원문 (가운데) ───────── */
+  .doc{padding:26px 34px 80px}
   .doc .crumb{font-size:12px;color:var(--muted)}
   .doc h2{margin:6px 0 2px;font-size:22px;letter-spacing:-.3px}
   .doc .subt{font-size:13px;color:var(--muted)}
+  .doc .backline{margin-bottom:14px}
+  .doc .backline button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-family:inherit}
+  .doc .backline button:hover{border-color:var(--accent);color:var(--text)}
+  .blank{color:var(--muted);font-size:13px;padding:60px 34px;line-height:1.8;max-width:52ch}
+  .blank b{color:var(--text);font-weight:600}
   .stamp{margin-top:10px;font-size:11px;color:var(--muted);padding:4px 9px;
     border-radius:6px;background:var(--panel2);display:inline-block}
   .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
@@ -128,9 +184,28 @@
   table.ann td:last-child{white-space:nowrap;color:var(--muted)}
   table.ann tbody tr:nth-child(2n){background:var(--zebra)}
 
-  .side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
-  .side h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
+  /* ───────── 관계·미리보기 (오른쪽) ───────── */
+  .rail{border-left:1px solid var(--line);background:var(--panel);
+    display:flex;flex-direction:column;min-height:0}
+  .rail h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
     text-transform:uppercase;letter-spacing:.6px}
+
+  /* 인용 미리보기 — 본문을 갈아끼우지 않고 옆에서 확인한다.
+     "이게 무슨 조문이더라" 확인하려고 읽던 자리를 잃는 게 이 도구의 가장 흔한 짜증이다. */
+  #preview{display:none;flex-direction:column;min-height:0;
+    border-bottom:1px solid var(--line);max-height:58%}
+  #preview.on{display:flex}
+  .pvhead{display:flex;align-items:center;gap:8px;padding:10px 13px 8px;
+    border-bottom:1px solid var(--divider)}
+  .pvhead .t{flex:1;min-width:0;font-size:12.5px;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pvhead button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex:none}
+  .pvhead button:hover{border-color:var(--accent);color:var(--text)}
+  .pvbody{overflow:auto;padding:10px 14px 16px;font-size:12.5px;line-height:1.8;
+    color:var(--text2);white-space:pre-wrap;min-height:0}
+  .pvbody .sub{color:var(--muted);font-size:11px;display:block;margin-bottom:6px}
+
   .rel{font-size:12.5px;padding:7px 15px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
   .rel:hover{background:var(--panel2)}
   .rel .k{font-size:9.5px;padding:1px 6px;border-radius:20px;flex:none}
@@ -145,38 +220,41 @@
 </head>
 <body>
 
-<button id="themeBtn" class="themebtn" type="button"></button>
-
-<!-- 검색 (초기 화면 = 본체) -->
-<div id="spot">
-  <div class="brand">
-    <h1>몇 조항이더라</h1>
-    <p id="meta"></p>
-  </div>
-  <div class="qwrap">
-    <input id="q" autocomplete="off" spellcheck="false"
-      placeholder="조문·키워드 검색   예) 수의계약 · 7조 보증금 · ㅅㅇㄱㅇ" />
-  </div>
-  <div class="hint" id="hint">
-    <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 원문 · <kbd>Esc</kbd> 닫기 · 초성 검색 가능
-  </div>
-  <div class="results" id="results"></div>
-</div>
-
-<!-- 원문 -->
-<div id="reader">
-  <div class="topbar">
-    <button id="back">← 뒤로</button>
-    <button id="tosearch">검색 <kbd>/</kbd></button>
-    <div class="grow"></div>
-    <div class="metaline" id="rmeta"></div>
-  </div>
-  <div class="cols">
-    <div class="doc" id="doc"></div>
-    <div class="side">
-      <div id="rels"></div>
+<div id="app">
+  <!-- ① 왼쪽: 검색창 하나 + 전체 법령 -->
+  <aside class="side">
+    <header>
+      <div class="htop">
+        <h1>몇 조항이더라</h1>
+        <button id="themeBtn" class="themebtn" type="button"></button>
+      </div>
+      <p id="meta"></p>
+    </header>
+    <div class="searchbar">
+      <input id="q" autocomplete="off" spellcheck="false"
+        placeholder="조문·키워드 검색  예) 수의계약 · 7조 · ㅅㅇㄱㅇ" />
+      <div class="hint" id="hint">
+        <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · 초성 검색 가능
+      </div>
     </div>
-  </div>
+    <div class="scroll">
+      <div class="results" id="results"></div>
+      <!-- 검색어가 없을 때: 즐겨찾기 + 전체 법령 계단형 -->
+      <div id="browse">
+        <div id="favs"></div>
+        <div id="tree"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ② 가운데: 원문 -->
+  <main class="doc scroll" id="doc"></main>
+
+  <!-- ③ 오른쪽: 인용 미리보기 + 관계 조문 -->
+  <aside class="rail">
+    <div id="preview"></div>
+    <div class="scroll" id="rels"></div>
+  </aside>
 </div>
 
 <script>
@@ -187,6 +265,9 @@ const GRAPH = /*__GRAPH__*/;
 </script>
 <script>
 /*__ANNEX__*/
+</script>
+<script>
+/*__FAVS__*/
 </script>
 <script>
 (function(){
@@ -233,15 +314,14 @@ const GRAPH = /*__GRAPH__*/;
     }
     return p.join(' · ');
   })();
-  document.getElementById('meta').textContent=metaText;
-  const rmeta=document.getElementById('rmeta');
-  rmeta.textContent=metaText;
-  if(v&&v.낡음>0)rmeta.classList.add('warn');
+  const metaEl=document.getElementById('meta');
+  metaEl.textContent=metaText;
+  if(v&&v.낡음>0)metaEl.classList.add('warn');
 
   // ───────── 검색 ─────────
   const idx=LawSearch.create(nodes);
   const q=document.getElementById('q'), results=document.getElementById('results');
-  const spot=document.getElementById('spot'), hint=document.getElementById('hint');
+  const app=document.getElementById('app'), hint=document.getElementById('hint');
   let hits=[], cur=0;
 
   function highlight(text,raw){
@@ -276,8 +356,7 @@ const GRAPH = /*__GRAPH__*/;
 
   function doSearch(){
     const s=q.value.trim();
-    spot.classList.toggle('typing',!!s);
-    hint.style.display=s?'none':'';
+    app.classList.toggle('searching',!!s); // 사이드바 한 자리를 목록↔결과로 갈아끼운다
     hits=s?idx.search(s,60):[];
     cur=0;
     renderResults();
@@ -288,9 +367,166 @@ const GRAPH = /*__GRAPH__*/;
     open(hits[+it.dataset.i].node.id);
   });
 
+  // ───────── 즐겨찾기 ─────────
+  // 별을 누르는 곳이 세 군데(트리 행·원문 제목·즐겨찾기 목록)라 상태를 한곳에서 돌려준다.
+  const favsEl=document.getElementById('favs');
+
+  function paintStar(b,on){
+    b.classList.toggle('on',on);
+    b.textContent=on?'★':'☆';
+    b.title=on?'즐겨찾기 해제':'즐겨찾기';
+  }
+  function starBtn(id){
+    const b=document.createElement('button');
+    b.className='star'; b.type='button'; b.dataset.star=id;
+    paintStar(b,LawFavs.has(id));
+    // 핸들러를 버튼이 직접 갖는다. document 위임으로 하면 트리 행의 자체 리스너가
+    // 먼저 실행돼(버블 순서: 버튼 → 행 → document) 별을 눌러도 원문이 열려버린다.
+    b.addEventListener('click',e=>{
+      e.preventDefault(); e.stopPropagation();
+      LawFavs.toggle(id);
+      syncStars(id);
+      renderFavs(); // 목록만 다시 그린다 — 트리를 재렌더하면 펼침 상태가 날아간다
+    });
+    return b;
+  }
+  /** 같은 노드의 별이 여러 곳(트리·원문·목록)에 떠 있을 수 있어 한꺼번에 맞춘다. */
+  function syncStars(id){
+    const on=LawFavs.has(id);
+    document.querySelectorAll(`[data-star="${CSS.escape(id)}"]`).forEach(b=>paintStar(b,on));
+  }
+
+  function favRow(n){
+    const d=document.createElement('div');
+    d.className='fav'; d.dataset.go=n.id;
+    const dot=document.createElement('span');
+    dot.className='tdot '+(n.type||''); d.appendChild(dot);
+    const l=document.createElement('span');
+    l.className='lbl';
+    l.textContent=n.kind==='법령'?(n.label||n.name):`${n.group||''} ${n.label}`.trim();
+    d.appendChild(l);
+    if(n.kind!=='법령'&&n.title){
+      const s=document.createElement('span'); s.className='sub'; s.textContent=n.title; d.appendChild(s);
+    }
+    d.appendChild(starBtn(n.id));
+    return d;
+  }
+  function renderFavs(){
+    const g=LawFavs.grouped(byId);
+    favsEl.innerHTML='';
+    const total=g.법.length+g.조.length+g.별표.length;
+    const head=document.createElement('div');
+    head.className='bsec'; head.textContent=`즐겨찾기${total?` (${total})`:''}`;
+    favsEl.appendChild(head);
+    if(!total){
+      const e=document.createElement('div');
+      e.className='bempty';
+      e.textContent='아래 목록이나 원문에서 ☆ 를 누르면 법·조 단위로 여기에 모입니다.';
+      favsEl.appendChild(e);
+      return;
+    }
+    [...g.법,...g.조,...g.별표].forEach(n=>favsEl.appendChild(favRow(n)));
+  }
+
+  // ───────── 계단형 트리 ─────────
+  // 법령 › 장 › 조. 장이 없는 문서(행정규칙 등)는 장 단계를 건너뛴다.
+  const treeEl=document.getElementById('tree');
+  const laws=nodes.filter(n=>n.kind==='법령');
+  // 법령 노드 id 는 "law:nca" 지만 조문·별표가 들고 있는 lawId 는 "nca" 다 (접두사 없음).
+  const rawId=id=>String(id).replace(/^law:/,'');
+  const unitsOf=id=>{const r=rawId(id);
+    return nodes.filter(n=>(n.kind==='조문'||n.kind==='별표')&&n.lawId===r);};
+
+  const isLaw=n=>['법률','시행령','시행규칙'].includes(n.type);
+  const byLabel=(a,b)=>String(a.label).localeCompare(String(b.label),'ko');
+  const typeRank={법률:0,시행령:1,시행규칙:2};
+  const lawDocs=laws.filter(isLaw).sort((a,b)=>
+    a.family===b.family?(typeRank[a.type]-typeRank[b.type]||byLabel(a,b))
+                       :String(a.family).localeCompare(String(b.family)));
+  const GROUPS=[
+    {key:'법령',docs:lawDocs},
+    {key:'계약예규',docs:laws.filter(n=>n.type==='계약예규').sort(byLabel)},
+    {key:'조달청 행정규칙',docs:laws.filter(n=>!isLaw(n)&&n.type!=='계약예규').sort(byLabel)},
+  ];
+
+  let curRow=null;
+  function markRow(row){ if(curRow)curRow.classList.remove('on'); curRow=row; if(row)row.classList.add('on'); }
+
+  /** 접었다 폈다 하는 한 계단. 자식은 처음 펼칠 때 만든다(1,500노드를 한 번에 그리지 않는다). */
+  function step(depth,{cls,dot,label,cnt,favId,expandable,onOpen,build}){
+    const wrap=document.createElement('div');
+    const row=document.createElement('div');
+    row.className='trow '+(cls||'');
+    row.style.paddingLeft=(depth*15+8)+'px';
+    const arrow=document.createElement('span');
+    arrow.className='arrow'; arrow.textContent=expandable?'▶':'';
+    row.appendChild(arrow);
+    if(dot!=null){const t=document.createElement('span');t.className='tdot '+dot;row.appendChild(t);}
+    const l=document.createElement('span'); l.className='lbl'; l.textContent=label; row.appendChild(l);
+    if(cnt!=null){const c=document.createElement('span');c.className='cnt';c.textContent=cnt;row.appendChild(c);}
+    if(favId)row.appendChild(starBtn(favId));
+    const kids=document.createElement('div'); kids.className='tchildren'; kids.hidden=true;
+    let open_=false,built=false;
+    function toggle(force){
+      open_=force==null?!open_:force; kids.hidden=!open_;
+      arrow.textContent=expandable?(open_?'▼':'▶'):'';
+      if(open_&&!built&&build){built=true;build(kids);}
+    }
+    arrow.addEventListener('click',e=>{e.stopPropagation();if(expandable)toggle();});
+    row.addEventListener('click',()=>{ if(onOpen)onOpen(row); if(expandable&&!open_)toggle(true); });
+    wrap.append(row,kids);
+    wrap._toggle=toggle;
+    return wrap;
+  }
+
+  function unitStep(u,depth){
+    return step(depth,{cls:'leaf',label:u.title?`${u.label} ${u.title}`:u.label,
+      favId:u.id,expandable:false,onOpen:row=>{markRow(row);open(u.id);}});
+  }
+  function docStep(d,depth){
+    const units=unitsOf(d.id);
+    const arts=units.filter(u=>u.kind==='조문');
+    const byls=units.filter(u=>u.kind==='별표');
+    return step(depth,{
+      cls:'doc',dot:d.type,label:d.label,favId:d.id,
+      cnt:`${arts.length}조${byls.length?`·별표${byls.length}`:''}`,
+      expandable:units.length>0,
+      onOpen:row=>{markRow(row);open(d.id);},
+      build:box=>{
+        // 장이 있으면 한 계단 더 — 시행령 153조를 평평하게 늘어놓으면 못 찾는다.
+        let chap=null,bucket=null;
+        for(const a of arts){
+          if(a.chapter&&a.chapter!==chap){
+            chap=a.chapter;
+            const items=arts.filter(x=>x.chapter===chap);
+            const node=step(depth+1,{cls:'chap',label:chap,cnt:`${items.length}조`,expandable:true,
+              build:b=>items.forEach(x=>b.appendChild(unitStep(x,depth+2)))});
+            box.appendChild(node); bucket=chap;
+            continue;
+          }
+          if(a.chapter&&a.chapter===bucket)continue; // 위에서 통째로 담았다
+          box.appendChild(unitStep(a,depth+1));
+        }
+        byls.forEach(b=>box.appendChild(unitStep(b,depth+1)));
+      },
+    });
+  }
+  function renderTree(){
+    treeEl.innerHTML='';
+    GROUPS.forEach(g=>{
+      if(!g.docs.length)return;
+      const head=document.createElement('div');
+      head.className='bsec'; head.textContent=`${g.key} (${g.docs.length})`;
+      treeEl.appendChild(head);
+      g.docs.forEach(d=>treeEl.appendChild(docStep(d,0)));
+    });
+  }
+
+  renderFavs();
+  renderTree();
+
   // ───────── 원문 뷰 ─────────
-  const reader=document.getElementById('reader'), docEl=document.getElementById('doc'),
-        relsEl=document.getElementById('rels');
+  const docEl=document.getElementById('doc'), relsEl=document.getElementById('rels');
   const stack=[];
   let focusId=null;
 
@@ -371,6 +607,10 @@ const GRAPH = /*__GRAPH__*/;
       ${n.kind==='법령'&&n.name?`<div class="subt">${esc(n.name)}</div>`:''}
       ${stamp}
       ${bodyHtml}`;
+    // 제목 옆 ★ — 읽다가 바로 담을 수 있어야 한다. 외부법 스텁은 담을 게 없어 제외.
+    if(n.kind==='법령'||n.kind==='조문'||n.kind==='별표'){
+      const h=docEl.querySelector('h2'); if(h)h.appendChild(starBtn(n.id));
+    }
     const cp=docEl.querySelector('.copymd');
     if(cp)cp.onclick=()=>{navigator.clipboard?.writeText(AnnexTable.toMarkdown(AnnexTable.parse(n.text)));
       cp.textContent='복사됨';setTimeout(()=>cp.textContent='표 마크다운 복사',1500);};
@@ -381,45 +621,87 @@ const GRAPH = /*__GRAPH__*/;
       (i.length?`<h3>이곳을 가리키는 것 (${i.length})</h3>`+i.map(e=>relRow(e,'in')).join(''):'')+
       (!o.length&&!i.length?'<div class="relempty">연결된 관계가 없습니다.</div>':'');
 
-    reader.classList.add('on');
-    spot.style.display='none';
-    document.getElementById('back').style.visibility=stack.length?'visible':'hidden';
+    closePreview(); // 본문이 바뀌면 옆 미리보기는 남의 맥락이 된다
+    renderBack();
   }
 
+  function renderBack(){
+    const old=docEl.querySelector('.backline');
+    if(old)old.remove();
+    if(!stack.length)return;
+    const prev=byId.get(stack[stack.length-1]);
+    const line=document.createElement('div');
+    line.className='backline';
+    const b=document.createElement('button');
+    b.type='button';
+    b.textContent=`← ${prev?nameOf(prev):'뒤로'}`;
+    b.onclick=()=>{const p=stack.pop(); if(p)open(p,false);};
+    line.appendChild(b);
+    docEl.insertBefore(line,docEl.firstChild);
+  }
+
+  // ───────── 인용 미리보기 ─────────
+  // 인용을 눌렀다고 읽던 화면을 통째로 갈아끼우면, 확인하고 돌아왔을 때 어디였는지를 잃는다.
+  // 그래서 기본 동작은 "옆에서 열기"다. 본문으로 옮기고 싶으면 명시적으로 누른다.
+  const pvEl=document.getElementById('preview');
+  function closePreview(){ pvEl.classList.remove('on'); pvEl.innerHTML=''; }
+  function preview(id){
+    const n=byId.get(id); if(!n)return;
+    if(n.id===focusId)return; // 지금 보고 있는 것을 옆에 또 띄우지 않는다
+    pvEl.innerHTML='';
+
+    const head=document.createElement('div'); head.className='pvhead';
+    const t=document.createElement('span'); t.className='t'; t.textContent=nameOf(n);
+    const go=document.createElement('button'); go.type='button'; go.textContent='본문으로';
+    go.onclick=()=>open(n.id);
+    const x=document.createElement('button'); x.type='button'; x.textContent='✕'; x.title='닫기';
+    x.onclick=closePreview;
+    head.append(t,go,x);
+    if(n.kind==='법령'||n.kind==='조문'||n.kind==='별표')head.insertBefore(starBtn(n.id),go);
+
+    const body=document.createElement('div'); body.className='pvbody';
+    if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
+    body.appendChild(document.createTextNode(
+      n.text||'원문 없음 — 이 노드는 법령/외부법 단위입니다.'));
+
+    pvEl.append(head,body);
+    pvEl.classList.add('on');
+  }
+
+  // 인용 링크(.cite)는 미리보기로, 그 밖의 [data-go](검색결과·트리·관계·즐겨찾기)는 본문으로.
   document.addEventListener('click',e=>{
     const g=e.target.closest('[data-go]');
-    if(g){ open(g.dataset.go); }
+    if(!g)return;
+    if(g.classList.contains('cite'))preview(g.dataset.go);
+    else open(g.dataset.go);
   });
-  document.getElementById('back').onclick=()=>{
-    const prev=stack.pop(); if(prev)open(prev,false);
-    document.getElementById('back').style.visibility=stack.length?'visible':'hidden';
-  };
-  document.getElementById('tosearch').onclick=toSearch;
-  function toSearch(){
-    reader.classList.remove('on');
-    spot.style.display='';
-    q.focus(); q.select();
-  }
+  function toSearch(){ q.focus(); q.select(); }
 
   // ───────── 키보드 ─────────
   document.addEventListener('keydown',e=>{
     // 한글 IME 조합 중의 Enter 는 "조합 확정"이지 "선택"이 아니다.
     // 이걸 거르지 않으면 "수의계약" 치고 Enter 한 번에 엉뚱한 항목이 열린다.
     if(e.isComposing||e.keyCode===229)return;
-    const inReader=reader.classList.contains('on');
     if(e.key==='/'&&document.activeElement!==q){e.preventDefault();toSearch();return;}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();toSearch();return;}
     if(e.key==='Escape'){
-      if(inReader){toSearch();}
-      else if(q.value){q.value='';doSearch();}
+      // 미리보기가 떠 있으면 그것부터 닫는다 → 그다음 검색어를 비운다
+      if(pvEl.classList.contains('on')){closePreview();return;}
+      if(q.value){q.value='';doSearch();q.focus();}
       return;
     }
-    if(inReader)return;
     if(!hits.length)return;
+    if(document.activeElement!==q)return; // 목록 이동은 검색창에 있을 때만
     if(e.key==='ArrowDown'){e.preventDefault();cur=Math.min(cur+1,hits.length-1);renderResults();}
     else if(e.key==='ArrowUp'){e.preventDefault();cur=Math.max(cur-1,0);renderResults();}
     else if(e.key==='Enter'){e.preventDefault();open(hits[cur].node.id);}
   });
+
+  // 시작 화면 — 빈 원문 자리에 무엇을 하면 되는지만 적어둔다.
+  docEl.innerHTML='<div class="blank">왼쪽 <b>검색창</b>에 조문·키워드를 치거나, '+
+    '아래 <b>전체 법령</b>에서 조문까지 펼쳐 여세요.<br><br>'+
+    '조문을 열면 오른쪽에 <b>관계 조문</b>(위임·인용)이 함께 뜹니다. '+
+    '본문 속 인용을 누르면 화면을 옮기지 않고 <b>옆에서 미리보기</b>로 확인합니다.</div>';
 
   q.focus();
 })();

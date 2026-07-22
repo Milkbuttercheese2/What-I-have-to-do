@@ -49,14 +49,31 @@ async function getJson(path, params) {
     throw new LawApiError(`HTTP ${res.status} — ${path}`, { url: url.href, status: res.status, body: body.slice(0, 300) });
   }
   // 인증 실패 시 법제처는 200 + HTML 안내페이지를 준다. JSON 파싱 실패로 잡는다.
+  let json;
   try {
-    return JSON.parse(body);
+    json = JSON.parse(body);
   } catch {
     const hint = /OC|인증|등록|권한/.test(body)
       ? " (OC 인증 실패로 보입니다. 법제처에 등록한 이메일 앞부분이 맞는지, 해당 OC로 API 신청이 승인됐는지 확인하세요.)"
       : "";
     throw new LawApiError(`JSON 이 아닌 응답 — ${path}${hint}`, { url: url.href, status: res.status, body: body.slice(0, 300) });
   }
+
+  // ...그런데 **유효한 JSON 으로** 인증 실패를 주는 경로도 있다:
+  //   { "result": "사용자 정보 검증에 실패하였습니다.", "msg": "...IP주소 및 도메인주소를 등록해 주세요." }
+  // HTTP 200 + 파싱 성공이라 위 그물을 그대로 빠져나간다. 그러면 열거 API 는 빈 배열을 반환하고
+  // 수집기는 "0/0종 → 신규 0종" 만 찍고 성공으로 끝난다 — 아무것도 못 받았는데 성공처럼 보인다.
+  // 조용한 실패는 이 도구에서 가장 위험한 실패다(AGENTS.md 원칙 6). 여기서 끊는다.
+  if (json && typeof json.result === "string") {
+    throw new LawApiError(
+      `법제처가 요청을 거부했습니다 — ${path}\n  ${json.result}` +
+        (json.msg ? `\n  ${json.msg}` : "") +
+        "\n  · OC 는 법제처에 등록한 이메일의 @ 앞부분입니다(예: hong). 서비스키·UUID 가 아닙니다." +
+        "\n  · 오픈API 신청 시 등록한 서버 IP/도메인에서만 호출이 허용됩니다.",
+      { url: url.href, status: res.status, body: body.slice(0, 300) },
+    );
+  }
+  return json;
 }
 
 // ── 응답 정규화 ────────────────────────────────────────────────────────────
