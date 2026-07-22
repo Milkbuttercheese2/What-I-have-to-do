@@ -42,7 +42,15 @@ if (g.meta.확인요약?.현행 > 0) {
   console.log(`✅ 노드 스탬프 ${stamped}/${g.nodes.length}`);
 }
 
-// 2) 인라인 스크립트 문법
+// 2) 검색 런타임이 인라인됐는가 (별도 파일이라 치환 실패해도 조용히 넘어갈 수 있다)
+if (!/var LawSearch\s*=/.test(html)) fail("검색 런타임이 인라인되지 않았습니다 (검색 자리표시자 치환 실패).");
+if (!/var AnnexTable\s*=/.test(html)) fail("별표 표 변환기가 인라인되지 않았습니다 (표 자리표시자 치환 실패).");
+if (!/var LawFavs\s*=/.test(html)) fail("즐겨찾기 모듈이 인라인되지 않았습니다 (즐겨찾기 자리표시자 치환 실패).");
+if (!/var LawNotes\s*=/.test(html)) fail("법률노트 모듈이 인라인되지 않았습니다 (노트 자리표시자 치환 실패).");
+if (/\bSEARCH__\b|\bANNEX__\b|\bFAVS__\b|\bNOTES__\b/.test(html)) fail("치환되지 않은 자리표시자가 남아 있습니다.");
+console.log("✅ 검색 런타임 인라인");
+
+// 3) 인라인 스크립트 문법
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((x) => x[1]);
 scripts.forEach((s, i) => {
   try {
@@ -53,7 +61,7 @@ scripts.forEach((s, i) => {
 });
 console.log(`✅ 인라인 스크립트 ${scripts.length}개 문법 OK`);
 
-// 3) 외부 의존성 0 — 폐쇄망에서 깨지는 가장 흔한 원인
+// 4) 외부 의존성 0 — 폐쇄망에서 깨지는 가장 흔한 원인
 const ext = html.match(/(?:src|href)\s*=\s*["'](?:https?:)?\/\//gi);
 if (ext) fail(`외부 리소스 참조 ${ext.length}건: ${[...new Set(ext)].join(", ")}`);
 const fetches = html.match(/\b(?:fetch|XMLHttpRequest|WebSocket|importScripts)\s*\(/g);

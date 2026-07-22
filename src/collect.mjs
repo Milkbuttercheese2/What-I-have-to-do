@@ -1,4 +1,4 @@
-// LawEverything — 수집: seed.json → 법제처 오픈API → data/snapshot.json
+// 몇 조항이더라 — 수집: seed.json → 법제처 오픈API → data/snapshot.json
 //
 // 온라인 빌드 단계의 첫 걸음. 인터넷 PC에서 실행한다.
 //   node src/collect.mjs            수집 (캐시 있으면 재사용)
@@ -53,6 +53,9 @@ async function cached(id, fn) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** 별표는 조달 실무의 핵심(제재기준·심사표)이라 수집 로그에 따로 드러낸다. */
+const annexNote = (d) => (d.annexes?.length ? ` · 별표/서식 ${d.annexes.length}` : "");
+
 async function main() {
   loadDotEnv();
 
@@ -98,9 +101,9 @@ async function main() {
           공포일: data.공포일 ?? null,
         },
         articles: data.articles,
-        ...(data.별표?.length ? { 별표: data.별표 } : {}),
+        annexes: data.annexes ?? [],
       });
-      console.log(`  ✅ ${l.shortName} — ${data.articles.length}개 조문${data._cached ? " (캐시)" : ""}`);
+      console.log(`  ✅ ${l.shortName} — ${data.articles.length}개 조문${annexNote(data)}${data._cached ? " (캐시)" : ""}`);
     } catch (e) {
       failures.push({ id: l.id, name: l.shortName, error: e.message });
       console.error(`  ❌ ${l.shortName} — ${e.message}`);
@@ -152,8 +155,6 @@ async function main() {
         parent: null,
         aliases: [r.shortName],
         source: { kind: "admrul", seq: r.seq, ruleId: r.ruleId },
-        // 별표(표 내용 + HWP/PDF 링크). 조문 텍스트엔 없는 별표를 리더에서 테이블로 렌더한다.
-        ...(data.별표?.length ? { 별표: data.별표 } : {}),
         // 본문에 위임근거가 없는 문서용 수기 매핑 (seed.json). 있으면 추출기가 최우선으로 쓴다.
         ...(r.위임근거 ? { 위임근거: r.위임근거 } : {}),
         verification: {
@@ -165,8 +166,10 @@ async function main() {
           발령일: data.발령일 ?? null,
         },
         articles: data.articles,
+        // 별표(본문 텍스트). 조문 텍스트엔 없는 별표를 리더에서 테이블로 렌더한다.
+        annexes: data.annexes ?? [],
       });
-      console.log(`  ✅ ${r.shortName} — ${data.articles.length}개 조문${data._cached ? " (캐시)" : ""}`);
+      console.log(`  ✅ ${r.shortName} — ${data.articles.length}개 조문${annexNote(data)}${data._cached ? " (캐시)" : ""}`);
     } catch (e) {
       failures.push({ id: r.id, name: r.shortName, error: e.message });
       console.error(`  ❌ ${r.shortName} — ${e.message}`);
@@ -181,6 +184,7 @@ async function main() {
       source: "법제처 국가법령정보 오픈API",
       documents: documents.length,
       articles: documents.reduce((n, d) => n + d.articles.length, 0),
+      annexes: documents.reduce((n, d) => n + (d.annexes?.length ?? 0), 0),
     },
     documents,
   };
@@ -188,7 +192,7 @@ async function main() {
   writeFileSync(join(root, "data/snapshot.json"), JSON.stringify(snapshot, null, 2));
 
   console.log(`\n수집 완료 → data/snapshot.json`);
-  console.log(`  문서 ${snapshot.meta.documents} · 조문 ${snapshot.meta.articles}`);
+  console.log(`  문서 ${snapshot.meta.documents} · 조문 ${snapshot.meta.articles} · 별표/서식 ${snapshot.meta.annexes}`);
   if (failures.length) {
     console.log(`\n⚠️  실패 ${failures.length}건:`);
     for (const f of failures) console.log(`  · ${f.name} — ${f.error}`);

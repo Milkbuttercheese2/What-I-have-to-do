@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LawEverything — 조달 법령 원문 리더</title>
+<title>몇 조항이더라 — 조달 법령 즉시검색</title>
 <script>
   /* 페인트 전에 테마 확정(플래시 방지): 저장값 → 없으면 시스템 설정 */
   (function(){try{
@@ -21,6 +21,9 @@
     --accent:#5bb3a6; --warn:#f6a94a;
     --hl:rgba(91,179,166,.14); --marktint:rgba(91,179,166,.34);
     --law:#5bb3a6; --ord:#5cc8ff; --rule:#7fd6a0; --ye:#e7c98a; --adm:#c79bf0;
+    /* 관계 배지 색 — 위임=경고색, 인용=시행령색 계열로 맞춘다 */
+    --wimim:var(--warn); --inyong:var(--ord); --sosok:#39425a;
+    --zebra:rgba(255,255,255,.02);
   }
   :root[data-theme="light"]{
     color-scheme:light;
@@ -30,6 +33,8 @@
     --accent:#4d938a; --warn:#b26a1f;
     --hl:rgba(77,147,138,.10); --marktint:rgba(77,147,138,.22);
     --law:#4d938a; --ord:#3e6fa8; --rule:#2c7a4b; --ye:#b07d24; --adm:#7a45b0;
+    --wimim:var(--warn); --inyong:var(--ord); --sosok:#d8dde3;
+    --zebra:rgba(0,0,0,.025);
   }
   /* Pretendard 가변폰트 — 로컬 번들(빌드 시 data-URI로 임베드). 외부 웹폰트 금지(내부망). */
   @font-face{
@@ -41,105 +46,428 @@
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:'Pretendard','Malgun Gothic','맑은 고딕',system-ui,-apple-system,sans-serif;
     -webkit-font-smoothing:antialiased}
-  .num{font-variant-numeric:tabular-nums}
-  #app{display:grid;grid-template-columns:340px 1fr;height:100vh;min-height:0}
-  .side{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
-  .scroll{overflow:auto;flex:1;min-height:0}
-  header{padding:13px 15px;border-bottom:1px solid var(--line)}
-  header .htop{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  header h1{margin:0;font-size:14px;letter-spacing:.2px}
+  body{overflow:hidden}
+
   .themebtn{flex:none;background:var(--panel2);border:1px solid var(--line);color:var(--muted);
-    border-radius:7px;width:30px;height:26px;cursor:pointer;font-size:14px;line-height:1;display:flex;
-    align-items:center;justify-content:center}
+    border-radius:7px;width:30px;height:26px;cursor:pointer;font-size:14px;line-height:1;
+    display:flex;align-items:center;justify-content:center}
   .themebtn:hover{border-color:var(--accent);color:var(--accent)}
-  header p{margin:5px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
-  header p.warn{color:var(--warn)}
-  .search{padding:11px 13px;border-bottom:1px solid var(--line)}
-  .search input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
-    background:var(--panel2);color:var(--text);font-size:13px;outline:none}
-  .search input:focus{border-color:var(--accent)}
+
+  /* ───────── 4단 레이아웃 ─────────
+     ① 검색·선택 │ ② 원문 │ ③ 관계 법령 │ ④ 법령노트
+     실무 동선이 "찾는다 → 읽는다 → 근거를 확인한다 → 적어둔다" 라서 넷이 동시에 보여야 한다.
+     화면을 갈아끼우면 어디 있었는지를 매번 다시 찾게 된다. */
+  /* 원문(②)만 고정이다. 나머지 셋은 접힌다 — 접으면 그 폭이 전부 원문으로 간다.
+     완전히 숨기지 않고 36px 띠로 남긴다. 사라지면 다시 여는 법을 못 찾는다. */
+  #app{display:grid;height:100vh;min-height:0;
+    --w1:300px; --wcol:330px; --w3:var(--wcol); --w4:var(--wcol);
+    grid-template-columns:var(--w1) minmax(0,1fr) var(--w3) var(--w4);
+    grid-template-areas:"side doc rail note"}
+  #app.off1{--w1:36px} #app.off3{--w3:36px} #app.off4{--w4:36px}
+  /* ③④ 는 짝이다. 하나를 접으면 남은 하나가 그 자리를 가져간다 —
+     원문은 그대로 두고 옆 칸끼리만 주고받는다. 둘 다 접으면 둘 다 원문에 내준다. */
+  #app.off3:not(.off4){--w4:calc(var(--wcol)*2 - 36px)}
+  #app.off4:not(.off3){--w3:calc(var(--wcol)*2 - 36px)}
+  .side{grid-area:side} .doc{grid-area:doc}
+  .rail{grid-area:rail} .notecol{grid-area:note}
+  .side,.rail,.notecol{position:relative}
+  .scroll{overflow:auto;min-height:0}
+
+  /* 접기 버튼은 헤더 안에 **다른 요소와 나란히** 놓는다.
+     절대배치로 얹었다가 테마 버튼·미리보기 버튼을 그대로 덮어버렸다(실측 13×16, 15×19). */
+  .colbtn{flex:none;width:20px;height:20px;background:var(--panel2);
+    border:1px solid var(--line);color:var(--muted);border-radius:5px;cursor:pointer;
+    font-size:10px;line-height:1;padding:0;display:flex;align-items:center;
+    justify-content:center;font-family:inherit}
+  .colbtn:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* 접히면 칸 전체가 세로 라벨 하나가 된다 — 라벨 자체가 펼치기 버튼이다.
+     별도 버튼을 띄우면 36px 안에서 또 겹친다. */
+  .colstrip{display:none;flex:1;align-items:center;justify-content:center;
+    writing-mode:vertical-rl;text-orientation:mixed;font-size:11px;color:var(--muted);
+    letter-spacing:2px;cursor:pointer;user-select:none;white-space:nowrap}
+  .colstrip:hover{color:var(--accent);background:var(--panel2)}
+  #app.off1 .side > *:not(.colstrip),
+  #app.off3 .rail > *:not(.colstrip),
+  #app.off4 .notecol > *:not(.colstrip){display:none}
+  #app.off1 .side .colstrip,
+  #app.off3 .rail .colstrip,
+  #app.off4 .notecol .colstrip{display:flex}
+
+  /* ③ 관계 법령 칸 머리 — 그동안 제목이 없어 무슨 칸인지 알 수 없었다 */
+  .colhead{display:flex;align-items:center;gap:8px;padding:10px 13px 8px;
+    border-bottom:1px solid var(--line);flex:none}
+  .colhead .colttl{flex:1;min-width:0;font-size:11px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+
+  /* 좁아지면 폭을 줄이고, 더 좁으면 노트를 관계 아래로, 끝내 안 되면 원문 아래로 내린다.
+     네 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(3단에서 실측). */
+  /* 폭만 줄인다. grid-template-columns 를 통째로 덮으면 접기 규칙이 무력화된다. */
+  @media (max-width:1560px){
+    #app{--w1:270px; --wcol:300px}
+    #doc{padding:22px 24px 70px}
+  }
+  @media (max-width:1340px){
+    #app{grid-template-columns:260px minmax(0,1fr) 320px;
+      grid-template-rows:minmax(0,1fr) minmax(0,1fr);
+      grid-template-areas:"side doc rail" "side doc note"}
+    .notecol{border-top:1px solid var(--line)}
+  }
+  @media (max-width:980px){
+    #app{grid-template-columns:240px minmax(0,1fr);
+      grid-template-rows:minmax(0,1fr) minmax(0,auto) minmax(0,auto);
+      grid-template-areas:"side doc" "side rail" "side note"}
+    .rail,.notecol{border-left:0;border-top:1px solid var(--line);max-height:32vh}
+    #preview{max-height:none}
+  }
+
+  /* ───────── ④ 법령노트 ─────────
+     평범한 txt 다. 딱 하나 {[법령명-조항]} 만 링크가 된다.
+     **어떤 법령을 열어두든 항상 같은 노트다** — 법에 종속되지 않는다.
+     실무 메모는 법 하나에 갇히지 않고 여러 법을 가로지르기 때문이다. */
+  .notecol{display:flex;flex-direction:column;min-height:0;
+    border-left:1px solid var(--line);background:var(--panel)}
+  .notebar{display:flex;align-items:center;gap:7px;padding:10px 13px 8px;
+    border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  .notebar .nb-t{font-size:11px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.6px;font-weight:600}
+  .notebar .grow{flex:1}
+  .notebar .nb-save{font-size:10.5px;color:var(--accent)}
+  .nb-btn{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex:none}
+  .nb-btn:hover{border-color:var(--accent);color:var(--text)}
+  .nb-btn.on{color:var(--accent);border-color:var(--accent)}
+  .nb-hint{width:100%;font-size:10.5px;color:var(--muted);line-height:1.6}
+  .nb-hint code{background:var(--panel2);border-radius:4px;padding:1px 4px;font-size:10px}
+
+  .notewrap{position:relative;flex:1;min-height:0;display:flex}
+  #noteText{flex:1;width:100%;border:0;outline:none;overflow:auto;min-height:0;
+    background:var(--panel);color:var(--text2);font-family:inherit;
+    font-size:13px;line-height:1.85;padding:14px 15px 40px;white-space:pre-wrap;
+    word-break:break-word}
+  #noteText:empty::before{content:attr(data-ph);color:var(--muted);white-space:pre-wrap}
+
+  /* 참조는 **글자 그대로 두고 배경만 입힌다.**
+     contenteditable=false 로 통째 칩을 만들면 백스페이스가 참조 전체를 지워버린다.
+     사용자가 원한 건 "일반 텍스트처럼" 한 글자씩 지워지고, } 가 사라지는 순간
+     버튼이 꺼지는 것이다 — 그래서 스타일만 입히고 편집은 그대로 둔다. */
+  #noteText .chip{border-radius:5px;padding:1px 3px;cursor:pointer}
+  #noteText .chip.ok{background:var(--panel2);color:var(--inyong);
+    box-shadow:inset 0 0 0 1px var(--inyong)}
+  #noteText .chip.ok:hover{background:var(--hl)}
+  #noteText .chip.bad{color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
+  .noteview{flex:1;overflow:auto;padding:14px 15px 40px;font-size:13px;line-height:1.85;
+    color:var(--text2);white-space:pre-wrap}
+  .noteview a.ref{color:var(--inyong);text-decoration:none;
+    border-bottom:1px dashed var(--inyong);cursor:pointer}
+  .noteview a.ref:hover{background:var(--hl)}
+
+  /* 노트 칸 아래 영역 — 노트에서 건 법령을 여기서 확인한다.
+     가운데 원문을 갈아끼우지 않는 이유는 ③ 미리보기와 같다:
+     적어둔 걸 보면서 근거를 확인하는 게 목적이라 노트가 화면에 남아야 한다. */
+  .noteref{flex:none;max-height:55%;display:flex;flex-direction:column;min-height:0;
+    border-top:1px solid var(--line);background:var(--bg)}
+  /* display:flex 는 hidden 속성을 이긴다 — 명시하지 않으면 닫아도 1px 띠가 남는다 */
+  .noteref[hidden]{display:none}
+  .nrhead{display:flex;align-items:center;gap:7px;padding:9px 13px 7px;
+    border-bottom:1px solid var(--divider);flex:none}
+  .nrhead .t{flex:1;min-width:0;font-size:12px;font-weight:650;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nrbody{overflow:auto;padding:10px 13px 14px;font-size:12.5px;line-height:1.8;
+    color:var(--text2);white-space:pre-wrap;min-height:0}
+  .nrbody .sub{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+  /* 기록 보관함 목록 */
+  .logit{display:flex;align-items:baseline;gap:8px;padding:8px 13px;cursor:pointer;
+    border-bottom:1px solid var(--divider)}
+  .logit:hover{background:var(--panel2)}
+  .logit .lt{flex:1;min-width:0;font-size:12.5px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .logit .ld{flex:none;font-size:10.5px;color:var(--muted)}
+  .logit .lx{flex:none;background:none;border:0;color:var(--muted);cursor:pointer;
+    font-size:11px;padding:0 2px;font-family:inherit}
+  .logit .lx:hover{color:var(--warn)}
+  /* 못 찾은 참조 — 오타를 알아야 고친다 */
+  .noteview .miss{color:var(--warn);border-bottom:1px dotted var(--warn)}
+
+  /* 자동완성 드롭다운 */
+  /* 자동완성은 노트 칸 안에 갇힌다 — 폭이 좁으니 칸 전체를 쓴다 */
+  .ac{position:absolute;z-index:30;left:8px;right:8px;top:8px;max-height:min(300px,60%);overflow:auto;
+    background:var(--panel2);border:1px solid var(--accent);border-radius:9px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);padding:4px}
+  .ac .acit{padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
+  .ac .acit.sel{background:var(--panel2);outline:1px solid var(--accent)}
+  .ac .acit:hover{background:var(--panel2)}
+  .ac .acit .l{font-size:12.5px;flex:none}
+  .ac .acit .s{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* 좁아지면 먼저 폭을 줄이고, 그래도 안 되면 관계 패널을 원문 아래로 내린다.
+     세 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(실측). */
+  @media (max-width:1180px){
+    #app{grid-template-columns:270px minmax(0,1fr) 300px}
+    #doc{padding:22px 24px 70px}
+  }
+  @media (max-width:920px){
+    #app{grid-template-columns:250px minmax(0,1fr);
+      grid-template-rows:minmax(0,1fr) minmax(0,auto);
+      grid-template-areas:"side doc" "side rail"}
+    .rail{border-left:0;border-top:1px solid var(--line);max-height:40vh}
+    #preview{max-height:none}
+  }
+
+  .side{display:flex;flex-direction:column;min-height:0;
+    border-right:1px solid var(--line);background:var(--panel)}
+  .side header{padding:13px 15px 11px;border-bottom:1px solid var(--line)}
+  .side .htop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .side h1{margin:0;font-size:14.5px;letter-spacing:-.2px;font-weight:650}
+  .side header p{margin:6px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
+  .side header p.warn{color:var(--warn)}
+  .searchbar{padding:11px 13px;border-bottom:1px solid var(--line)}
+  #q{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);font-size:13px;outline:none;font-family:inherit}
+  #q:focus{border-color:var(--accent)}
+  .hint{margin-top:7px;font-size:10.5px;color:var(--muted)}
+  .hint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-family:inherit;font-size:10px}
+
+  .results{padding:6px 8px 20px}
+  .ritem{padding:8px 10px;border-radius:9px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
+  .ritem.sel{background:var(--panel2);outline:1px solid var(--line)}
+  .ritem:hover{background:var(--panel2)}
+  .ritem .dot{width:8px;height:8px;border-radius:50%;flex:none;align-self:center}
+  .ritem .main{flex:1;min-width:0}
+  .ritem .ttl{font-size:12.5px}
+  .ritem .ttl b{color:var(--accent);font-weight:600}
+  .ritem .sub{font-size:11.5px;color:var(--muted);margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ritem .badge{font-size:10px;color:var(--muted);background:var(--panel2);
+    border-radius:20px;padding:2px 8px;flex:none}
+  .none{color:var(--muted);font-size:13px;text-align:center;padding:30px}
+
+  /* ───────── 브라우즈 (검색어 없을 때) ───────── */
+  /* 사이드바는 평소엔 전체 법령 목록, 검색어를 치면 결과로 바뀐다. 자리는 하나다. */
+  #browse{padding:2px 8px 24px}
+  #app.searching #browse{display:none}
+  #app:not(.searching) .results{display:none}
+  .bsec{font-size:10.5px;letter-spacing:.6px;color:var(--muted);font-weight:600;
+    text-transform:uppercase;padding:14px 4px 6px}
+  .bempty{color:var(--muted);font-size:12px;padding:2px 6px 8px;line-height:1.6}
+
+  /* 즐겨찾기 */
+  .fav{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:9px;cursor:pointer}
+  .fav:hover{background:var(--panel2)}
+  .fav .lbl{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fav .sub{font-size:11px;color:var(--muted);flex:none}
+
+  /* ★ 토글 — 트리 행과 원문 제목에 함께 쓴다 */
+  .star{flex:none;background:none;border:none;cursor:pointer;font-size:13px;line-height:1;
+    color:var(--line);padding:2px 4px;font-family:inherit}
+  .star:hover{color:var(--ye)}
+  .star.on{color:var(--ye)}
+  h2 .star{font-size:18px;vertical-align:middle;margin-left:8px}
 
   /* ── 계단형 트리 ── */
-  .trow{display:flex;align-items:center;gap:5px;padding:4px 10px 4px 0;cursor:pointer;
+  .trow{display:flex;align-items:center;gap:5px;padding:4px 6px 4px 0;cursor:pointer;
     font-size:12.5px;line-height:1.35;border-left:2px solid transparent;white-space:nowrap;
-    overflow:hidden}
+    overflow:hidden;border-radius:0 7px 7px 0}
   .trow:hover{background:var(--panel2)}
   .trow.on{background:var(--panel2);border-left-color:var(--accent)}
-  .arrow{flex:none;width:12px;text-align:center;color:var(--muted);font-size:9px;transition:none}
-  .ic{flex:none;font-size:11px;width:13px;text-align:center}
+  .arrow{flex:none;width:12px;text-align:center;color:var(--muted);font-size:9px}
   .lbl{overflow:hidden;text-overflow:ellipsis}
-  .cnt{flex:none;color:var(--muted);font-size:10.5px;margin-left:auto;padding-left:8px}
-  .trow.group{font-size:10.5px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;font-weight:600}
-  .trow.doc .lbl{font-weight:500}
+  .cnt{flex:none;color:var(--muted);font-size:10.5px;padding-left:8px}
+  .trow .star{margin-left:auto}
+  .trow.group{font-size:10.5px;letter-spacing:.6px;color:var(--muted);
+    text-transform:uppercase;font-weight:600}
+  .trow.lawrow .lbl{font-weight:500}
+  .trow.chap{color:var(--faint);font-weight:600;font-size:12px}
   .trow.leaf{font-size:12px}
   .trow.leaf .lbl{color:var(--text2)}
-  .trow.struct{color:var(--muted);font-weight:600}
-  .dot{flex:none;width:7px;height:7px;border-radius:2px}
-  .dot.법률{background:var(--law)} .dot.시행령{background:var(--ord)} .dot.시행규칙{background:var(--rule)}
-  .dot.계약예규{background:var(--ye)} .dot.훈령,.dot.예규,.dot.지침,.dot.고시,.dot.공고,.dot.행정규칙{background:var(--adm)}
+  .trow .tdot{flex:none;width:7px;height:7px;border-radius:2px}
+  .tdot.법률{background:var(--law)} .tdot.시행령{background:var(--ord)}
+  .tdot.시행규칙{background:var(--rule)} .tdot.계약예규{background:var(--ye)}
+  .tdot.훈령,.tdot.예규,.tdot.지침,.tdot.고시,.tdot.공고,.tdot.행정규칙{background:var(--adm)}
   .tchildren[hidden]{display:none}
-  .shelf{font-size:10.5px;color:var(--muted);padding:8px 15px;border-top:1px solid var(--line)}
-  .snip{color:var(--muted);font-size:11px;padding-left:4px}
 
-  /* ── 원문 ── */
-  main{background:var(--bg)}
-  .reader-inner{max-width:840px;margin:0 auto;padding:26px 34px 140px}
-  .rhead{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:8px}
-  .rhead h2{margin:0;font-size:22px;line-height:1.3}
-  .rhead .crumb{font-size:11.5px;color:var(--muted);margin-bottom:8px}
-  .rhead .meta{margin-top:8px;font-size:12px;color:var(--muted)}
-  .stamp{display:inline-block;margin-top:9px;font-size:11.5px;color:var(--muted);
-    padding:4px 9px;border-radius:6px;background:var(--panel2)}
-  .stamp.old{color:var(--warn);background:rgba(246,169,74,.13)}
-  .art{padding:18px 0;border-bottom:1px solid var(--divider);scroll-margin-top:14px}
-  .art.hl{background:var(--hl)}
-  .art h3{margin:0 0 8px;font-size:15px}
-  .art h3 .no{color:var(--accent);margin-right:7px}
-  .art h3 .ti{color:var(--muted);font-weight:400;font-size:13px}
-  .art .atext{font-size:13.5px;line-height:1.85;color:var(--text2);white-space:pre-wrap;word-break:break-word}
-  .struct-h{margin:26px 0 2px;font-size:14px;font-weight:700;color:var(--faint);
-    border-top:1px solid var(--line);padding-top:16px}
-  .byul{margin-top:30px;border-top:2px solid var(--line);padding-top:16px}
-  .byul h3{font-size:15px;margin:20px 0 8px;color:var(--ye)}
-  .byul .lnk{font-size:12px;margin:6px 0}
-  .byul .lnk a{color:var(--accent);text-decoration:none;margin-right:12px}
-  table.tbl{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px;display:block;overflow:auto}
-  table.tbl td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top;
-    color:var(--text2);white-space:pre-wrap}
-  table.tbl tr:first-child td{background:var(--panel2);font-weight:600}
-  .empty{color:var(--muted);font-size:13px;padding:40px 34px;line-height:1.7;max-width:640px}
-  mark{background:var(--marktint);color:var(--text);border-radius:2px}
+  /* ───────── 원문 (가운데) ───────── */
+  #doc{padding:26px 34px 80px}
+  /* 원문 칸 전용 — id 로 못박는다. .doc 로 두면 트리 행(.trow.doc)이 주워먹는다.
+     실제로 그랬다: 트리의 법령 행이 padding 26/80 을 받아 123px 로 부풀었다. */
+  #doc .crumb{font-size:12px;color:var(--muted)}
+  #doc h2{margin:6px 0 2px;font-size:22px;letter-spacing:-.3px}
+  #doc .subt{font-size:13px;color:var(--muted)}
+  .blank{color:var(--muted);font-size:13px;padding:60px 34px;line-height:1.8;max-width:52ch}
+  .blank b{color:var(--text);font-weight:600}
+
+  /* 법령 전체를 죽 이어서 보여준다. 이동은 화면 교체가 아니라 스크롤이다. */
+  .lawhead{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:0}
+  .chaphead{margin:26px 0 2px;font-size:14px;font-weight:700;color:var(--faint);
+    border-top:1px solid var(--line);padding-top:16px;letter-spacing:-.2px}
+  /* 첫 장·첫 조는 법령 제목 바로 아래다 — 구분선을 또 그으면 가로줄 두 개가 겹쳐 보인다.
+     장 사이의 간격은 의미가 있지만 제목과 본문 사이의 간격은 그냥 빈틈이다. */
+  .lawhead + .chaphead{margin-top:10px;padding-top:0;border-top:0}
+  .lawhead + .unit{border-top:0;padding-top:14px}
+  .unit{padding:16px 12px 18px;border-bottom:1px solid var(--divider);
+    border-left:2px solid transparent;border-radius:0 8px 8px 0;
+    scroll-margin-top:12px;transition:background .25s,border-color .25s}
+  /* 마우스가 놓인 조 — 오른쪽 관계 패널이 이 조를 따라간다 */
+  .unit.active{border-left-color:var(--accent);background:var(--hl)}
+  /* 클릭해 고정한 조. 마우스가 떠나도 관계 패널이 이 조에 머문다. */
+  .unit.pin{border-left-color:var(--ye);border-left-width:3px}
+  .unit.pin .uhead .uno::after{content:' 📌';font-size:11px}
+  /* 사이드바에서 눌러 굴러왔을 때 잠깐 반짝 */
+  .unit.jumped{background:var(--marktint)}
+  .uhead{display:flex;align-items:baseline;gap:9px;margin-bottom:7px}
+  .uhead .uno{font-size:15px;font-weight:650;color:var(--accent);flex:none}
+  .uhead .uti{font-size:13px;color:var(--muted);flex:1;min-width:0}
+  .uhead .star{align-self:center}
+  .stamp{margin-top:10px;font-size:11px;color:var(--muted);padding:4px 9px;
+    border-radius:6px;background:var(--panel2);display:inline-block}
+  .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
+  .body{font-size:14px;line-height:1.9;color:var(--text2);
+    white-space:pre-wrap;max-width:74ch}
+  .body a.cite{color:var(--inyong);text-decoration:none;
+    border-bottom:1px dashed var(--inyong);cursor:pointer}
+  .body a.cite:hover{background:var(--hl)}
+  .body mark{background:var(--marktint);color:inherit;border-radius:3px}
+  /* 별표는 고정폭(罫線) 레이아웃이라 등폭 글꼴 + 줄바꿈 금지라야 표가 맞는다 */
+  .srcnote{margin-top:14px;font-size:11px;color:var(--muted)}
+  .srcnote .copymd{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:6px}
+  .srcnote .copymd:hover{border-color:var(--accent);color:var(--text)}
+  .body.annex{max-width:none}
+  .body.annex .ann-text{white-space:pre-wrap;margin:6px 0 14px}
+  .body.annex .ann-tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:8px}
+  table.ann{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6}
+  table.ann th,table.ann td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
+  table.ann th{background:var(--panel2);color:var(--text);font-weight:600;white-space:nowrap}
+  table.ann td:last-child{white-space:nowrap;color:var(--muted)}
+  table.ann tbody tr:nth-child(2n){background:var(--zebra)}
+
+  /* ───────── 관계·미리보기 (오른쪽) ───────── */
+  .rail{border-left:1px solid var(--line);background:var(--panel);
+    display:flex;flex-direction:column;min-height:0}
+  /* 관계 목록이 칸을 끝까지 채우게 한다. flex:1 이 없으면 내용 높이(100px 남짓)에서
+     멈춰 아래 800px 가 통째로 빈 채로 남는다 — 조문 옆이 텅 빈 것처럼 보인다. */
+  #rels{flex:1}
+  .rail h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.6px}
+
+  /* 인용 미리보기 — 본문을 갈아끼우지 않고 옆에서 확인한다.
+     "이게 무슨 조문이더라" 확인하려고 읽던 자리를 잃는 게 이 도구의 가장 흔한 짜증이다. */
+  #preview{display:none;flex-direction:column;min-height:0;
+    border-bottom:1px solid var(--line);max-height:58%}
+  #preview.on{display:flex}
+  .pvhead{display:flex;align-items:center;gap:8px;padding:10px 13px 8px;
+    border-bottom:1px solid var(--divider)}
+  .pvhead .t{flex:1;min-width:0;font-size:12.5px;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pvhead button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex:none}
+  .pvhead button:hover{border-color:var(--accent);color:var(--text)}
+  .pvbody{overflow:auto;padding:10px 14px 16px;font-size:12.5px;line-height:1.8;
+    color:var(--text2);white-space:pre-wrap;min-height:0}
+  .pvbody .sub{color:var(--muted);font-size:11px;display:block;margin-bottom:6px}
+
+  .rel{font-size:12.5px;padding:7px 15px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
+  .rel:hover{background:var(--panel2)}
+  .rel .k{font-size:9.5px;padding:1px 6px;border-radius:20px;flex:none}
+  .rel .k.위임{background:var(--panel2);color:var(--wimim)}
+  .rel .k.인용{background:var(--panel2);color:var(--inyong)}
+  .rel .k.소속{background:var(--sosok);color:var(--muted)}
+  .rel .k.별표{background:var(--panel2);color:var(--rule)}
+  .rel .ev{color:var(--muted);font-size:11px}
+  .relempty{padding:6px 15px 14px;font-size:12px;color:var(--muted)}
+  .pinnote{font-size:11px;color:var(--ye);padding:9px 15px 0}
+
 </style>
 </head>
 <body>
+
 <div id="app">
-  <div class="side">
+  <!-- ① 왼쪽: 검색창 하나 + 전체 법령 -->
+  <aside class="side">
+    <div class="colstrip" data-col="1">검색 · 법령</div>
     <header>
       <div class="htop">
-        <h1>LawEverything · 조달 법령 원문</h1>
-        <button id="themeBtn" class="themebtn" type="button" title="다크/라이트 전환" aria-label="테마 전환">◐</button>
+        <h1>몇 조항이더라</h1>
+        <button id="themeBtn" class="themebtn" type="button"></button>
+        <button type="button" class="colbtn" data-col="1" title="접기">‹</button>
       </div>
       <p id="meta"></p>
     </header>
-    <div class="search">
-      <input id="q" placeholder="법령·조문 원문 즉시검색 (예: 수의계약)" autocomplete="off"/>
+    <div class="searchbar">
+      <input id="q" autocomplete="off" spellcheck="false"
+        placeholder="조문·키워드 검색  예) 수의계약 · 7조 · ㅅㅇㄱㅇ" />
+      <div class="hint" id="hint">
+        <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · 초성 검색 가능
+      </div>
     </div>
-    <div class="scroll" id="tree"></div>
-    <div class="scroll" id="results" hidden></div>
-    <div class="shelf">폴더를 펼치면 시행령·시행규칙·조문이 계단형으로 이어집니다. 그래프는 잠정 보류.</div>
-  </div>
-  <main class="scroll" id="reader">
-    <div class="empty">왼쪽 트리에서 법령을 펼쳐 조문까지 내려가거나, 문서를 클릭해 원문을 여세요.</div>
-  </main>
+    <div class="scroll">
+      <div class="results" id="results"></div>
+      <!-- 검색어가 없을 때: 즐겨찾기 + 전체 법령 계단형 -->
+      <div id="browse">
+        <div id="favs"></div>
+        <div id="tree"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ② 가운데: 원문 -->
+  <main class="doc scroll" id="doc"></main>
+
+  <!-- ③ 관계 법령: 인용 미리보기 + 관계 조문 -->
+  <aside class="rail">
+    <div class="colstrip" data-col="3">관계 법령</div>
+    <div class="colhead">
+      <span class="colttl">관계 법령</span>
+      <button type="button" class="colbtn" data-col="3" title="접기">›</button>
+    </div>
+    <div id="preview"></div>
+    <div class="scroll" id="rels"></div>
+  </aside>
+
+  <!-- ④ 법령노트 — 어떤 법령을 열어두든 항상 같은 노트다 -->
+  <aside class="notecol">
+    <div class="colstrip" data-col="4">법령노트</div>
+    <div class="notebar">
+      <span class="nb-t">법령노트</span>
+      <span class="grow"></span>
+      <span class="nb-save" id="noteSaved"></span>
+      <button type="button" id="noteArchive" class="nb-btn" title="지금 노트를 기록으로 담기">담기</button>
+      <button type="button" id="noteLog" class="nb-btn" title="담아둔 기록 열기">기록</button>
+      <button type="button" id="notePreview" class="nb-btn">미리보기</button>
+      <button type="button" class="colbtn" data-col="4" title="접기">›</button>
+      <div class="nb-hint"><code>{[</code> 를 열면 법령 목록이 뜹니다 — 고르면 링크가 됩니다.</div>
+    </div>
+    <div class="notewrap">
+      <div id="noteText" contenteditable="plaintext-only" spellcheck="false"
+        data-ph="자유롭게 적으세요. 특정 법령에 매이지 않는 내 노트입니다.
+
+예)  낙찰자 결정은 {[국가계약법-제10조]} 기준"></div>
+      <div class="noteview" id="noteView" hidden></div>
+      <div class="ac" id="noteAc" hidden></div>
+    </div>
+    <!-- 노트에서 법령 링크를 누르면 여기에 그 조문과 관련 규정이 뜬다 -->
+    <div class="noteref" id="noteRef" hidden></div>
+  </aside>
 </div>
+
 <script>
-const PAGE = /*__GRAPH__*/;
+const GRAPH = /*__GRAPH__*/;
+</script>
+<script>
+/*__SEARCH__*/
+</script>
+<script>
+/*__ANNEX__*/
+</script>
+<script>
+/*__FAVS__*/
+</script>
+<script>
+/*__NOTES__*/
 </script>
 <script>
 (function(){
-  const {documents:docs,meta}=PAGE;
-  const byId=new Map(docs.map(d=>[d.id,d]));
-
   // ---- 테마 토글 ----
   (function(){
     const root=document.documentElement, btn=document.getElementById('themeBtn');
@@ -150,162 +478,807 @@ const PAGE = /*__GRAPH__*/;
       try{localStorage.setItem('law-theme',root.dataset.theme);}catch(e){} sync(); });
   })();
 
-  const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-  const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:"";
-  const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
+  const {nodes,edges,meta}=GRAPH;
+  const byId=new Map(nodes.map(n=>[n.id,n]));
+  const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-  // ---- 메타 배너 ----
-  (function(){
-    const m=document.getElementById('meta');const parts=[];
-    if(meta.title)parts.push(meta.title);
-    parts.push(`문서 ${meta.documents} · 조문 ${meta.articles}`);
-    if(meta.확인요약&&meta.확인요약.최고경과일!=null)parts.push(`최종확인 ${meta.확인요약.최고경과일}일 전`);
-    const stale=docs.filter(d=>d.stamp&&d.stamp.낡음).length;
-    m.textContent=parts.join(' · ');
-    if(stale){m.className='warn';m.textContent+=` · ⚠ ${stale}건 재수집 필요`;}
+  // 나가는/들어오는 관계 미리 묶기
+  const outs=new Map(), ins=new Map();
+  for(const e of edges){
+    if(!outs.has(e.source))outs.set(e.source,[]); outs.get(e.source).push(e);
+    if(!ins.has(e.target))ins.set(e.target,[]);   ins.get(e.target).push(e);
+  }
+  // ---- 색상: 법령 가문(hue) × 유형(명도) ----
+  const HUE={};const hueSeed=[210,145,275,25,330,190,55];
+  nodes.forEach(n=>{if(n.family&&!(n.family in HUE))HUE[n.family]=hueSeed[Object.keys(HUE).length%hueSeed.length];});
+  const light={"법률":46,"시행령":58,"시행규칙":66,"계약예규":72};
+  const color=n=>n.kind==='외부법'?'hsl(220,8%,55%)':`hsl(${HUE[n.family]??220},55%,${light[n.type]||60}%)`;
+
+  const nameOf=n=>(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:n.label;
+  const ymd=s=>s?`${s.slice(0,4)}.${s.slice(4,6)}.${s.slice(6,8)}`:'';
+
+  // ───────── 확인일 배너 ─────────
+  // 폐쇄망에서는 데이터가 늘 과거다. "언제 기준인지"를 숨기면 낡은 조문을 현행으로 착각한다.
+  const v=meta.확인요약;
+  const metaText=(()=>{
+    const p=[];
+    if(meta.기준일)p.push(`기준일 ${ymd(meta.기준일)}`);
+    if(v){
+      if(v.현행)p.push(`현행 ${v.현행}건`);
+      if(v.시행예정)p.push(`시행예정 ${v.시행예정}건 · 인용 제외`);
+      if(v.최고경과일!=null)p.push(`최종확인 ${v.최고경과일}일 전`);
+      if(v.낡음>0)p.push(`⚠ ${v.낡음}건 재수집 필요`);
+    }
+    return p.join(' · ');
   })();
+  const metaEl=document.getElementById('meta');
+  metaEl.textContent=metaText;
+  if(v&&v.낡음>0)metaEl.classList.add('warn');
 
-  // ---- 분류 ----
-  // 법률·시행령·시행규칙은 같은 레벨(형제)로 나란히 둔다. 계단형은 '문서 → 조문'에만 적용.
-  const isLaw=d=>["법률","시행령","시행규칙"].includes(d.docType);
-  const byName=(a,b)=>a.name.localeCompare(b.name,'ko');
+  // ───────── 검색 ─────────
+  const idx=LawSearch.create(nodes);
+  const q=document.getElementById('q'), results=document.getElementById('results');
+  const app=document.getElementById('app'), hint=document.getElementById('hint');
+  let hits=[], cur=0;
+
+  function highlight(text,raw){
+    const t=String(raw||'').trim();
+    if(!t)return esc(text);
+    const i=text.toLowerCase().indexOf(t.toLowerCase());
+    if(i<0)return esc(text);
+    return esc(text.slice(0,i))+'<b>'+esc(text.slice(i,i+t.length))+'</b>'+esc(text.slice(i+t.length));
+  }
+
+  function renderResults(){
+    if(!hits.length){
+      results.innerHTML=q.value.trim()?'<div class="none">결과 없음</div>':'';
+      return;
+    }
+    results.innerHTML=hits.map((h,i)=>{
+      const n=h.node;
+      const title=(n.kind==='조문'||n.kind==='별표')?(n.title||n.label):n.label;
+      const sub=(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:(n.name||n.type);
+      return `<div class="ritem${i===cur?' sel':''}" data-i="${i}">
+        <span class="dot" style="background:${color(n)}"></span>
+        <span class="main">
+          <span class="ttl">${highlight(title,q.value)}</span>
+          <div class="sub">${esc(sub)}</div>
+        </span>
+        <span class="badge">${esc(n.kind==='별표'?n.label.replace(/[\[\]]/g,'').split(' ')[0]:n.type)}</span>
+      </div>`;
+    }).join('');
+    const sel=results.querySelector('.ritem.sel');
+    if(sel)sel.scrollIntoView({block:'nearest'});
+  }
+
+  function doSearch(){
+    const s=q.value.trim();
+    app.classList.toggle('searching',!!s); // 사이드바 한 자리를 목록↔결과로 갈아끼운다
+    hits=s?idx.search(s,60):[];
+    cur=0;
+    renderResults();
+  }
+  q.addEventListener('input',doSearch);
+  results.addEventListener('click',e=>{
+    const it=e.target.closest('.ritem'); if(!it)return;
+    open(hits[+it.dataset.i].node.id);
+  });
+
+  // ───────── 즐겨찾기 ─────────
+  // 별을 누르는 곳이 세 군데(트리 행·원문 제목·즐겨찾기 목록)라 상태를 한곳에서 돌려준다.
+  const favsEl=document.getElementById('favs');
+
+  function paintStar(b,on){
+    b.classList.toggle('on',on);
+    b.textContent=on?'★':'☆';
+    b.title=on?'즐겨찾기 해제':'즐겨찾기';
+  }
+  function starBtn(id){
+    const b=document.createElement('button');
+    b.className='star'; b.type='button'; b.dataset.star=id;
+    paintStar(b,LawFavs.has(id));
+    // 핸들러를 버튼이 직접 갖는다. document 위임으로 하면 트리 행의 자체 리스너가
+    // 먼저 실행돼(버블 순서: 버튼 → 행 → document) 별을 눌러도 원문이 열려버린다.
+    b.addEventListener('click',e=>{
+      e.preventDefault(); e.stopPropagation();
+      LawFavs.toggle(id);
+      syncStars(id);
+      renderFavs(); // 목록만 다시 그린다 — 트리를 재렌더하면 펼침 상태가 날아간다
+    });
+    return b;
+  }
+  /** 같은 노드의 별이 여러 곳(트리·원문·목록)에 떠 있을 수 있어 한꺼번에 맞춘다. */
+  function syncStars(id){
+    const on=LawFavs.has(id);
+    document.querySelectorAll(`[data-star="${CSS.escape(id)}"]`).forEach(b=>paintStar(b,on));
+  }
+
+  function favRow(n){
+    const d=document.createElement('div');
+    d.className='fav'; d.dataset.go=n.id;
+    const dot=document.createElement('span');
+    dot.className='tdot '+(n.type||''); d.appendChild(dot);
+    const l=document.createElement('span');
+    l.className='lbl';
+    l.textContent=n.kind==='법령'?(n.label||n.name):`${n.group||''} ${n.label}`.trim();
+    d.appendChild(l);
+    if(n.kind!=='법령'&&n.title){
+      const s=document.createElement('span'); s.className='sub'; s.textContent=n.title; d.appendChild(s);
+    }
+    d.appendChild(starBtn(n.id));
+    return d;
+  }
+  function renderFavs(){
+    const g=LawFavs.grouped(byId);
+    favsEl.innerHTML='';
+    const total=g.법.length+g.조.length+g.별표.length;
+    const head=document.createElement('div');
+    head.className='bsec'; head.textContent=`즐겨찾기${total?` (${total})`:''}`;
+    favsEl.appendChild(head);
+    if(!total){
+      const e=document.createElement('div');
+      e.className='bempty';
+      e.textContent='아래 목록이나 원문에서 ☆ 를 누르면 법·조 단위로 여기에 모입니다.';
+      favsEl.appendChild(e);
+      return;
+    }
+    [...g.법,...g.조,...g.별표].forEach(n=>favsEl.appendChild(favRow(n)));
+  }
+
+  // ───────── 계단형 트리 ─────────
+  // 법령 › 장 › 조. 장이 없는 문서(행정규칙 등)는 장 단계를 건너뛴다.
+  const treeEl=document.getElementById('tree');
+  const laws=nodes.filter(n=>n.kind==='법령');
+  // 법령 노드 id 는 "law:nca" 지만 조문·별표가 들고 있는 lawId 는 "nca" 다 (접두사 없음).
+  const rawId=id=>String(id).replace(/^law:/,'');
+  const unitsOf=id=>{const r=rawId(id);
+    return nodes.filter(n=>(n.kind==='조문'||n.kind==='별표')&&n.lawId===r);};
+
+  const isLaw=n=>['법률','시행령','시행규칙'].includes(n.type);
+  const byLabel=(a,b)=>String(a.label).localeCompare(String(b.label),'ko');
   const typeRank={법률:0,시행령:1,시행규칙:2};
-  const lawDocs=docs.filter(isLaw).sort((a,b)=>
-    a.family===b.family ? (typeRank[a.docType]-typeRank[b.docType]||byName(a,b))
-                        : String(a.family).localeCompare(String(b.family)));
+  const lawDocs=laws.filter(isLaw).sort((a,b)=>
+    a.family===b.family?(typeRank[a.type]-typeRank[b.type]||byLabel(a,b))
+                       :String(a.family).localeCompare(String(b.family)));
   const GROUPS=[
-    {key:"법령", docs:lawDocs},
-    {key:"계약예규", docs:docs.filter(d=>d.docType==="계약예규").sort(byName)},
-    {key:"조달청 행정규칙", docs:docs.filter(d=>!isLaw(d)&&d.docType!=="계약예규").sort(byName)},
+    {key:'법령',docs:lawDocs},
+    {key:'계약예규',docs:laws.filter(n=>n.type==='계약예규').sort(byLabel)},
+    {key:'조달청 행정규칙',docs:laws.filter(n=>!isLaw(n)&&n.type!=='계약예규').sort(byLabel)},
   ];
-  const arts=d=>d.articles.filter(a=>!a.structural);
 
-  // ---- 트리 ----
-  const tree=document.getElementById('tree');
-  let curRow=null;
-  function markRow(row){ if(curRow)curRow.classList.remove('on'); curRow=row; if(row)row.classList.add('on'); }
 
-  // 확장형 노드: arrow + row + lazy children container
-  function node(depth,{cls,icon,dot,label,cnt,expandable,onOpen,build}){
-    const wrap=el('div','tnode');
-    const row=el('div','trow '+(cls||''));
+  /** 접었다 폈다 하는 한 계단. 자식은 처음 펼칠 때 만든다(1,500노드를 한 번에 그리지 않는다). */
+  function step(depth,{cls,dot,label,cnt,favId,expandable,onOpen,build}){
+    const wrap=document.createElement('div');
+    const row=document.createElement('div');
+    row.className='trow '+(cls||'');
     row.style.paddingLeft=(depth*15+8)+'px';
-    const arrow=el('span','arrow'); arrow.textContent=expandable?'▶':'';
+    const arrow=document.createElement('span');
+    arrow.className='arrow'; arrow.textContent=expandable?'▶':'';
     row.appendChild(arrow);
-    if(dot){const dt=el('span','dot '+dot);row.appendChild(dt);} else if(icon){const ic=el('span','ic');ic.textContent=icon;row.appendChild(ic);}
-    const lbl=el('span','lbl'); lbl.innerHTML=label; row.appendChild(lbl);
-    if(cnt!=null){const c=el('span','cnt');c.textContent=cnt;row.appendChild(c);}
-    const kids=el('div','tchildren'); kids.hidden=true;
-    let open=false,built=false;
+    if(dot!=null){const t=document.createElement('span');t.className='tdot '+dot;row.appendChild(t);}
+    const l=document.createElement('span'); l.className='lbl'; l.textContent=label; row.appendChild(l);
+    if(cnt!=null){const c=document.createElement('span');c.className='cnt';c.textContent=cnt;row.appendChild(c);}
+    if(favId){row.dataset.unit=favId;row.appendChild(starBtn(favId));}
+    const kids=document.createElement('div'); kids.className='tchildren'; kids.hidden=true;
+    let open_=false,built=false;
     function toggle(force){
-      open=force==null?!open:force; kids.hidden=!open; arrow.textContent=expandable?(open?'▼':'▶'):'';
-      if(open&&!built&&build){built=true;build(kids);}
+      open_=force==null?!open_:force; kids.hidden=!open_;
+      arrow.textContent=expandable?(open_?'▼':'▶'):'';
+      if(open_&&!built&&build){built=true;build(kids);}
     }
     arrow.addEventListener('click',e=>{e.stopPropagation();if(expandable)toggle();});
-    row.addEventListener('click',()=>{ if(onOpen)onOpen(row); if(expandable&&!open)toggle(true); });
+    row.addEventListener('click',()=>{ if(onOpen)onOpen(row); if(expandable&&!open_)toggle(true); });
     wrap.append(row,kids);
-    wrap._toggle=toggle; wrap._row=row;
+    wrap._toggle=toggle;
     return wrap;
   }
 
-  function docNode(d,depth){
-    const aa=arts(d);
-    return node(depth,{
-      cls:'doc', dot:d.docType, label:esc(d.shortName||d.name),
-      cnt:`${aa.length}조${d.별표?.length?`·별표${d.별표.length}`:''}`,
-      expandable:aa.length>0,
-      onOpen:row=>openDoc(d.id,null,row),
-      // 계단형은 여기서만: 문서를 펼치면 그 문서의 조문(장/절 헤더 포함)이 다음 계단으로.
-      build:box=>d.articles.forEach(a=>box.appendChild(artNode(d,a,depth+1))),
+  function unitStep(u,depth){
+    return step(depth,{cls:'leaf',label:u.title?`${u.label} ${u.title}`:u.label,
+      favId:u.id,expandable:false,onOpen:()=>open(u.id)});
+  }
+  function docStep(d,depth){
+    const units=unitsOf(d.id);
+    const arts=units.filter(u=>u.kind==='조문');
+    const byls=units.filter(u=>u.kind==='별표');
+    return step(depth,{
+      cls:'lawrow',dot:d.type,label:d.label,favId:d.id,
+      cnt:`${arts.length}조${byls.length?`·별표${byls.length}`:''}`,
+      expandable:units.length>0,
+      onOpen:()=>open(d.id),
+      build:box=>{
+        // 장이 있으면 한 계단 더 — 시행령 153조를 평평하게 늘어놓으면 못 찾는다.
+        let chap=null,bucket=null;
+        for(const a of arts){
+          if(a.chapter&&a.chapter!==chap){
+            chap=a.chapter;
+            const items=arts.filter(x=>x.chapter===chap);
+            const node=step(depth+1,{cls:'chap',label:chap,cnt:`${items.length}조`,expandable:true,
+              build:b=>items.forEach(x=>b.appendChild(unitStep(x,depth+2)))});
+            box.appendChild(node); bucket=chap;
+            continue;
+          }
+          if(a.chapter&&a.chapter===bucket)continue; // 위에서 통째로 담았다
+          box.appendChild(unitStep(a,depth+1));
+        }
+        byls.forEach(b=>box.appendChild(unitStep(b,depth+1)));
+      },
     });
-  }
-  function artNode(d,a,depth){
-    if(a.structural){
-      return node(depth,{cls:'struct',label:esc(a.text.split('\n')[0].slice(0,34)),expandable:false});
-    }
-    return node(depth,{cls:'leaf',label:`제${esc(a.no)}조${a.title?` <span style="color:var(--muted)">${esc(a.title)}</span>`:''}`,
-      expandable:false, onOpen:row=>openDoc(d.id,a.no,row)});
-  }
-  function groupNode(g){
-    return node(0,{cls:'group',label:`${g.key} (${g.docs.length})`,expandable:true,
-      build:box=>g.docs.forEach(d=>box.appendChild(docNode(d,1)))});
   }
   function renderTree(){
-    tree.innerHTML='';
-    GROUPS.forEach(g=>{ if(g.docs.length){const gn=groupNode(g); tree.appendChild(gn); gn._toggle(true);} });
-  }
-
-  // ---- 원문 ----
-  const reader=document.getElementById('reader');
-  function isCleanTable(rows){
-    if(!rows||rows.length<2)return false;
-    const cols=Math.max(...rows.map(r=>r.length)); if(cols<2||cols>8)return false;
-    let n=0,s=0; for(const r of rows)for(const c of r){n++;s+=String(c).length;} return n&&s/n>=2;
-  }
-  const tableHtml=rows=>!isCleanTable(rows)?"":`<table class="tbl"><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-  function stripHead(a){const t=a.text.replace(/^제\d+조(?:의\d+)?\s*[（(][^）)]*[）)]\s*/,'').trim();return t||a.text;}
-
-  function openDoc(id,no,row){
-    const d=byId.get(id);
-    if(row)markRow(row);
-    const st=d.stamp;
-    const stamp=st&&(st.시행일||st.확인일)?`<div class="stamp${st.낡음?' old':''}">${[st.시행일?`시행 ${ymd(st.시행일)}`:'',st.확인일?`확인 ${ymd(st.확인일)}`:'',st.상태&&st.상태!=='현행'?st.상태:'',st.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`:'';
-    // 상위 경로(빵부스러기)
-    const path=[]; let c=d; while(c){path.unshift(c.shortName||c.name); c=c.parent?byId.get(c.parent):null;}
-    let body=`<div class="reader-inner"><div class="rhead">
-      ${path.length>1?`<div class="crumb">${path.slice(0,-1).map(esc).join(' › ')} ›</div>`:''}
-      <h2>${esc(d.name)}</h2>
-      <div class="meta">${esc(d.docType)} · 조문 ${arts(d).length}개${d.별표?.length?` · 별표 ${d.별표.length}개`:''}</div>${stamp}</div>`;
-    for(const a of d.articles){
-      if(a.structural){body+=`<div class="struct-h" id="a-${esc(a.no)}">${esc(a.text.split('\n')[0])}</div>`;continue;}
-      body+=`<div class="art" id="a-${esc(a.no)}"><h3><span class="no">제${esc(a.no)}조</span>${a.title?`<span class="ti">(${esc(a.title)})</span>`:''}</h3><div class="atext">${esc(stripHead(a))}</div></div>`;
-    }
-    if(d.별표?.length){
-      body+=`<div class="byul"><h3 style="border:none;color:var(--muted);margin-top:0">별표 · 서식 (${d.별표.length})</h3>`;
-      for(const b of d.별표){
-        body+=`<h3>${b.번호?`[별표 ${esc(b.번호)}] `:''}${esc(b.title||'별표')}</h3>`+tableHtml(b.rows);
-        if(b.hwp||b.pdf)body+=`<div class="lnk">${b.hwp?`<a href="${esc(b.hwp)}" target="_blank" rel="noopener">HWP 서식 내려받기</a>`:''}${b.pdf?`<a href="${esc(b.pdf)}" target="_blank" rel="noopener">PDF</a>`:''} <span style="color:var(--muted)">(전체 표는 kordoc 파싱 예정)</span></div>`;
-      }
-      body+=`</div>`;
-    }
-    reader.innerHTML=body+`</div>`;
-    reader.scrollTop=0;
-    if(no)requestAnimationFrame(()=>{const t=document.getElementById('a-'+no);if(t){t.scrollIntoView({behavior:'smooth',block:'start'});t.classList.add('hl');setTimeout(()=>t.classList.remove('hl'),1600);}});
-  }
-
-  // ---- 검색 (전 문서 원문) ----
-  const q=document.getElementById('q'),results=document.getElementById('results');
-  function search(v){
-    const s=v.toLowerCase();const hits=[];
-    for(const d of docs){
-      if((d.name+d.shortName+d.docType).toLowerCase().includes(s))hits.push({d});
-      for(const a of d.articles){ if(a.structural)continue;
-        if(((a.title||"")+a.text).toLowerCase().includes(s)){
-          const i=a.text.toLowerCase().indexOf(s);
-          hits.push({d,a,snip:i>=0?a.text.slice(Math.max(0,i-10),i+40):(a.title||"")});
-          if(hits.length>400)break;
-        }
-      }
-      if(hits.length>400)break;
-    }
-    results.innerHTML='';
-    if(!hits.length){results.innerHTML=`<div class="empty" style="padding:20px 15px">일치하는 원문이 없습니다.</div>`;return;}
-    hits.forEach(h=>{
-      const r=node(0,{cls:'leaf',dot:h.d.docType,
-        label:`${esc(h.d.shortName)}${h.a?` <span style="color:var(--accent)">제${esc(h.a.no)}조</span>`:''}`,
-        expandable:false, onOpen:row=>openDoc(h.d.id,h.a?h.a.no:null,row)});
-      if(h.a&&h.snip)r._row.querySelector('.lbl').insertAdjacentHTML('beforeend',`<div class="snip">…${esc(h.snip)}…</div>`);
-      results.appendChild(r);
+    treeEl.innerHTML='';
+    GROUPS.forEach(g=>{
+      if(!g.docs.length)return;
+      const head=document.createElement('div');
+      head.className='bsec'; head.textContent=`${g.key} (${g.docs.length})`;
+      treeEl.appendChild(head);
+      g.docs.forEach(d=>treeEl.appendChild(docStep(d,0)));
     });
   }
-  q.addEventListener('input',()=>{const v=q.value.trim();
-    if(v){tree.hidden=true;results.hidden=false;search(v);}
-    else{results.hidden=true;tree.hidden=false;}});
 
-  // ---- 초기 ----
+  renderFavs();
   renderTree();
-  const first=docs.find(d=>d.docType==="법률")||docs[0];
-  if(first)openDoc(first.id,null,null);
+
+  // ───────── 원문 뷰 ─────────
+  const docEl=document.getElementById('doc'), relsEl=document.getElementById('rels');
+  let focusId=null;
+
+  /**
+   * 원문 안의 인용 표기를 클릭 가능한 링크로.
+   * evidence 는 추출 단계에서 항·호를 덧붙여 만든 문자열이라 원문과 띄어쓰기가 다를 수 있다.
+   * 그래서 공백을 제거한 사본에서 위치를 찾고 원문 좌표로 되돌린다.
+   */
+  function linkify(text,outEdges){
+    let bare='';const map=[];
+    for(let i=0;i<text.length;i++){ if(!/\s/.test(text[i])){bare+=text[i];map.push(i);} }
+    const marks=[];
+    const seen=new Set();
+    for(const e of outEdges){
+      if(e.kind==='소속'||!e.evidence)continue;
+      const ev=e.evidence.replace(/\s/g,'');
+      if(!ev)continue;
+      let from=0;
+      while(true){
+        const at=bare.indexOf(ev,from);
+        if(at<0)break;
+        const s=map[at], en=map[at+ev.length-1]+1;
+        const key=s+':'+en;
+        if(!seen.has(key)){ seen.add(key); marks.push({s,e:en,target:e.target}); }
+        from=at+ev.length;
+        break; // 같은 근거는 첫 등장만
+      }
+    }
+    marks.sort((a,b)=>a.s-b.s||b.e-a.e);
+    let out='',pos=0;
+    for(const m of marks){
+      if(m.s<pos)continue; // 겹치면 건너뜀
+      out+=esc(text.slice(pos,m.s));
+      const t=byId.get(m.target);
+      out+=`<a class="cite" data-go="${esc(m.target)}" title="${esc(t?nameOf(t):'')}">${esc(text.slice(m.s,m.e))}</a>`;
+      pos=m.e;
+    }
+    return out+esc(text.slice(pos));
+  }
+
+  /**
+   * 근거 문구를 화면용으로 다듬는다.
+   *
+   * 원본 근거는 세 종류의 군더더기를 달고 온다:
+   *   "근거: …"                     추출기가 붙인 감사용 접두사 (110건)
+   *   "(이하 "시행령"이라 한다)"      법령 원문의 약칭 정의 (85건)
+   *   「정식 법령명 전체」            화살표 옆에 이미 약칭으로 보이는 이름의 반복
+   * 셋 다 그대로 두면 330px 칸에서 여러 줄로 접혀 관계 목록이 읽히지 않는다.
+   * 근거가 쓸모 있는 건 "어디를 가리키는지"(제30조제1항)를 알려줄 때뿐이다.
+   */
+  const normName=s=>String(s||'').replace(/[\s·ㆍ「」()]/g,'');
+  function evText(ev,other){
+    let t=String(ev||'').replace(/^근거:\s*/,'')
+      .replace(/\(\s*이하\s*["'"'"]?[^)]*?한다\s*\.?\s*\)/g,'')
+      .replace(/\s{2,}/g,' ').trim();
+    if(!t)return '';
+    // 대상 이름을 되풀이하기만 하면 정보가 없다
+    const n=normName(t), a=normName(other.label), b=normName(other.name);
+    if(n===a||n===b)return '';
+    return t.length>30?t.slice(0,29)+'…':t;
+  }
+
+  function relRow(e,dir){
+    const other=byId.get(dir==='out'?e.target:e.source);
+    if(!other)return '';
+    const ev=evText(e.evidence,other);
+    return `<div class="rel" data-go="${esc(other.id)}">
+      <span class="k ${e.kind}">${e.kind}</span>
+      <span>${dir==='out'?'→':'←'} ${esc(nameOf(other))}
+      ${ev?`<span class="ev" title="${esc(e.evidence)}"> ⟨${esc(ev)}⟩</span>`:''}</span></div>`;
+  }
+
+  /** 한 단위(조문·별표)의 본문 HTML. 별표는 罫線 텍스트를 실제 표로 세운다. */
+  function unitBody(n){
+    const oe=outs.get(n.id)||[];
+    if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
+    if(n.kind==='별표'){
+      return '<div class="body annex">'+AnnexTable.toHtml(AnnexTable.parse(n.text),t=>linkify(t,oe))+'</div>'+
+        '<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. '+
+        `<button class="copymd" data-for="${esc(n.id)}">표 마크다운 복사</button></div>`;
+    }
+    return `<div class="body">${linkify(n.text,oe)}</div>`;
+  }
+
+  const anchorOf=id=>'u_'+String(id).replace(/[^\w가-힣]/g,'_');
+
+  /**
+   * 법령 **전체**를 한 번에 펼친다.
+   *
+   * 조문 하나만 띄우고 갈아끼우는 방식은 법령을 읽는 방식이 아니다. 실무자는 앞뒤 조문을
+   * 훑으며 맥락을 잡는다. 그래서 문서 전체를 이어 붙이고, 이동은 스크롤로 한다.
+   * focusId 는 "지금 화면 가운데 있는 조" 이고, 오른쪽 관계 패널이 그걸 따라간다.
+   */
+  let curLawId=null;
+  function openLaw(lawId,focusUnitId,smooth){
+    const law=byId.get('law:'+rawId(lawId))||byId.get(lawId);
+    if(!law)return;
+    const rid=rawId(law.id);
+
+    if(curLawId!==rid){
+      curLawId=rid;
+      const units=unitsOf(law.id);
+      const stamp=(law.확인일||law.시행일)?`<div class="stamp${law.낡음?' old':''}">${
+        [law.시행일?`시행 ${ymd(law.시행일)}`:'',law.확인일?`확인 ${ymd(law.확인일)}`:'',
+         law.상태&&law.상태!=='현행'?law.상태:'',law.낡음?'⚠ 재수집 필요':''].filter(Boolean).join(' · ')}</div>`:'';
+
+      let chap=null,html='';
+      for(const u of units){
+        if(u.kind==='조문'&&u.chapter&&u.chapter!==chap){
+          chap=u.chapter;
+          html+=`<h3 class="chaphead">${esc(chap)}</h3>`;
+        }
+        html+=`<section class="unit" id="${anchorOf(u.id)}" data-unit="${esc(u.id)}">
+          <div class="uhead"><span class="uno">${esc(u.label)}</span>${
+            u.title?`<span class="uti">${esc(u.title)}</span>`:''}</div>
+          ${unitBody(u)}
+        </section>`;
+      }
+      docEl.innerHTML=`<div class="lawhead">
+          <div class="crumb">${esc(law.type)}</div>
+          <h2>${esc(law.label)}</h2>
+          ${law.name&&law.name!==law.label?`<div class="subt">${esc(law.name)}</div>`:''}
+          ${stamp}
+        </div>${html||'<div class="blank">이 문서에는 조문이 없습니다.</div>'}`;
+      docEl.querySelector('.lawhead h2').appendChild(starBtn(law.id));
+      docEl.querySelectorAll('.unit').forEach(s=>{
+        const u=byId.get(s.dataset.unit);
+        if(u)s.querySelector('.uhead').appendChild(starBtn(u.id));
+      });
+      docEl.querySelectorAll('.copymd').forEach(b=>{
+        b.onclick=()=>{const u=byId.get(b.dataset.for); if(!u)return;
+          navigator.clipboard?.writeText(AnnexTable.toMarkdown(AnnexTable.parse(u.text)));
+          b.textContent='복사됨';setTimeout(()=>b.textContent='표 마크다운 복사',1500);};
+      });
+      observeUnits();
+    }
+
+    // 이동 — 화면을 바꾸는 게 아니라 지금 위치에서 목표 조까지 굴러간다.
+    const target=focusUnitId?document.getElementById(anchorOf(focusUnitId)):null;
+    if(target){
+      target.scrollIntoView({behavior:smooth===false?'auto':'smooth',block:'start'});
+      target.classList.add('jumped');
+      setTimeout(()=>target.classList.remove('jumped'),1200);
+      setActive(focusUnitId);
+    }else{
+      docEl.scrollTop=0;
+      const first=docEl.querySelector('.unit');
+      setActive(first?first.dataset.unit:law.id);
+    }
+  }
+
+  /** 클릭 진입점 — 무엇을 누르든 "그 조가 있는 법령 전체"를 열고 그 조로 간다. */
+  function open(id){
+    const n=byId.get(id); if(!n)return;
+    if(n.kind==='법령'){ openLaw(n.id,null); return; }
+    if(n.kind==='조문'||n.kind==='별표'){ openLaw(n.lawId,n.id); return; }
+    // 외부법 스텁 등 — 펼칠 본문이 없다. 옆 미리보기로만 보여준다.
+    preview(id);
+  }
+
+  // ───────── 오른쪽 패널: 화면 가운데 조를 따라간다 ─────────
+  function setActive(id){
+    if(!id||id===focusId)return;
+    focusId=id;
+    const n=byId.get(id);
+    docEl.querySelectorAll('.unit.active').forEach(s=>s.classList.remove('active'));
+    const sec=document.getElementById(anchorOf(id)); if(sec)sec.classList.add('active');
+    // 사이드바 트리에서도 같은 줄을 짚어준다
+    document.querySelectorAll('#tree .trow.on').forEach(r=>r.classList.remove('on'));
+    const trow=document.querySelector(`#tree .trow[data-unit="${CSS.escape(id)}"]`);
+    if(trow){trow.classList.add('on');trow.scrollIntoView({block:'nearest'});}
+
+    if(!n){relsEl.innerHTML='';return;}
+    const o=(outs.get(id)||[]).filter(e=>e.kind!=='소속');
+    const i=(ins.get(id)||[]).filter(e=>e.kind!=='소속');
+    relsEl.innerHTML=
+      `<h3>${esc(nameOf(n))} 기준</h3>`+
+      (o.length?`<h3>이 조문이 향하는 곳 (${o.length})</h3>`+o.map(e=>relRow(e,'out')).join(''):'')+
+      (i.length?`<h3>이곳을 가리키는 것 (${i.length})</h3>`+i.map(e=>relRow(e,'in')).join(''):'')+
+      (!o.length&&!i.length?'<div class="relempty">연결된 관계가 없습니다.</div>':'');
+  }
+
+  // ───────── 집중 영역: 마우스가 놓인 조 → 클릭하면 고정 ─────────
+  //
+  // 스크롤 위치로 추론하는 방식(IntersectionObserver·scroll 계산)을 접었다.
+  // 추론은 늘 어긋난다 — 긴 조문 하나가 화면을 다 덮으면 어디를 "보고 있는지" 알 수 없고,
+  // 합성이 멈춘 환경에서는 IntersectionObserver 콜백이 아예 오지 않는다(초기 1회조차).
+  // 마우스는 사용자가 직접 가리키는 곳이라 추론이 필요 없다. 읽던 조를 붙잡아두고 싶으면
+  // 클릭해서 고정하고, 다시 누르면 푼다.
+  let pinned=null;
+  function observeUnits(){ /* 목록 캐시가 필요 없어졌다 — hover 로 직접 받는다 */ }
+
+  docEl.addEventListener('mouseover',e=>{
+    if(pinned)return;                       // 고정 중에는 따라가지 않는다
+    const s=e.target.closest('.unit');
+    if(s)setActive(s.dataset.unit);
+  });
+
+  docEl.addEventListener('click',e=>{
+    if(e.target.closest('a,button'))return; // 인용 링크·★ 는 자기 일이 있다
+    const s=e.target.closest('.unit'); if(!s)return;
+    const id=s.dataset.unit;
+    if(pinned===id){                        // 같은 조를 다시 누르면 해제
+      pinned=null;
+      s.classList.remove('pin');
+      setPinNote(null);
+    }else{
+      docEl.querySelectorAll('.unit.pin').forEach(x=>x.classList.remove('pin'));
+      pinned=id;
+      s.classList.add('pin');
+      setActive(id);
+      setPinNote(byId.get(id));
+    }
+  });
+
+  /** 고정 상태를 오른쪽 패널 머리에 알린다 — 왜 안 따라오는지 몰라 헤매지 않도록. */
+  function setPinNote(n){
+    const old=relsEl.querySelector('.pinnote'); if(old)old.remove();
+    if(!n)return;
+    const d=document.createElement('div');
+    d.className='pinnote';
+    d.textContent='📌 고정됨 — 다시 클릭하면 해제';
+    relsEl.insertBefore(d,relsEl.firstChild);
+  }
+
+  // ───────── 인용 미리보기 ─────────
+  // 인용을 눌렀다고 읽던 화면을 통째로 갈아끼우면, 확인하고 돌아왔을 때 어디였는지를 잃는다.
+  // 그래서 기본 동작은 "옆에서 열기"다. 본문으로 옮기고 싶으면 명시적으로 누른다.
+  const pvEl=document.getElementById('preview');
+  function closePreview(){ pvEl.classList.remove('on'); pvEl.innerHTML=''; }
+  function preview(id){
+    const n=byId.get(id); if(!n)return;
+    if(n.id===focusId)return; // 지금 보고 있는 것을 옆에 또 띄우지 않는다
+    pvEl.innerHTML='';
+
+    const head=document.createElement('div'); head.className='pvhead';
+    const t=document.createElement('span'); t.className='t'; t.textContent=nameOf(n);
+    const go=document.createElement('button'); go.type='button'; go.textContent='본문으로';
+    go.onclick=()=>open(n.id);
+    const x=document.createElement('button'); x.type='button'; x.textContent='✕'; x.title='닫기';
+    x.onclick=closePreview;
+    head.append(t,go,x);
+    if(n.kind==='법령'||n.kind==='조문'||n.kind==='별표')head.insertBefore(starBtn(n.id),go);
+
+    const body=document.createElement('div'); body.className='pvbody';
+    if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
+    body.appendChild(document.createTextNode(
+      n.text||'원문 없음 — 이 노드는 법령/외부법 단위입니다.'));
+
+    pvEl.append(head,body);
+    pvEl.classList.add('on');
+  }
+
+  // 클릭 대상에 따라 목적지가 다르다:
+  //   .cite (원문 속 인용) → ③ 미리보기      · 읽던 자리를 잃지 않으려고
+  //   .ref  (노트 속 참조) → ④ 노트 아래 영역 · 적어둔 걸 보면서 확인하려고
+  //   그 밖(검색결과·트리·관계·즐겨찾기) → ② 원문
+  document.addEventListener('click',e=>{
+    const g=e.target.closest('[data-go]');
+    if(!g)return;
+    if(g.classList.contains('cite'))preview(g.dataset.go);
+    else if(g.classList.contains('ref'))showNoteRef(g.dataset.go);
+    else open(g.dataset.go);
+  });
+  function toSearch(){ q.focus(); q.select(); }
+
+  // ───────── 키보드 ─────────
+  document.addEventListener('keydown',e=>{
+    // 한글 IME 조합 중의 Enter 는 "조합 확정"이지 "선택"이 아니다.
+    // 이걸 거르지 않으면 "수의계약" 치고 Enter 한 번에 엉뚱한 항목이 열린다.
+    if(e.isComposing||e.keyCode===229)return;
+    if(e.key==='/'&&document.activeElement!==q){e.preventDefault();toSearch();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();toSearch();return;}
+    if(e.key==='Escape'){
+      // 미리보기가 떠 있으면 그것부터 닫는다 → 그다음 검색어를 비운다
+      if(pvEl.classList.contains('on')){closePreview();return;}
+      if(q.value){q.value='';doSearch();q.focus();}
+      return;
+    }
+    if(!hits.length)return;
+    if(document.activeElement!==q)return; // 목록 이동은 검색창에 있을 때만
+    if(e.key==='ArrowDown'){e.preventDefault();cur=Math.min(cur+1,hits.length-1);renderResults();}
+    else if(e.key==='ArrowUp'){e.preventDefault();cur=Math.max(cur-1,0);renderResults();}
+    else if(e.key==='Enter'){e.preventDefault();open(hits[cur].node.id);}
+  });
+
+  // ───────── 칸 접기/펼치기 ─────────
+  // 원문(②)은 고정이다. ①③④ 는 접히고, 접힌 폭은 전부 원문으로 간다.
+  // 상태는 테마·즐겨찾기와 같은 방식으로 localStorage 에 남긴다.
+  const COLKEY='law-cols';
+  const colLabel={1:'검색 · 법령',3:'관계 법령',4:'법령노트'};
+  function readCols(){
+    try{const v=JSON.parse(localStorage.getItem(COLKEY)||'[]');return Array.isArray(v)?v:[];}
+    catch(e){return [];}
+  }
+  function applyCols(off){
+    [1,3,4].forEach(c=>app.classList.toggle('off'+c,off.indexOf(c)>=0));
+    // 접히면 버튼은 숨고 세로 라벨이 펼치기 버튼 노릇을 한다 → 버튼은 항상 "접기"다.
+    document.querySelectorAll('.colbtn').forEach(b=>{
+      b.title='접기 — '+colLabel[+b.dataset.col];
+    });
+    document.querySelectorAll('.colstrip').forEach(s=>{
+      s.title='펼치기 — '+colLabel[+s.dataset.col];
+    });
+  }
+  function toggleCol(c){
+    const off=readCols(), i=off.indexOf(c);
+    if(i>=0)off.splice(i,1); else off.push(c);
+    try{localStorage.setItem(COLKEY,JSON.stringify(off));}catch(e){}
+    applyCols(off);
+  }
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('.colbtn,.colstrip'); if(!t)return;
+    e.preventDefault(); e.stopPropagation();
+    toggleCol(+t.dataset.col);
+  });
+  applyCols(readCols());
+
+  // ───────── 법률노트 ─────────
+  // 노트는 네 번째 칸에 항상 떠 있다. 열려 있는 법령과 무관한 단일 노트다 —
+  // 저장 키도 하나뿐이라(LawNotes.KEY) 법을 갈아타도 내용이 따라다니지 않는다.
+  const noteEl=document.getElementById('noteText'), noteView=document.getElementById('noteView'),
+        acEl=document.getElementById('noteAc'),
+        savedEl=document.getElementById('noteSaved'), pvBtn=document.getElementById('notePreview');
+
+  // 편집 영역은 contenteditable 이다. 참조를 버튼처럼 보이게 하면서도
+  // 백스페이스는 한 글자씩 먹어야 해서, 글자를 치환하지 않고 **감싸서 칠하기만** 한다.
+  const noteVal=()=>noteEl.textContent;
+
+  /** 캐럿 위치를 "평문 기준 몇 번째 글자"로 센다 (다시 그린 뒤 되돌리려고). */
+  function caretOffset(){
+    const sel=getSelection();
+    if(!sel||!sel.rangeCount||!noteEl.contains(sel.anchorNode))return null;
+    const r=sel.getRangeAt(0).cloneRange();
+    r.selectNodeContents(noteEl); r.setEnd(sel.getRangeAt(0).endContainer,sel.getRangeAt(0).endOffset);
+    return r.toString().length;
+  }
+  function setCaret(off){
+    if(off==null)return;
+    const walk=document.createTreeWalker(noteEl,NodeFilter.SHOW_TEXT);
+    let seen=0,node;
+    while((node=walk.nextNode())){
+      const len=node.nodeValue.length;
+      if(seen+len>=off){
+        const sel=getSelection(),r=document.createRange();
+        r.setStart(node,Math.max(0,off-seen)); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r); return;
+      }
+      seen+=len;
+    }
+    // 끝으로
+    const sel=getSelection(),r=document.createRange();
+    r.selectNodeContents(noteEl); r.collapse(false);
+    sel.removeAllRanges(); sel.addRange(r);
+  }
+
+  /** 완성된 {[...]} 만 칩으로 칠한다. 미완성이면 그냥 글자로 남는다. */
+  function paintChips(){
+    const text=noteVal();
+    const off=caretOffset();
+    const refs=LawNotes.parseRefs(text);
+    let html='',pos=0;
+    for(const r of refs){
+      html+=esc(text.slice(pos,r.start));
+      const id=LawNotes.resolve(r,nodes);
+      html+=`<span class="chip ${id?'ok':'bad'}"${id?` data-ref="${esc(id)}"`:''}`+
+            `${id?'':' title="찾지 못한 참조입니다"'}>${esc(r.raw)}</span>`;
+      pos=r.end;
+    }
+    html+=esc(text.slice(pos));
+    if(noteEl.innerHTML!==html){ noteEl.innerHTML=html; setCaret(off); }
+  }
+
+  noteEl.textContent=LawNotes.load();
+  paintChips();
+
+  let saveT=null;
+  noteEl.addEventListener('input',()=>{
+    paintChips();          // } 를 지우면 패턴이 깨져 칩이 저절로 꺼진다
+    clearTimeout(saveT);
+    saveT=setTimeout(()=>{
+      savedEl.textContent=LawNotes.save(noteVal())?'저장됨':'저장 실패(브라우저 저장소)';
+      setTimeout(()=>{savedEl.textContent='';},1500);
+    },400);
+    updateAc();
+  });
+  noteEl.addEventListener('click',e=>{
+    // 칩을 누르면 아래 영역에 관련 규정. 캐럿은 그대로 두어 편집을 방해하지 않는다.
+    const chip=e.target.closest('.chip.ok');
+    if(chip&&chip.dataset.ref){showNoteRef(chip.dataset.ref);return;}
+    updateAc();
+  });
+  noteEl.addEventListener('blur',()=>setTimeout(hideAc,150));
+
+  function renderNoteView(){
+    noteView.innerHTML=LawNotes.toHtml(noteVal(),nodes,esc,
+      (id,text)=>`<a class="ref" data-go="${esc(id)}">${esc(text)}</a>`,
+      t=>`<span class="miss" title="찾지 못한 참조입니다">${esc(t)}</span>`);
+  }
+  // ── 기록 보관함 ──
+  // 노트는 하나뿐이라 새로 쓰려면 지워야 한다. 지우기 전에 담아두는 곳.
+  const logBtn=document.getElementById('noteLog'), arcBtn=document.getElementById('noteArchive');
+  function fmtAt(iso){
+    const d=new Date(iso); if(isNaN(d))return '';
+    const p=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  arcBtn.onclick=()=>{
+    const rec=LawNotes.archive(noteVal());
+    savedEl.textContent=rec?'기록에 담았습니다':'빈 노트는 담지 않습니다';
+    setTimeout(()=>{savedEl.textContent='';},1800);
+    if(rec&&!nrEl.hidden)showLog();
+  };
+  logBtn.onclick=showLog;
+  function showLog(){
+    const list=LawNotes.archiveList();
+    nrEl.innerHTML='';
+    const head=document.createElement('div'); head.className='nrhead';
+    const t=document.createElement('span'); t.className='t';
+    t.textContent=`기록 ${list.length}건`;
+    const x=document.createElement('button'); x.type='button'; x.className='nb-btn';
+    x.textContent='✕'; x.title='닫기'; x.onclick=closeNoteRef;
+    head.append(t,x);
+    nrEl.appendChild(head);
+
+    if(!list.length){
+      const e=document.createElement('div'); e.className='nrbody';
+      e.style.color='var(--muted)';
+      e.textContent='아직 담아둔 기록이 없습니다. 노트를 쓰고 "담기" 를 누르면 여기에 쌓입니다.';
+      nrEl.appendChild(e);
+    }else{
+      const box=document.createElement('div'); box.className='nrbody';
+      box.style.whiteSpace='normal'; box.style.padding='0';
+      for(const rec of list){
+        const it=document.createElement('div'); it.className='logit';
+        const lt=document.createElement('span'); lt.className='lt'; lt.textContent=rec.title;
+        const ld=document.createElement('span'); ld.className='ld'; ld.textContent=fmtAt(rec.at);
+        const lx=document.createElement('button'); lx.type='button'; lx.className='lx';
+        lx.textContent='✕'; lx.title='이 기록 지우기';
+        lx.onclick=ev=>{ev.stopPropagation();LawNotes.archiveRemove(rec.id);showLog();};
+        // 불러오기 전에 지금 노트를 잃지 않도록 자동으로 담아둔다
+        it.onclick=()=>{
+          const cur=noteVal();
+          if(cur.trim()&&cur!==rec.text)LawNotes.archive(cur);
+          noteEl.textContent=rec.text; paintChips(); LawNotes.save(rec.text);
+          savedEl.textContent='불러왔습니다'; setTimeout(()=>{savedEl.textContent='';},1500);
+          showLog();
+        };
+        it.append(lt,ld,lx);
+        box.appendChild(it);
+      }
+      nrEl.appendChild(box);
+    }
+    nrEl.hidden=false;
+  }
+
+  pvBtn.onclick=()=>{
+    const on=noteView.hidden;
+    if(on)renderNoteView();
+    noteView.hidden=!on; noteEl.hidden=on;
+    pvBtn.classList.toggle('on',on);
+    pvBtn.textContent=on?'편집':'미리보기';
+    hideAc();
+  };
+
+  // ── 자동완성: 커서가 아직 닫히지 않은 {[ 안에 있을 때만 뜬다 ──
+  let acItems=[], acSel=0, acFrom=-1;
+  function openRefAt(pos){
+    const v=noteVal(), open=v.lastIndexOf('{[',pos);
+    if(open<0)return -1;
+    const close=v.indexOf(']}',open);
+    if(close>=0&&close+2<=pos)return -1; // 이미 닫힌 참조
+    if(v.slice(open,pos).indexOf('\n')>=0)return -1; // 줄을 넘기면 참조가 아니다
+    return open;
+  }
+  function hideAc(){acEl.hidden=true;acItems=[];acFrom=-1;}
+  function updateAc(){
+    const pos=caretOffset(); if(pos==null)return hideAc();
+    const open=openRefAt(pos);
+    if(open<0)return hideAc();
+    acFrom=open;
+    const inner=noteVal().slice(open+2,pos);
+    acItems=LawNotes.suggest(inner,nodes,8);
+    if(!acItems.length)return hideAc();
+    acSel=0; drawAc(); placeAc();
+  }
+  function drawAc(){
+    acEl.innerHTML=acItems.map((it,i)=>
+      `<div class="acit${i===acSel?' sel':''}" data-i="${i}">
+        <span class="l">${esc(it.label)}</span><span class="s">${esc(it.sub||'')}</span></div>`).join('');
+    acEl.hidden=false;
+  }
+  // 위치는 CSS 가 잡는다(노트 칸 상단에 폭을 꽉 채워 붙인다).
+  // 캐럿 좌표를 따라가려면 거울 엘리먼트가 필요한데, 칸이 좁아 어차피 폭을 다 쓰므로 과하다.
+  function placeAc(){}
+  function acceptAc(i){
+    const it=acItems[i]; if(!it||acFrom<0)return;
+    const v=noteVal(), pos=caretOffset(); if(pos==null)return;
+    const closed=it.kind==='조문';           // 조문까지 골랐으면 참조를 닫아준다
+    const ins='{['+it.insert+(closed?']}':'-');
+    noteEl.textContent=v.slice(0,acFrom)+ins+v.slice(pos);
+    const caret=acFrom+ins.length;
+    paintChips(); noteEl.focus(); setCaret(caret);
+    LawNotes.save(noteVal());
+    if(closed)hideAc(); else updateAc();     // 법령만 골랐으면 이어서 조문 목록
+  }
+  acEl.addEventListener('mousedown',e=>{
+    const it=e.target.closest('.acit'); if(!it)return;
+    e.preventDefault(); acceptAc(+it.dataset.i);
+  });
+  noteEl.addEventListener('keydown',e=>{
+    if(acEl.hidden||!acItems.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();acSel=Math.min(acSel+1,acItems.length-1);drawAc();}
+    else if(e.key==='ArrowUp'){e.preventDefault();acSel=Math.max(acSel-1,0);drawAc();}
+    else if(e.key==='Enter'||e.key==='Tab'){
+      if(e.isComposing||e.keyCode===229)return; // 한글 조합 확정용 Enter 는 선택이 아니다
+      e.preventDefault();acceptAc(acSel);
+    }
+    else if(e.key==='Escape'){e.preventDefault();hideAc();}
+  });
+
+  // ── 노트 아래 참조 패널 ──
+  // 노트에서 건 법령을 이 칸 안에서 확인한다. 가운데 원문은 건드리지 않는다.
+  const nrEl=document.getElementById('noteRef');
+  function closeNoteRef(){nrEl.hidden=true;nrEl.innerHTML='';}
+  function showNoteRef(id){
+    const n=byId.get(id); if(!n)return;
+    nrEl.innerHTML='';
+    const head=document.createElement('div'); head.className='nrhead';
+    const t=document.createElement('span'); t.className='t'; t.textContent=nameOf(n);
+    const go=document.createElement('button'); go.type='button'; go.className='nb-btn';
+    go.textContent='본문으로'; go.onclick=()=>open(id);
+    const x=document.createElement('button'); x.type='button'; x.className='nb-btn';
+    x.textContent='✕'; x.title='닫기'; x.onclick=closeNoteRef;
+    head.append(t);
+    if(n.kind==='법령'||n.kind==='조문'||n.kind==='별표')head.appendChild(starBtn(id));
+    head.append(go,x);
+
+    const body=document.createElement('div'); body.className='nrbody';
+    if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
+    body.appendChild(document.createTextNode(n.text||'원문 없음 — 법령 단위입니다.'));
+    // 관련 규정 목록은 넣지 않는다 — 노트에서 건 법령은 "그 조문이 뭐라 하는지"를
+    // 확인하려는 것이지 관계망을 타려는 게 아니다. 관계는 ③ 칸의 몫이다.
+    nrEl.append(head,body);
+    nrEl.hidden=false;
+  }
+
+  // 아무것도 안 고른 상태에서 ③ 이 텅 비어 있으면 고장난 것처럼 보인다.
+  relsEl.innerHTML='<div class="relempty">조문 위에 마우스를 올리면 그 조의 위임·인용 관계가 여기 나옵니다. '+
+    '클릭하면 📌 로 고정됩니다.</div>';
+
+  // 시작 화면 — 빈 원문 자리에 무엇을 하면 되는지만 적어둔다.
+  docEl.innerHTML='<div class="blank">왼쪽 <b>검색창</b>에 조문·키워드를 치거나, '+
+    '아래 <b>전체 법령</b>에서 조문까지 펼쳐 여세요.<br><br>'+
+    '조문을 열면 오른쪽에 <b>관계 조문</b>(위임·인용)이 함께 뜹니다. '+
+    '본문 속 인용을 누르면 화면을 옮기지 않고 <b>옆에서 미리보기</b>로 확인합니다.</div>';
+
+  q.focus();
 })();
 </script>
 </body>

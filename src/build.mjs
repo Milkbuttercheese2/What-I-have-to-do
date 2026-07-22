@@ -1,4 +1,4 @@
-// LawEverything — 빌드: 스냅샷 → 관계추출 → 자족형 오프라인 페이지
+// 몇 조항이더라 — 빌드: 스냅샷 → 관계추출 → 자족형 오프라인 페이지
 //
 // 이 스크립트가 "온라인 빌드 단계"의 마지막 조립이다.
 // 산출물 web/index.html 은 외부 의존성 0 → 내부망에 반입해 더블클릭으로 연다.
@@ -28,26 +28,21 @@ const snapshot = JSON.parse(readFileSync(src, "utf8"));
 const graph = buildGraph(snapshot, { maxAgeDays });
 const template = readFileSync(join(root, "src/template.html"), "utf8");
 
-// 리더 페이로드 — 화면은 "법령 원문 보기"에 충실. 그래프는 잠정 보류(데이터는 web/graph.json 에 남김).
-// 조문별 신선도 스탬프는 그래프 문서 노드에서 가져와 문서에 붙인다.
-const stampByDoc = {};
-for (const nd of graph.nodes) {
-  if (typeof nd.id === "string" && nd.id.startsWith("law:")) {
-    stampByDoc[nd.id.slice(4)] = { 확인일: nd.확인일, 시행일: nd.시행일, 상태: nd.상태, 낡음: nd.낡음 };
-  }
-}
-const page = {
-  meta: { ...graph.meta, documents: snapshot.documents.length,
-    articles: snapshot.documents.reduce((n, d) => n + (d.articles?.length ?? 0), 0) },
-  documents: snapshot.documents.map((d) => ({
-    id: d.id, name: d.name, shortName: d.shortName, docType: d.docType, family: d.family, parent: d.parent,
-    stamp: stampByDoc[d.id] ?? null,
-    articles: d.articles ?? [],
-    별표: d.별표 ?? [],
-  })),
-};
-const { audit } = graph;
-let html = template.replace("/*__GRAPH__*/", JSON.stringify(page));
+// 감사 정보는 빌드 산출물에 실을 필요가 없다 (내부망 페이지는 가볍게 유지).
+const { audit, ...page } = graph;
+
+// 검색 런타임을 인라인. 브라우저와 테스트가 같은 파일을 쓰도록 별도 파일로 두고 여기서 끼워넣는다.
+const searchRuntime = readFileSync(join(root, "src/search-runtime.js"), "utf8");
+const annexTable = readFileSync(join(root, "src/annex-table.js"), "utf8");
+const favorites = readFileSync(join(root, "src/favorites.js"), "utf8");
+const notes = readFileSync(join(root, "src/notes.js"), "utf8");
+
+let html = template
+  .replace("/*__SEARCH__*/", () => searchRuntime)
+  .replace("/*__ANNEX__*/", () => annexTable)
+  .replace("/*__FAVS__*/", () => favorites)
+  .replace("/*__NOTES__*/", () => notes)
+  .replace("/*__GRAPH__*/", () => JSON.stringify(page));
 
 // Pretendard 폰트를 data-URI로 임베드(외부 웹폰트 금지 — 내부망 단일파일 원칙).
 const fontPath = join(root, "assets/PretendardVariable.woff2");
@@ -66,8 +61,8 @@ writeFileSync(join(root, "data/audit.json"), JSON.stringify(audit, null, 2));
 
 const s = graph.stats;
 console.log(`빌드 완료 → web/index.html  (입력: ${src.replace(root, ".")})`);
-console.log(`  문서 ${s.documents} · 노드 ${s.nodes} (조문 ${s.articleNodes} · 외부법 ${s.externalNodes})`);
-console.log(`  엣지 ${s.edges} — 위임 ${s.위임} · 인용 ${s.인용} · 소속 ${s.소속}`);
+console.log(`  문서 ${s.documents} · 노드 ${s.nodes} (조문 ${s.articleNodes} · 별표 ${s.annexNodes} · 외부법 ${s.externalNodes})`);
+console.log(`  엣지 ${s.edges} — 위임 ${s.위임} · 인용 ${s.인용} · 별표 ${s.별표} · 소속 ${s.소속}`);
 
 const c = audit.위임근거_커버리지;
 if (c.행정규칙수) {

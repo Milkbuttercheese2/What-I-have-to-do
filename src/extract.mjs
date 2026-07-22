@@ -1,4 +1,4 @@
-// LawEverything — 규칙기반 법령 관계 추출기 (AI 없음)
+// 몇 조항이더라 — 규칙기반 법령 관계 추출기 (AI 없음)
 //
 // 입력:  data/snapshot.json  { meta, documents[] }
 // 출력:  { nodes, edges, stats, audit } — 위임/인용 그래프
@@ -193,7 +193,20 @@ export function buildGraph(snapshot, options = {}) {
       name: doc.name,
       ...stamp,
     });
+    // 편/장/절 헤더는 조문이 아니다 — 노드로 만들지 않고 "지금 어느 장인가"만 들고 간다.
+    //
+    // 이걸 노드로 만들면 조문이 사라진다. 법제처 API는 장 헤더에 *뒤따르는 조문의 번호*를
+    // 그대로 달아 보낸다("제1장 총칙"의 조문번호 = 1). 헤더가 문서 순서상 먼저 오므로
+    // addNode 의 선착순 유지 규칙과 맞물려 진짜 제1조를 밀어낸다.
+    // (실측: 45개 조문/5개 문서가 장 제목으로 덮여 있었다 — 시행령 제10조 경쟁방법,
+    //  제33조 입찰공고 등 조달 실무 핵심 조문 포함. 검색 색인도 같은 노드를 쓰므로
+    //  실제 내용으로는 검색조차 되지 않았다.)
+    let chapter = null;
     for (const art of doc.articles ?? []) {
+      if (art.structural) {
+        chapter = String(art.text ?? "").split("\n")[0].trim() || null;
+        continue;
+      }
       addNode({
         id: artId(doc, art.no),
         kind: "조문",
@@ -204,9 +217,40 @@ export function buildGraph(snapshot, options = {}) {
         text: art.text,
         lawId: doc.id,
         group: doc.shortName,
+        // 리더 트리의 "법령 › 장 › 조" 중간 계단. 장 구분이 없는 문서는 붙지 않는다.
+        ...(chapter ? { chapter } : {}),
         ...stamp,
       });
       addEdge(`law:${doc.id}`, artId(doc, art.no), "소속");
+    }
+
+    // 별표·서식 — 조달 실무의 핵심 표(제재기준·심사표·서식)가 여기 있다.
+    // 조문만 색인하면 "부정당업자 제재기준"을 아무리 검색해도 안 나온다.
+    for (const bx of doc.annexes ?? []) {
+      const id = `byl:${doc.id}:${bx.kind}:${bx.no}`;
+      addNode({
+        id,
+        kind: "별표",
+        type: typeOf(doc),
+        family: familyOf(doc),
+        label: `[${bx.kind} ${bx.no}]`,
+        title: bx.title,
+        text: bx.text,
+        lawId: doc.id,
+        group: doc.shortName,
+        ...stamp,
+      });
+      addEdge(`law:${doc.id}`, id, "소속");
+
+      // 별표 제목의 "(제76조 관련)" 표기가 근거 조문을 알려준다 — 규칙으로 바로 잇을 수 있다.
+      // 항·호가 끼거나("제77조의2제1항제1호 관련") 여러 조를 나열하는("제4조 및 제5조 관련")
+      // 경우가 흔하므로, 괄호 안에 '관련'이 있으면 그 안의 조 번호를 전부 뽑는다.
+      for (const par of String(bx.title ?? "").matchAll(/\(([^)]*관련[^)]*)\)/g)) {
+        for (const m of par[1].matchAll(/제(\d+)조(?:의(\d+))?/g)) {
+          const jo = joKey(m[1], m[2]);
+          if (hasArticle(doc, jo)) addEdge(artId(doc, jo), id, "별표", `${joLabel(jo)} 관련`);
+        }
+      }
     }
   }
 
@@ -274,7 +318,12 @@ export function buildGraph(snapshot, options = {}) {
     addEdge(targetIdFor(g.doc, g.jo), `law:${ruleId}`, "위임", `근거: ${g.evidence}`);
     const fam = familyOf(g.doc);
     nodes.get(`law:${ruleId}`).family = fam;
-    for (const art of rule.articles ?? []) nodes.get(artId(rule, art.no)).family = fam;
+    // 장 헤더는 노드가 아니고, 헤더만 있고 조문이 없는 장도 있을 수 있다 → 없는 노드는 건너뛴다.
+    for (const art of rule.articles ?? []) {
+      if (art.structural) continue;
+      const n = nodes.get(artId(rule, art.no));
+      if (n) n.family = fam;
+    }
   }
 
   // ── 3) Layer 1 + 2: 문서별 스캔 ──────────────────────────────────────────
@@ -433,11 +482,13 @@ export function buildGraph(snapshot, options = {}) {
       documents: docs.length,
       nodes: nodeArr.length,
       articleNodes: nodeArr.filter((n) => n.kind === "조문").length,
+      annexNodes: nodeArr.filter((n) => n.kind === "별표").length,
       externalNodes: nodeArr.filter((n) => n.kind === "외부법").length,
       edges: edges.length,
       소속: count("소속"),
       위임: count("위임"),
       인용: count("인용"),
+      별표: count("별표"),
     },
     audit: {
       // ★ Phase 1 핵심 지표 — 행정규칙이 근거 조문에 자동 연결된 비율.
@@ -472,7 +523,11 @@ export function buildGraph(snapshot, options = {}) {
 }
 
 // CLI: `node src/extract.mjs [--json]`
-if (import.meta.url === `file://${process.argv[1]}`) {
+// 경로 비교를 문자열로 하면 Windows 에서 영원히 거짓이다 —
+// import.meta.url 은 "file:///C:/..." 인데 process.argv[1] 은 "C:\..." 라 절대 안 맞는다.
+// (그래서 `npm run extract` 가 Windows 에서 아무 출력 없이 끝났다.)
+const { pathToFileURL: _toFileURL } = await import("node:url");
+if (process.argv[1] && import.meta.url === _toFileURL(process.argv[1]).href) {
   const { readFileSync, existsSync } = await import("node:fs");
   const { fileURLToPath } = await import("node:url");
   const { dirname, join } = await import("node:path");
