@@ -57,12 +57,36 @@
      ① 검색·선택 │ ② 원문 │ ③ 관계 법령 │ ④ 법령노트
      실무 동선이 "찾는다 → 읽는다 → 근거를 확인한다 → 적어둔다" 라서 넷이 동시에 보여야 한다.
      화면을 갈아끼우면 어디 있었는지를 매번 다시 찾게 된다. */
+  /* 원문(②)만 고정이다. 나머지 셋은 접힌다 — 접으면 그 폭이 전부 원문으로 간다.
+     완전히 숨기지 않고 36px 띠로 남긴다. 사라지면 다시 여는 법을 못 찾는다. */
   #app{display:grid;height:100vh;min-height:0;
-    grid-template-columns:300px minmax(0,1fr) 330px 330px;
+    --w1:300px; --w3:330px; --w4:330px;
+    grid-template-columns:var(--w1) minmax(0,1fr) var(--w3) var(--w4);
     grid-template-areas:"side doc rail note"}
+  #app.off1{--w1:36px} #app.off3{--w3:36px} #app.off4{--w4:36px}
   .side{grid-area:side} .doc{grid-area:doc}
   .rail{grid-area:rail} .notecol{grid-area:note}
+  .side,.rail,.notecol{position:relative}
   .scroll{overflow:auto;min-height:0}
+
+  /* 접기 버튼 — 각 칸 우상단(접히면 띠 안 가운데) */
+  .colbtn{position:absolute;top:9px;right:8px;z-index:5;width:20px;height:20px;
+    background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:5px;cursor:pointer;font-size:10px;line-height:1;padding:0;
+    display:flex;align-items:center;justify-content:center;font-family:inherit}
+  .colbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .colstrip{display:none;writing-mode:vertical-rl;text-orientation:mixed;
+    margin:36px auto 0;font-size:11px;color:var(--muted);letter-spacing:2px;
+    cursor:pointer;user-select:none;white-space:nowrap}
+  .colstrip:hover{color:var(--accent)}
+  /* 접힌 칸은 버튼과 세로 라벨만 남긴다 */
+  #app.off1 .side > *:not(.colbtn):not(.colstrip),
+  #app.off3 .rail > *:not(.colbtn):not(.colstrip),
+  #app.off4 .notecol > *:not(.colbtn):not(.colstrip){display:none}
+  #app.off1 .side .colstrip,
+  #app.off3 .rail .colstrip,
+  #app.off4 .notecol .colstrip{display:block}
+  #app.off1 .side .colbtn,#app.off3 .rail .colbtn,#app.off4 .notecol .colbtn{right:8px;left:8px}
 
   /* 좁아지면 폭을 줄이고, 더 좁으면 노트를 관계 아래로, 끝내 안 되면 원문 아래로 내린다.
      네 칸을 그대로 우겨넣으면 가운데 원문이 0px 로 찌그러진다(3단에서 실측). */
@@ -306,6 +330,8 @@
 <div id="app">
   <!-- ① 왼쪽: 검색창 하나 + 전체 법령 -->
   <aside class="side">
+    <button type="button" class="colbtn" data-col="1" title="접기">‹</button>
+    <div class="colstrip" data-col="1">검색 · 법령</div>
     <header>
       <div class="htop">
         <h1>몇 조항이더라</h1>
@@ -335,12 +361,16 @@
 
   <!-- ③ 관계 법령: 인용 미리보기 + 관계 조문 -->
   <aside class="rail">
+    <button type="button" class="colbtn" data-col="3" title="접기">›</button>
+    <div class="colstrip" data-col="3">관계 법령</div>
     <div id="preview"></div>
     <div class="scroll" id="rels"></div>
   </aside>
 
   <!-- ④ 법령노트 — 어떤 법령을 열어두든 항상 같은 노트다 -->
   <aside class="notecol">
+    <button type="button" class="colbtn" data-col="4" title="접기">›</button>
+    <div class="colstrip" data-col="4">법령노트</div>
     <div class="notebar">
       <span class="nb-t">법령노트</span>
       <span class="grow"></span>
@@ -885,6 +915,37 @@ const GRAPH = /*__GRAPH__*/;
     else if(e.key==='ArrowUp'){e.preventDefault();cur=Math.max(cur-1,0);renderResults();}
     else if(e.key==='Enter'){e.preventDefault();open(hits[cur].node.id);}
   });
+
+  // ───────── 칸 접기/펼치기 ─────────
+  // 원문(②)은 고정이다. ①③④ 는 접히고, 접힌 폭은 전부 원문으로 간다.
+  // 상태는 테마·즐겨찾기와 같은 방식으로 localStorage 에 남긴다.
+  const COLKEY='law-cols';
+  const colLabel={1:'검색 · 법령',3:'관계 법령',4:'법령노트'};
+  function readCols(){
+    try{const v=JSON.parse(localStorage.getItem(COLKEY)||'[]');return Array.isArray(v)?v:[];}
+    catch(e){return [];}
+  }
+  function applyCols(off){
+    [1,3,4].forEach(c=>app.classList.toggle('off'+c,off.indexOf(c)>=0));
+    document.querySelectorAll('.colbtn').forEach(b=>{
+      const c=+b.dataset.col, closed=off.indexOf(c)>=0;
+      // 화살표는 "누르면 일어날 일" 을 가리킨다
+      b.textContent=closed?(c===1?'›':'‹'):(c===1?'‹':'›');
+      b.title=(closed?'펼치기 — ':'접기 — ')+colLabel[c];
+    });
+  }
+  function toggleCol(c){
+    const off=readCols(), i=off.indexOf(c);
+    if(i>=0)off.splice(i,1); else off.push(c);
+    try{localStorage.setItem(COLKEY,JSON.stringify(off));}catch(e){}
+    applyCols(off);
+  }
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('.colbtn,.colstrip'); if(!t)return;
+    e.preventDefault(); e.stopPropagation();
+    toggleCol(+t.dataset.col);
+  });
+  applyCols(readCols());
 
   // ───────── 법률노트 ─────────
   // 노트는 네 번째 칸에 항상 떠 있다. 열려 있는 법령과 무관한 단일 노트다 —
