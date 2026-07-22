@@ -43,8 +43,23 @@ var LawSearch = (function () {
     });
     // 조번호를 못 찾았고 질의가 숫자만이면 그것도 조번호로 본다 ("42")
     if (!jo && /^\d+$/.test(q)) jo = q;
-    var terms = normalize(rest).length ? [normalize(rest)] : [];
-    return { raw: q, jo: jo, terms: terms, cho: chosung(normalize(rest)) };
+
+    // **띄어쓴 단어를 각각의 조건으로 쪼갠다.**
+    //
+    // 예전에는 질의 전체를 붙여 한 덩어리로 만들었다. 그래서 제명을 정확히 기억하지
+    // 못하면 아무것도 안 나왔다 — "공공주택 종합심사" 로는
+    // 「조달청 공공주택 *공사계약* 종합심사낙찰제 심사세부기준」이 안 걸린다.
+    // 가운데 한 단어를 빠뜨렸을 뿐인데 결과가 0이면 도구를 못 믿게 된다.
+    // 점수 계산부는 이미 여러 단어를 AND 로 다루고 있었다(하나라도 안 걸리면 0점).
+    var terms = [];
+    var parts = rest.split(/\s+/);
+    for (var i = 0; i < parts.length; i++) {
+      var t = normalize(parts[i]);
+      if (t.length && terms.indexOf(t) < 0) terms.push(t);
+    }
+    // 붙여 친 전체 문자열도 함께 넘긴다 — 제명을 통째로 맞힌 경우를 위에 올리려고.
+    var phrase = normalize(rest);
+    return { raw: q, jo: jo, terms: terms, phrase: phrase, cho: chosung(phrase) };
   }
 
   /** 노드 1건의 색인 — 빌드 시 1회 계산해 두고 타건마다 재사용한다. */
@@ -86,13 +101,14 @@ var LawSearch = (function () {
       }
     }
 
+    var ownHits = 0; // 이 노드 **자신의 이름**에 걸린 단어 수
     for (var i = 0; i < q.terms.length; i++) {
       var t = q.terms[i];
       if (!t) continue;
       // 조문제목 매치가 가장 강하다 — 실무자가 찾는 건 대개 "그 주제의 조문"이다.
-      if (ix.ti === t) { sc += 700; matchedSomething = true; }
-      else if (ix.ti.indexOf(t) === 0) { sc += 450; matchedSomething = true; }
-      else if (ix.ti.indexOf(t) >= 0) { sc += 300; matchedSomething = true; }
+      if (ix.ti === t) { sc += 700; matchedSomething = true; ownHits++; }
+      else if (ix.ti.indexOf(t) === 0) { sc += 450; matchedSomething = true; ownHits++; }
+      else if (ix.ti.indexOf(t) >= 0) { sc += 300; matchedSomething = true; ownHits++; }
       // 그 다음이 소속 법령명 매치
       else if (ix.t.indexOf(t) === 0) { sc += 220; matchedSomething = true; }
       else if (ix.t.indexOf(t) >= 0) { sc += 160; matchedSomething = true; }
@@ -114,6 +130,21 @@ var LawSearch = (function () {
     }
 
     if (!matchedSomething) return 0;
+
+    // 띄어쓴 단어를 쪼개 찾다 보니 "여러 단어가 흩어져 걸린 문서"와
+    // "제명을 통째로 맞힌 문서"가 같은 점수가 된다. 후자를 위로 올린다.
+    if (q.phrase && q.terms.length > 1) {
+      if (ix.ti.indexOf(q.phrase) >= 0) sc += 400;
+      else if (ix.t.indexOf(q.phrase) >= 0) sc += 250;
+    }
+
+    // 법령명을 통째로 물었으면 **그 법령이 자기 조문·별표보다 위**여야 한다.
+    // 소속 법령명은 조문·별표의 색인에도 통째로 들어가 있어서(ix.t),
+    // 별지 제목이 우연히 앞부분 일치(450점)만 해도 본체 법령(300+300)을 제친다.
+    // 실측: "공공주택 종합심사" → 별지 632 vs 본체 훈령 617.
+    // 사용자가 문서 이름을 쳤는데 그 문서가 목록 아래에 있으면 못 찾았다고 여긴다.
+    if (n.kind === "법령" && ownHits === q.terms.length && q.terms.length > 0) sc += 350;
+
     sc += TYPE_W[n.type] || 0;
     if (n.kind === "조문" || n.kind === "별표") sc += 10;
     else if (n.kind === "법령") sc += 5;

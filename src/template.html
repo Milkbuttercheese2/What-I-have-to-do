@@ -731,13 +731,36 @@ const GRAPH = /*__GRAPH__*/;
     return out+esc(text.slice(pos));
   }
 
+  /**
+   * 근거 문구를 화면용으로 다듬는다.
+   *
+   * 원본 근거는 세 종류의 군더더기를 달고 온다:
+   *   "근거: …"                     추출기가 붙인 감사용 접두사 (110건)
+   *   "(이하 "시행령"이라 한다)"      법령 원문의 약칭 정의 (85건)
+   *   「정식 법령명 전체」            화살표 옆에 이미 약칭으로 보이는 이름의 반복
+   * 셋 다 그대로 두면 330px 칸에서 여러 줄로 접혀 관계 목록이 읽히지 않는다.
+   * 근거가 쓸모 있는 건 "어디를 가리키는지"(제30조제1항)를 알려줄 때뿐이다.
+   */
+  const normName=s=>String(s||'').replace(/[\s·ㆍ「」()]/g,'');
+  function evText(ev,other){
+    let t=String(ev||'').replace(/^근거:\s*/,'')
+      .replace(/\(\s*이하\s*["'"'"]?[^)]*?한다\s*\.?\s*\)/g,'')
+      .replace(/\s{2,}/g,' ').trim();
+    if(!t)return '';
+    // 대상 이름을 되풀이하기만 하면 정보가 없다
+    const n=normName(t), a=normName(other.label), b=normName(other.name);
+    if(n===a||n===b)return '';
+    return t.length>30?t.slice(0,29)+'…':t;
+  }
+
   function relRow(e,dir){
     const other=byId.get(dir==='out'?e.target:e.source);
     if(!other)return '';
+    const ev=evText(e.evidence,other);
     return `<div class="rel" data-go="${esc(other.id)}">
       <span class="k ${e.kind}">${e.kind}</span>
       <span>${dir==='out'?'→':'←'} ${esc(nameOf(other))}
-      ${e.evidence?`<span class="ev"> ⟨${esc(e.evidence)}⟩</span>`:''}</span></div>`;
+      ${ev?`<span class="ev" title="${esc(e.evidence)}"> ⟨${esc(ev)}⟩</span>`:''}</span></div>`;
   }
 
   /** 한 단위(조문·별표)의 본문 HTML. 별표는 罫線 텍스트를 실제 표로 세운다. */
