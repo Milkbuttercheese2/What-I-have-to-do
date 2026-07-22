@@ -136,9 +136,21 @@
   .nb-hint code{background:var(--panel2);border-radius:4px;padding:1px 4px;font-size:10px}
 
   .notewrap{position:relative;flex:1;min-height:0;display:flex}
-  #noteText{flex:1;width:100%;border:0;outline:none;resize:none;
+  #noteText{flex:1;width:100%;border:0;outline:none;overflow:auto;min-height:0;
     background:var(--panel);color:var(--text2);font-family:inherit;
-    font-size:13px;line-height:1.85;padding:14px 15px 40px}
+    font-size:13px;line-height:1.85;padding:14px 15px 40px;white-space:pre-wrap;
+    word-break:break-word}
+  #noteText:empty::before{content:attr(data-ph);color:var(--muted);white-space:pre-wrap}
+
+  /* 참조는 **글자 그대로 두고 배경만 입힌다.**
+     contenteditable=false 로 통째 칩을 만들면 백스페이스가 참조 전체를 지워버린다.
+     사용자가 원한 건 "일반 텍스트처럼" 한 글자씩 지워지고, } 가 사라지는 순간
+     버튼이 꺼지는 것이다 — 그래서 스타일만 입히고 편집은 그대로 둔다. */
+  #noteText .chip{border-radius:5px;padding:1px 3px;cursor:pointer}
+  #noteText .chip.ok{background:var(--panel2);color:var(--inyong);
+    box-shadow:inset 0 0 0 1px var(--inyong)}
+  #noteText .chip.ok:hover{background:var(--hl)}
+  #noteText .chip.bad{color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
   .noteview{flex:1;overflow:auto;padding:14px 15px 40px;font-size:13px;line-height:1.85;
     color:var(--text2);white-space:pre-wrap}
   .noteview a.ref{color:var(--inyong);text-decoration:none;
@@ -413,8 +425,10 @@
       <div class="nb-hint"><code>{[</code> 를 열면 법령 목록이 뜹니다 — 고르면 링크가 됩니다.</div>
     </div>
     <div class="notewrap">
-      <textarea id="noteText" spellcheck="false"
-        placeholder="자유롭게 적으세요. 특정 법령에 매이지 않는 내 노트입니다.&#10;&#10;예)  낙찰자 결정은 {[국가계약법-제10조]} 기준"></textarea>
+      <div id="noteText" contenteditable="plaintext-only" spellcheck="false"
+        data-ph="자유롭게 적으세요. 특정 법령에 매이지 않는 내 노트입니다.
+
+예)  낙찰자 결정은 {[국가계약법-제10조]} 기준"></div>
       <div class="noteview" id="noteView" hidden></div>
       <div class="ac" id="noteAc" hidden></div>
     </div>
@@ -1018,22 +1032,77 @@ const GRAPH = /*__GRAPH__*/;
         acEl=document.getElementById('noteAc'),
         savedEl=document.getElementById('noteSaved'), pvBtn=document.getElementById('notePreview');
 
-  noteEl.value=LawNotes.load();
+  // 편집 영역은 contenteditable 이다. 참조를 버튼처럼 보이게 하면서도
+  // 백스페이스는 한 글자씩 먹어야 해서, 글자를 치환하지 않고 **감싸서 칠하기만** 한다.
+  const noteVal=()=>noteEl.textContent;
+
+  /** 캐럿 위치를 "평문 기준 몇 번째 글자"로 센다 (다시 그린 뒤 되돌리려고). */
+  function caretOffset(){
+    const sel=getSelection();
+    if(!sel||!sel.rangeCount||!noteEl.contains(sel.anchorNode))return null;
+    const r=sel.getRangeAt(0).cloneRange();
+    r.selectNodeContents(noteEl); r.setEnd(sel.getRangeAt(0).endContainer,sel.getRangeAt(0).endOffset);
+    return r.toString().length;
+  }
+  function setCaret(off){
+    if(off==null)return;
+    const walk=document.createTreeWalker(noteEl,NodeFilter.SHOW_TEXT);
+    let seen=0,node;
+    while((node=walk.nextNode())){
+      const len=node.nodeValue.length;
+      if(seen+len>=off){
+        const sel=getSelection(),r=document.createRange();
+        r.setStart(node,Math.max(0,off-seen)); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r); return;
+      }
+      seen+=len;
+    }
+    // 끝으로
+    const sel=getSelection(),r=document.createRange();
+    r.selectNodeContents(noteEl); r.collapse(false);
+    sel.removeAllRanges(); sel.addRange(r);
+  }
+
+  /** 완성된 {[...]} 만 칩으로 칠한다. 미완성이면 그냥 글자로 남는다. */
+  function paintChips(){
+    const text=noteVal();
+    const off=caretOffset();
+    const refs=LawNotes.parseRefs(text);
+    let html='',pos=0;
+    for(const r of refs){
+      html+=esc(text.slice(pos,r.start));
+      const id=LawNotes.resolve(r,nodes);
+      html+=`<span class="chip ${id?'ok':'bad'}"${id?` data-ref="${esc(id)}"`:''}`+
+            `${id?'':' title="찾지 못한 참조입니다"'}>${esc(r.raw)}</span>`;
+      pos=r.end;
+    }
+    html+=esc(text.slice(pos));
+    if(noteEl.innerHTML!==html){ noteEl.innerHTML=html; setCaret(off); }
+  }
+
+  noteEl.textContent=LawNotes.load();
+  paintChips();
 
   let saveT=null;
   noteEl.addEventListener('input',()=>{
+    paintChips();          // } 를 지우면 패턴이 깨져 칩이 저절로 꺼진다
     clearTimeout(saveT);
     saveT=setTimeout(()=>{
-      savedEl.textContent=LawNotes.save(noteEl.value)?'저장됨':'저장 실패(브라우저 저장소)';
+      savedEl.textContent=LawNotes.save(noteVal())?'저장됨':'저장 실패(브라우저 저장소)';
       setTimeout(()=>{savedEl.textContent='';},1500);
     },400);
     updateAc();
   });
-  noteEl.addEventListener('click',updateAc);
+  noteEl.addEventListener('click',e=>{
+    // 칩을 누르면 아래 영역에 관련 규정. 캐럿은 그대로 두어 편집을 방해하지 않는다.
+    const chip=e.target.closest('.chip.ok');
+    if(chip&&chip.dataset.ref){showNoteRef(chip.dataset.ref);return;}
+    updateAc();
+  });
   noteEl.addEventListener('blur',()=>setTimeout(hideAc,150));
 
   function renderNoteView(){
-    noteView.innerHTML=LawNotes.toHtml(noteEl.value,nodes,esc,
+    noteView.innerHTML=LawNotes.toHtml(noteVal(),nodes,esc,
       (id,text)=>`<a class="ref" data-go="${esc(id)}">${esc(text)}</a>`,
       t=>`<span class="miss" title="찾지 못한 참조입니다">${esc(t)}</span>`);
   }
@@ -1049,7 +1118,7 @@ const GRAPH = /*__GRAPH__*/;
   // ── 자동완성: 커서가 아직 닫히지 않은 {[ 안에 있을 때만 뜬다 ──
   let acItems=[], acSel=0, acFrom=-1;
   function openRefAt(pos){
-    const v=noteEl.value, open=v.lastIndexOf('{[',pos);
+    const v=noteVal(), open=v.lastIndexOf('{[',pos);
     if(open<0)return -1;
     const close=v.indexOf(']}',open);
     if(close>=0&&close+2<=pos)return -1; // 이미 닫힌 참조
@@ -1058,11 +1127,11 @@ const GRAPH = /*__GRAPH__*/;
   }
   function hideAc(){acEl.hidden=true;acItems=[];acFrom=-1;}
   function updateAc(){
-    const pos=noteEl.selectionStart;
+    const pos=caretOffset(); if(pos==null)return hideAc();
     const open=openRefAt(pos);
     if(open<0)return hideAc();
     acFrom=open;
-    const inner=noteEl.value.slice(open+2,pos);
+    const inner=noteVal().slice(open+2,pos);
     acItems=LawNotes.suggest(inner,nodes,8);
     if(!acItems.length)return hideAc();
     acSel=0; drawAc(); placeAc();
@@ -1078,13 +1147,13 @@ const GRAPH = /*__GRAPH__*/;
   function placeAc(){}
   function acceptAc(i){
     const it=acItems[i]; if(!it||acFrom<0)return;
-    const v=noteEl.value, pos=noteEl.selectionStart;
+    const v=noteVal(), pos=caretOffset(); if(pos==null)return;
     const closed=it.kind==='조문';           // 조문까지 골랐으면 참조를 닫아준다
     const ins='{['+it.insert+(closed?']}':'-');
-    noteEl.value=v.slice(0,acFrom)+ins+v.slice(pos);
+    noteEl.textContent=v.slice(0,acFrom)+ins+v.slice(pos);
     const caret=acFrom+ins.length;
-    noteEl.focus(); noteEl.setSelectionRange(caret,caret);
-    LawNotes.save(noteEl.value);
+    paintChips(); noteEl.focus(); setCaret(caret);
+    LawNotes.save(noteVal());
     if(closed)hideAc(); else updateAc();     // 법령만 골랐으면 이어서 조문 목록
   }
   acEl.addEventListener('mousedown',e=>{
