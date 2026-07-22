@@ -36,12 +36,14 @@ const searchRuntime = readFileSync(join(root, "src/search-runtime.js"), "utf8");
 const annexTable = readFileSync(join(root, "src/annex-table.js"), "utf8");
 const favorites = readFileSync(join(root, "src/favorites.js"), "utf8");
 const notes = readFileSync(join(root, "src/notes.js"), "utf8");
+const lawtext = readFileSync(join(root, "src/lawtext.js"), "utf8");
 
 let html = template
   .replace("/*__SEARCH__*/", () => searchRuntime)
   .replace("/*__ANNEX__*/", () => annexTable)
   .replace("/*__FAVS__*/", () => favorites)
   .replace("/*__NOTES__*/", () => notes)
+  .replace("/*__LAWTEXT__*/", () => lawtext)
   .replace("/*__GRAPH__*/", () => JSON.stringify(page));
 
 // Pretendard 폰트를 data-URI로 임베드(외부 웹폰트 금지 — 내부망 단일파일 원칙).

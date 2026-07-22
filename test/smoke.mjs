@@ -47,7 +47,8 @@ if (!/var LawSearch\s*=/.test(html)) fail("검색 런타임이 인라인되지 �
 if (!/var AnnexTable\s*=/.test(html)) fail("별표 표 변환기가 인라인되지 않았습니다 (표 자리표시자 치환 실패).");
 if (!/var LawFavs\s*=/.test(html)) fail("즐겨찾기 모듈이 인라인되지 않았습니다 (즐겨찾기 자리표시자 치환 실패).");
 if (!/var LawNotes\s*=/.test(html)) fail("법률노트 모듈이 인라인되지 않았습니다 (노트 자리표시자 치환 실패).");
-if (/\bSEARCH__\b|\bANNEX__\b|\bFAVS__\b|\bNOTES__\b/.test(html)) fail("치환되지 않은 자리표시자가 남아 있습니다.");
+if (!/var LawText\s*=/.test(html)) fail("본문 들여쓰기 모듈이 인라인되지 않았습니다 (들여쓰기 자리표시자 치환 실패).");
+if (/\bSEARCH__\b|\bANNEX__\b|\bFAVS__\b|\bNOTES__\b|\bLAWTEXT__\b/.test(html)) fail("치환되지 않은 자리표시자가 남아 있습니다.");
 console.log("✅ 검색 런타임 인라인");
 
 // 3) 인라인 스크립트 문법
