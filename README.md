@@ -62,6 +62,31 @@ npm run smoke          # 산출물 검사 (외부 의존성 0 · 확인일 메�
 
 생성된 `web/index.html`은 더블클릭으로 열면 됨 — 서버·인터넷 불필요. (또는 `npm run serve`)
 
+## 데스크톱 앱 (Tauri) — 별표 원본 PDF 뷰어
+
+별표·서식의 罫線 텍스트 복원은 한계가 있어(굵은 罫線을 못 읽는 표가 60%), **원본 PDF 를
+그대로 보여주고 검색은 파싱 텍스트로** 하는 방향으로 전환했다. 원본 파일(~200MB)은 단일
+HTML 에 담을 수 없어 Tauri 데스크톱 앱으로 배포한다. `web/` 을 그대로 창에 띄우므로
+프론트엔드는 브라우저와 100% 동일하다 (별표는 `annex/<flSeq>.pdf` 상대경로로 연다).
+
+```bash
+npm run annex          # 별표 원본 HWP/PDF → web/annex/ (약 200MB, 최초 1회)
+                       #   빠른 검증: npm run annex -- --sample 5
+npm run build          # web/index.html 재생성 (web/annex 를 스캔해 가용 파일 주입)
+
+# 최초 1회 준비
+cargo install tauri-cli --version "^2"   # Tauri CLI
+npm run tauri:icon                        # 플레이스홀더 아이콘 생성(진짜 아이콘 있으면 교체)
+
+npm run tauri:dev      # 개발 창 띄우기
+npm run tauri:build    # 설치본(.exe/.msi) 빌드 → src-tauri/target/release/bundle/
+```
+
+- 별표 원본이 없어도(=`npm run annex` 생략) 앱·페이지는 돈다 — 뷰어가 법제처 다운로드
+  링크로 물러난다. 즉 원본 동봉은 선택이고, 검색·조문 열람은 파일 없이도 완전하다.
+- Rust 쪽(`src-tauri/`)은 최소 셸이다. 네이티브 기능이 필요해지면 `src/lib.rs` 에
+  `#[tauri::command]` 를 더한다. `target/`·`gen/` 은 재생성물이라 커밋하지 않는다.
+
 ## 관계 추출 규칙 (`src/extract.mjs`, AI 없음)
 
 관계를 3계층으로 나눠 **전부 규칙으로** 도출합니다. 근거는 [docs/scope.md §5.6](docs/scope.md).

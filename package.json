@@ -8,8 +8,12 @@
     "collect": "node src/collect.mjs",
     "extract": "node src/extract.mjs",
     "build": "node src/build.mjs",
+    "annex": "node src/fetch-annexes.mjs",
     "test": "node --test test/*.test.mjs",
     "smoke": "node test/smoke.mjs",
-    "serve": "node --version >/dev/null && python3 -m http.server 8080 --directory web"
+    "serve": "node --version >/dev/null && python3 -m http.server 8080 --directory web",
+    "tauri:icon": "node src-tauri/gen-icons.mjs",
+    "tauri:dev": "cargo tauri dev",
+    "tauri:build": "cargo tauri build"
   }
 }

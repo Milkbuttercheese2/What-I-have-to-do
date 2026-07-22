@@ -191,6 +191,10 @@ export function buildGraph(snapshot, options = {}) {
       family: familyOf(doc),
       label: doc.shortName,
       name: doc.name,
+      // 소관부처·연락처 — 화면에서 "누구 소관인지, 어디에 물어야 하는지"
+      ...(doc.소관부처 ? { 소관부처: doc.소관부처 } : {}),
+      ...(doc.연락부서?.length ? { 연락부서: doc.연락부서.slice(0, 3) } : {}),
+      ...(doc.전화번호 ? { 전화번호: doc.전화번호 } : {}),
       ...stamp,
     });
     // 편/장/절 헤더는 조문이 아니다 — 노드로 만들지 않고 "지금 어느 장인가"만 들고 간다.
@@ -228,6 +232,14 @@ export function buildGraph(snapshot, options = {}) {
     // 조문만 색인하면 "부정당업자 제재기준"을 아무리 검색해도 안 나온다.
     for (const bx of doc.annexes ?? []) {
       const id = `byl:${doc.id}:${bx.kind}:${bx.no}`;
+      // 원본 파일 열쇠(flSeq)만 싣는다 — 전체 URL 은 프론트가 flSeq 로 조립한다.
+      // 표시는 원본 PDF, 검색은 아래 text 로. (src/fetch-annexes.mjs 가 파일을 받는다)
+      const flSeq = (u) => {
+        const m = String(u ?? "").match(/[?&]flSeq=(\d+)/);
+        return m ? m[1] : null;
+      };
+      const pdfSeq = flSeq(bx.files?.pdf);
+      const hwpSeq = flSeq(bx.files?.hwp);
       addNode({
         id,
         kind: "별표",
@@ -238,6 +250,10 @@ export function buildGraph(snapshot, options = {}) {
         text: bx.text,
         lawId: doc.id,
         group: doc.shortName,
+        ...(pdfSeq ? { pdfSeq } : {}),
+        ...(hwpSeq ? { hwpSeq } : {}),
+        ...(bx.files?.pdfName ? { pdfName: bx.files.pdfName } : {}),
+        ...(bx.files?.hwpName ? { hwpName: bx.files.hwpName } : {}),
         ...stamp,
       });
       addEdge(`law:${doc.id}`, id, "소속");

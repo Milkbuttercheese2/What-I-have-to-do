@@ -14,3 +14,6 @@ data/audit.json
 
 # 수집 산출물 — `npm run collect` 로 재생성 (실데이터는 반입 대상이 web/index.html 이다)
 data/snapshot.json
+
+# 별표 원본 파일 — `npm run annex` 로 재생성 (Tauri 배포 리소스, ~200MB)
+web/annex/

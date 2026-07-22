@@ -26,6 +26,9 @@ test("항 0칸 · 호 2칸 · 목 4칸", () => {
   assert.ok(out[3].startsWith("  1."), "호는 2칸");
   assert.ok(out[4].startsWith("    가."), "목은 4칸");
   assert.ok(out[6].startsWith("  2."), "다음 호도 2칸");
+
+  // 계층은 들여쓰기로만 드러낸다. 빈 줄로 벌리면 한 조가 너무 길어져 훑기가 어렵다.
+  assert.equal(out.filter((l) => l === "").length, 0, "빈 줄을 끼워넣지 않는다");
 });
 
 test("깊이 판정", () => {
@@ -61,7 +64,12 @@ test("빈 줄과 빈 입력을 안전하게 다룬다", () => {
   assert.equal(LawText.indent(null), "");
   assert.equal(LawText.indent(undefined), "");
   const out = LawText.indent("1.  가\n\n2.  나").split("\n");
-  assert.equal(out[1], "", "빈 줄은 빈 줄로");
+  assert.equal(out[1], "", "원문에 있던 빈 줄은 그대로 둔다");
+  assert.deepEqual(
+    LawText.indent("① 가\n1.  나\n② 다").split("\n"),
+    ["① 가", "  1.  나", "② 다"],
+    "우리가 빈 줄을 만들지는 않는다",
+  );
 });
 
 test("글자를 더하거나 빼지 않는다 — 공백만 바뀐다", () => {
