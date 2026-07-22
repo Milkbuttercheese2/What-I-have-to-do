@@ -205,9 +205,13 @@
   .blank b{color:var(--text);font-weight:600}
 
   /* 법령 전체를 죽 이어서 보여준다. 이동은 화면 교체가 아니라 스크롤이다. */
-  .lawhead{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:6px}
-  .chaphead{margin:34px 0 4px;font-size:14px;font-weight:700;color:var(--faint);
-    border-top:1px solid var(--line);padding-top:18px;letter-spacing:-.2px}
+  .lawhead{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:0}
+  .chaphead{margin:26px 0 2px;font-size:14px;font-weight:700;color:var(--faint);
+    border-top:1px solid var(--line);padding-top:16px;letter-spacing:-.2px}
+  /* 첫 장·첫 조는 법령 제목 바로 아래다 — 구분선을 또 그으면 가로줄 두 개가 겹쳐 보인다.
+     장 사이의 간격은 의미가 있지만 제목과 본문 사이의 간격은 그냥 빈틈이다. */
+  .lawhead + .chaphead{margin-top:10px;padding-top:0;border-top:0}
+  .lawhead + .unit{border-top:0;padding-top:14px}
   .unit{padding:16px 12px 18px;border-bottom:1px solid var(--divider);
     border-left:2px solid transparent;border-radius:0 8px 8px 0;
     scroll-margin-top:12px;transition:background .25s,border-color .25s}
