@@ -1272,7 +1272,7 @@ const GRAPH = /*__GRAPH__*/;
     if(open<0)return hideAc();
     acFrom=open;
     const inner=noteVal().slice(open+2,pos);
-    acItems=LawNotes.suggest(inner,nodes,8);
+    acItems=LawNotes.suggest(inner,nodes,200);
     if(!acItems.length)return hideAc();
     acSel=0; drawAc(); placeAc();
   }

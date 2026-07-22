@@ -148,7 +148,9 @@ var LawNotes = (function () {
    * 법령명만 친 단계면 법령들을, `-` 를 찍었으면 그 법령의 조문들을 준다.
    */
   function suggest(inner, nodes, limit) {
-    var lim = limit || 8;
+    // 기본을 넉넉히 — 조가 150개인 시행령도 목록으로 훑을 수 있어야 한다.
+    // 드롭다운은 max-height + overflow:auto 라 넘치면 스크롤된다.
+    var lim = limit || 200;
     var p = splitRef(inner);
     var raw = String(inner == null ? "" : inner);
     var hasSep = raw.indexOf("-") >= 0;
