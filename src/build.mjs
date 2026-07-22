@@ -35,15 +35,24 @@ const { audit, ...page } = graph;
 const searchRuntime = readFileSync(join(root, "src/search-runtime.js"), "utf8");
 const annexTable = readFileSync(join(root, "src/annex-table.js"), "utf8");
 
-const html = template
+let html = template
   .replace("/*__SEARCH__*/", () => searchRuntime)
   .replace("/*__ANNEX__*/", () => annexTable)
   .replace("/*__GRAPH__*/", () => JSON.stringify(page));
 
+// Pretendard 폰트를 data-URI로 임베드(외부 웹폰트 금지 — 내부망 단일파일 원칙).
+const fontPath = join(root, "assets/PretendardVariable.woff2");
+const fontUri = existsSync(fontPath)
+  ? `data:font/woff2;base64,${readFileSync(fontPath).toString("base64")}`
+  : "";
+if (!fontUri) console.warn("⚠️  assets/PretendardVariable.woff2 없음 — 폰트 폴백(맑은 고딕)으로 빌드합니다.");
+html = html.replace("/*__FONT__*/", fontUri);
+
 mkdirSync(join(root, "web"), { recursive: true });
 writeFileSync(join(root, "web/index.html"), html);
-// 그래프·감사 데이터는 별도 저장 (다른 도구/디버깅/커버리지 추적용)
-writeFileSync(join(root, "web/graph.json"), JSON.stringify(page, null, 2));
+// 그래프·감사 데이터는 별도 저장 (그래프는 잠정 보류지만 파이프라인은 유지 — 디버깅/커버리지)
+const { audit: _a, ...graphOut } = graph;
+writeFileSync(join(root, "web/graph.json"), JSON.stringify(graphOut, null, 2));
 writeFileSync(join(root, "data/audit.json"), JSON.stringify(audit, null, 2));
 
 const s = graph.stats;

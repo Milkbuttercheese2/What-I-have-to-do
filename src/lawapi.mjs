@@ -272,22 +272,70 @@ export async function fetchAdminRule({ seq, ruleId }) {
   if (!seq && !ruleId) throw new LawApiError("fetchAdminRule: seq 또는 ruleId 가 필요합니다.");
   const json = await getJson("lawService.do", { target: "admrul", ID: seq ?? ruleId });
 
+  const name = clean(findKey(json, "행정규칙명") ?? "");
   let articles = normalizeArticles(findKey(json, "조문단위"));
+  let bodyText = "";
   if (articles.length === 0) {
-    const body = clean(flattenText(findKey(json, "조문내용", "행정규칙내용", "본문")));
-    articles = splitArticlesFromText(body);
+    bodyText = clean(flattenText(findKey(json, "조문내용", "행정규칙내용", "본문")));
+    articles = splitArticlesFromText(bodyText);
   }
+
+  const annexes = normalizeAnnexes(findKey(json, "별표단위"));
+
+  // ★ "무조건 다 와야 한다": 조문 구조가 없는 문서(공고·고시·별표전용)도 버리지 않는다.
+  //   통짜 본문이 있으면 단일 조문으로, 그마저 없으면 별표 참조 스텁으로 노드를 남긴다.
+  //   스텁 제목은 collectByulpyo 로 뽑는다 — normalizeAnnexes 는 본문 없는 별표(HWP/PDF 링크만
+  //   있는 서식)를 버리므로, 그것만으로는 별표전용 문서가 "(본문 없음)" 으로 뭉개진다.
   if (articles.length === 0) {
-    throw new LawApiError(`행정규칙 본문에서 조문을 찾지 못했습니다 (ID=${seq ?? ruleId}).`, {
-      body: JSON.stringify(json).slice(0, 400),
-    });
+    const refs = collectByulpyo(json).map((a) => a.title).filter(Boolean).join(", ");
+    const text = bodyText || (refs ? `(본문 없음 — 별표/서식 참조: ${refs})` : "(본문 없음)");
+    articles = [{ no: "1", title: name || null, text, ...(bodyText ? {} : { 별표전용: true }) }];
   }
+
   return {
-    name: clean(findKey(json, "행정규칙명") ?? ""),
+    name,
     발령일: clean(findKey(json, "발령일자", "공포일자") ?? ""),
-    annexes: normalizeAnnexes(findKey(json, "별표단위")),
+    annexes,
     articles,
   };
+}
+
+/**
+ * 별표·서식 수집.
+ * - 표 내용(별표내용)이 배열로 오면 행렬로 정규화해 리더에서 테이블로 렌더한다.
+ * - 실제 서식은 대개 HWP/PDF 파일이라 링크도 남긴다(kordoc 파싱 대상).
+ */
+function collectByulpyo(json) {
+  const abs = (p) => (p ? `https://www.law.go.kr${clean(p)}` : null);
+  const out = [];
+  for (const b of asArray(findKey(json, "별표단위"))) {
+    const hwp = abs(findKey(b, "별표서식파일링크"));
+    const pdf = abs(findKey(b, "별표서식PDF파일링크"));
+    const rows = normalizeTable(findKey(b, "별표내용"));
+    if (!hwp && !pdf && rows.length === 0) continue;
+    out.push({
+      title: clean(findKey(b, "별표제목") ?? ""),
+      번호: clean(findKey(b, "별표번호") ?? ""),
+      구분: clean(findKey(b, "별표구분") ?? ""),
+      rows,
+      hwp,
+      pdf,
+    });
+  }
+  return out;
+}
+
+/** 별표내용을 2차원 문자열 배열(행×열)로 정규화. 문자열/1차원/2차원을 모두 받는다. */
+function normalizeTable(raw) {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) {
+    if (raw.length && raw.every((r) => Array.isArray(r))) {
+      return raw.map((r) => r.map((c) => clean(flattenText(c)))).filter((r) => r.some(Boolean));
+    }
+    return raw.map((r) => [clean(flattenText(r))]).filter((r) => r[0]);
+  }
+  const s = clean(flattenText(raw));
+  return s ? [[s]] : [];
 }
 
 /**
@@ -309,4 +357,56 @@ export function splitArticlesFromText(text) {
     title: mark.title || null,
     text: body.slice(mark.start, i + 1 < marks.length ? marks[i + 1].start : undefined).trim(),
   }));
+}
+
+/**
+ * 소관부처(org)별 행정규칙 전수 열거 — 페이지네이션.
+ *
+ * seed.json 수기 나열의 한계("쿼리당 20건")를 넘는다. 목록 API는 display 최대 100 +
+ * page 로 넘길 수 있어, 소관부처 기준 완전열거가 실제로 가능하다.
+ * (조달청 org=1230000 → 훈령·예규·지침·고시·공고 전부. docs/scope.md §5.3)
+ *
+ *   const { total, items } = await searchAdminRules({ org: "1230000" });
+ *
+ * @param {object}   opts
+ * @param {string}   opts.org      소관부처 코드 (예: 조달청 "1230000")
+ * @param {string}  [opts.query]   추가 검색어(선택)
+ * @param {string[]}[opts.kinds]   포함할 행정규칙종류. null 이면 전부.
+ * @param {number}  [opts.max]     안전 상한
+ * @returns {Promise<{total:number, items:Array}>}
+ */
+export async function searchAdminRules({ org, query, kinds = null, max = 5000 } = {}) {
+  const display = 100;
+  const seen = new Set();
+  const items = [];
+  let page = 1;
+  let total = 0;
+
+  for (;;) {
+    const json = await getJson("lawSearch.do", { target: "admrul", org, query, display, page });
+    total = Number(clean(findKey(json, "totalCnt") ?? total)) || total;
+    const rows = asArray(findKey(json, "admrul"));
+    if (rows.length === 0) break;
+
+    for (const it of rows) {
+      const seq = clean(findKey(it, "행정규칙일련번호") ?? "");
+      if (!seq || seen.has(seq)) continue;
+      const kind = clean(findKey(it, "행정규칙종류") ?? "");
+      if (kinds && !kinds.includes(kind)) continue;
+      seen.add(seq);
+      items.push({
+        seq,
+        ruleId: clean(findKey(it, "행정규칙ID") ?? ""),
+        name: clean(findKey(it, "행정규칙명") ?? ""),
+        kind,
+        시행일: clean(findKey(it, "시행일자") ?? ""),
+        소관: clean(findKey(it, "소관부처명") ?? ""),
+      });
+      if (items.length >= max) return { total, items };
+    }
+
+    if (rows.length < display || seen.size >= total) break;
+    page += 1;
+  }
+  return { total, items };
 }

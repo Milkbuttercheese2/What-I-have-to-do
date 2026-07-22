@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { fetchLaw, fetchAdminRule, resolveCurrentMst, LawApiError } from "./lawapi.mjs";
+import { fetchLaw, fetchAdminRule, resolveCurrentMst, searchAdminRules, LawApiError } from "./lawapi.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const cacheDir = join(root, ".cache");
@@ -20,6 +20,10 @@ const args = process.argv.slice(2);
 const refresh = args.includes("--refresh");
 const onlyIdx = args.indexOf("--only");
 const only = onlyIdx >= 0 ? args[onlyIdx + 1] : null;
+// 열거로 수집할 행정규칙 상한. 검증·데모용으로 규모를 줄일 때 쓴다.
+// 지정하지 않으면 소관부처 전수(조달청 = 약 290종)를 모두 받는다.
+const maxRulesIdx = args.indexOf("--max-rules");
+const maxRules = maxRulesIdx >= 0 ? Number(args[maxRulesIdx + 1]) : Infinity;
 
 /** 루트 .env 를 최소 파싱 (의존성 추가 없이) */
 function loadDotEnv() {
@@ -108,7 +112,38 @@ async function main() {
     if (!refresh) await sleep(100);
   }
 
-  for (const r of rules) {
+  // 수집할 행정규칙 = 수기 지정(계약예규 등) + 소관부처 전수 열거(조달청 등).
+  // 열거가 '조달청 행정규칙 전부'를 담당한다. seq 로 중복 제거한다.
+  const ruleList = [...rules];
+  if (!only) {
+    const seenSeq = new Set(rules.map((r) => r.seq));
+    for (const srcCfg of seed.adminRuleSources ?? []) {
+      try {
+        const { total, items } = await searchAdminRules(srcCfg);
+        let added = 0;
+        for (const it of items) {
+          if (seenSeq.has(it.seq)) continue;
+          if (ruleList.length - rules.length >= maxRules) break;
+          seenSeq.add(it.seq);
+          ruleList.push({
+            id: `adm-${it.seq}`,
+            name: it.name,
+            shortName: it.name,
+            docType: it.kind || "행정규칙",
+            seq: it.seq,
+            ruleId: it.ruleId,
+          });
+          added += 1;
+        }
+        const capped = Number.isFinite(maxRules) ? ` [상한 ${maxRules} 적용]` : "";
+        console.log(`  ▸ ${srcCfg.label ?? srcCfg.org} 행정규칙 열거 ${items.length}/${total}종 → 신규 ${added}종${capped}`);
+      } catch (e) {
+        console.error(`  ❌ 행정규칙 열거 실패 (${srcCfg.label ?? srcCfg.org}) — ${e.message}`);
+      }
+    }
+  }
+
+  for (const r of ruleList) {
     try {
       const data = await cached(r.id, () => fetchAdminRule({ seq: r.seq, ruleId: r.ruleId }));
       documents.push({
@@ -120,6 +155,8 @@ async function main() {
         parent: null,
         aliases: [r.shortName],
         source: { kind: "admrul", seq: r.seq, ruleId: r.ruleId },
+        // 별표(본문 텍스트). 조문 텍스트엔 없는 별표를 리더에서 테이블로 렌더한다.
+        annexes: data.annexes ?? [],
         // 본문에 위임근거가 없는 문서용 수기 매핑 (seed.json). 있으면 추출기가 최우선으로 쓴다.
         ...(r.위임근거 ? { 위임근거: r.위임근거 } : {}),
         verification: {
@@ -143,7 +180,7 @@ async function main() {
 
   const snapshot = {
     meta: {
-      title: "조달 법령군 스냅샷 (Phase 1 — 핵심 30종)",
+      title: "조달 법령군 스냅샷 (법령 + 조달청 행정규칙 전수)",
       collectedAt: new Date().toISOString(),
       source: "법제처 국가법령정보 오픈API",
       documents: documents.length,

@@ -4,16 +4,55 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>LawEverything — 조달 법령 즉시검색</title>
+<script>
+  /* 페인트 전에 테마 확정(플래시 방지): 저장값 → 없으면 시스템 설정 */
+  (function(){try{
+    var t=localStorage.getItem('law-theme');
+    if(!t) t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+    document.documentElement.dataset.theme=t;
+  }catch(e){document.documentElement.dataset.theme='dark';}})();
+</script>
 <style>
+  /* 다크 = 기본. 라이트는 [data-theme="light"]로 덮어쓴다(head 스크립트가 시스템/저장값으로 선택). */
   :root{
-    --bg:#0f1420; --panel:#171d2b; --panel2:#1e2537; --line:#2b3346;
-    --text:#e8ecf4; --muted:#93a0b8; --accent:#4c9aff;
-    --wimim:#f6a94a; --inyong:#5cc8ff; --sosok:#39425a;
+    color-scheme:dark;
+    --bg:#0f1420; --panel:#161c29; --panel2:#1e2537; --line:#2b3346; --divider:#1c2333;
+    --text:#e8ecf4; --text2:#d7deec; --faint:#aeb9cf; --muted:#93a0b8;
+    --accent:#5bb3a6; --warn:#f6a94a;
+    --hl:rgba(91,179,166,.14); --marktint:rgba(91,179,166,.34);
+    --law:#5bb3a6; --ord:#5cc8ff; --rule:#7fd6a0; --ye:#e7c98a; --adm:#c79bf0;
+    /* 관계 배지 색 — 위임=경고색, 인용=시행령색 계열로 맞춘다 */
+    --wimim:var(--warn); --inyong:var(--ord); --sosok:#39425a;
+    --zebra:rgba(255,255,255,.02);
+  }
+  :root[data-theme="light"]{
+    color-scheme:light;
+    /* 참조: What-I-have-to-do 라이트 팔레트(따뜻한 종이톤) */
+    --bg:#f4f3f0; --panel:#ffffff; --panel2:#eef0f3; --line:#e4e7ea; --divider:#eceef0;
+    --text:#1f2a33; --text2:#2b3640; --faint:#5a6472; --muted:#68717c;
+    --accent:#4d938a; --warn:#b26a1f;
+    --hl:rgba(77,147,138,.10); --marktint:rgba(77,147,138,.22);
+    --law:#4d938a; --ord:#3e6fa8; --rule:#2c7a4b; --ye:#b07d24; --adm:#7a45b0;
+    --wimim:var(--warn); --inyong:var(--ord); --sosok:#d8dde3;
+    --zebra:rgba(0,0,0,.025);
+  }
+  /* Pretendard 가변폰트 — 로컬 번들(빌드 시 data-URI로 임베드). 외부 웹폰트 금지(내부망). */
+  @font-face{
+    font-family:'Pretendard';
+    src:url('/*__FONT__*/') format('woff2-variations');
+    font-weight:45 920; font-style:normal; font-display:swap;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-    font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+    font-family:'Pretendard','Malgun Gothic','맑은 고딕',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased}
   body{overflow:hidden}
+
+  /* 테마 토글 — 우상단 고정. 다크/라이트 전환(설정은 localStorage에 남는다). */
+  .themebtn{position:fixed;top:14px;right:16px;z-index:40;background:var(--panel2);
+    border:1px solid var(--line);color:var(--muted);border-radius:7px;width:30px;height:26px;
+    cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
+  .themebtn:hover{border-color:var(--accent);color:var(--accent)}
 
   /* ───────── 스포틀라이트 (초기 화면) ───────── */
   #spot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
@@ -69,12 +108,12 @@
   .stamp{margin-top:10px;font-size:11px;color:var(--muted);padding:4px 9px;
     border-radius:6px;background:var(--panel2);display:inline-block}
   .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
-  .body{margin-top:20px;font-size:14.5px;line-height:1.95;color:#dbe3f0;
+  .body{margin-top:20px;font-size:14.5px;line-height:1.95;color:var(--text2);
     white-space:pre-wrap;max-width:74ch}
   .body a.cite{color:var(--inyong);text-decoration:none;
-    border-bottom:1px dashed rgba(92,200,255,.5);cursor:pointer}
-  .body a.cite:hover{background:rgba(92,200,255,.12)}
-  .body mark{background:rgba(76,154,255,.28);color:inherit;border-radius:3px}
+    border-bottom:1px dashed var(--inyong);cursor:pointer}
+  .body a.cite:hover{background:var(--hl)}
+  .body mark{background:var(--marktint);color:inherit;border-radius:3px}
   /* 별표는 고정폭(罫線) 레이아웃이라 등폭 글꼴 + 줄바꿈 금지라야 표가 맞는다 */
   .srcnote{margin-top:14px;font-size:11px;color:var(--muted)}
   .srcnote .copymd{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
@@ -87,7 +126,7 @@
   table.ann th,table.ann td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
   table.ann th{background:var(--panel2);color:var(--text);font-weight:600;white-space:nowrap}
   table.ann td:last-child{white-space:nowrap;color:var(--muted)}
-  table.ann tbody tr:nth-child(2n){background:rgba(255,255,255,.02)}
+  table.ann tbody tr:nth-child(2n){background:var(--zebra)}
 
   .side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
   .side h3{margin:0;padding:12px 15px 8px;font-size:11px;color:var(--muted);
@@ -95,16 +134,18 @@
   .rel{font-size:12.5px;padding:7px 15px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
   .rel:hover{background:var(--panel2)}
   .rel .k{font-size:9.5px;padding:1px 6px;border-radius:20px;flex:none}
-  .rel .k.위임{background:rgba(246,169,74,.18);color:var(--wimim)}
-  .rel .k.인용{background:rgba(92,200,255,.16);color:var(--inyong)}
-  .rel .k.소속{background:#2a3247;color:var(--muted)}
-  .rel .k.별표{background:rgba(140,220,160,.16);color:#8cdca0}
+  .rel .k.위임{background:var(--panel2);color:var(--wimim)}
+  .rel .k.인용{background:var(--panel2);color:var(--inyong)}
+  .rel .k.소속{background:var(--sosok);color:var(--muted)}
+  .rel .k.별표{background:var(--panel2);color:var(--rule)}
   .rel .ev{color:var(--muted);font-size:11px}
   .relempty{padding:6px 15px 14px;font-size:12px;color:var(--muted)}
 
 </style>
 </head>
 <body>
+
+<button id="themeBtn" class="themebtn" type="button"></button>
 
 <!-- 검색 (초기 화면 = 본체) -->
 <div id="spot">
@@ -149,6 +190,16 @@ const GRAPH = /*__GRAPH__*/;
 </script>
 <script>
 (function(){
+  // ---- 테마 토글 ----
+  (function(){
+    const root=document.documentElement, btn=document.getElementById('themeBtn');
+    const sync=()=>{ const dark=root.dataset.theme!=='light'; btn.textContent=dark?'☀':'☾';
+      btn.title=(dark?'라이트':'다크')+' 모드로 전환'; };
+    sync();
+    btn.addEventListener('click',()=>{ root.dataset.theme=root.dataset.theme==='light'?'dark':'light';
+      try{localStorage.setItem('law-theme',root.dataset.theme);}catch(e){} sync(); });
+  })();
+
   const {nodes,edges,meta}=GRAPH;
   const byId=new Map(nodes.map(n=>[n.id,n]));
   const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
