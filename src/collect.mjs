@@ -102,6 +102,10 @@ async function main() {
         },
         articles: data.articles,
         annexes: data.annexes ?? [],
+        // 소관부처·담당부서·연락처 — 화면에 "누구 소관인지" 를 띄우기 위한 것
+        ...(data.소관부처 ? { 소관부처: data.소관부처, 소관부처코드: data.소관부처코드 ?? null } : {}),
+        ...(data.연락부서?.length ? { 연락부서: data.연락부서 } : {}),
+        ...(data.약칭 ? { 약칭: data.약칭 } : {}),
       });
       console.log(`  ✅ ${l.shortName} — ${data.articles.length}개 조문${annexNote(data)}${data._cached ? " (캐시)" : ""}`);
     } catch (e) {
@@ -168,6 +172,9 @@ async function main() {
         articles: data.articles,
         // 별표(본문 텍스트). 조문 텍스트엔 없는 별표를 리더에서 테이블로 렌더한다.
         annexes: data.annexes ?? [],
+        ...(data.소관부처 ? { 소관부처: data.소관부처, 소관부처코드: data.소관부처코드 ?? null } : {}),
+        ...(data.연락부서?.length ? { 연락부서: data.연락부서 } : {}),
+        ...(data.전화번호 ? { 전화번호: data.전화번호 } : {}),
       });
       console.log(`  ✅ ${r.shortName} — ${data.articles.length}개 조문${annexNote(data)}${data._cached ? " (캐시)" : ""}`);
     } catch (e) {

@@ -191,6 +191,10 @@ export function buildGraph(snapshot, options = {}) {
       family: familyOf(doc),
       label: doc.shortName,
       name: doc.name,
+      // 소관부처·연락처 — 화면에서 "누구 소관인지, 어디에 물어야 하는지"
+      ...(doc.소관부처 ? { 소관부처: doc.소관부처 } : {}),
+      ...(doc.연락부서?.length ? { 연락부서: doc.연락부서.slice(0, 3) } : {}),
+      ...(doc.전화번호 ? { 전화번호: doc.전화번호 } : {}),
       ...stamp,
     });
     // 편/장/절 헤더는 조문이 아니다 — 노드로 만들지 않고 "지금 어느 장인가"만 들고 간다.

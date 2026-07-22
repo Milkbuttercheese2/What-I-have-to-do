@@ -292,7 +292,41 @@ export async function fetchLaw({ mst, lawId }) {
     공포일: clean(findKey(json, "공포일자") ?? ""),
     articles,
     annexes: normalizeAnnexes(findKey(json, "별표단위")),
+    ...소관정보(json),
   };
+}
+
+/**
+ * 소관부처·담당부서·연락처.
+ *
+ * 화면에 "이 법이 누구 소관인지"가 없으면 실무자는 어디에 물어야 할지를 모른다.
+ * 다행히 기본정보에 전부 들어 있다(실측: 국가계약법 → 재정경제부 / 계약정책과 /
+ * 044-215-5211). 연락부서는 여럿 올 수 있어(소관부처 + 조달청 등) 전부 담되
+ * 대표 한 곳을 앞세운다.
+ */
+function 소관정보(json) {
+  // findKey 는 깊이우선이라 `연락부서.부서단위[].소관부처명` 이 먼저 잡힐 수 있다.
+  // 기본정보의 값을 명시 경로로 먼저 집는다.
+  const 기본 = json?.법령?.기본정보 ?? null;
+  const 부처 = (기본 && 기본.소관부처) ?? findKey(json, "소관부처");
+  const name = clean(typeof 부처 === "object" ? findKey(부처, "content") ?? "" : 부처 ?? "");
+  const code = clean(typeof 부처 === "object" ? findKey(부처, "소관부처코드") ?? "" : "");
+
+  const 부서 = asArray((기본 && 기본.연락부서 && 기본.연락부서.부서단위) ?? findKey(json, "부서단위"))
+    .map((d) => ({
+      부서명: clean(findKey(d, "부서명") ?? ""),
+      연락처: clean(findKey(d, "부서연락처") ?? ""),
+      소관부처: clean(findKey(d, "소관부처명") ?? ""),
+    }))
+    .filter((d) => d.부서명 || d.연락처);
+
+  const out = {};
+  if (name) out.소관부처 = name;
+  if (code) out.소관부처코드 = code;
+  if (부서.length) out.연락부서 = 부서;
+  const 약칭 = clean(findKey(json, "법령명약칭") ?? "");
+  if (약칭) out.약칭 = 약칭;
+  return out;
 }
 
 /**
@@ -329,6 +363,28 @@ export async function fetchAdminRule({ seq, ruleId }) {
     발령일: clean(findKey(json, "발령일자", "공포일자") ?? ""),
     annexes,
     articles,
+    // ★ 시행일·효력을 여기서 읽지 않아 행정규칙 307건 **전부**(전체 문서의 95.9%)가
+    //   신선도 판정 없이 지나가고 있었다. "낡음은 항상 눈에 보여야 한다"(원칙 6)가
+    //   문서 대부분에서 무력했다는 뜻이다.
+    시행일: clean(findKey(json, "시행일자") ?? "") || null,
+    효력: clean(findKey(json, "현행연혁코드", "효력") ?? "") || null,
+
+    // 소관부처는 `상위부처명` 을 쓴다. `소관부처명` 은 8건(2.6%)이 부서명으로 오염돼
+    // 있다(`조달등록팀` 등). 상위부처명은 307/307 정상.
+    ...(clean(findKey(json, "상위부처명") ?? "") ? { 소관부처: clean(findKey(json, "상위부처명")) } : {}),
+    ...(clean(findKey(json, "담당부서기관명") ?? "") || clean(findKey(json, "전화번호") ?? "")
+      ? {
+          연락부서: [
+            {
+              부서명: clean(findKey(json, "담당부서기관명") ?? ""),
+              연락처: clean(findKey(json, "전화번호") ?? ""),
+              소관부처: clean(findKey(json, "상위부처명") ?? ""),
+            },
+          ],
+        }
+      : {}),
+    // 담당자 실명은 인사이동으로 부서보다 훨씬 빨리 낡는다. 담되 화면 기본 표기에서는 뺀다.
+    ...(clean(findKey(json, "담당자명") ?? "") ? { 담당자: clean(findKey(json, "담당자명")) } : {}),
   };
 }
 

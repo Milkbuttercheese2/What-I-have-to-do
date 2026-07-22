@@ -305,7 +305,8 @@
      장 사이의 간격은 의미가 있지만 제목과 본문 사이의 간격은 그냥 빈틈이다. */
   .lawhead + .chaphead{margin-top:10px;padding-top:0;border-top:0}
   .lawhead + .unit{border-top:0;padding-top:14px}
-  .unit{padding:16px 12px 18px;border-bottom:1px solid var(--divider);
+  /* 조와 조 사이를 한 줄만큼 벌린다 — 붙여두면 어디서 조가 바뀌는지 눈이 못 잡는다 */
+  .unit{padding:22px 12px 24px;border-bottom:1px solid var(--divider);
     border-left:2px solid transparent;border-radius:0 8px 8px 0;
     scroll-margin-top:12px;transition:background .25s,border-color .25s}
   /* 마우스가 놓인 조 — 오른쪽 관계 패널이 이 조를 따라간다 */
@@ -322,6 +323,10 @@
   .stamp{margin-top:10px;font-size:11px;color:var(--muted);padding:4px 9px;
     border-radius:6px;background:var(--panel2);display:inline-block}
   .stamp.old{color:var(--wimim);background:rgba(246,169,74,.13)}
+  /* 소관부처·담당부서·연락처 — 막히면 결국 사람에게 물어야 한다 */
+  .orgline{margin-top:8px;font-size:12px;color:var(--muted);line-height:1.7}
+  .orgline b{color:var(--text2);font-weight:600}
+  .orgline .tel{color:var(--accent);font-variant-numeric:tabular-nums}
   .body{font-size:14px;line-height:1.9;color:var(--text2);
     white-space:pre-wrap;max-width:74ch}
   .body a.cite{color:var(--inyong);text-decoration:none;
@@ -607,6 +612,18 @@ const GRAPH = /*__GRAPH__*/;
     if(n.kind==='조문')return '조문';
     return n.type||'법령';
   }
+
+  /** 정부조직 약칭 — 사이드바 한 줄에 정식명을 다 넣으면 법제목이 밀린다. */
+  const ORG={'기획재정부':'기재부','재정경제부':'기재부','국토교통부':'국토부',
+    '중소벤처기업부':'중기부','고용노동부':'고용부','과학기술정보통신부':'과기부',
+    '산업통상자원부':'산업부','행정안전부':'행안부','공정거래위원회':'공정위',
+    '환경부':'환경부','조달청':'조달청','국방부':'국방부','방위사업청':'방사청',
+    '교육부':'교육부','문화체육관광부':'문체부','보건복지부':'복지부',
+    '농림축산식품부':'농식품부','해양수산부':'해수부','금융위원회':'금융위',
+    '국가유산청':'유산청','법무부':'법무부','인사혁신처':'인사처','법제처':'법제처'};
+  const orgShort=s=>{const t=String(s||'').trim();return t?(ORG[t]||t.replace(/^대한민국\s*/,'')):'';};
+  /** 사이드바 법령 행에 붙일 꼬리표: 소관부처 약칭이 있으면 그것, 없으면 위계. */
+  const orgTag=n=>orgShort(n.소관부처)||tierOf(n);
   /** 검색 결과처럼 HTML 로 그린 곳에 ★ 버튼을 끼워넣는다. */
   function fillStarSlots(root){
     root.querySelectorAll('.starslot').forEach(sl=>{
@@ -705,7 +722,7 @@ const GRAPH = /*__GRAPH__*/;
     const arts=units.filter(u=>u.kind==='조문');
     const byls=units.filter(u=>u.kind==='별표');
     return step(depth,{
-      cls:'lawrow',dot:d.type,label:d.label,favId:d.id,
+      cls:'lawrow',dot:orgTag(d),label:d.label,favId:d.id,
       cnt:`${arts.length}조${byls.length?`·별표${byls.length}`:''}`,
       expandable:units.length>0,
       onOpen:()=>open(d.id),
@@ -863,11 +880,21 @@ const GRAPH = /*__GRAPH__*/;
           ${unitBody(u)}
         </section>`;
       }
+      // 소관부처·담당부서·연락처 — 조문을 읽다 막히면 결국 사람에게 물어야 한다.
+      // 어디에 물어야 하는지가 화면에 없으면 그때부터 검색을 다시 시작하게 된다.
+      const 부서=(law.연락부서||[]).filter(d=>d.부서명||d.연락처);
+      const org=[
+        law.소관부처?`<b>${esc(law.소관부처)}</b>`:'',
+        ...부서.map(d=>`${esc(d.부서명||'')}${d.연락처?` <span class="tel">${esc(d.연락처)}</span>`:''}`),
+        !law.소관부처&&!부서.length&&law.전화번호?`<span class="tel">${esc(law.전화번호)}</span>`:'',
+      ].filter(Boolean).join(' · ');
+
       docEl.innerHTML=`<div class="lawhead">
           <div class="crumb">${esc(law.type)}</div>
           <h2>${esc(law.label)}</h2>
           ${law.name&&law.name!==law.label?`<div class="subt">${esc(law.name)}</div>`:''}
           ${stamp}
+          ${org?`<div class="orgline">${org}</div>`:''}
         </div>${html||'<div class="blank">이 문서에는 조문이 없습니다.</div>'}`;
       docEl.querySelector('.lawhead h2').appendChild(starBtn(law.id));
       docEl.querySelectorAll('.unit').forEach(s=>{
