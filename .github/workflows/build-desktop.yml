@@ -1,0 +1,149 @@
+name: 데스크톱 앱 빌드 (수집→빌드→Windows exe)
+
+# 리눅스 개발 환경에서는 Windows 실행파일을 만들 수 없어, 이 워크플로가
+#   1) 법제처 오픈API 로 조달청 전수 + 관련법령을 라이브 수집(secrets.LAW_OC)
+#   2) 자족형 web/index.html 빌드(별표 원본 PDF 는 옵션 동봉)
+#   3) Windows 러너에서 Tauri .exe/.msi 패키징
+#   4) 산출물을 `최종 프로그램 산출물/` 에 커밋 + 아티팩트 + Release
+# 를 한 번에 처리한다. 수동 실행(Run workflow)으로 돌린다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      annexes:
+        description: "별표 원본 PDF 동봉 범위 (none=링크만 · sample=표본 5문서 · full=전량 ~200MB)"
+        type: choice
+        options: [none, sample, full]
+        default: sample
+      commit_outputs:
+        description: "빌드 결과(web/index.html · exe)를 이 브랜치에 커밋"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── 1) 라이브 수집 + 빌드 (리눅스) ──────────────────────────────────────────
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 법령 수집 (라이브 · 병렬)
+        env:
+          LAW_API_OC: ${{ secrets.LAW_OC }}
+        run: |
+          if [ -z "$LAW_API_OC" ]; then
+            echo "::error::secrets.LAW_OC 가 비어 있습니다. 리포지토리 Secrets 에 LAW_OC(법제처 OC)를 등록하세요."
+            exit 1
+          fi
+          node src/collect.mjs --concurrency 8
+
+      - name: 별표 원본 PDF 수집 (옵션)
+        if: ${{ inputs.annexes != 'none' }}
+        run: |
+          if [ "${{ inputs.annexes }}" = "full" ]; then
+            node src/fetch-annexes.mjs --pdf-only
+          else
+            node src/fetch-annexes.mjs --pdf-only --sample 5
+          fi
+
+      - name: 빌드 (관계추출 + 자족형 페이지)
+        run: node src/build.mjs
+
+      - name: 스모크 검사
+        run: npm run smoke
+
+      - name: web/ 업로드 (Windows 잡으로 전달)
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          include-hidden-files: true
+          retention-days: 5
+          path: |
+            web/
+            data/snapshot.json
+
+  # ── 2) Windows 패키징 (Tauri) ───────────────────────────────────────────────
+  windows:
+    needs: collect
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: web/ 내려받기 (수집·빌드 결과)
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Tauri CLI 설치
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Tauri 빌드 (.exe/.msi)
+        run: cargo tauri build
+
+      - name: 산출물을 '최종 프로그램 산출물/' 로 모으기
+        shell: pwsh
+        run: |
+          $out = "최종 프로그램 산출물"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $bundle = "src-tauri/target/release/bundle"
+          Get-ChildItem -Path $bundle -Recurse -Include *.exe,*.msi |
+            ForEach-Object { Copy-Item $_.FullName -Destination $out -Force; Write-Host "→ $($_.Name)" }
+          Get-ChildItem $out
+
+      - name: 아티팩트 업로드 (exe/msi)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          retention-days: 30
+          path: 최종 프로그램 산출물/*
+
+      - name: 결과 커밋 (web/index.html + 실행파일)
+        if: ${{ inputs.commit_outputs }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f web/index.html "최종 프로그램 산출물"/*.exe "최종 프로그램 산출물"/*.msi 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "커밋할 변경 없음"; exit 0
+          fi
+          git commit -m "빌드 산출물: 실데이터 web/index.html + Windows 설치본 [skip ci]"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            echo "push 재시도 $i"; sleep $((2**i))
+          done
+
+      - name: GitHub Release 생성/갱신
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: 몇 조항이더라 데스크톱 (최신)
+          body: |
+            조달청 실무자용 오프라인 법령 리더 — Windows 설치본.
+            - 전역 핫키 `Ctrl+Shift+Space` 로 빠른 검색
+            - 검색 대상 전환: 검색창 칩 클릭 또는 `Ctrl` 단독 탭 (전체·법령·행정규칙)
+            - 별표/별지는 원문 PDF 뷰어로 열람, 법령노트는 SQLite 로 영속화
+          files: 최종 프로그램 산출물/*
+          fail_on_unmatched_files: false
