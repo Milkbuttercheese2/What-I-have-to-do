@@ -13,7 +13,7 @@ import { createRequire } from "node:module";
 import { buildGraph } from "../src/extract.mjs";
 
 const require = createRequire(import.meta.url);
-const LawSearch = require("../src/search-runtime.js");
+const LawSearch = require("../src/search-runtime.cjs");
 
 const snapshot = JSON.parse(readFileSync(new URL("./fixture-snapshot.json", import.meta.url), "utf8"));
 const g = buildGraph(snapshot);
@@ -102,4 +102,24 @@ test("동점이면 상위 법령이 앞선다", () => {
 
 test("결과 수 제한이 동작한다", () => {
   assert.ok(idx.search("계약", 3).length <= 3);
+});
+
+test("검색 대상 스코프 — 법령/행정규칙을 가른다", () => {
+  // scopeOf: 법률/시행령 계열은 법령, 계약예규·훈령 등은 행정규칙, 외부법은 법령.
+  assert.equal(LawSearch.scopeOf({ kind: "조문", type: "법률" }), "법령");
+  assert.equal(LawSearch.scopeOf({ kind: "조문", type: "시행규칙" }), "법령");
+  assert.equal(LawSearch.scopeOf({ kind: "조문", type: "계약예규" }), "행정규칙");
+  assert.equal(LawSearch.scopeOf({ kind: "별표", type: "훈령" }), "행정규칙");
+  assert.equal(LawSearch.scopeOf({ kind: "외부법", type: "외부" }), "법령");
+
+  const mini = LawSearch.create([
+    { id: "a", kind: "조문", type: "법률", label: "제1조", title: "계약", group: "국가계약법", text: "" },
+    { id: "b", kind: "조문", type: "계약예규", label: "제1조", title: "계약", group: "공사계약일반조건", text: "" },
+  ]);
+  const 전체 = mini.search("계약", 60);
+  const 법령 = mini.search("계약", 60, { scope: "법령" });
+  const 행정 = mini.search("계약", 60, { scope: "행정규칙" });
+  assert.equal(전체.length, 2, "전체는 둘 다");
+  assert.deepEqual(법령.map((h) => h.node.id), ["a"], "법령 스코프는 법률만");
+  assert.deepEqual(행정.map((h) => h.node.id), ["b"], "행정규칙 스코프는 예규만");
 });

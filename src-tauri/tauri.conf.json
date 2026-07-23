@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "몇 조항이더라",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "kr.pps.myeot-johang-ideora",
   "build": {
     "frontendDist": "../web"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "몇 조항이더라 — 조달 법령 리더",

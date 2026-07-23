@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-const LawNotes = createRequire(import.meta.url)("../src/notes.js");
+const LawNotes = createRequire(import.meta.url)("../src/notes.cjs");
 
 // 실제 그래프와 같은 모양의 최소 노드 집합
 const NODES = [

@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-const LawFavs = createRequire(import.meta.url)("../src/favorites.js");
+const LawFavs = createRequire(import.meta.url)("../src/favorites.cjs");
 
 /** localStorage 대역. 던지는 저장소도 흉내낼 수 있다. */
 function stubStore(initial, opts = {}) {

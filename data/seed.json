@@ -5,13 +5,20 @@
     "  (2) adminRuleSources  : 소관부처 전수 열거. '조달청 행정규칙 전부'는 여기서 온다.",
     "목록 API는 display=100 + page 페이지네이션이 되므로 소관부처(org) 완전열거가 가능하다",
     "(과거 '쿼리당 20건' 가정은 틀렸음 — org=1230000 조달청 = 290종 확인, 2026-07-22).",
-    "MST는 개정되면 바뀐다. collect.mjs가 법령명으로 현행 MST를 재확인한 뒤 본문을 받는다."
+    "MST는 개정되면 바뀐다. collect.mjs가 법령명으로 현행 MST를 재확인한 뒤 본문을 받는다.",
+    "  (3) relatedLaws : 부처 교차 관련법령(§2·§2.5). 조달 조문이 인용하는 타부처 개별법을 전문 수집한다."
   ],
   "adminRuleSources": [
     {
       "org": "1230000",
       "label": "조달청",
-      "kinds": ["훈령", "예규", "지침", "고시", "공고"],
+      "kinds": [
+        "훈령",
+        "예규",
+        "지침",
+        "고시",
+        "공고"
+      ],
       "비고": "조달청 소관 행정규칙 전수(훈령·예규·지침·고시·공고). 지침/특수조건/처리기준/세부기준 등 포함."
     }
   ],
@@ -25,7 +32,10 @@
       "parent": null,
       "mst": "283877",
       "lawId": "000695",
-      "aliases": ["국가계약법", "법률"]
+      "aliases": [
+        "국가계약법",
+        "법률"
+      ]
     },
     {
       "id": "nca-e",
@@ -36,7 +46,10 @@
       "parent": "nca",
       "mst": "285893",
       "lawId": "002652",
-      "aliases": ["시행령", "영"]
+      "aliases": [
+        "시행령",
+        "영"
+      ]
     },
     {
       "id": "nca-r",
@@ -47,7 +60,10 @@
       "parent": "nca-e",
       "mst": "282607",
       "lawId": "006590",
-      "aliases": ["시행규칙", "규칙"]
+      "aliases": [
+        "시행규칙",
+        "규칙"
+      ]
     },
     {
       "id": "nca-sp1-e",
@@ -93,7 +109,6 @@
       "lawId": "008556",
       "aliases": []
     },
-
     {
       "id": "psa",
       "name": "조달사업에 관한 법률",
@@ -103,7 +118,9 @@
       "parent": null,
       "mst": "277155",
       "lawId": "000705",
-      "aliases": ["조달사업법"]
+      "aliases": [
+        "조달사업법"
+      ]
     },
     {
       "id": "psa-e",
@@ -127,7 +144,6 @@
       "lawId": "008200",
       "aliases": []
     },
-
     {
       "id": "epa",
       "name": "전자조달의 이용 및 촉진에 관한 법률",
@@ -137,7 +153,9 @@
       "parent": null,
       "mst": "277153",
       "lawId": "011778",
-      "aliases": ["전자조달법"]
+      "aliases": [
+        "전자조달법"
+      ]
     },
     {
       "id": "epa-e",
@@ -162,24 +180,1077 @@
       "aliases": []
     }
   ],
-
   "adminRules": [
-    { "id": "ye-jibhaeng",   "name": "(계약예규) 정부 입찰·계약 집행기준",        "shortName": "정부입찰계약집행기준",   "docType": "계약예규", "seq": "2100000276688", "ruleId": "34470" },
-    { "id": "ye-yejeong",    "name": "(계약예규) 예정가격 작성기준",              "shortName": "예정가격작성기준",       "docType": "계약예규", "seq": "2100000272430", "ruleId": "27944" },
-    { "id": "ye-jeokgyeok",  "name": "(계약예규) 적격심사기준",                   "shortName": "적격심사기준",           "docType": "계약예규", "seq": "2100000274732", "ruleId": "27941" },
-    { "id": "ye-pq",         "name": "(계약예규) 입찰참가자격사전심사요령",       "shortName": "입찰참가자격사전심사요령", "docType": "계약예규", "seq": "2100000275554", "ruleId": "27939" },
-    { "id": "ye-gongdong",   "name": "(계약예규) 공동계약운용요령",               "shortName": "공동계약운용요령",       "docType": "계약예규", "seq": "2100000275812", "ruleId": "27945" },
-    { "id": "ye-hyeopsang",  "name": "(계약예규) 협상에 의한 계약체결기준",       "shortName": "협상에의한계약체결기준", "docType": "계약예규", "seq": "2100000272436", "ruleId": "27946" },
-    { "id": "ye-daehwa",     "name": "(계약예규) 경쟁적대화에 의한 계약체결기준", "shortName": "경쟁적대화계약체결기준", "docType": "계약예규", "seq": "2100000272426", "ruleId": "65935" },
-    { "id": "ye-gongsa-gen", "name": "(계약예규) 공사계약일반조건",               "shortName": "공사계약일반조건",       "docType": "계약예규", "seq": "2100000276690", "ruleId": "27874", "위임근거": { "doc": "nca-e", "비고": "수기: 제1조가 총칙이라 근거 미명시. 본문에서 시행령 43회·국가계약법 6회 인용" } },
-    { "id": "ye-gongsa-bid", "name": "(계약예규) 공사입찰유의서",                 "shortName": "공사입찰유의서",         "docType": "계약예규", "seq": "2100000271122", "ruleId": "27940", "위임근거": { "doc": "nca-e", "비고": "수기: 제1조가 근거 미명시. 본문 시행령 35회 인용 + 법제처 체계도상 국가계약법 소속" } },
-    { "id": "ye-gongsa-js",  "name": "(계약예규) 공사계약 종합심사낙찰제 심사기준", "shortName": "공사종합심사기준",     "docType": "계약예규", "seq": "2100000274730", "ruleId": "51116" },
-    { "id": "ye-mulpum-gen", "name": "(계약예규) 물품구매(제조)계약일반조건",     "shortName": "물품구매계약일반조건",   "docType": "계약예규", "seq": "2100000276692", "ruleId": "27947", "위임근거": { "doc": "nca-e", "비고": "수기: 제1조가 총칙이라 근거 미명시. 본문 시행령 11회 인용 + 법제처 체계도상 국가계약법 소속" } },
-    { "id": "ye-mulpum-bid", "name": "(계약예규) 물품구매(제조)입찰유의서",       "shortName": "물품구매입찰유의서",     "docType": "계약예규", "seq": "2100000272402", "ruleId": "27948", "위임근거": { "doc": "nca-e", "비고": "수기: 제1조가 근거 미명시. 본문에서 시행령 25회·국가계약법 4회 인용" } },
-    { "id": "ye-yongyeok-gen", "name": "(계약예규) 용역계약일반조건",             "shortName": "용역계약일반조건",       "docType": "계약예규", "seq": "2100000276694", "ruleId": "27949", "위임근거": { "doc": "nca-e", "비고": "수기: 제1조가 근거 미명시. 본문에서 시행령 20회·시행규칙 9회 인용" } },
-    { "id": "ye-yongyeok-bid", "name": "(계약예규) 용역입찰유의서",               "shortName": "용역입찰유의서",         "docType": "계약예규", "seq": "2100000271132", "ruleId": "27950", "위임근거": { "doc": "nca-e", "비고": "수기: 제1조가 근거 미명시. 본문에서 시행령 27회·국가계약법 4회 인용" } },
-    { "id": "ye-yongyeok-js",  "name": "(계약예규) 용역계약 종합심사낙찰제 심사기준", "shortName": "용역종합심사기준",   "docType": "계약예규", "seq": "2100000272404", "ruleId": "65936" },
-    { "id": "ye-ilgwal",     "name": "(계약예규) 일괄입찰 등에 의한 낙찰자 결정기준", "shortName": "일괄입찰낙찰자결정기준", "docType": "계약예규", "seq": "2100000244202", "ruleId": "27942" },
-    { "id": "ye-jonghap",    "name": "(계약예규) 종합계약집행요령",               "shortName": "종합계약집행요령",       "docType": "계약예규", "seq": "2100000272410", "ruleId": "34485" }
+    {
+      "id": "ye-jibhaeng",
+      "name": "(계약예규) 정부 입찰·계약 집행기준",
+      "shortName": "정부입찰계약집행기준",
+      "docType": "계약예규",
+      "seq": "2100000276688",
+      "ruleId": "34470"
+    },
+    {
+      "id": "ye-yejeong",
+      "name": "(계약예규) 예정가격 작성기준",
+      "shortName": "예정가격작성기준",
+      "docType": "계약예규",
+      "seq": "2100000272430",
+      "ruleId": "27944"
+    },
+    {
+      "id": "ye-jeokgyeok",
+      "name": "(계약예규) 적격심사기준",
+      "shortName": "적격심사기준",
+      "docType": "계약예규",
+      "seq": "2100000274732",
+      "ruleId": "27941"
+    },
+    {
+      "id": "ye-pq",
+      "name": "(계약예규) 입찰참가자격사전심사요령",
+      "shortName": "입찰참가자격사전심사요령",
+      "docType": "계약예규",
+      "seq": "2100000275554",
+      "ruleId": "27939"
+    },
+    {
+      "id": "ye-gongdong",
+      "name": "(계약예규) 공동계약운용요령",
+      "shortName": "공동계약운용요령",
+      "docType": "계약예규",
+      "seq": "2100000275812",
+      "ruleId": "27945"
+    },
+    {
+      "id": "ye-hyeopsang",
+      "name": "(계약예규) 협상에 의한 계약체결기준",
+      "shortName": "협상에의한계약체결기준",
+      "docType": "계약예규",
+      "seq": "2100000272436",
+      "ruleId": "27946"
+    },
+    {
+      "id": "ye-daehwa",
+      "name": "(계약예규) 경쟁적대화에 의한 계약체결기준",
+      "shortName": "경쟁적대화계약체결기준",
+      "docType": "계약예규",
+      "seq": "2100000272426",
+      "ruleId": "65935"
+    },
+    {
+      "id": "ye-gongsa-gen",
+      "name": "(계약예규) 공사계약일반조건",
+      "shortName": "공사계약일반조건",
+      "docType": "계약예규",
+      "seq": "2100000276690",
+      "ruleId": "27874",
+      "위임근거": {
+        "doc": "nca-e",
+        "비고": "수기: 제1조가 총칙이라 근거 미명시. 본문에서 시행령 43회·국가계약법 6회 인용"
+      }
+    },
+    {
+      "id": "ye-gongsa-bid",
+      "name": "(계약예규) 공사입찰유의서",
+      "shortName": "공사입찰유의서",
+      "docType": "계약예규",
+      "seq": "2100000271122",
+      "ruleId": "27940",
+      "위임근거": {
+        "doc": "nca-e",
+        "비고": "수기: 제1조가 근거 미명시. 본문 시행령 35회 인용 + 법제처 체계도상 국가계약법 소속"
+      }
+    },
+    {
+      "id": "ye-gongsa-js",
+      "name": "(계약예규) 공사계약 종합심사낙찰제 심사기준",
+      "shortName": "공사종합심사기준",
+      "docType": "계약예규",
+      "seq": "2100000274730",
+      "ruleId": "51116"
+    },
+    {
+      "id": "ye-mulpum-gen",
+      "name": "(계약예규) 물품구매(제조)계약일반조건",
+      "shortName": "물품구매계약일반조건",
+      "docType": "계약예규",
+      "seq": "2100000276692",
+      "ruleId": "27947",
+      "위임근거": {
+        "doc": "nca-e",
+        "비고": "수기: 제1조가 총칙이라 근거 미명시. 본문 시행령 11회 인용 + 법제처 체계도상 국가계약법 소속"
+      }
+    },
+    {
+      "id": "ye-mulpum-bid",
+      "name": "(계약예규) 물품구매(제조)입찰유의서",
+      "shortName": "물품구매입찰유의서",
+      "docType": "계약예규",
+      "seq": "2100000272402",
+      "ruleId": "27948",
+      "위임근거": {
+        "doc": "nca-e",
+        "비고": "수기: 제1조가 근거 미명시. 본문에서 시행령 25회·국가계약법 4회 인용"
+      }
+    },
+    {
+      "id": "ye-yongyeok-gen",
+      "name": "(계약예규) 용역계약일반조건",
+      "shortName": "용역계약일반조건",
+      "docType": "계약예규",
+      "seq": "2100000276694",
+      "ruleId": "27949",
+      "위임근거": {
+        "doc": "nca-e",
+        "비고": "수기: 제1조가 근거 미명시. 본문에서 시행령 20회·시행규칙 9회 인용"
+      }
+    },
+    {
+      "id": "ye-yongyeok-bid",
+      "name": "(계약예규) 용역입찰유의서",
+      "shortName": "용역입찰유의서",
+      "docType": "계약예규",
+      "seq": "2100000271132",
+      "ruleId": "27950",
+      "위임근거": {
+        "doc": "nca-e",
+        "비고": "수기: 제1조가 근거 미명시. 본문에서 시행령 27회·국가계약법 4회 인용"
+      }
+    },
+    {
+      "id": "ye-yongyeok-js",
+      "name": "(계약예규) 용역계약 종합심사낙찰제 심사기준",
+      "shortName": "용역종합심사기준",
+      "docType": "계약예규",
+      "seq": "2100000272404",
+      "ruleId": "65936"
+    },
+    {
+      "id": "ye-ilgwal",
+      "name": "(계약예규) 일괄입찰 등에 의한 낙찰자 결정기준",
+      "shortName": "일괄입찰낙찰자결정기준",
+      "docType": "계약예규",
+      "seq": "2100000244202",
+      "ruleId": "27942"
+    },
+    {
+      "id": "ye-jonghap",
+      "name": "(계약예규) 종합계약집행요령",
+      "shortName": "종합계약집행요령",
+      "docType": "계약예규",
+      "seq": "2100000272410",
+      "ruleId": "34485"
+    },
+    {
+      "id": "moef-innov",
+      "name": "혁신제품 지정 및 구매촉진 등에 관한 규정",
+      "shortName": "혁신제품구매규정",
+      "docType": "훈령",
+      "seq": null,
+      "ruleId": "74640",
+      "비고": "재정경제부(기재부) 소관 — 조달청 org(1230000) 전수 열거로 잡히지 않아 개별 지정. 혁신조달 근거."
+    }
+  ],
+  "relatedLaws": [
+    {
+      "id": "mspa",
+      "name": "중소기업제품 구매촉진 및 판로지원에 관한 법률",
+      "shortName": "중소기업제품 구매촉진",
+      "docType": "법률",
+      "family": "mspa",
+      "parent": null,
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "284097",
+      "aliases": []
+    },
+    {
+      "id": "mspa-e",
+      "name": "중소기업제품 구매촉진 및 판로지원에 관한 법률 시행령",
+      "shortName": "중소기업제품 구매촉진 시행령",
+      "docType": "시행령",
+      "family": "mspa",
+      "parent": "mspa",
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "287311",
+      "aliases": []
+    },
+    {
+      "id": "mspa-r",
+      "name": "중소기업제품 구매촉진 및 판로지원에 관한 법률 시행규칙",
+      "shortName": "중소기업제품 구매촉진 시행규칙",
+      "docType": "시행규칙",
+      "family": "mspa",
+      "parent": "mspa-e",
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "253373",
+      "aliases": []
+    },
+    {
+      "id": "swa",
+      "name": "소프트웨어 진흥법",
+      "shortName": "소프트웨어 진흥법",
+      "docType": "법률",
+      "family": "swa",
+      "parent": null,
+      "category": "관련",
+      "org": "과학기술정보통신부",
+      "mst": "265845",
+      "aliases": []
+    },
+    {
+      "id": "swa-e",
+      "name": "소프트웨어 진흥법 시행령",
+      "shortName": "소프트웨어 진흥법 시행령",
+      "docType": "시행령",
+      "family": "swa",
+      "parent": "swa",
+      "category": "관련",
+      "org": "과학기술정보통신부",
+      "mst": "286139",
+      "aliases": []
+    },
+    {
+      "id": "swa-r",
+      "name": "소프트웨어 진흥법 시행규칙",
+      "shortName": "소프트웨어 진흥법 시행규칙",
+      "docType": "시행규칙",
+      "family": "swa",
+      "parent": "swa-e",
+      "category": "관련",
+      "org": "과학기술정보통신부",
+      "mst": "271031",
+      "aliases": []
+    },
+    {
+      "id": "cib",
+      "name": "건설산업기본법",
+      "shortName": "건설산업기본법",
+      "docType": "법률",
+      "family": "cib",
+      "parent": null,
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "273435",
+      "aliases": []
+    },
+    {
+      "id": "cib-e",
+      "name": "건설산업기본법 시행령",
+      "shortName": "건설산업기본법 시행령",
+      "docType": "시행령",
+      "family": "cib",
+      "parent": "cib",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "287349",
+      "aliases": []
+    },
+    {
+      "id": "cib-r",
+      "name": "건설산업기본법 시행규칙",
+      "shortName": "건설산업기본법 시행규칙",
+      "docType": "시행규칙",
+      "family": "cib",
+      "parent": "cib-e",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "282375",
+      "aliases": []
+    },
+    {
+      "id": "nfa",
+      "name": "국가재정법",
+      "shortName": "국가재정법",
+      "docType": "법률",
+      "family": "nfa",
+      "parent": null,
+      "category": "관련",
+      "org": "기획재정부",
+      "mst": "286517",
+      "aliases": []
+    },
+    {
+      "id": "nfa-e",
+      "name": "국가재정법 시행령",
+      "shortName": "국가재정법 시행령",
+      "docType": "시행령",
+      "family": "nfa",
+      "parent": "nfa",
+      "category": "관련",
+      "org": "기획재정부",
+      "mst": "285795",
+      "aliases": []
+    },
+    {
+      "id": "ppsorg",
+      "name": "조달청과 그 소속기관 직제",
+      "shortName": "조달청과 그 소속기관 ",
+      "docType": "대통령령",
+      "family": "ppsorg",
+      "parent": null,
+      "category": "관련",
+      "org": "조달청",
+      "mst": "288239",
+      "aliases": []
+    },
+    {
+      "id": "ppsorg-r",
+      "name": "조달청과 그 소속기관 직제 시행규칙",
+      "shortName": "조달청과 그 소속기관  시행규칙",
+      "docType": "시행규칙",
+      "family": "ppsorg",
+      "parent": "ppsorg",
+      "category": "관련",
+      "org": "조달청",
+      "mst": "288283",
+      "aliases": []
+    },
+    {
+      "id": "lca",
+      "name": "지방자치단체를 당사자로 하는 계약에 관한 법률",
+      "shortName": "지방자치단체를 당사자로",
+      "docType": "법률",
+      "family": "lca",
+      "parent": null,
+      "category": "관련",
+      "org": "행정안전부",
+      "mst": "253973",
+      "aliases": []
+    },
+    {
+      "id": "lca-e",
+      "name": "지방자치단체를 당사자로 하는 계약에 관한 법률 시행령",
+      "shortName": "지방자치단체를 당사자로 시행령",
+      "docType": "시행령",
+      "family": "lca",
+      "parent": "lca",
+      "category": "관련",
+      "org": "행정안전부",
+      "mst": "286149",
+      "aliases": []
+    },
+    {
+      "id": "lca-r",
+      "name": "지방자치단체를 당사자로 하는 계약에 관한 법률 시행규칙",
+      "shortName": "지방자치단체를 당사자로 시행규칙",
+      "docType": "시행규칙",
+      "family": "lca",
+      "parent": "lca-e",
+      "category": "관련",
+      "org": "행정안전부",
+      "mst": "287365",
+      "aliases": []
+    },
+    {
+      "id": "ppma",
+      "name": "공유재산 및 물품 관리법",
+      "shortName": "공유재산",
+      "docType": "법률",
+      "family": "ppma",
+      "parent": null,
+      "category": "관련",
+      "org": "행정안전부",
+      "mst": "258477",
+      "aliases": []
+    },
+    {
+      "id": "ppma-e",
+      "name": "공유재산 및 물품 관리법 시행령",
+      "shortName": "공유재산 시행령",
+      "docType": "시행령",
+      "family": "ppma",
+      "parent": "ppma",
+      "category": "관련",
+      "org": "행정안전부",
+      "mst": "288163",
+      "aliases": []
+    },
+    {
+      "id": "cta",
+      "name": "건설기술 진흥법",
+      "shortName": "건설기술 진흥법",
+      "docType": "법률",
+      "family": "cta",
+      "parent": null,
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "276921",
+      "aliases": []
+    },
+    {
+      "id": "cta-e",
+      "name": "건설기술 진흥법 시행령",
+      "shortName": "건설기술 진흥법 시행령",
+      "docType": "시행령",
+      "family": "cta",
+      "parent": "cta",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "286847",
+      "aliases": []
+    },
+    {
+      "id": "cta-r",
+      "name": "건설기술 진흥법 시행규칙",
+      "shortName": "건설기술 진흥법 시행규칙",
+      "docType": "시행규칙",
+      "family": "cta",
+      "parent": "cta-e",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "286885",
+      "aliases": []
+    },
+    {
+      "id": "fsm",
+      "name": "시설물의 안전 및 유지관리에 관한 특별법",
+      "shortName": "시설물의 안전",
+      "docType": "법률",
+      "family": "fsm",
+      "parent": null,
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "266683",
+      "aliases": []
+    },
+    {
+      "id": "fsm-e",
+      "name": "시설물의 안전 및 유지관리에 관한 특별법 시행령",
+      "shortName": "시설물의 안전 시행령",
+      "docType": "시행령",
+      "family": "fsm",
+      "parent": "fsm",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "284791",
+      "aliases": []
+    },
+    {
+      "id": "fsm-r",
+      "name": "시설물의 안전 및 유지관리에 관한 특별법 시행규칙",
+      "shortName": "시설물의 안전 시행규칙",
+      "docType": "시행규칙",
+      "family": "fsm",
+      "parent": "fsm-e",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "282381",
+      "aliases": []
+    },
+    {
+      "id": "arch",
+      "name": "건축사법",
+      "shortName": "건축사법",
+      "docType": "법률",
+      "family": "arch",
+      "parent": null,
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "276927",
+      "aliases": []
+    },
+    {
+      "id": "arch-e",
+      "name": "건축사법 시행령",
+      "shortName": "건축사법 시행령",
+      "docType": "시행령",
+      "family": "arch",
+      "parent": "arch",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "243997",
+      "aliases": []
+    },
+    {
+      "id": "arch-r",
+      "name": "건축사법 시행규칙",
+      "shortName": "건축사법 시행규칙",
+      "docType": "시행규칙",
+      "family": "arch",
+      "parent": "arch-e",
+      "category": "관련",
+      "org": "국토교통부",
+      "mst": "265655",
+      "aliases": []
+    },
+    {
+      "id": "eng",
+      "name": "엔지니어링산업 진흥법",
+      "shortName": "엔지니어링산업 진흥법",
+      "docType": "법률",
+      "family": "eng",
+      "parent": null,
+      "category": "관련",
+      "org": "산업통상자원부",
+      "mst": "280053",
+      "aliases": []
+    },
+    {
+      "id": "eng-e",
+      "name": "엔지니어링산업 진흥법 시행령",
+      "shortName": "엔지니어링산업 진흥법 시행령",
+      "docType": "시행령",
+      "family": "eng",
+      "parent": "eng",
+      "category": "관련",
+      "org": "산업통상자원부",
+      "mst": "286331",
+      "aliases": []
+    },
+    {
+      "id": "eng-r",
+      "name": "엔지니어링산업 진흥법 시행규칙",
+      "shortName": "엔지니어링산업 진흥법 시행규칙",
+      "docType": "시행규칙",
+      "family": "eng",
+      "parent": "eng-e",
+      "category": "관련",
+      "org": "산업통상자원부",
+      "mst": "286691",
+      "aliases": []
+    },
+    {
+      "id": "chr",
+      "name": "국가유산수리 등에 관한 법률",
+      "shortName": "국가유산수리 등법",
+      "docType": "법률",
+      "family": "chr",
+      "parent": null,
+      "category": "관련",
+      "org": "국가유산청",
+      "mst": "279661",
+      "aliases": []
+    },
+    {
+      "id": "chr-e",
+      "name": "국가유산수리 등에 관한 법률 시행령",
+      "shortName": "국가유산수리 등법 시행령",
+      "docType": "시행령",
+      "family": "chr",
+      "parent": "chr",
+      "category": "관련",
+      "org": "국가유산청",
+      "mst": "285993",
+      "aliases": []
+    },
+    {
+      "id": "chr-r",
+      "name": "국가유산수리 등에 관한 법률 시행규칙",
+      "shortName": "국가유산수리 등법 시행규칙",
+      "docType": "시행규칙",
+      "family": "chr",
+      "parent": "chr-e",
+      "category": "관련",
+      "org": "국가유산청",
+      "mst": "286041",
+      "aliases": []
+    },
+    {
+      "id": "elec",
+      "name": "전기공사업법",
+      "shortName": "전기공사업법",
+      "docType": "법률",
+      "family": "elec",
+      "parent": null,
+      "category": "관련",
+      "org": "산업통상자원부",
+      "mst": "271253",
+      "aliases": []
+    },
+    {
+      "id": "elec-e",
+      "name": "전기공사업법 시행령",
+      "shortName": "전기공사업법 시행령",
+      "docType": "시행령",
+      "family": "elec",
+      "parent": "elec",
+      "category": "관련",
+      "org": "산업통상자원부",
+      "mst": "282331",
+      "aliases": []
+    },
+    {
+      "id": "elec-r",
+      "name": "전기공사업법 시행규칙",
+      "shortName": "전기공사업법 시행규칙",
+      "docType": "시행규칙",
+      "family": "elec",
+      "parent": "elec-e",
+      "category": "관련",
+      "org": "산업통상자원부",
+      "mst": "278985",
+      "aliases": []
+    },
+    {
+      "id": "ict",
+      "name": "정보통신공사업법",
+      "shortName": "정보통신공사업법",
+      "docType": "법률",
+      "family": "ict",
+      "parent": null,
+      "category": "관련",
+      "org": "과학기술정보통신부",
+      "mst": "268833",
+      "aliases": []
+    },
+    {
+      "id": "ict-e",
+      "name": "정보통신공사업법 시행령",
+      "shortName": "정보통신공사업법 시행령",
+      "docType": "시행령",
+      "family": "ict",
+      "parent": "ict",
+      "category": "관련",
+      "org": "과학기술정보통신부",
+      "mst": "284859",
+      "aliases": []
+    },
+    {
+      "id": "ict-r",
+      "name": "정보통신공사업법 시행규칙",
+      "shortName": "정보통신공사업법 시행규칙",
+      "docType": "시행규칙",
+      "family": "ict",
+      "parent": "ict-e",
+      "category": "관련",
+      "org": "과학기술정보통신부",
+      "mst": "272931",
+      "aliases": []
+    },
+    {
+      "id": "fire",
+      "name": "소방시설공사업법",
+      "shortName": "소방시설공사업법",
+      "docType": "법률",
+      "family": "fire",
+      "parent": null,
+      "category": "관련",
+      "org": "소방청",
+      "mst": "259473",
+      "aliases": []
+    },
+    {
+      "id": "fire-e",
+      "name": "소방시설공사업법 시행령",
+      "shortName": "소방시설공사업법 시행령",
+      "docType": "시행령",
+      "family": "fire",
+      "parent": "fire",
+      "category": "관련",
+      "org": "소방청",
+      "mst": "287253",
+      "aliases": []
+    },
+    {
+      "id": "fire-r",
+      "name": "소방시설공사업법 시행규칙",
+      "shortName": "소방시설공사업법 시행규칙",
+      "docType": "시행규칙",
+      "family": "fire",
+      "parent": "fire-e",
+      "category": "관련",
+      "org": "소방청",
+      "mst": "287829",
+      "aliases": []
+    },
+    {
+      "id": "osh",
+      "name": "산업안전보건법",
+      "shortName": "산업안전보건법",
+      "docType": "법률",
+      "family": "osh",
+      "parent": null,
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "287805",
+      "aliases": []
+    },
+    {
+      "id": "osh-e",
+      "name": "산업안전보건법 시행령",
+      "shortName": "산업안전보건법 시행령",
+      "docType": "시행령",
+      "family": "osh",
+      "parent": "osh",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "263363",
+      "aliases": []
+    },
+    {
+      "id": "osh-r",
+      "name": "산업안전보건법 시행규칙",
+      "shortName": "산업안전보건법 시행규칙",
+      "docType": "시행규칙",
+      "family": "osh",
+      "parent": "osh-e",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "263749",
+      "aliases": []
+    },
+    {
+      "id": "sda",
+      "name": "중대재해 처벌 등에 관한 법률",
+      "shortName": "중대재해 처벌 등법",
+      "docType": "법률",
+      "family": "sda",
+      "parent": null,
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "228817",
+      "aliases": []
+    },
+    {
+      "id": "sda-e",
+      "name": "중대재해 처벌 등에 관한 법률 시행령",
+      "shortName": "중대재해 처벌 등법 시행령",
+      "docType": "시행령",
+      "family": "sda",
+      "parent": "sda",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "277417",
+      "aliases": []
+    },
+    {
+      "id": "cwe",
+      "name": "건설근로자의 고용개선 등에 관한 법률",
+      "shortName": "건설근로자의 고용개선 ",
+      "docType": "법률",
+      "family": "cwe",
+      "parent": null,
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "234693",
+      "aliases": []
+    },
+    {
+      "id": "cwe-e",
+      "name": "건설근로자의 고용개선 등에 관한 법률 시행령",
+      "shortName": "건설근로자의 고용개선  시행령",
+      "docType": "시행령",
+      "family": "cwe",
+      "parent": "cwe",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "277395",
+      "aliases": []
+    },
+    {
+      "id": "cwe-r",
+      "name": "건설근로자의 고용개선 등에 관한 법률 시행규칙",
+      "shortName": "건설근로자의 고용개선  시행규칙",
+      "docType": "시행규칙",
+      "family": "cwe",
+      "parent": "cwe-e",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "265105",
+      "aliases": []
+    },
+    {
+      "id": "insp",
+      "name": "고용보험 및 산업재해보상보험의 보험료징수 등에 관한 법률",
+      "shortName": "고용보험",
+      "docType": "법률",
+      "family": "insp",
+      "parent": null,
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "247481",
+      "aliases": []
+    },
+    {
+      "id": "insp-e",
+      "name": "고용보험 및 산업재해보상보험의 보험료징수 등에 관한 법률 시행령",
+      "shortName": "고용보험 시행령",
+      "docType": "시행령",
+      "family": "insp",
+      "parent": "insp",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "280527",
+      "aliases": []
+    },
+    {
+      "id": "insp-r",
+      "name": "고용보험 및 산업재해보상보험의 보험료징수 등에 관한 법률 시행규칙",
+      "shortName": "고용보험 시행규칙",
+      "docType": "시행규칙",
+      "family": "insp",
+      "parent": "insp-e",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "287859",
+      "aliases": []
+    },
+    {
+      "id": "subc",
+      "name": "하도급거래 공정화에 관한 법률",
+      "shortName": "하도급거래 공정화법",
+      "docType": "법률",
+      "family": "subc",
+      "parent": null,
+      "category": "관련",
+      "org": "공정거래위원회",
+      "mst": "273643",
+      "aliases": []
+    },
+    {
+      "id": "subc-e",
+      "name": "하도급거래 공정화에 관한 법률 시행령",
+      "shortName": "하도급거래 공정화법 시행령",
+      "docType": "시행령",
+      "family": "subc",
+      "parent": "subc",
+      "category": "관련",
+      "org": "공정거래위원회",
+      "mst": "287201",
+      "aliases": []
+    },
+    {
+      "id": "mrfta",
+      "name": "독점규제 및 공정거래에 관한 법률",
+      "shortName": "독점규제",
+      "docType": "법률",
+      "family": "mrfta",
+      "parent": null,
+      "category": "관련",
+      "org": "공정거래위원회",
+      "mst": "285951",
+      "aliases": []
+    },
+    {
+      "id": "mrfta-e",
+      "name": "독점규제 및 공정거래에 관한 법률 시행령",
+      "shortName": "독점규제 시행령",
+      "docType": "시행령",
+      "family": "mrfta",
+      "parent": "mrfta",
+      "category": "관련",
+      "org": "공정거래위원회",
+      "mst": "284737",
+      "aliases": []
+    },
+    {
+      "id": "sdp",
+      "name": "중증장애인생산품 우선구매 특별법",
+      "shortName": "중증장애인생산품 우선구",
+      "docType": "법률",
+      "family": "sdp",
+      "parent": null,
+      "category": "관련",
+      "org": "보건복지부",
+      "mst": "279741",
+      "aliases": []
+    },
+    {
+      "id": "sdp-e",
+      "name": "중증장애인생산품 우선구매 특별법 시행령",
+      "shortName": "중증장애인생산품 우선구 시행령",
+      "docType": "시행령",
+      "family": "sdp",
+      "parent": "sdp",
+      "category": "관련",
+      "org": "보건복지부",
+      "mst": "284873",
+      "aliases": []
+    },
+    {
+      "id": "sdp-r",
+      "name": "중증장애인생산품 우선구매 특별법 시행규칙",
+      "shortName": "중증장애인생산품 우선구 시행규칙",
+      "docType": "시행규칙",
+      "family": "sdp",
+      "parent": "sdp-e",
+      "category": "관련",
+      "org": "보건복지부",
+      "mst": "218455",
+      "aliases": []
+    },
+    {
+      "id": "green",
+      "name": "녹색제품 구매촉진에 관한 법률",
+      "shortName": "녹색제품 구매촉진법",
+      "docType": "법률",
+      "family": "green",
+      "parent": null,
+      "category": "관련",
+      "org": "환경부",
+      "mst": "276711",
+      "aliases": []
+    },
+    {
+      "id": "green-e",
+      "name": "녹색제품 구매촉진에 관한 법률 시행령",
+      "shortName": "녹색제품 구매촉진법 시행령",
+      "docType": "시행령",
+      "family": "green",
+      "parent": "green",
+      "category": "관련",
+      "org": "환경부",
+      "mst": "278513",
+      "aliases": []
+    },
+    {
+      "id": "green-r",
+      "name": "녹색제품 구매촉진에 관한 법률 시행규칙",
+      "shortName": "녹색제품 구매촉진법 시행규칙",
+      "docType": "시행규칙",
+      "family": "green",
+      "parent": "green-e",
+      "category": "관련",
+      "org": "환경부",
+      "mst": "278887",
+      "aliases": []
+    },
+    {
+      "id": "sea",
+      "name": "사회적기업 육성법",
+      "shortName": "사회적기업 육성법",
+      "docType": "법률",
+      "family": "sea",
+      "parent": null,
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "286815",
+      "aliases": []
+    },
+    {
+      "id": "sea-e",
+      "name": "사회적기업 육성법 시행령",
+      "shortName": "사회적기업 육성법 시행령",
+      "docType": "시행령",
+      "family": "sea",
+      "parent": "sea",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "281623",
+      "aliases": []
+    },
+    {
+      "id": "sea-r",
+      "name": "사회적기업 육성법 시행규칙",
+      "shortName": "사회적기업 육성법 시행규칙",
+      "docType": "시행규칙",
+      "family": "sea",
+      "parent": "sea-e",
+      "category": "관련",
+      "org": "고용노동부",
+      "mst": "212633",
+      "aliases": []
+    },
+    {
+      "id": "wba",
+      "name": "여성기업지원에 관한 법률",
+      "shortName": "여성기업지원법",
+      "docType": "법률",
+      "family": "wba",
+      "parent": null,
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "255889",
+      "aliases": []
+    },
+    {
+      "id": "wba-e",
+      "name": "여성기업지원에 관한 법률 시행령",
+      "shortName": "여성기업지원법 시행령",
+      "docType": "시행령",
+      "family": "wba",
+      "parent": "wba",
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "262701",
+      "aliases": []
+    },
+    {
+      "id": "dba",
+      "name": "장애인기업활동 촉진법",
+      "shortName": "장애인기업활동 촉진법",
+      "docType": "법률",
+      "family": "dba",
+      "parent": null,
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "280145",
+      "aliases": []
+    },
+    {
+      "id": "dba-e",
+      "name": "장애인기업활동 촉진법 시행령",
+      "shortName": "장애인기업활동 촉진법 시행령",
+      "docType": "시행령",
+      "family": "dba",
+      "parent": "dba",
+      "category": "관련",
+      "org": "중소벤처기업부",
+      "mst": "279877",
+      "aliases": []
+    },
+    {
+      "id": "vets",
+      "name": "국가유공자 등 예우 및 지원에 관한 법률",
+      "shortName": "국가유공자 등 예우",
+      "docType": "법률",
+      "family": "vets",
+      "parent": null,
+      "category": "관련",
+      "org": "국가보훈부",
+      "mst": "276369",
+      "aliases": []
+    },
+    {
+      "id": "vets-e",
+      "name": "국가유공자 등 예우 및 지원에 관한 법률 시행령",
+      "shortName": "국가유공자 등 예우 시행령",
+      "docType": "시행령",
+      "family": "vets",
+      "parent": "vets",
+      "category": "관련",
+      "org": "국가보훈부",
+      "mst": "284685",
+      "aliases": []
+    },
+    {
+      "id": "vets-r",
+      "name": "국가유공자 등 예우 및 지원에 관한 법률 시행규칙",
+      "shortName": "국가유공자 등 예우 시행규칙",
+      "docType": "시행규칙",
+      "family": "vets",
+      "parent": "vets-e",
+      "category": "관련",
+      "org": "국가보훈부",
+      "mst": "280321",
+      "aliases": []
+    },
+    {
+      "id": "pia",
+      "name": "공공기관의 운영에 관한 법률",
+      "shortName": "공공기관의 운영법",
+      "docType": "법률",
+      "family": "pia",
+      "parent": null,
+      "category": "관련",
+      "org": "기획재정부",
+      "mst": "276057",
+      "aliases": []
+    },
+    {
+      "id": "pia-e",
+      "name": "공공기관의 운영에 관한 법률 시행령",
+      "shortName": "공공기관의 운영법 시행령",
+      "docType": "시행령",
+      "family": "pia",
+      "parent": "pia",
+      "category": "관련",
+      "org": "기획재정부",
+      "mst": "280787",
+      "aliases": []
+    }
   ]
 }

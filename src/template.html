@@ -8,7 +8,7 @@
   /* 페인트 전에 테마 확정(플래시 방지): 저장값 → 없으면 시스템 설정 */
   (function(){try{
     var t=localStorage.getItem('law-theme');
-    if(!t) t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+    if(!t||t==='system') t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
     document.documentElement.dataset.theme=t;
   }catch(e){document.documentElement.dataset.theme='dark';}})();
 </script>
@@ -224,12 +224,74 @@
   .side header p{margin:6px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
   .side header p.warn{color:var(--warn)}
   .searchbar{padding:11px 13px;border-bottom:1px solid var(--line)}
-  #q{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
+  .qrow{display:flex;gap:7px;align-items:stretch}
+  #scopeBtn{flex:0 0 auto;padding:0 11px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;
+    white-space:nowrap;font-weight:600;transition:color .12s,border-color .12s}
+  #scopeBtn:hover{border-color:var(--accent);color:var(--text)}
+  #scopeBtn.act{color:var(--accent);border-color:var(--accent)}
+  #q{flex:1;min-width:0;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
     background:var(--panel2);color:var(--text);font-size:13px;outline:none;font-family:inherit}
   #q:focus{border-color:var(--accent)}
   .hint{margin-top:7px;font-size:10.5px;color:var(--muted)}
   .hint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
     padding:1px 5px;font-family:inherit;font-size:10px}
+
+  /* ───────── 빠른 검색 오버레이 (Spotlight) ───────── */
+  .spot{position:fixed;inset:0;z-index:1000;display:flex;justify-content:center;
+    align-items:flex-start;padding-top:14vh;background:rgba(10,12,16,.44);
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .spot[hidden]{display:none}
+  .spotbox{width:min(680px,92vw);background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.5);overflow:hidden;
+    display:flex;flex-direction:column;max-height:72vh}
+  .spotqrow{display:flex;gap:9px;align-items:stretch;padding:13px 14px;border-bottom:1px solid var(--line)}
+  #spotScope{flex:0 0 auto;padding:0 12px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);font-size:12.5px;font-weight:600;font-family:inherit;
+    cursor:pointer;white-space:nowrap}
+  #spotScope:hover{border-color:var(--accent);color:var(--text)}
+  #spotScope.act{color:var(--accent);border-color:var(--accent)}
+  #spotQ{flex:1;min-width:0;border:none;background:transparent;color:var(--text);
+    font-size:18px;outline:none;font-family:inherit}
+  .spotresults{overflow:auto;padding:6px}
+  .spotresults .sitem{display:flex;gap:10px;align-items:center;padding:9px 11px;border-radius:9px;cursor:pointer}
+  .spotresults .sitem.sel{background:var(--hl)}
+  .spotresults .sitem .tag{flex:0 0 auto;font-size:10.5px;color:var(--muted);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .spotresults .sitem .main{min-width:0;flex:1}
+  .spotresults .sitem .ttl{display:block;font-size:14px;color:var(--text);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spotresults .sitem .sub{font-size:11.5px;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spotresults .none{padding:16px;color:var(--muted);font-size:13px;text-align:center}
+  .spothint{padding:9px 14px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+  .spothint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-family:inherit;font-size:10px}
+
+  /* ───────── 설정 패널 ───────── */
+  .setbox{max-height:80vh}
+  .sethead{display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px;font-weight:700;color:var(--text)}
+  .sethead button{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer}
+  .sethead button:hover{color:var(--text)}
+  .setbody{overflow:auto;padding:6px 4px}
+  .setrow{display:flex;gap:14px;padding:14px 16px;border-bottom:1px solid var(--divider)}
+  .setrow:last-child{border-bottom:none}
+  .setk{flex:0 0 132px;font-size:12.5px;color:var(--muted);padding-top:5px}
+  .setv{flex:1;min-width:0}
+  .segbtns{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .segbtns button{background:var(--panel2);border:none;color:var(--muted);font-family:inherit;
+    font-size:12.5px;padding:6px 13px;cursor:pointer;border-right:1px solid var(--line)}
+  .segbtns button:last-child{border-right:none}
+  .segbtns button.on{background:var(--accent);color:#fff}
+  .setacts{display:flex;flex-wrap:wrap;gap:8px}
+  .setbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-family:inherit;
+    font-size:12.5px;padding:7px 13px;border-radius:8px;cursor:pointer}
+  .setbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .setpath{font-size:12px;color:var(--text2);background:var(--panel2);border:1px solid var(--line);
+    border-radius:7px;padding:7px 10px;margin-bottom:8px;word-break:break-all;font-family:ui-monospace,monospace}
+  .setnote{font-size:11.5px;color:var(--muted);margin-top:8px;min-height:14px}
+  .setnote.ok{color:var(--accent)} .setnote.bad{color:var(--warn)}
 
   .results{padding:6px 8px 20px}
   .ritem{padding:8px 10px;border-radius:9px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
@@ -339,14 +401,9 @@
     border-bottom:1px dashed var(--inyong);cursor:pointer}
   .body a.cite:hover{background:var(--hl)}
   .body mark{background:var(--marktint);color:inherit;border-radius:3px}
-  /* 별표는 고정폭(罫線) 레이아웃이라 등폭 글꼴 + 줄바꿈 금지라야 표가 맞는다 */
-  .srcnote{margin-top:14px;font-size:11px;color:var(--muted)}
-  .srcnote .copymd{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
-    border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:6px}
-  .srcnote .copymd:hover{border-color:var(--accent);color:var(--text)}
-  /* 별표 원본 뷰어 — PDF 를 크게, 파싱표는 접어서 보조로 */
+  /* 별표·별지(서식) 원본 뷰어 — 원문(PDF)을 크게 띄운다. 파싱표는 제거했다(원문이 진실). */
   .body.annexview{max-width:none}
-  .annexview .pdfview{width:100%;height:min(72vh,900px);border:1px solid var(--line);
+  .annexview .pdfview{width:100%;height:min(78vh,960px);border:1px solid var(--line);
     border-radius:8px;background:#fff}
   .annexview .novip{font-size:12.5px;color:var(--muted);background:var(--panel2);
     border:1px dashed var(--line);border-radius:8px;padding:14px 16px;line-height:1.7}
@@ -354,17 +411,6 @@
   .annexview .dl{font-size:12px;color:var(--accent);text-decoration:none;
     border:1px solid var(--line);border-radius:7px;padding:5px 12px}
   .annexview .dl:hover{border-color:var(--accent);background:var(--hl)}
-  .annexview .parsed{margin-top:8px}
-  .annexview .parsed summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 0}
-  .annexview .parsed summary:hover{color:var(--text)}
-  .body.annex{max-width:none}
-  .body.annex .ann-text{white-space:pre-wrap;margin:6px 0 14px}
-  .body.annex .ann-tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:8px}
-  table.ann{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6}
-  table.ann th,table.ann td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
-  table.ann th{background:var(--panel2);color:var(--text);font-weight:600;white-space:nowrap}
-  table.ann td:last-child{white-space:nowrap;color:var(--muted)}
-  table.ann tbody tr:nth-child(2n){background:var(--zebra)}
 
   /* ───────── 관계·미리보기 (오른쪽) ───────── */
   .rail{border-left:1px solid var(--line);background:var(--panel);
@@ -405,6 +451,55 @@
 </head>
 <body>
 
+<!-- 맥 Spotlight 식 빠른 검색 오버레이 — 앱 어디서나 Ctrl+Shift+Space(또는 Ctrl+K)로 연다.
+     데스크톱 앱에서는 전역 핫키(다른 창을 쓰다가도)로도 열린다. -->
+<div id="spot" class="spot" hidden>
+  <div class="spotbox" role="dialog" aria-label="빠른 검색">
+    <div class="spotqrow">
+      <button type="button" id="spotScope" title="검색 대상 전환 (Ctrl 탭)">전체</button>
+      <input id="spotQ" autocomplete="off" spellcheck="false" placeholder="빠른 검색  —  조문·키워드·초성" />
+    </div>
+    <div id="spotResults" class="spotresults"></div>
+    <div class="spothint"><kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · <kbd>Ctrl</kbd> 탭 대상전환 · <kbd>Esc</kbd> 닫기</div>
+  </div>
+</div>
+
+<!-- 설정 — 법령노트 저장·백업·복원·XLSX·테마를 한곳에 -->
+<div id="settings" class="spot" hidden>
+  <div class="spotbox setbox" role="dialog" aria-label="설정">
+    <div class="sethead"><span>설정</span><button type="button" id="setClose" title="닫기">✕</button></div>
+    <div class="setbody">
+      <section class="setrow">
+        <div class="setk">테마</div>
+        <div class="setv"><div class="segbtns" id="themeSeg">
+          <button type="button" data-theme="light">라이트</button>
+          <button type="button" data-theme="dark">다크</button>
+          <button type="button" data-theme="system">시스템</button>
+        </div></div>
+      </section>
+      <section class="setrow">
+        <div class="setk">법령노트 저장위치</div>
+        <div class="setv"><div class="setpath" id="notePath">확인 중…</div>
+          <div class="setacts"><button type="button" id="btnChangeLoc" class="setbtn">위치 변경…</button></div></div>
+      </section>
+      <section class="setrow">
+        <div class="setk">백업 · 내보내기</div>
+        <div class="setv"><div class="setacts">
+          <button type="button" id="btnJson" class="setbtn">JSON 백업</button>
+          <button type="button" id="btnXlsx" class="setbtn">XLSX 다운로드</button>
+        </div></div>
+      </section>
+      <section class="setrow">
+        <div class="setk">불러오기 · 복원</div>
+        <div class="setv"><div class="setacts">
+          <button type="button" id="btnImport" class="setbtn">JSON·DB 파일 불러오기…</button>
+          <input type="file" id="importFile" accept=".json,.db,.sqlite,application/json" hidden />
+        </div><div class="setnote" id="setMsg"></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <!-- ① 왼쪽: 검색창 하나 + 전체 법령 -->
   <aside class="side">
@@ -413,15 +508,19 @@
       <div class="htop">
         <h1>몇 조항이더라</h1>
         <button id="themeBtn" class="themebtn" type="button"></button>
+        <button id="settingsBtn" class="themebtn" type="button" title="설정">⚙</button>
         <button type="button" class="colbtn" data-col="1" title="접기">‹</button>
       </div>
       <p id="meta"></p>
     </header>
     <div class="searchbar">
-      <input id="q" autocomplete="off" spellcheck="false"
-        placeholder="조문·키워드 검색  예) 수의계약 · 7조 · ㅅㅇㄱㅇ" />
+      <div class="qrow">
+        <button type="button" id="scopeBtn" title="검색 대상 전환 (Ctrl 탭)">전체</button>
+        <input id="q" autocomplete="off" spellcheck="false"
+          placeholder="조문·키워드 검색  예) 수의계약 · 7조 · ㅅㅇㄱㅇ" />
+      </div>
       <div class="hint" id="hint">
-        <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · 초성 검색 가능
+        <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · <kbd>Ctrl</kbd> 탭: 대상(전체·법령·행정규칙) · 초성 가능
       </div>
     </div>
     <div class="scroll">
@@ -484,9 +583,6 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 /*__SEARCH__*/
 </script>
 <script>
-/*__ANNEX__*/
-</script>
-<script>
 /*__ANNEXVIEW__*/
 </script>
 <script>
@@ -496,19 +592,25 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 /*__NOTES__*/
 </script>
 <script>
+/*__BACKUP__*/
+</script>
+<script>
 /*__LAWTEXT__*/
 </script>
 <script>
 (function(){
-  // ---- 테마 토글 ----
-  (function(){
-    const root=document.documentElement, btn=document.getElementById('themeBtn');
-    const sync=()=>{ const dark=root.dataset.theme!=='light'; btn.textContent=dark?'☀':'☾';
-      btn.title=(dark?'라이트':'다크')+' 모드로 전환'; };
-    sync();
-    btn.addEventListener('click',()=>{ root.dataset.theme=root.dataset.theme==='light'?'dark':'light';
-      try{localStorage.setItem('law-theme',root.dataset.theme);}catch(e){} sync(); });
-  })();
+  // ---- 테마 (라이트·다크·시스템) ----
+  const themeRoot=document.documentElement, themeBtn=document.getElementById('themeBtn');
+  const computeTheme=p=>p==='system'?((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'):(p==='light'?'light':'dark');
+  const themePref=()=>{ try{return localStorage.getItem('law-theme')||'system';}catch(e){return 'dark';} };
+  function syncThemeUI(){ const p=themePref(), dark=themeRoot.dataset.theme!=='light';
+    themeBtn.textContent=dark?'☀':'☾'; themeBtn.title=(dark?'라이트':'다크')+' 모드로 전환';
+    const seg=document.getElementById('themeSeg'); if(seg)for(const b of seg.children)b.classList.toggle('on',b.dataset.theme===p); }
+  function applyTheme(p){ try{localStorage.setItem('law-theme',p);}catch(e){} themeRoot.dataset.theme=computeTheme(p); syncThemeUI(); }
+  themeBtn.addEventListener('click',()=>applyTheme(themeRoot.dataset.theme==='light'?'dark':'light'));
+  syncThemeUI();
+  if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').addEventListener)
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{ if(themePref()==='system')applyTheme('system'); });
 
   const {nodes,edges,meta}=GRAPH;
   const byId=new Map(nodes.map(n=>[n.id,n]));
@@ -585,17 +687,84 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     if(sel)sel.scrollIntoView({block:'nearest'});
   }
 
+  // ── 검색 대상(스코프) — Ctrl 탭 또는 칩 클릭으로 전체 → 법령 → 행정규칙 순환 ──
+  const SCOPES=['전체','법령','행정규칙'];
+  let scopeI=0;
+  const scopeBtn=document.getElementById('scopeBtn');
+  const spotScopeBtn=document.getElementById('spotScope');
+  function updateScope(){
+    for(const b of [scopeBtn,spotScopeBtn]){ if(!b)continue; b.textContent=SCOPES[scopeI]; b.classList.toggle('act',scopeI!==0); }
+  }
+  function cycleScope(){
+    scopeI=(scopeI+1)%SCOPES.length; updateScope();
+    // 열려 있는 쪽을 다시 검색한다 (오버레이가 떠 있으면 그쪽, 아니면 사이드바).
+    if(!spotEl.hidden){ spotSearch(); spotQ.focus(); } else { doSearch(); q.focus(); }
+  }
+  scopeBtn.addEventListener('click',cycleScope);
+  if(spotScopeBtn)spotScopeBtn.addEventListener('click',cycleScope);
+
   function doSearch(){
     const s=q.value.trim();
     app.classList.toggle('searching',!!s); // 사이드바 한 자리를 목록↔결과로 갈아끼운다
-    hits=s?idx.search(s,60):[];
+    hits=s?idx.search(s,60,{scope:SCOPES[scopeI]}):[];
     cur=0;
     renderResults();
   }
   q.addEventListener('input',doSearch);
+
+  // Ctrl 을 다른 키 없이 톡 눌렀다 떼면 검색 대상을 바꾼다.
+  // (Ctrl+K 등 조합은 취소된다 — 다른 키가 끼면 후보에서 빠진다.)
+  let ctrlTap=false;
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Control'){ if(!e.repeat)ctrlTap=true; }
+    else ctrlTap=false;
+  },true);
+  document.addEventListener('keyup',e=>{
+    if(e.key==='Control'){ if(ctrlTap)cycleScope(); ctrlTap=false; }
+  },true);
+  updateScope();
   results.addEventListener('click',e=>{
     const it=e.target.closest('.ritem'); if(!it)return;
     open(hits[+it.dataset.i].node.id);
+  });
+
+  // ───────── 빠른 검색 오버레이 (Spotlight) ─────────
+  // 앱 어디서나 Ctrl+Shift+Space / Ctrl+K 로 중앙에 뜬다. 데스크톱 앱은 전역 핫키로도.
+  const spotEl=document.getElementById('spot'),
+        spotQ=document.getElementById('spotQ'),
+        spotResults=document.getElementById('spotResults');
+  let spotHits=[], spotCur=0;
+  function spotRender(){
+    if(!spotQ.value.trim()){ spotResults.innerHTML=''; return; }
+    if(!spotHits.length){ spotResults.innerHTML='<div class="none">결과 없음</div>'; return; }
+    spotResults.innerHTML=spotHits.map((h,i)=>{
+      const n=h.node;
+      const title=(n.kind==='조문'||n.kind==='별표')?(n.title||n.label):n.label;
+      const sub=(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:(n.name||'');
+      return `<div class="sitem${i===spotCur?' sel':''}" data-i="${i}">
+        <span class="tag">${esc(tierOf(n))}</span>
+        <span class="main"><span class="ttl">${highlight(title,spotQ.value)}</span>
+        ${sub?`<div class="sub">${esc(sub)}</div>`:''}</span></div>`;
+    }).join('');
+    const sel=spotResults.querySelector('.sitem.sel'); if(sel)sel.scrollIntoView({block:'nearest'});
+  }
+  function spotSearch(){
+    const s=spotQ.value.trim();
+    spotHits=s?idx.search(s,40,{scope:SCOPES[scopeI]}):[];
+    spotCur=0; spotRender();
+  }
+  function openSpot(){ spotEl.hidden=false; spotQ.value=q.value; spotSearch(); spotQ.focus(); spotQ.select(); }
+  function closeSpot(){ spotEl.hidden=true; }
+  function spotOpenSel(){ const h=spotHits[spotCur]; if(!h)return; closeSpot(); open(h.node.id); }
+  spotQ.addEventListener('input',spotSearch);
+  spotResults.addEventListener('click',e=>{ const it=e.target.closest('.sitem'); if(!it)return; spotCur=+it.dataset.i; spotOpenSel(); });
+  spotEl.addEventListener('mousedown',e=>{ if(e.target===spotEl)closeSpot(); });
+  spotQ.addEventListener('keydown',e=>{
+    if(e.isComposing||e.keyCode===229)return;
+    if(e.key==='ArrowDown'){e.preventDefault();spotCur=Math.min(spotCur+1,spotHits.length-1);spotRender();}
+    else if(e.key==='ArrowUp'){e.preventDefault();spotCur=Math.max(spotCur-1,0);spotRender();}
+    else if(e.key==='Enter'){e.preventDefault();spotOpenSel();}
+    else if(e.key==='Escape'){e.preventDefault();closeSpot();}
   });
 
   // ───────── 즐겨찾기 ─────────
@@ -880,17 +1049,24 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
       ${ev?`<span class="ev" title="${esc(e.evidence)}"> ⟨${esc(ev)}⟩</span>`:''}</span></div>`;
   }
 
-  /** 한 단위(조문·별표)의 본문 HTML. 별표는 罫線 텍스트를 실제 표로 세운다. */
+  /** 옆 미리보기·노트참조용 순수 텍스트. 조문은 항·호·목 계층 들여쓰기(조문항 표기법)를 그대로 적용하고,
+   *  별표·별지(서식)는 원문 유도 문구로 대신한다(파싱 텍스트는 화면에 노출하지 않음). */
+  function previewText(n,empty){
+    if(n.kind==='별표')return '별표·별지(서식)입니다. [본문으로]를 눌러 원본(PDF)을 뷰어에서 확인하세요.';
+    if(!n.text)return empty||'원문 없음 — 이 노드는 법령/외부법 단위입니다.';
+    return n.kind==='조문'?LawText.indent(n.text):n.text;
+  }
+
+  /** 한 단위(조문·별표)의 본문 HTML. 별표·별지(서식)는 원문(PDF/HWP)을 뷰어로만 제공한다. */
   function unitBody(n){
     const oe=outs.get(n.id)||[];
-    if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
     if(n.kind==='별표'){
-      // 원본 PDF 를 본체로 보여주고, 파싱표는 접어서 검색·복사용으로 남긴다.
-      const tableHtml=AnnexTable.toHtml(AnnexTable.parse(n.text),t=>linkify(t,oe))+
-        `<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. `+
-        `<button class="copymd" data-for="${esc(n.id)}">표 마크다운 복사</button></div>`;
-      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc,tableHtml});
+      // 별표(표)·별지(서식) 모두 원문 뷰어로만 보여준다. 罫線 텍스트 복원(파싱표)은
+      // 굵은 罫線을 못 읽는 표가 많아 신뢰할 수 없어 화면에서 제거했다 — 원문이 진실이다.
+      // (n.text 는 검색 색인용으로만 남는다. 화면엔 노출하지 않는다.)
+      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc});
     }
+    if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
     // 화면에서만 계층 들여쓰기를 입힌다. 공백만 늘어나므로 인용 매칭은 영향이 없다
     // (linkify 는 공백을 지운 사본에서 위치를 찾는다).
     return `<div class="body">${linkify(LawText.indent(n.text),oe)}</div>`;
@@ -950,11 +1126,6 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
       docEl.querySelectorAll('.unit').forEach(s=>{
         const u=byId.get(s.dataset.unit);
         if(u)s.querySelector('.uhead').appendChild(starBtn(u.id));
-      });
-      docEl.querySelectorAll('.copymd').forEach(b=>{
-        b.onclick=()=>{const u=byId.get(b.dataset.for); if(!u)return;
-          navigator.clipboard?.writeText(AnnexTable.toMarkdown(AnnexTable.parse(u.text)));
-          b.textContent='복사됨';setTimeout(()=>b.textContent='표 마크다운 복사',1500);};
       });
       observeUnits();
     }
@@ -1057,8 +1228,7 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 
     const body=document.createElement('div'); body.className='pvbody';
     if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
-    body.appendChild(document.createTextNode(
-      n.text||'원문 없음 — 이 노드는 법령/외부법 단위입니다.'));
+    body.appendChild(document.createTextNode(previewText(n)));
 
     pvEl.append(head,body);
     pvEl.classList.add('on');
@@ -1082,9 +1252,13 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     // 한글 IME 조합 중의 Enter 는 "조합 확정"이지 "선택"이 아니다.
     // 이걸 거르지 않으면 "수의계약" 치고 Enter 한 번에 엉뚱한 항목이 열린다.
     if(e.isComposing||e.keyCode===229)return;
-    if(e.key==='/'&&document.activeElement!==q){e.preventDefault();toSearch();return;}
-    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();toSearch();return;}
+    // 빠른 검색 오버레이 — Ctrl+Shift+Space 토글, Ctrl/Cmd+K 열기.
+    if(e.ctrlKey&&e.shiftKey&&e.code==='Space'){e.preventDefault();spotEl.hidden?openSpot():closeSpot();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSpot();return;}
+    if(e.key==='/'&&document.activeElement!==q&&spotEl.hidden){e.preventDefault();toSearch();return;}
     if(e.key==='Escape'){
+      if(!setEl.hidden){closeSettings();return;}
+      if(!spotEl.hidden){closeSpot();return;}
       // 미리보기가 떠 있으면 그것부터 닫는다 → 그다음 검색어를 비운다
       if(pvEl.classList.contains('on')){closePreview();return;}
       if(q.value){q.value='';doSearch();q.focus();}
@@ -1184,8 +1358,9 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     if(noteEl.innerHTML!==html){ noteEl.innerHTML=html; setCaret(off); }
   }
 
-  noteEl.textContent=LawNotes.load();
-  paintChips();
+  // 노트 저장소가 준비/교체될 때(SQLite 주입 등) 노트 본문을 다시 읽어 그린다.
+  function reloadNotes(){ if(!noteEl.hidden)noteEl.textContent=LawNotes.load(); paintChips(); if(!noteView.hidden)renderNoteView(); }
+  reloadNotes();
 
   let saveT=null;
   noteEl.addEventListener('input',()=>{
@@ -1351,7 +1526,7 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 
     const body=document.createElement('div'); body.className='nrbody';
     if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
-    body.appendChild(document.createTextNode(n.text||'원문 없음 — 법령 단위입니다.'));
+    body.appendChild(document.createTextNode(previewText(n,'원문 없음 — 법령 단위입니다.')));
     // 관련 규정 목록은 넣지 않는다 — 노트에서 건 법령은 "그 조문이 뭐라 하는지"를
     // 확인하려는 것이지 관계망을 타려는 게 아니다. 관계는 ③ 칸의 몫이다.
     nrEl.append(head,body);
@@ -1369,6 +1544,111 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     '본문 속 인용을 누르면 화면을 옮기지 않고 <b>옆에서 미리보기</b>로 확인합니다.</div>';
 
   q.focus();
+
+  // Tauri 전역 핫키(Ctrl+Shift+Space)가 앱을 앞으로 부르면 빠른 검색을 띄운다.
+  // 브라우저(비-Tauri)에는 window.__TAURI__ 가 없어 조용히 건너뛴다.
+  if(window.__TAURI__&&window.__TAURI__.event&&window.__TAURI__.event.listen){
+    window.__TAURI__.event.listen('spotlight',()=>{ openSpot(); });
+  }
+
+  // ── 법령노트 저장 백엔드 (SQLite: 데스크톱 · localStorage: 브라우저) ──
+  // notes.cjs 의 store 를 SQLite 어댑터로 갈아끼운다. 읽기는 메모리 캐시(동기),
+  // 쓰기는 캐시 + SQLite write-through(비동기). 브라우저·실패 시 localStorage 로 남는다.
+  const invoke=(window.__TAURI__&&window.__TAURI__.core&&window.__TAURI__.core.invoke)||null;
+  const DBPREF='notes-db-url';
+  let notesLoc={kind:'localStorage',label:'브라우저 저장소 (localStorage)'};
+
+  async function connectDb(dbUrl){
+    await invoke('plugin:sql|load',{db:dbUrl});
+    await invoke('plugin:sql|execute',{db:dbUrl,query:"CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)",values:[]});
+    const rows=await invoke('plugin:sql|select',{db:dbUrl,query:"SELECT k, v FROM kv",values:[]});
+    const cache={}; for(const r of (rows||[]))cache[r.k]=r.v;
+    const up=(k,v)=>invoke('plugin:sql|execute',{db:dbUrl,query:"INSERT INTO kv (k,v) VALUES ($1,$2) ON CONFLICT(k) DO UPDATE SET v=$2",values:[k,String(v)]}).catch(()=>{});
+    LawNotes.useStore({
+      getItem:k=>cache[k]!=null?cache[k]:null,
+      setItem:(k,v)=>{ cache[k]=String(v); up(k,v); },
+      removeItem:k=>{ delete cache[k]; invoke('plugin:sql|execute',{db:dbUrl,query:"DELETE FROM kv WHERE k=$1",values:[k]}).catch(()=>{}); },
+    });
+    notesLoc={kind:'sqlite',url:dbUrl,label:'SQLite · '+dbUrl.replace(/^sqlite:/,'')};
+    return {cache,up};
+  }
+
+  (async function initNotesBackend(){
+    if(!invoke)return; // 브라우저 — localStorage 유지
+    try{
+      let url=null; try{url=localStorage.getItem(DBPREF);}catch(e){} url=url||'sqlite:notes.db';
+      const {cache,up}=await connectDb(url);
+      // 첫 실행: 기존 localStorage 노트를 SQLite 로 이관
+      for(const k of [LawNotes.KEY,LawNotes.ARCHIVE]){
+        if(cache[k]==null){ let s=null; try{s=localStorage.getItem(k);}catch(e){} if(s!=null){cache[k]=s;up(k,s);} }
+      }
+      reloadNotes(); refreshNotePath();
+    }catch(e){ /* SQLite 불가 — localStorage 로 계속 */ }
+  })();
+
+  // 저장위치 전환. migrate=true 면 현재 노트를 새 위치로 옮겨 담고, false 면 그 DB 의 노트를 그대로 쓴다.
+  async function switchDb(path, migrate){
+    const dbUrl=/^sqlite:/.test(path)?path:('sqlite:'+path);
+    const data=migrate?LawNotes.exportData():null;
+    await connectDb(dbUrl);
+    if(migrate)LawNotes.importData(data,{merge:false});
+    try{localStorage.setItem(DBPREF,dbUrl);}catch(e){}
+    reloadNotes(); refreshNotePath();
+  }
+
+  // ── 설정 패널 ──
+  const setEl=document.getElementById('settings'), setMsg=document.getElementById('setMsg');
+  function setNote(m,ok){ if(!setMsg)return; setMsg.textContent=m||''; setMsg.className='setnote'+(ok===true?' ok':ok===false?' bad':''); }
+  function refreshNotePath(){ const el=document.getElementById('notePath'); if(el)el.textContent=notesLoc.label; }
+  function openSettings(){ setEl.hidden=false; refreshNotePath(); syncThemeUI(); setNote(''); }
+  function closeSettings(){ setEl.hidden=true; setNote(''); }
+  document.getElementById('settingsBtn').addEventListener('click',openSettings);
+  document.getElementById('setClose').addEventListener('click',closeSettings);
+  setEl.addEventListener('mousedown',e=>{ if(e.target===setEl)closeSettings(); });
+  document.getElementById('themeSeg').addEventListener('click',e=>{ const b=e.target.closest('button[data-theme]'); if(b)applyTheme(b.dataset.theme); });
+
+  function dlFile(name,data,type){
+    const blob=new Blob([data],{type:type||'application/octet-stream'});
+    const u=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=u; a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},120);
+  }
+  const dstamp=()=>new Date().toISOString().slice(0,10);
+  document.getElementById('btnJson').addEventListener('click',()=>{
+    try{ dlFile('법령노트_백업_'+dstamp()+'.json',Backup.toJson(LawNotes.exportData()),'application/json'); setNote('JSON 백업을 내려받았습니다.',true); }
+    catch(e){ setNote('백업 실패: '+e.message,false); }
+  });
+  document.getElementById('btnXlsx').addEventListener('click',()=>{
+    try{ dlFile('법령노트_'+dstamp()+'.xlsx',Backup.toXlsx(LawNotes.exportData()),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); setNote('XLSX 를 내려받았습니다.',true); }
+    catch(e){ setNote('XLSX 실패: '+e.message,false); }
+  });
+  const importFile=document.getElementById('importFile');
+  document.getElementById('btnImport').addEventListener('click',()=>importFile.click());
+  importFile.addEventListener('change',async()=>{
+    const f=importFile.files&&importFile.files[0]; importFile.value=''; if(!f)return;
+    if(/\.(db|sqlite)$/i.test(f.name)){
+      setNote('DB 파일은 [위치 변경…]에서 파일을 지정해 여세요(데스크톱 앱).',false); return;
+    }
+    try{ const data=Backup.fromJson(await f.text()); LawNotes.importData(data,{merge:false}); reloadNotes();
+      setNote('복원 완료 — 보관 '+((data.archive&&data.archive.length)||0)+'건.',true); }
+    catch(e){ setNote('불러오기 실패: '+e.message,false); }
+  });
+  document.getElementById('btnChangeLoc').addEventListener('click',async()=>{
+    if(!invoke){ setNote('저장위치 변경·DB 열기는 데스크톱 앱 전용입니다. 브라우저에선 JSON 백업/복원을 쓰세요.',false); return; }
+    try{
+      // 기존 DB 열기 우선 — 있으면 그 노트를 그대로 쓴다(migrate=false).
+      let path=await invoke('plugin:dialog|open',{options:{title:'열 DB 파일 선택(새로 만들려면 취소)',multiple:false,filters:[{name:'SQLite DB',extensions:['db','sqlite']}]}}).catch(()=>null);
+      let migrate=false;
+      if(!path){ // 새 위치로 이전
+        path=await invoke('plugin:dialog|save',{options:{title:'법령노트 DB 새 위치',defaultPath:'notes.db',filters:[{name:'SQLite DB',extensions:['db']}]}}).catch(()=>null);
+        migrate=true;
+      }
+      if(!path)return;
+      await switchDb(path,migrate);
+      setNote((migrate?'현재 노트를 새 위치로 옮겼습니다: ':'해당 DB 를 엽니다: ')+path,true);
+    }catch(e){ setNote('위치 변경 실패: '+e.message,false); }
+  });
+  // Esc 로 설정 닫기(스포트라이트보다 우선순위는 아래 — 전역 핸들러에서 처리).
 })();
 </script>
 </body>

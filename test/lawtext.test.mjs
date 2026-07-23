@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-const LawText = createRequire(import.meta.url)("../src/lawtext.js");
+const LawText = createRequire(import.meta.url)("../src/lawtext.cjs");
 
 const 실원문 = [
   "제76조(부정당업자의 입찰참가자격 제한)",

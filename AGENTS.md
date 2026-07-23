@@ -78,7 +78,7 @@ MCP는 탐색·검증용으로만 쓴다 (docs/scope.md §5.2).
 
 ## 검증 방법
 ```bash
-npm test                      # 추출 규칙 + 신선도 회귀 (23케이스)
+npm test                      # 추출·신선도·검색·별표뷰어·백업 회귀 (97케이스)
 npm run collect               # 실데이터 수집 (LAW_API_OC 필요)
 npm run extract               # 통계 + 위임근거 커버리지 + 미매칭 목록
 npm run build                 # web/index.html  (--strict: 낡은 법령 있으면 실패)

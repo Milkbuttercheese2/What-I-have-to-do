@@ -289,11 +289,54 @@ var LawNotes = (function () {
 
   function useStore(s) { override = s || null; }
 
+  // ── 백업/복원 ──────────────────────────────────────────────────────────────
+  /** 현재 노트 + 보관함을 통째로 내보낸다(JSON/XLSX 백업의 원재료). */
+  function exportData() {
+    return { version: 1, exportedAt: new Date().toISOString(), note: load(), archive: readArchive() };
+  }
+  /**
+   * 백업을 되돌린다. merge=false 면 통째로 교체, true 면 보관함을 합친다(id 기준 중복 제거).
+   * 잘못된 입력은 조용히 무시하지 않고 그대로 두지 않도록 검증한 것만 반영한다.
+   */
+  function importData(obj, opts) {
+    if (!obj || typeof obj !== "object") return false;
+    var merge = opts && opts.merge;
+    if (typeof obj.note === "string") {
+      if (merge) {
+        var cur = load();
+        save(cur ? cur + (obj.note ? "\n\n" + obj.note : "") : obj.note);
+      } else {
+        save(obj.note);
+      }
+    }
+    if (Array.isArray(obj.archive)) {
+      var incoming = [];
+      for (var i = 0; i < obj.archive.length; i++) {
+        var r = obj.archive[i];
+        if (r && typeof r.text === "string") {
+          incoming.push({ id: String(r.id || Date.now() + "-" + i), title: String(r.title || titleOf(r.text)), text: r.text, at: String(r.at || "") });
+        }
+      }
+      if (merge) {
+        var have = readArchive();
+        var seen = {};
+        for (var j = 0; j < have.length; j++) seen[have[j].id] = true;
+        var add = incoming.filter(function (r) { return !seen[r.id]; });
+        writeArchive(add.concat(have));
+      } else {
+        writeArchive(incoming);
+      }
+    }
+    return true;
+  }
+
   return {
     KEY: KEY,
     ARCHIVE: ARCHIVE,
     load: load,
     save: save,
+    exportData: exportData,
+    importData: importData,
     titleOf: titleOf,
     archive: archive,
     archiveList: archiveList,
