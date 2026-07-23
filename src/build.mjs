@@ -35,6 +35,7 @@ const { audit, ...page } = graph;
 const searchRuntime = readFileSync(join(root, "src/search-runtime.cjs"), "utf8");
 const favorites = readFileSync(join(root, "src/favorites.cjs"), "utf8");
 const notes = readFileSync(join(root, "src/notes.cjs"), "utf8");
+const backup = readFileSync(join(root, "src/backup.cjs"), "utf8");
 const lawtext = readFileSync(join(root, "src/lawtext.cjs"), "utf8");
 const annexView = readFileSync(join(root, "src/annex-view.cjs"), "utf8");
 
@@ -51,6 +52,7 @@ let html = template
   .replace("/*__ANNEXVIEW__*/", () => annexView)
   .replace("/*__FAVS__*/", () => favorites)
   .replace("/*__NOTES__*/", () => notes)
+  .replace("/*__BACKUP__*/", () => backup)
   .replace("/*__LAWTEXT__*/", () => lawtext)
   .replace("/*__ANNEX_AVAIL__*/", () => JSON.stringify(annexAvail))
   .replace("/*__GRAPH__*/", () => JSON.stringify(page));

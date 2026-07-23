@@ -8,7 +8,7 @@
   /* 페인트 전에 테마 확정(플래시 방지): 저장값 → 없으면 시스템 설정 */
   (function(){try{
     var t=localStorage.getItem('law-theme');
-    if(!t) t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+    if(!t||t==='system') t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
     document.documentElement.dataset.theme=t;
   }catch(e){document.documentElement.dataset.theme='dark';}})();
 </script>
@@ -268,6 +268,31 @@
   .spothint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
     padding:1px 5px;font-family:inherit;font-size:10px}
 
+  /* ───────── 설정 패널 ───────── */
+  .setbox{max-height:80vh}
+  .sethead{display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px;font-weight:700;color:var(--text)}
+  .sethead button{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer}
+  .sethead button:hover{color:var(--text)}
+  .setbody{overflow:auto;padding:6px 4px}
+  .setrow{display:flex;gap:14px;padding:14px 16px;border-bottom:1px solid var(--divider)}
+  .setrow:last-child{border-bottom:none}
+  .setk{flex:0 0 132px;font-size:12.5px;color:var(--muted);padding-top:5px}
+  .setv{flex:1;min-width:0}
+  .segbtns{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .segbtns button{background:var(--panel2);border:none;color:var(--muted);font-family:inherit;
+    font-size:12.5px;padding:6px 13px;cursor:pointer;border-right:1px solid var(--line)}
+  .segbtns button:last-child{border-right:none}
+  .segbtns button.on{background:var(--accent);color:#fff}
+  .setacts{display:flex;flex-wrap:wrap;gap:8px}
+  .setbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-family:inherit;
+    font-size:12.5px;padding:7px 13px;border-radius:8px;cursor:pointer}
+  .setbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .setpath{font-size:12px;color:var(--text2);background:var(--panel2);border:1px solid var(--line);
+    border-radius:7px;padding:7px 10px;margin-bottom:8px;word-break:break-all;font-family:ui-monospace,monospace}
+  .setnote{font-size:11.5px;color:var(--muted);margin-top:8px;min-height:14px}
+  .setnote.ok{color:var(--accent)} .setnote.bad{color:var(--warn)}
+
   .results{padding:6px 8px 20px}
   .ritem{padding:8px 10px;border-radius:9px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
   .ritem.sel{background:var(--panel2);outline:1px solid var(--line)}
@@ -439,6 +464,42 @@
   </div>
 </div>
 
+<!-- 설정 — 법령노트 저장·백업·복원·XLSX·테마를 한곳에 -->
+<div id="settings" class="spot" hidden>
+  <div class="spotbox setbox" role="dialog" aria-label="설정">
+    <div class="sethead"><span>설정</span><button type="button" id="setClose" title="닫기">✕</button></div>
+    <div class="setbody">
+      <section class="setrow">
+        <div class="setk">테마</div>
+        <div class="setv"><div class="segbtns" id="themeSeg">
+          <button type="button" data-theme="light">라이트</button>
+          <button type="button" data-theme="dark">다크</button>
+          <button type="button" data-theme="system">시스템</button>
+        </div></div>
+      </section>
+      <section class="setrow">
+        <div class="setk">법령노트 저장위치</div>
+        <div class="setv"><div class="setpath" id="notePath">확인 중…</div>
+          <div class="setacts"><button type="button" id="btnChangeLoc" class="setbtn">위치 변경…</button></div></div>
+      </section>
+      <section class="setrow">
+        <div class="setk">백업 · 내보내기</div>
+        <div class="setv"><div class="setacts">
+          <button type="button" id="btnJson" class="setbtn">JSON 백업</button>
+          <button type="button" id="btnXlsx" class="setbtn">XLSX 다운로드</button>
+        </div></div>
+      </section>
+      <section class="setrow">
+        <div class="setk">불러오기 · 복원</div>
+        <div class="setv"><div class="setacts">
+          <button type="button" id="btnImport" class="setbtn">JSON·DB 파일 불러오기…</button>
+          <input type="file" id="importFile" accept=".json,.db,.sqlite,application/json" hidden />
+        </div><div class="setnote" id="setMsg"></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <!-- ① 왼쪽: 검색창 하나 + 전체 법령 -->
   <aside class="side">
@@ -447,6 +508,7 @@
       <div class="htop">
         <h1>몇 조항이더라</h1>
         <button id="themeBtn" class="themebtn" type="button"></button>
+        <button id="settingsBtn" class="themebtn" type="button" title="설정">⚙</button>
         <button type="button" class="colbtn" data-col="1" title="접기">‹</button>
       </div>
       <p id="meta"></p>
@@ -530,19 +592,25 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 /*__NOTES__*/
 </script>
 <script>
+/*__BACKUP__*/
+</script>
+<script>
 /*__LAWTEXT__*/
 </script>
 <script>
 (function(){
-  // ---- 테마 토글 ----
-  (function(){
-    const root=document.documentElement, btn=document.getElementById('themeBtn');
-    const sync=()=>{ const dark=root.dataset.theme!=='light'; btn.textContent=dark?'☀':'☾';
-      btn.title=(dark?'라이트':'다크')+' 모드로 전환'; };
-    sync();
-    btn.addEventListener('click',()=>{ root.dataset.theme=root.dataset.theme==='light'?'dark':'light';
-      try{localStorage.setItem('law-theme',root.dataset.theme);}catch(e){} sync(); });
-  })();
+  // ---- 테마 (라이트·다크·시스템) ----
+  const themeRoot=document.documentElement, themeBtn=document.getElementById('themeBtn');
+  const computeTheme=p=>p==='system'?((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'):(p==='light'?'light':'dark');
+  const themePref=()=>{ try{return localStorage.getItem('law-theme')||'system';}catch(e){return 'dark';} };
+  function syncThemeUI(){ const p=themePref(), dark=themeRoot.dataset.theme!=='light';
+    themeBtn.textContent=dark?'☀':'☾'; themeBtn.title=(dark?'라이트':'다크')+' 모드로 전환';
+    const seg=document.getElementById('themeSeg'); if(seg)for(const b of seg.children)b.classList.toggle('on',b.dataset.theme===p); }
+  function applyTheme(p){ try{localStorage.setItem('law-theme',p);}catch(e){} themeRoot.dataset.theme=computeTheme(p); syncThemeUI(); }
+  themeBtn.addEventListener('click',()=>applyTheme(themeRoot.dataset.theme==='light'?'dark':'light'));
+  syncThemeUI();
+  if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').addEventListener)
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{ if(themePref()==='system')applyTheme('system'); });
 
   const {nodes,edges,meta}=GRAPH;
   const byId=new Map(nodes.map(n=>[n.id,n]));
@@ -1189,6 +1257,7 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSpot();return;}
     if(e.key==='/'&&document.activeElement!==q&&spotEl.hidden){e.preventDefault();toSearch();return;}
     if(e.key==='Escape'){
+      if(!setEl.hidden){closeSettings();return;}
       if(!spotEl.hidden){closeSpot();return;}
       // 미리보기가 떠 있으면 그것부터 닫는다 → 그다음 검색어를 비운다
       if(pvEl.classList.contains('on')){closePreview();return;}
@@ -1482,35 +1551,104 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     window.__TAURI__.event.listen('spotlight',()=>{ openSpot(); });
   }
 
-  // ── 법령노트 SQLite 영속화 (데스크톱 앱 전용) ──
-  // notes.cjs 의 store 를 SQLite 백엔드 어댑터로 갈아끼운다. 읽기는 메모리 캐시(동기),
-  // 쓰기는 캐시 + SQLite write-through(비동기). 브라우저나 실패 시 localStorage 로 남는다.
-  (async function initSqlNotes(){
-    const T=window.__TAURI__;
-    if(!(T&&T.core&&T.core.invoke))return;
-    const invoke=T.core.invoke, db="sqlite:notes.db";
+  // ── 법령노트 저장 백엔드 (SQLite: 데스크톱 · localStorage: 브라우저) ──
+  // notes.cjs 의 store 를 SQLite 어댑터로 갈아끼운다. 읽기는 메모리 캐시(동기),
+  // 쓰기는 캐시 + SQLite write-through(비동기). 브라우저·실패 시 localStorage 로 남는다.
+  const invoke=(window.__TAURI__&&window.__TAURI__.core&&window.__TAURI__.core.invoke)||null;
+  const DBPREF='notes-db-url';
+  let notesLoc={kind:'localStorage',label:'브라우저 저장소 (localStorage)'};
+
+  async function connectDb(dbUrl){
+    await invoke('plugin:sql|load',{db:dbUrl});
+    await invoke('plugin:sql|execute',{db:dbUrl,query:"CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)",values:[]});
+    const rows=await invoke('plugin:sql|select',{db:dbUrl,query:"SELECT k, v FROM kv",values:[]});
+    const cache={}; for(const r of (rows||[]))cache[r.k]=r.v;
+    const up=(k,v)=>invoke('plugin:sql|execute',{db:dbUrl,query:"INSERT INTO kv (k,v) VALUES ($1,$2) ON CONFLICT(k) DO UPDATE SET v=$2",values:[k,String(v)]}).catch(()=>{});
+    LawNotes.useStore({
+      getItem:k=>cache[k]!=null?cache[k]:null,
+      setItem:(k,v)=>{ cache[k]=String(v); up(k,v); },
+      removeItem:k=>{ delete cache[k]; invoke('plugin:sql|execute',{db:dbUrl,query:"DELETE FROM kv WHERE k=$1",values:[k]}).catch(()=>{}); },
+    });
+    notesLoc={kind:'sqlite',url:dbUrl,label:'SQLite · '+dbUrl.replace(/^sqlite:/,'')};
+    return {cache,up};
+  }
+
+  (async function initNotesBackend(){
+    if(!invoke)return; // 브라우저 — localStorage 유지
     try{
-      await invoke('plugin:sql|load',{db});
-      await invoke('plugin:sql|execute',{db,query:"CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)",values:[]});
-      const rows=await invoke('plugin:sql|select',{db,query:"SELECT k, v FROM kv",values:[]});
-      const cache={};
-      // SQLite 가 비어 있으면(첫 실행) 기존 localStorage 노트를 옮겨 심는다.
-      const seed=(k)=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
-      for(const r of (rows||[]))cache[r.k]=r.v;
+      let url=null; try{url=localStorage.getItem(DBPREF);}catch(e){} url=url||'sqlite:notes.db';
+      const {cache,up}=await connectDb(url);
+      // 첫 실행: 기존 localStorage 노트를 SQLite 로 이관
       for(const k of [LawNotes.KEY,LawNotes.ARCHIVE]){
-        if(cache[k]==null){ const s=seed(k); if(s!=null){ cache[k]=s;
-          invoke('plugin:sql|execute',{db,query:"INSERT INTO kv (k,v) VALUES ($1,$2) ON CONFLICT(k) DO UPDATE SET v=$2",values:[k,s]}).catch(()=>{}); } }
+        if(cache[k]==null){ let s=null; try{s=localStorage.getItem(k);}catch(e){} if(s!=null){cache[k]=s;up(k,s);} }
       }
-      LawNotes.useStore({
-        getItem:(k)=>cache[k]!=null?cache[k]:null,
-        setItem:(k,v)=>{ cache[k]=String(v);
-          invoke('plugin:sql|execute',{db,query:"INSERT INTO kv (k,v) VALUES ($1,$2) ON CONFLICT(k) DO UPDATE SET v=$2",values:[k,String(v)]}).catch(()=>{}); },
-        removeItem:(k)=>{ delete cache[k];
-          invoke('plugin:sql|execute',{db,query:"DELETE FROM kv WHERE k=$1",values:[k]}).catch(()=>{}); },
-      });
-      reloadNotes(); // 이제 SQLite 값으로 노트를 다시 그린다
+      reloadNotes(); refreshNotePath();
     }catch(e){ /* SQLite 불가 — localStorage 로 계속 */ }
   })();
+
+  // 저장위치 전환. migrate=true 면 현재 노트를 새 위치로 옮겨 담고, false 면 그 DB 의 노트를 그대로 쓴다.
+  async function switchDb(path, migrate){
+    const dbUrl=/^sqlite:/.test(path)?path:('sqlite:'+path);
+    const data=migrate?LawNotes.exportData():null;
+    await connectDb(dbUrl);
+    if(migrate)LawNotes.importData(data,{merge:false});
+    try{localStorage.setItem(DBPREF,dbUrl);}catch(e){}
+    reloadNotes(); refreshNotePath();
+  }
+
+  // ── 설정 패널 ──
+  const setEl=document.getElementById('settings'), setMsg=document.getElementById('setMsg');
+  function setNote(m,ok){ if(!setMsg)return; setMsg.textContent=m||''; setMsg.className='setnote'+(ok===true?' ok':ok===false?' bad':''); }
+  function refreshNotePath(){ const el=document.getElementById('notePath'); if(el)el.textContent=notesLoc.label; }
+  function openSettings(){ setEl.hidden=false; refreshNotePath(); syncThemeUI(); setNote(''); }
+  function closeSettings(){ setEl.hidden=true; setNote(''); }
+  document.getElementById('settingsBtn').addEventListener('click',openSettings);
+  document.getElementById('setClose').addEventListener('click',closeSettings);
+  setEl.addEventListener('mousedown',e=>{ if(e.target===setEl)closeSettings(); });
+  document.getElementById('themeSeg').addEventListener('click',e=>{ const b=e.target.closest('button[data-theme]'); if(b)applyTheme(b.dataset.theme); });
+
+  function dlFile(name,data,type){
+    const blob=new Blob([data],{type:type||'application/octet-stream'});
+    const u=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=u; a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},120);
+  }
+  const dstamp=()=>new Date().toISOString().slice(0,10);
+  document.getElementById('btnJson').addEventListener('click',()=>{
+    try{ dlFile('법령노트_백업_'+dstamp()+'.json',Backup.toJson(LawNotes.exportData()),'application/json'); setNote('JSON 백업을 내려받았습니다.',true); }
+    catch(e){ setNote('백업 실패: '+e.message,false); }
+  });
+  document.getElementById('btnXlsx').addEventListener('click',()=>{
+    try{ dlFile('법령노트_'+dstamp()+'.xlsx',Backup.toXlsx(LawNotes.exportData()),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); setNote('XLSX 를 내려받았습니다.',true); }
+    catch(e){ setNote('XLSX 실패: '+e.message,false); }
+  });
+  const importFile=document.getElementById('importFile');
+  document.getElementById('btnImport').addEventListener('click',()=>importFile.click());
+  importFile.addEventListener('change',async()=>{
+    const f=importFile.files&&importFile.files[0]; importFile.value=''; if(!f)return;
+    if(/\.(db|sqlite)$/i.test(f.name)){
+      setNote('DB 파일은 [위치 변경…]에서 파일을 지정해 여세요(데스크톱 앱).',false); return;
+    }
+    try{ const data=Backup.fromJson(await f.text()); LawNotes.importData(data,{merge:false}); reloadNotes();
+      setNote('복원 완료 — 보관 '+((data.archive&&data.archive.length)||0)+'건.',true); }
+    catch(e){ setNote('불러오기 실패: '+e.message,false); }
+  });
+  document.getElementById('btnChangeLoc').addEventListener('click',async()=>{
+    if(!invoke){ setNote('저장위치 변경·DB 열기는 데스크톱 앱 전용입니다. 브라우저에선 JSON 백업/복원을 쓰세요.',false); return; }
+    try{
+      // 기존 DB 열기 우선 — 있으면 그 노트를 그대로 쓴다(migrate=false).
+      let path=await invoke('plugin:dialog|open',{options:{title:'열 DB 파일 선택(새로 만들려면 취소)',multiple:false,filters:[{name:'SQLite DB',extensions:['db','sqlite']}]}}).catch(()=>null);
+      let migrate=false;
+      if(!path){ // 새 위치로 이전
+        path=await invoke('plugin:dialog|save',{options:{title:'법령노트 DB 새 위치',defaultPath:'notes.db',filters:[{name:'SQLite DB',extensions:['db']}]}}).catch(()=>null);
+        migrate=true;
+      }
+      if(!path)return;
+      await switchDb(path,migrate);
+      setNote((migrate?'현재 노트를 새 위치로 옮겼습니다: ':'해당 DB 를 엽니다: ')+path,true);
+    }catch(e){ setNote('위치 변경 실패: '+e.message,false); }
+  });
+  // Esc 로 설정 닫기(스포트라이트보다 우선순위는 아래 — 전역 핸들러에서 처리).
 })();
 </script>
 </body>

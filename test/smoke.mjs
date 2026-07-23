@@ -46,9 +46,10 @@ if (g.meta.확인요약?.현행 > 0) {
 if (!/var LawSearch\s*=/.test(html)) fail("검색 런타임이 인라인되지 않았습니다 (검색 자리표시자 치환 실패).");
 if (!/var LawFavs\s*=/.test(html)) fail("즐겨찾기 모듈이 인라인되지 않았습니다 (즐겨찾기 자리표시자 치환 실패).");
 if (!/var LawNotes\s*=/.test(html)) fail("법률노트 모듈이 인라인되지 않았습니다 (노트 자리표시자 치환 실패).");
+if (!/var Backup\s*=/.test(html)) fail("백업 모듈이 인라인되지 않았습니다 (백업 자리표시자 치환 실패).");
 if (!/var AnnexView\s*=/.test(html)) fail("별표 뷰어 모듈이 인라인되지 않았습니다 (뷰어 자리표시자 치환 실패).");
 if (!/var LawText\s*=/.test(html)) fail("본문 들여쓰기 모듈이 인라인되지 않았습니다 (들여쓰기 자리표시자 치환 실패).");
-if (/\bSEARCH__\b|\bANNEXVIEW__\b|\bFAVS__\b|\bNOTES__\b|\bLAWTEXT__\b|\bANNEX_AVAIL__\b/.test(html)) fail("치환되지 않은 자리표시자가 남아 있습니다.");
+if (/\bSEARCH__\b|\bANNEXVIEW__\b|\bFAVS__\b|\bNOTES__\b|\bBACKUP__\b|\bLAWTEXT__\b|\bANNEX_AVAIL__\b/.test(html)) fail("치환되지 않은 자리표시자가 남아 있습니다.");
 console.log("✅ 검색 런타임 인라인");
 
 // 3) 인라인 스크립트 문법
