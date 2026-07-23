@@ -19,6 +19,12 @@ on:
         description: "빌드 결과(web/index.html · exe)를 이 브랜치에 커밋"
         type: boolean
         default: true
+  # workflow_dispatch 는 기본 브랜치에 파일이 있어야 API 실행이 되므로(피처 브랜치 단계에선 404),
+  # 온디맨드 빌드는 트리거 파일을 건드려 push 로 돌린다. 일반 코드 push 로는 돌지 않는다.
+  push:
+    paths:
+      - ".github/build-trigger"
+      - ".github/workflows/build-desktop.yml"
 
 permissions:
   contents: write
@@ -120,7 +126,7 @@ jobs:
           path: 최종 프로그램 산출물/*
 
       - name: 결과 커밋 (web/index.html + 실행파일)
-        if: ${{ inputs.commit_outputs }}
+        if: ${{ inputs.commit_outputs != 'false' }}
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
