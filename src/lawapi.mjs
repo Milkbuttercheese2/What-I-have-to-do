@@ -221,11 +221,19 @@ function normalizeAnnexes(raw) {
   for (const b of asArray(raw)) {
     if (!b || typeof b !== "object") continue;
     const text = tidyAnnexText(clean(findKey(b, "별표내용") ?? ""));
-    if (!text) continue;
+
+    // 원본 파일 링크를 먼저 뽑는다 — 본문 텍스트 유무 판정보다 앞선다.
+    const hwp = abs(findKey(b, "별표서식파일링크"));
+    const pdf = abs(findKey(b, "별표서식PDF파일링크"));
+
+    // 본문 텍스트도 파일도 없으면 실체가 없는 항목이라 버린다.
+    // ★ 그러나 텍스트가 없어도 파일이 있으면 남긴다 — 별지 서식(양식)은 대개 본문
+    //   텍스트 없이 HWP/PDF 파일로만 온다. 이걸 버리면 서식을 뷰어에서 아예 못 연다.
+    if (!text && !hwp && !pdf) continue;
 
     const no = clean(findKey(b, "별표번호") ?? "");
     const branch = clean(findKey(b, "별표가지번호") ?? "");
-    const kind = clean(findKey(b, "별표구분") ?? "별표"); // 별표 | 서식
+    const kind = clean(findKey(b, "별표구분") ?? "별표"); // 별표 | 서식(별지)
     const title = clean(findKey(b, "별표제목") ?? "");
 
     // 번호는 "0002" 처럼 0채움으로 온다 → "2"
@@ -233,10 +241,12 @@ function normalizeAnnexes(raw) {
     const key = branch && branch !== "00" ? `${n}의${Number(branch)}` : n;
 
     out.push({
-      kind, // 별표 / 서식
+      kind, // 별표 / 서식(별지)
       no: key,
       title: title || null,
-      text,
+      // 파일만 있는 서식은 검색 색인용 텍스트로 제목을 대신 싣는다(없으면 빈 문자열).
+      text: text || (title ? `[${kind} ${key}] ${title}` : ""),
+      hasText: Boolean(text),
       // 원본 파일 링크.
       //
       // `별표HWP파일명`/`별표PDF파일명` 을 읽고 있었는데 그건 **파일명일 뿐이고 3%에만 있다**.
@@ -244,8 +254,8 @@ function normalizeAnnexes(raw) {
       // 이쪽은 100% 온다(실측: 국가계약법 시행규칙 20/20).
       // 罫線 텍스트 복원이 깨지는 별표는 결국 원본을 봐야 하므로 이 링크가 생명줄이다.
       files: {
-        hwp: abs(findKey(b, "별표서식파일링크")),
-        pdf: abs(findKey(b, "별표서식PDF파일링크")),
+        hwp,
+        pdf,
         images: String(clean(findKey(b, "별표서식이미지파일링크") ?? ""))
           .split(",").map((s) => abs(s)).filter(Boolean),
         // 파일명도 같이 남긴다 — 내려받을 때 사람이 알아볼 이름이 된다.

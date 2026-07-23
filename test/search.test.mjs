@@ -13,7 +13,7 @@ import { createRequire } from "node:module";
 import { buildGraph } from "../src/extract.mjs";
 
 const require = createRequire(import.meta.url);
-const LawSearch = require("../src/search-runtime.js");
+const LawSearch = require("../src/search-runtime.cjs");
 
 const snapshot = JSON.parse(readFileSync(new URL("./fixture-snapshot.json", import.meta.url), "utf8"));
 const g = buildGraph(snapshot);

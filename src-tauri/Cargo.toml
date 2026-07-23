@@ -1,6 +1,6 @@
 [package]
 name = "myeot-johang-ideora"
-version = "0.1.0"
+version = "0.2.0"
 description = "몇 조항이더라 — 조달 법령 오프라인 리더"
 authors = ["조달청 실무자"]
 edition = "2021"

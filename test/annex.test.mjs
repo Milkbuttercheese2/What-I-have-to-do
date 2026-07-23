@@ -71,7 +71,7 @@ test("빈 입력·공백 입력을 안전하게 처리한다", () => {
 
 test("검색 정규화와 맞물린다 — 줄이 나뉘어도 용어가 걸린다", async () => {
   const { createRequire } = await import("node:module");
-  const LawSearch = createRequire(import.meta.url)("../src/search-runtime.js");
+  const LawSearch = createRequire(import.meta.url)("../src/search-runtime.cjs");
   const out = tidyAnnexText("그 처분일부터 입찰       ,  참가자격제한기간 종료 후");
   // 줄바꿈을 유지해도 검색은 공백·개행을 지우고 대조하므로 영향이 없다.
   assert.ok(LawSearch.normalize(out).includes("입찰참가자격제한기간"));

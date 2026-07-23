@@ -254,6 +254,8 @@ export function buildGraph(snapshot, options = {}) {
         ...(hwpSeq ? { hwpSeq } : {}),
         ...(bx.files?.pdfName ? { pdfName: bx.files.pdfName } : {}),
         ...(bx.files?.hwpName ? { hwpName: bx.files.hwpName } : {}),
+        // 파일만 있고 본문 텍스트가 없는 서식(별지) — 파싱표 대신 원본 뷰어만 띄운다.
+        ...(bx.hasText === false ? { formOnly: true } : {}),
         ...stamp,
       });
       addEdge(`law:${doc.id}`, id, "소속");

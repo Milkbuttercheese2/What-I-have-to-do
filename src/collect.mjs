@@ -53,6 +53,23 @@ async function cached(id, fn) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 전수조사(법령 88 + 행정규칙 300여)는 순차로 받으면 오래 걸린다. 동시성을 제한한 풀로
+// 병렬 수집한다. 상한을 두는 이유는 법제처에 대한 예의 + 순간 폭주로 인한 차단 회피다.
+const concIdx = args.indexOf("--concurrency");
+const concurrency = concIdx >= 0 ? Math.max(1, Number(args[concIdx + 1]) || 1) : 6;
+
+/** items 를 worker 로 처리하되 동시에 최대 limit 개만 진행한다. 입력 순서와 무관하게 완료. */
+async function mapPool(items, limit, worker) {
+  let idx = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (idx < items.length) {
+      const i = idx++;
+      await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+}
+
 /** 별표는 조달 실무의 핵심(제재기준·심사표)이라 수집 로그에 따로 드러낸다. */
 const annexNote = (d) => (d.annexes?.length ? ` · 별표/서식 ${d.annexes.length}` : "");
 
@@ -62,14 +79,17 @@ async function main() {
   const seed = JSON.parse(readFileSync(join(root, "data/seed.json"), "utf8"));
   const wanted = (d) => !only || d.id === only;
   const laws = seed.laws.filter(wanted);
+  // 관련법령(부처 교차, §2·§2.5) — 조달 조문이 인용하는 타부처 개별법. 핵심 법령과 같은 방식으로 전문 수집한다.
+  const related = (seed.relatedLaws ?? []).filter(wanted);
+  const allLaws = [...laws, ...related];
   const rules = seed.adminRules.filter(wanted);
 
   const documents = [];
   const failures = [];
 
-  console.log(`수집 시작 — 법령 ${laws.length}종 · 행정규칙 ${rules.length}종\n`);
+  console.log(`수집 시작 — 핵심 법령 ${laws.length}종 · 관련법령 ${related.length}종 · 행정규칙 ${rules.length}종 (동시성 ${concurrency})\n`);
 
-  for (const l of laws) {
+  await mapPool(allLaws, concurrency, async (l) => {
     try {
       const data = await cached(l.id, async () => {
         // MST는 개정되면 바뀐다. seed의 값이 낡았을 수 있으니 현행을 재확인한다.
@@ -89,6 +109,8 @@ async function main() {
         family: l.family,
         parent: l.parent,
         aliases: l.aliases ?? [],
+        // 관련법령(부처 교차)은 핵심 조달 법령과 구분해 표기·필터할 수 있게 카테고리를 남긴다.
+        ...(l.category ? { category: l.category } : {}),
         source: { kind: "law", mst: l.mst, lawId: l.lawId },
         // 신선도 판정의 원재료 (src/freshness.mjs)
         verification: {
@@ -113,8 +135,7 @@ async function main() {
       console.error(`  ❌ ${l.shortName} — ${e.message}`);
       if (e instanceof LawApiError && /LAW_API_OC/.test(e.message)) process.exit(1);
     }
-    if (!refresh) await sleep(100);
-  }
+  });
 
   // 수집할 행정규칙 = 수기 지정(계약예규 등) + 소관부처 전수 열거(조달청 등).
   // 열거가 '조달청 행정규칙 전부'를 담당한다. seq 로 중복 제거한다.
@@ -147,7 +168,7 @@ async function main() {
     }
   }
 
-  for (const r of ruleList) {
+  await mapPool(ruleList, concurrency, async (r) => {
     try {
       const data = await cached(r.id, () => fetchAdminRule({ seq: r.seq, ruleId: r.ruleId }));
       documents.push({
@@ -181,8 +202,7 @@ async function main() {
       failures.push({ id: r.id, name: r.shortName, error: e.message });
       console.error(`  ❌ ${r.shortName} — ${e.message}`);
     }
-    await sleep(100);
-  }
+  });
 
   const snapshot = {
     meta: {

@@ -339,14 +339,9 @@
     border-bottom:1px dashed var(--inyong);cursor:pointer}
   .body a.cite:hover{background:var(--hl)}
   .body mark{background:var(--marktint);color:inherit;border-radius:3px}
-  /* 별표는 고정폭(罫線) 레이아웃이라 등폭 글꼴 + 줄바꿈 금지라야 표가 맞는다 */
-  .srcnote{margin-top:14px;font-size:11px;color:var(--muted)}
-  .srcnote .copymd{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
-    border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:6px}
-  .srcnote .copymd:hover{border-color:var(--accent);color:var(--text)}
-  /* 별표 원본 뷰어 — PDF 를 크게, 파싱표는 접어서 보조로 */
+  /* 별표·별지(서식) 원본 뷰어 — 원문(PDF)을 크게 띄운다. 파싱표는 제거했다(원문이 진실). */
   .body.annexview{max-width:none}
-  .annexview .pdfview{width:100%;height:min(72vh,900px);border:1px solid var(--line);
+  .annexview .pdfview{width:100%;height:min(78vh,960px);border:1px solid var(--line);
     border-radius:8px;background:#fff}
   .annexview .novip{font-size:12.5px;color:var(--muted);background:var(--panel2);
     border:1px dashed var(--line);border-radius:8px;padding:14px 16px;line-height:1.7}
@@ -354,17 +349,6 @@
   .annexview .dl{font-size:12px;color:var(--accent);text-decoration:none;
     border:1px solid var(--line);border-radius:7px;padding:5px 12px}
   .annexview .dl:hover{border-color:var(--accent);background:var(--hl)}
-  .annexview .parsed{margin-top:8px}
-  .annexview .parsed summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 0}
-  .annexview .parsed summary:hover{color:var(--text)}
-  .body.annex{max-width:none}
-  .body.annex .ann-text{white-space:pre-wrap;margin:6px 0 14px}
-  .body.annex .ann-tw{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:8px}
-  table.ann{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6}
-  table.ann th,table.ann td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
-  table.ann th{background:var(--panel2);color:var(--text);font-weight:600;white-space:nowrap}
-  table.ann td:last-child{white-space:nowrap;color:var(--muted)}
-  table.ann tbody tr:nth-child(2n){background:var(--zebra)}
 
   /* ───────── 관계·미리보기 (오른쪽) ───────── */
   .rail{border-left:1px solid var(--line);background:var(--panel);
@@ -482,9 +466,6 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 </script>
 <script>
 /*__SEARCH__*/
-</script>
-<script>
-/*__ANNEX__*/
 </script>
 <script>
 /*__ANNEXVIEW__*/
@@ -880,17 +861,24 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
       ${ev?`<span class="ev" title="${esc(e.evidence)}"> ⟨${esc(ev)}⟩</span>`:''}</span></div>`;
   }
 
-  /** 한 단위(조문·별표)의 본문 HTML. 별표는 罫線 텍스트를 실제 표로 세운다. */
+  /** 옆 미리보기·노트참조용 순수 텍스트. 조문은 항·호·목 계층 들여쓰기(조문항 표기법)를 그대로 적용하고,
+   *  별표·별지(서식)는 원문 유도 문구로 대신한다(파싱 텍스트는 화면에 노출하지 않음). */
+  function previewText(n,empty){
+    if(n.kind==='별표')return '별표·별지(서식)입니다. [본문으로]를 눌러 원본(PDF)을 뷰어에서 확인하세요.';
+    if(!n.text)return empty||'원문 없음 — 이 노드는 법령/외부법 단위입니다.';
+    return n.kind==='조문'?LawText.indent(n.text):n.text;
+  }
+
+  /** 한 단위(조문·별표)의 본문 HTML. 별표·별지(서식)는 원문(PDF/HWP)을 뷰어로만 제공한다. */
   function unitBody(n){
     const oe=outs.get(n.id)||[];
-    if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
     if(n.kind==='별표'){
-      // 원본 PDF 를 본체로 보여주고, 파싱표는 접어서 검색·복사용으로 남긴다.
-      const tableHtml=AnnexTable.toHtml(AnnexTable.parse(n.text),t=>linkify(t,oe))+
-        `<div class="srcnote">※ 법제처 API 텍스트본을 표로 재구성했습니다. `+
-        `<button class="copymd" data-for="${esc(n.id)}">표 마크다운 복사</button></div>`;
-      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc,tableHtml});
+      // 별표(표)·별지(서식) 모두 원문 뷰어로만 보여준다. 罫線 텍스트 복원(파싱표)은
+      // 굵은 罫線을 못 읽는 표가 많아 신뢰할 수 없어 화면에서 제거했다 — 원문이 진실이다.
+      // (n.text 는 검색 색인용으로만 남는다. 화면엔 노출하지 않는다.)
+      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc});
     }
+    if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
     // 화면에서만 계층 들여쓰기를 입힌다. 공백만 늘어나므로 인용 매칭은 영향이 없다
     // (linkify 는 공백을 지운 사본에서 위치를 찾는다).
     return `<div class="body">${linkify(LawText.indent(n.text),oe)}</div>`;
@@ -950,11 +938,6 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
       docEl.querySelectorAll('.unit').forEach(s=>{
         const u=byId.get(s.dataset.unit);
         if(u)s.querySelector('.uhead').appendChild(starBtn(u.id));
-      });
-      docEl.querySelectorAll('.copymd').forEach(b=>{
-        b.onclick=()=>{const u=byId.get(b.dataset.for); if(!u)return;
-          navigator.clipboard?.writeText(AnnexTable.toMarkdown(AnnexTable.parse(u.text)));
-          b.textContent='복사됨';setTimeout(()=>b.textContent='표 마크다운 복사',1500);};
       });
       observeUnits();
     }
@@ -1057,8 +1040,7 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 
     const body=document.createElement('div'); body.className='pvbody';
     if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
-    body.appendChild(document.createTextNode(
-      n.text||'원문 없음 — 이 노드는 법령/외부법 단위입니다.'));
+    body.appendChild(document.createTextNode(previewText(n)));
 
     pvEl.append(head,body);
     pvEl.classList.add('on');
@@ -1351,7 +1333,7 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 
     const body=document.createElement('div'); body.className='nrbody';
     if(n.title){const s=document.createElement('span');s.className='sub';s.textContent=n.title;body.appendChild(s);}
-    body.appendChild(document.createTextNode(n.text||'원문 없음 — 법령 단위입니다.'));
+    body.appendChild(document.createTextNode(previewText(n,'원문 없음 — 법령 단위입니다.')));
     // 관련 규정 목록은 넣지 않는다 — 노트에서 건 법령은 "그 조문이 뭐라 하는지"를
     // 확인하려는 것이지 관계망을 타려는 게 아니다. 관계는 ③ 칸의 몫이다.
     nrEl.append(head,body);

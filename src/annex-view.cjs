@@ -22,10 +22,12 @@ var AnnexView = (function () {
   }
 
   /**
-   * @param n 별표 노드 { pdfSeq, hwpSeq, pdfName, hwpName, label, title, text }
-   * @param opts { avail:Set<string>, esc:fn, tableHtml:string }
-   *   avail    web/annex 에 실제로 있는 파일명 집합("<flSeq>.pdf" 등)
-   *   tableHtml 파싱 표 HTML(폴백·복사용). 없으면 생략.
+   * @param n 별표 노드 { pdfSeq, hwpSeq, pdfName, hwpName, label, title }
+   * @param opts { avail:Set<string>, esc:fn }
+   *   avail  web/annex 에 실제로 있는 파일명 집합("<flSeq>.pdf" 등)
+   *
+   * 별표(표)·별지(서식)는 **원문(PDF/HWP)만** 보여준다. 罫線 텍스트를 표로 되살리는
+   * 파싱은 굵은 罫線을 못 읽는 표가 많아 신뢰할 수 없어 제거했다 — 원문이 진실이다.
    */
   function render(n, opts) {
     opts = opts || {};
@@ -42,8 +44,8 @@ var AnnexView = (function () {
       parts.push('<iframe class="pdfview" src="' + esc(pdfLocal) + '" title="' +
         esc((n.label || "") + " " + (n.title || "")) + '"></iframe>');
     } else {
-      parts.push('<div class="novip">원본 PDF 뷰어는 앱(오프라인 배포)에서 열립니다. ' +
-        '아래에서 원본을 내려받거나, 파싱된 표로 볼 수 있습니다.</div>');
+      parts.push('<div class="novip">원본 뷰어는 앱(오프라인 배포)에서 원문 PDF 로 열립니다. ' +
+        '아래에서 원본(PDF/HWP)을 내려받아 여실 수 있습니다.</div>');
     }
 
     // 2) 원본 내려받기 — 로컬 파일이 있으면 그것, 없으면 법제처 링크
@@ -59,13 +61,6 @@ var AnnexView = (function () {
         '>HWP 원본</a>');
     }
     if (dl.length) parts.push('<div class="dlrow">' + dl.join("") + "</div>");
-
-    // 3) 파싱 표 — 검색은 이걸로 되고, 뷰어가 없을 때의 폴백이기도 하다.
-    //    접어둔다: 원본이 본체이고 파싱본은 보조다.
-    if (opts.tableHtml) {
-      parts.push('<details class="parsed"' + (pdfLocal ? "" : " open") + ">" +
-        "<summary>파싱된 표 보기 (검색·복사용)</summary>" + opts.tableHtml + "</details>");
-    }
 
     parts.push("</div>");
     return parts.join("");
