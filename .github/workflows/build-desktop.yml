@@ -20,11 +20,10 @@ on:
         type: boolean
         default: true
   # workflow_dispatch 는 기본 브랜치에 파일이 있어야 API 실행이 되므로(피처 브랜치 단계에선 404),
-  # 온디맨드 빌드는 트리거 파일을 건드려 push 로 돌린다. 일반 코드 push 로는 돌지 않는다.
+  # 온디맨드 빌드는 트리거 파일을 건드려 push 로 돌린다. 일반 코드 push·워크플로 수정으로는 안 돈다.
   push:
     paths:
       - ".github/build-trigger"
-      - ".github/workflows/build-desktop.yml"
 
 permissions:
   contents: write
@@ -37,6 +36,9 @@ jobs:
   # ── 1) 라이브 수집 + 빌드 (리눅스) ──────────────────────────────────────────
   collect:
     runs-on: ubuntu-latest
+    # LAW_OC 가 Environment 시크릿이면 그 Environment 를 지정해야 읽힌다.
+    # 리포지토리 Variables 에 BUILD_ENV=<환경이름> 을 넣으면 자동 적용된다(Repository 시크릿이면 비워둬도 됨).
+    environment: ${{ vars.BUILD_ENV }}
     steps:
       - uses: actions/checkout@v4
 
