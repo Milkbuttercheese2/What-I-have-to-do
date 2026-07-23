@@ -237,6 +237,37 @@
   .hint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
     padding:1px 5px;font-family:inherit;font-size:10px}
 
+  /* ───────── 빠른 검색 오버레이 (Spotlight) ───────── */
+  .spot{position:fixed;inset:0;z-index:1000;display:flex;justify-content:center;
+    align-items:flex-start;padding-top:14vh;background:rgba(10,12,16,.44);
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .spot[hidden]{display:none}
+  .spotbox{width:min(680px,92vw);background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.5);overflow:hidden;
+    display:flex;flex-direction:column;max-height:72vh}
+  .spotqrow{display:flex;gap:9px;align-items:stretch;padding:13px 14px;border-bottom:1px solid var(--line)}
+  #spotScope{flex:0 0 auto;padding:0 12px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);font-size:12.5px;font-weight:600;font-family:inherit;
+    cursor:pointer;white-space:nowrap}
+  #spotScope:hover{border-color:var(--accent);color:var(--text)}
+  #spotScope.act{color:var(--accent);border-color:var(--accent)}
+  #spotQ{flex:1;min-width:0;border:none;background:transparent;color:var(--text);
+    font-size:18px;outline:none;font-family:inherit}
+  .spotresults{overflow:auto;padding:6px}
+  .spotresults .sitem{display:flex;gap:10px;align-items:center;padding:9px 11px;border-radius:9px;cursor:pointer}
+  .spotresults .sitem.sel{background:var(--hl)}
+  .spotresults .sitem .tag{flex:0 0 auto;font-size:10.5px;color:var(--muted);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .spotresults .sitem .main{min-width:0;flex:1}
+  .spotresults .sitem .ttl{display:block;font-size:14px;color:var(--text);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spotresults .sitem .sub{font-size:11.5px;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spotresults .none{padding:16px;color:var(--muted);font-size:13px;text-align:center}
+  .spothint{padding:9px 14px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+  .spothint kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-family:inherit;font-size:10px}
+
   .results{padding:6px 8px 20px}
   .ritem{padding:8px 10px;border-radius:9px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
   .ritem.sel{background:var(--panel2);outline:1px solid var(--line)}
@@ -394,6 +425,19 @@
 </style>
 </head>
 <body>
+
+<!-- 맥 Spotlight 식 빠른 검색 오버레이 — 앱 어디서나 Ctrl+Shift+Space(또는 Ctrl+K)로 연다.
+     데스크톱 앱에서는 전역 핫키(다른 창을 쓰다가도)로도 열린다. -->
+<div id="spot" class="spot" hidden>
+  <div class="spotbox" role="dialog" aria-label="빠른 검색">
+    <div class="spotqrow">
+      <button type="button" id="spotScope" title="검색 대상 전환 (Ctrl 탭)">전체</button>
+      <input id="spotQ" autocomplete="off" spellcheck="false" placeholder="빠른 검색  —  조문·키워드·초성" />
+    </div>
+    <div id="spotResults" class="spotresults"></div>
+    <div class="spothint"><kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · <kbd>Ctrl</kbd> 탭 대상전환 · <kbd>Esc</kbd> 닫기</div>
+  </div>
+</div>
 
 <div id="app">
   <!-- ① 왼쪽: 검색창 하나 + 전체 법령 -->
@@ -579,12 +623,17 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
   const SCOPES=['전체','법령','행정규칙'];
   let scopeI=0;
   const scopeBtn=document.getElementById('scopeBtn');
+  const spotScopeBtn=document.getElementById('spotScope');
   function updateScope(){
-    scopeBtn.textContent=SCOPES[scopeI];
-    scopeBtn.classList.toggle('act',scopeI!==0);
+    for(const b of [scopeBtn,spotScopeBtn]){ if(!b)continue; b.textContent=SCOPES[scopeI]; b.classList.toggle('act',scopeI!==0); }
   }
-  function cycleScope(){ scopeI=(scopeI+1)%SCOPES.length; updateScope(); doSearch(); q.focus(); }
+  function cycleScope(){
+    scopeI=(scopeI+1)%SCOPES.length; updateScope();
+    // 열려 있는 쪽을 다시 검색한다 (오버레이가 떠 있으면 그쪽, 아니면 사이드바).
+    if(!spotEl.hidden){ spotSearch(); spotQ.focus(); } else { doSearch(); q.focus(); }
+  }
   scopeBtn.addEventListener('click',cycleScope);
+  if(spotScopeBtn)spotScopeBtn.addEventListener('click',cycleScope);
 
   function doSearch(){
     const s=q.value.trim();
@@ -609,6 +658,45 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
   results.addEventListener('click',e=>{
     const it=e.target.closest('.ritem'); if(!it)return;
     open(hits[+it.dataset.i].node.id);
+  });
+
+  // ───────── 빠른 검색 오버레이 (Spotlight) ─────────
+  // 앱 어디서나 Ctrl+Shift+Space / Ctrl+K 로 중앙에 뜬다. 데스크톱 앱은 전역 핫키로도.
+  const spotEl=document.getElementById('spot'),
+        spotQ=document.getElementById('spotQ'),
+        spotResults=document.getElementById('spotResults');
+  let spotHits=[], spotCur=0;
+  function spotRender(){
+    if(!spotQ.value.trim()){ spotResults.innerHTML=''; return; }
+    if(!spotHits.length){ spotResults.innerHTML='<div class="none">결과 없음</div>'; return; }
+    spotResults.innerHTML=spotHits.map((h,i)=>{
+      const n=h.node;
+      const title=(n.kind==='조문'||n.kind==='별표')?(n.title||n.label):n.label;
+      const sub=(n.kind==='조문'||n.kind==='별표')?`${n.group} ${n.label}`:(n.name||'');
+      return `<div class="sitem${i===spotCur?' sel':''}" data-i="${i}">
+        <span class="tag">${esc(tierOf(n))}</span>
+        <span class="main"><span class="ttl">${highlight(title,spotQ.value)}</span>
+        ${sub?`<div class="sub">${esc(sub)}</div>`:''}</span></div>`;
+    }).join('');
+    const sel=spotResults.querySelector('.sitem.sel'); if(sel)sel.scrollIntoView({block:'nearest'});
+  }
+  function spotSearch(){
+    const s=spotQ.value.trim();
+    spotHits=s?idx.search(s,40,{scope:SCOPES[scopeI]}):[];
+    spotCur=0; spotRender();
+  }
+  function openSpot(){ spotEl.hidden=false; spotQ.value=q.value; spotSearch(); spotQ.focus(); spotQ.select(); }
+  function closeSpot(){ spotEl.hidden=true; }
+  function spotOpenSel(){ const h=spotHits[spotCur]; if(!h)return; closeSpot(); open(h.node.id); }
+  spotQ.addEventListener('input',spotSearch);
+  spotResults.addEventListener('click',e=>{ const it=e.target.closest('.sitem'); if(!it)return; spotCur=+it.dataset.i; spotOpenSel(); });
+  spotEl.addEventListener('mousedown',e=>{ if(e.target===spotEl)closeSpot(); });
+  spotQ.addEventListener('keydown',e=>{
+    if(e.isComposing||e.keyCode===229)return;
+    if(e.key==='ArrowDown'){e.preventDefault();spotCur=Math.min(spotCur+1,spotHits.length-1);spotRender();}
+    else if(e.key==='ArrowUp'){e.preventDefault();spotCur=Math.max(spotCur-1,0);spotRender();}
+    else if(e.key==='Enter'){e.preventDefault();spotOpenSel();}
+    else if(e.key==='Escape'){e.preventDefault();closeSpot();}
   });
 
   // ───────── 즐겨찾기 ─────────
@@ -1096,9 +1184,12 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     // 한글 IME 조합 중의 Enter 는 "조합 확정"이지 "선택"이 아니다.
     // 이걸 거르지 않으면 "수의계약" 치고 Enter 한 번에 엉뚱한 항목이 열린다.
     if(e.isComposing||e.keyCode===229)return;
-    if(e.key==='/'&&document.activeElement!==q){e.preventDefault();toSearch();return;}
-    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();toSearch();return;}
+    // 빠른 검색 오버레이 — Ctrl+Shift+Space 토글, Ctrl/Cmd+K 열기.
+    if(e.ctrlKey&&e.shiftKey&&e.code==='Space'){e.preventDefault();spotEl.hidden?openSpot():closeSpot();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSpot();return;}
+    if(e.key==='/'&&document.activeElement!==q&&spotEl.hidden){e.preventDefault();toSearch();return;}
     if(e.key==='Escape'){
+      if(!spotEl.hidden){closeSpot();return;}
       // 미리보기가 떠 있으면 그것부터 닫는다 → 그다음 검색어를 비운다
       if(pvEl.classList.contains('on')){closePreview();return;}
       if(q.value){q.value='';doSearch();q.focus();}
@@ -1387,7 +1478,7 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
   // Tauri 전역 핫키(Ctrl+Shift+Space)가 앱을 앞으로 부르면 검색창에 커서를 둔다.
   // 브라우저(비-Tauri)에는 window.__TAURI__ 가 없어 조용히 건너뛴다.
   if(window.__TAURI__&&window.__TAURI__.event&&window.__TAURI__.event.listen){
-    window.__TAURI__.event.listen('spotlight',()=>{ toSearch(); });
+    window.__TAURI__.event.listen('spotlight',()=>{ openSpot(); });
   }
 })();
 </script>
