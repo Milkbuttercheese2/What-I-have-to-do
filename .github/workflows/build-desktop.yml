@@ -42,14 +42,15 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: 법령 수집 (라이브 · 병렬)
         env:
-          LAW_API_OC: ${{ secrets.LAW_OC }}
+          # 시크릿 이름이 LAW_OC 든 LAW_API_OC 든 잡히도록 폴백.
+          LAW_API_OC: ${{ secrets.LAW_OC || secrets.LAW_API_OC }}
         run: |
           if [ -z "$LAW_API_OC" ]; then
-            echo "::error::secrets.LAW_OC 가 비어 있습니다. 리포지토리 Secrets 에 LAW_OC(법제처 OC)를 등록하세요."
+            echo "::error::법제처 OC 시크릿이 비어 있습니다. 리포지토리 Settings → Secrets and variables → Actions 에 LAW_OC(또는 LAW_API_OC)를 등록하세요. Environment 시크릿이면 job 에 environment 를 지정해야 합니다."
             exit 1
           fi
           node src/collect.mjs --concurrency 8
@@ -94,7 +95,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - uses: dtolnay/rust-toolchain@stable
 
