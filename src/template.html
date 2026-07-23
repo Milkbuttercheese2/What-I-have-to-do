@@ -1289,8 +1289,9 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     if(noteEl.innerHTML!==html){ noteEl.innerHTML=html; setCaret(off); }
   }
 
-  noteEl.textContent=LawNotes.load();
-  paintChips();
+  // 노트 저장소가 준비/교체될 때(SQLite 주입 등) 노트 본문을 다시 읽어 그린다.
+  function reloadNotes(){ if(!noteEl.hidden)noteEl.textContent=LawNotes.load(); paintChips(); if(!noteView.hidden)renderNoteView(); }
+  reloadNotes();
 
   let saveT=null;
   noteEl.addEventListener('input',()=>{
@@ -1475,11 +1476,41 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
 
   q.focus();
 
-  // Tauri 전역 핫키(Ctrl+Shift+Space)가 앱을 앞으로 부르면 검색창에 커서를 둔다.
+  // Tauri 전역 핫키(Ctrl+Shift+Space)가 앱을 앞으로 부르면 빠른 검색을 띄운다.
   // 브라우저(비-Tauri)에는 window.__TAURI__ 가 없어 조용히 건너뛴다.
   if(window.__TAURI__&&window.__TAURI__.event&&window.__TAURI__.event.listen){
     window.__TAURI__.event.listen('spotlight',()=>{ openSpot(); });
   }
+
+  // ── 법령노트 SQLite 영속화 (데스크톱 앱 전용) ──
+  // notes.cjs 의 store 를 SQLite 백엔드 어댑터로 갈아끼운다. 읽기는 메모리 캐시(동기),
+  // 쓰기는 캐시 + SQLite write-through(비동기). 브라우저나 실패 시 localStorage 로 남는다.
+  (async function initSqlNotes(){
+    const T=window.__TAURI__;
+    if(!(T&&T.core&&T.core.invoke))return;
+    const invoke=T.core.invoke, db="sqlite:notes.db";
+    try{
+      await invoke('plugin:sql|load',{db});
+      await invoke('plugin:sql|execute',{db,query:"CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)",values:[]});
+      const rows=await invoke('plugin:sql|select',{db,query:"SELECT k, v FROM kv",values:[]});
+      const cache={};
+      // SQLite 가 비어 있으면(첫 실행) 기존 localStorage 노트를 옮겨 심는다.
+      const seed=(k)=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+      for(const r of (rows||[]))cache[r.k]=r.v;
+      for(const k of [LawNotes.KEY,LawNotes.ARCHIVE]){
+        if(cache[k]==null){ const s=seed(k); if(s!=null){ cache[k]=s;
+          invoke('plugin:sql|execute',{db,query:"INSERT INTO kv (k,v) VALUES ($1,$2) ON CONFLICT(k) DO UPDATE SET v=$2",values:[k,s]}).catch(()=>{}); } }
+      }
+      LawNotes.useStore({
+        getItem:(k)=>cache[k]!=null?cache[k]:null,
+        setItem:(k,v)=>{ cache[k]=String(v);
+          invoke('plugin:sql|execute',{db,query:"INSERT INTO kv (k,v) VALUES ($1,$2) ON CONFLICT(k) DO UPDATE SET v=$2",values:[k,String(v)]}).catch(()=>{}); },
+        removeItem:(k)=>{ delete cache[k];
+          invoke('plugin:sql|execute',{db,query:"DELETE FROM kv WHERE k=$1",values:[k]}).catch(()=>{}); },
+      });
+      reloadNotes(); // 이제 SQLite 값으로 노트를 다시 그린다
+    }catch(e){ /* SQLite 불가 — localStorage 로 계속 */ }
+  })();
 })();
 </script>
 </body>

@@ -9,7 +9,9 @@
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default();
+    let mut builder = tauri::Builder::default()
+        // 법령노트 SQLite 영속화 — 프론트엔드가 plugin:sql 로 kv 테이블에 저장한다.
+        .plugin(tauri_plugin_sql::Builder::default().build());
 
     // 전역 핫키는 데스크톱 전용이다(모바일엔 개념이 없다).
     #[cfg(desktop)]

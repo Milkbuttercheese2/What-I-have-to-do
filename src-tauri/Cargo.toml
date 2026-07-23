@@ -18,6 +18,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# 법령노트를 SQLite 로 영속화한다(데스크톱 앱). 프론트엔드는 kv 테이블에 write-through.
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 
 # 전역 핫키(Ctrl+Shift+Space)는 데스크톱 전용 플러그인이다.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
