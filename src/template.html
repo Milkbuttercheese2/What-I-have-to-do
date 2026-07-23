@@ -224,7 +224,13 @@
   .side header p{margin:6px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
   .side header p.warn{color:var(--warn)}
   .searchbar{padding:11px 13px;border-bottom:1px solid var(--line)}
-  #q{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
+  .qrow{display:flex;gap:7px;align-items:stretch}
+  #scopeBtn{flex:0 0 auto;padding:0 11px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;
+    white-space:nowrap;font-weight:600;transition:color .12s,border-color .12s}
+  #scopeBtn:hover{border-color:var(--accent);color:var(--text)}
+  #scopeBtn.act{color:var(--accent);border-color:var(--accent)}
+  #q{flex:1;min-width:0;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
     background:var(--panel2);color:var(--text);font-size:13px;outline:none;font-family:inherit}
   #q:focus{border-color:var(--accent)}
   .hint{margin-top:7px;font-size:10.5px;color:var(--muted)}
@@ -402,10 +408,13 @@
       <p id="meta"></p>
     </header>
     <div class="searchbar">
-      <input id="q" autocomplete="off" spellcheck="false"
-        placeholder="조문·키워드 검색  예) 수의계약 · 7조 · ㅅㅇㄱㅇ" />
+      <div class="qrow">
+        <button type="button" id="scopeBtn" title="검색 대상 전환 (Ctrl 탭)">전체</button>
+        <input id="q" autocomplete="off" spellcheck="false"
+          placeholder="조문·키워드 검색  예) 수의계약 · 7조 · ㅅㅇㄱㅇ" />
+      </div>
       <div class="hint" id="hint">
-        <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · 초성 검색 가능
+        <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 열기 · <kbd>Ctrl</kbd> 탭: 대상(전체·법령·행정규칙) · 초성 가능
       </div>
     </div>
     <div class="scroll">
@@ -566,14 +575,37 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     if(sel)sel.scrollIntoView({block:'nearest'});
   }
 
+  // ── 검색 대상(스코프) — Ctrl 탭 또는 칩 클릭으로 전체 → 법령 → 행정규칙 순환 ──
+  const SCOPES=['전체','법령','행정규칙'];
+  let scopeI=0;
+  const scopeBtn=document.getElementById('scopeBtn');
+  function updateScope(){
+    scopeBtn.textContent=SCOPES[scopeI];
+    scopeBtn.classList.toggle('act',scopeI!==0);
+  }
+  function cycleScope(){ scopeI=(scopeI+1)%SCOPES.length; updateScope(); doSearch(); q.focus(); }
+  scopeBtn.addEventListener('click',cycleScope);
+
   function doSearch(){
     const s=q.value.trim();
     app.classList.toggle('searching',!!s); // 사이드바 한 자리를 목록↔결과로 갈아끼운다
-    hits=s?idx.search(s,60):[];
+    hits=s?idx.search(s,60,{scope:SCOPES[scopeI]}):[];
     cur=0;
     renderResults();
   }
   q.addEventListener('input',doSearch);
+
+  // Ctrl 을 다른 키 없이 톡 눌렀다 떼면 검색 대상을 바꾼다.
+  // (Ctrl+K 등 조합은 취소된다 — 다른 키가 끼면 후보에서 빠진다.)
+  let ctrlTap=false;
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Control'){ if(!e.repeat)ctrlTap=true; }
+    else ctrlTap=false;
+  },true);
+  document.addEventListener('keyup',e=>{
+    if(e.key==='Control'){ if(ctrlTap)cycleScope(); ctrlTap=false; }
+  },true);
+  updateScope();
   results.addEventListener('click',e=>{
     const it=e.target.closest('.ritem'); if(!it)return;
     open(hits[+it.dataset.i].node.id);
@@ -1351,6 +1383,12 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
     '본문 속 인용을 누르면 화면을 옮기지 않고 <b>옆에서 미리보기</b>로 확인합니다.</div>';
 
   q.focus();
+
+  // Tauri 전역 핫키(Ctrl+Shift+Space)가 앱을 앞으로 부르면 검색창에 커서를 둔다.
+  // 브라우저(비-Tauri)에는 window.__TAURI__ 가 없어 조용히 건너뛴다.
+  if(window.__TAURI__&&window.__TAURI__.event&&window.__TAURI__.event.listen){
+    window.__TAURI__.event.listen('spotlight',()=>{ toSearch(); });
+  }
 })();
 </script>
 </body>

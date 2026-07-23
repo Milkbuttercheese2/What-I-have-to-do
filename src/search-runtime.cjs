@@ -87,6 +87,15 @@ var LawSearch = (function () {
   // 상위 법령일수록, 원문이 있는 조문일수록 유용하다.
   var TYPE_W = { 법률: 40, 시행령: 32, 시행규칙: 24, 계약예규: 16, 훈령: 12, 고시: 12, 지침: 10, 외부: 0 };
 
+  // 검색 대상 스코프 — Ctrl 탭으로 법령 ↔ 행정규칙을 오간다(전역 핫키 UX).
+  // 노드 type(=docType)으로 가른다: 법률/시행령/시행규칙/대통령령/부령 계열은 '법령',
+  // 계약예규·훈령·예규·지침·고시·공고 등은 '행정규칙'. 외부법 스텁은 법령으로 본다.
+  var LAW_TYPES = { 법률: 1, 시행령: 1, 시행규칙: 1, 대통령령: 1, 부령: 1 };
+  function scopeOf(n) {
+    if (n.kind === "외부법") return "법령";
+    return LAW_TYPES[n.type] ? "법령" : "행정규칙";
+  }
+
   /** 점수. 0 이하면 결과에서 뺀다. */
   function score(n, ix, q) {
     var sc = 0;
@@ -157,12 +166,17 @@ var LawSearch = (function () {
 
     return {
       index: index,
-      /** 상위 limit 건을 점수 내림차순으로 */
-      search: function (raw, limit) {
+      /**
+       * 상위 limit 건을 점수 내림차순으로.
+       * @param opts.scope '법령' | '행정규칙' | '전체'(기본) — 그 대상만 남긴다.
+       */
+      search: function (raw, limit, opts) {
         var q = parseQuery(raw);
         if (!q.jo && !q.terms.length) return [];
+        var scope = opts && opts.scope && opts.scope !== "전체" ? opts.scope : null;
         var hits = [];
         for (var i = 0; i < nodes.length; i++) {
+          if (scope && scopeOf(nodes[i]) !== scope) continue;
           var sc = score(nodes[i], index[i], q);
           if (sc > 0) hits.push({ node: nodes[i], score: sc });
         }
@@ -174,7 +188,7 @@ var LawSearch = (function () {
     };
   }
 
-  return { create: create, parseQuery: parseQuery, chosung: chosung, normalize: normalize, indexNode: indexNode, score: score };
+  return { create: create, parseQuery: parseQuery, chosung: chosung, normalize: normalize, indexNode: indexNode, score: score, scopeOf: scopeOf };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = LawSearch;

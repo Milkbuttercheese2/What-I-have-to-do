@@ -7,6 +7,7 @@
     "frontendDist": "../web"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "몇 조항이더라 — 조달 법령 리더",
