@@ -23,7 +23,10 @@ function pick(re, name) {
   return m[1];
 }
 const GRAPH = pick(/const GRAPH = (\{.*?\});\s*\n<\/script>/s, "GRAPH");
-const AVAIL = pick(/const ANNEX_AVAIL = new Set\((.*?)\);/s, "ANNEX_AVAIL");
+// 리포에 별표 원본 파일(web/annex)은 커밋하지 않는다(gitignore). 그래서 브라우저용 산출물의
+// 가용 파일 목록은 비운다 — 뷰어가 빈 iframe 대신 법제처 원문 링크 카드를 띄우게.
+// (데스크톱 앱 빌드는 web/annex 를 채우고 build.mjs 가 실제 목록을 넣는다.)
+const AVAIL = "[]";
 
 const inl = (p) => readFileSync(join(root, p), "utf8");
 const template = readFileSync(join(root, "src/template.html"), "utf8");

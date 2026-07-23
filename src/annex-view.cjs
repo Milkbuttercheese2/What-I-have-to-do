@@ -23,42 +23,50 @@ var AnnexView = (function () {
 
   /**
    * @param n 별표 노드 { pdfSeq, hwpSeq, pdfName, hwpName, label, title }
-   * @param opts { avail:Set<string>, esc:fn }
-   *   avail  web/annex 에 실제로 있는 파일명 집합("<flSeq>.pdf" 등)
+   * @param opts { avail:Set<string>, esc:fn, native:boolean }
+   *   avail   web/annex 에 실제로 있는 파일명 집합("<flSeq>.pdf" 등)
+   *   native  데스크톱 앱(Tauri)인가. 앱에서만 동봉 PDF 를 iframe 으로 띄운다.
    *
    * 별표(표)·별지(서식)는 **원문(PDF/HWP)만** 보여준다. 罫線 텍스트를 표로 되살리는
    * 파싱은 굵은 罫線을 못 읽는 표가 많아 신뢰할 수 없어 제거했다 — 원문이 진실이다.
+   *
+   * ★ 브라우저에는 원본 PDF 가 동봉돼 있지 않다(앱 전용). 그래서 브라우저에서는 iframe 을
+   *   걸지 않고 **법제처 원문 링크 카드**를 보여준다 — 빈 화면이 뜨지 않게.
    */
   function render(n, opts) {
     opts = opts || {};
     var esc = opts.esc || function (s) { return String(s == null ? "" : s); };
     var avail = opts.avail;
+    var native = !!opts.native;
 
-    var pdfLocal = n.pdfSeq && has(avail, n.pdfSeq + ".pdf") ? "annex/" + n.pdfSeq + ".pdf" : null;
-    var hwpLocal = n.hwpSeq && has(avail, n.hwpSeq + ".hwp") ? "annex/" + n.hwpSeq + ".hwp" : null;
+    var pdfLocal = native && n.pdfSeq && has(avail, n.pdfSeq + ".pdf") ? "annex/" + n.pdfSeq + ".pdf" : null;
+    var hwpLocal = native && n.hwpSeq && has(avail, n.hwpSeq + ".hwp") ? "annex/" + n.hwpSeq + ".hwp" : null;
 
     var parts = ['<div class="body annexview">'];
 
-    // 1) 원본 PDF 뷰어 — 있으면 이게 본체다
+    // 1) 원본 PDF 뷰어 — 앱에 동봉된 PDF 가 있으면 이게 본체다
     if (pdfLocal) {
       parts.push('<iframe class="pdfview" src="' + esc(pdfLocal) + '" title="' +
         esc((n.label || "") + " " + (n.title || "")) + '"></iframe>');
     } else {
-      parts.push('<div class="novip">원본 뷰어는 앱(오프라인 배포)에서 원문 PDF 로 열립니다. ' +
-        '아래에서 원본(PDF/HWP)을 내려받아 여실 수 있습니다.</div>');
+      // 브라우저(또는 미동봉) — 빈 화면 대신 법제처 원문으로 보내는 카드.
+      var kind = (n.label || "").indexOf("서식") >= 0 ? "서식(별지)" : "별표";
+      parts.push('<div class="novip"><b>' + esc(n.label || kind) + "</b> " + esc(n.title || "") +
+        '<div class="novip-sub">원문(PDF)은 데스크톱 앱에 동봉되어 바로 열립니다. ' +
+        '브라우저에서는 아래 <b>법제처에서 원문 보기</b>로 원본을 여세요.</div></div>');
     }
 
-    // 2) 원본 내려받기 — 로컬 파일이 있으면 그것, 없으면 법제처 링크
+    // 2) 원본 열기/내려받기 — 앱은 동봉 파일, 브라우저는 법제처 원문 링크
     var dl = [];
     if (n.pdfSeq) {
-      dl.push('<a class="dl" href="' + esc(pdfLocal || (LAW + n.pdfSeq)) + '"' +
+      dl.push('<a class="dl' + (pdfLocal ? "" : " primary") + '" href="' + esc(pdfLocal || (LAW + n.pdfSeq)) + '"' +
         (pdfLocal ? ' download="' + esc(n.pdfName || (n.pdfSeq + ".pdf")) + '"' : ' target="_blank" rel="noopener"') +
-        '>PDF 원본</a>');
+        ">" + (pdfLocal ? "PDF 원본" : "법제처에서 원문 보기 (PDF)") + "</a>");
     }
     if (n.hwpSeq) {
       dl.push('<a class="dl" href="' + esc(hwpLocal || (LAW + n.hwpSeq)) + '"' +
         (hwpLocal ? ' download="' + esc(n.hwpName || (n.hwpSeq + ".hwp")) + '"' : ' target="_blank" rel="noopener"') +
-        '>HWP 원본</a>');
+        ">" + (hwpLocal ? "HWP 원본" : "HWP 내려받기") + "</a>");
     }
     if (dl.length) parts.push('<div class="dlrow">' + dl.join("") + "</div>");
 

@@ -17,3 +17,4 @@ data/snapshot.json
 
 # 별표 원본 파일 — `npm run annex` 로 재생성 (Tauri 배포 리소스, ~200MB)
 web/annex/
+data/collect-failures.json

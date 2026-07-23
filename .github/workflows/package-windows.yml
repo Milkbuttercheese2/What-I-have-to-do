@@ -1,0 +1,87 @@
+name: Windows 패키징 (수집 없이 커밋된 데이터로 exe)
+
+# 라이브 수집(LAW_OC) 없이, 리포에 커밋된 실데이터 web/index.html 을 그대로 Tauri 로 감싸
+# Windows .exe/.msi 를 만든다. 시크릿이 필요 없어 즉시 exe 를 낼 수 있는 경로.
+#   - 관련법령 전수/별표 PDF 동봉은 라이브 수집 빌드(build-desktop.yml)에서 채운다.
+#   - 온디맨드: .github/package-trigger 를 건드려 push, 또는 Actions 에서 수동 실행.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/package-trigger"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: web/index.html 확인 (커밋된 실데이터)
+        shell: bash
+        run: |
+          test -f web/index.html || { echo "::error::web/index.html 이 없습니다."; exit 1; }
+          echo "web/index.html $(wc -c < web/index.html) bytes"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Tauri CLI 설치 (npm prebuilt — cargo 컴파일 회피로 대폭 단축)
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Tauri 빌드 (.exe)
+        run: tauri build
+
+      - name: 산출물을 '최종 프로그램 산출물/' 로 모으기
+        shell: pwsh
+        run: |
+          $out = "최종 프로그램 산출물"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Include *.exe,*.msi |
+            ForEach-Object { Copy-Item $_.FullName -Destination $out -Force; Write-Host "→ $($_.Name)" }
+          Get-ChildItem $out
+
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          retention-days: 30
+          path: 최종 프로그램 산출물/*
+
+      - name: 실행파일 커밋 (최종 프로그램 산출물/)
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f "최종 프로그램 산출물"/*.exe "최종 프로그램 산출물"/*.msi 2>/dev/null || true
+          if git diff --cached --quiet; then echo "커밋할 실행파일 없음"; exit 0; fi
+          git commit -m "빌드 산출물: Windows 설치본(커밋 데이터 패키징) [skip ci]"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            echo "push 재시도 $i"; sleep $((2**i))
+          done
+
+      - name: GitHub Release 갱신
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: 몇 조항이더라 데스크톱 (최신)
+          body: |
+            조달청 오프라인 법령 리더 — Windows 설치본(커밋된 실데이터 320문서 패키징).
+            전역 핫키 Ctrl+Shift+Space · 검색 대상 전환(Ctrl 탭) · 설정(⚙) · 법령노트 SQLite.
+            ※ 관련법령 전수·별표 PDF 동봉은 라이브 수집 빌드에서 채웁니다.
+          files: 최종 프로그램 산출물/*
+          fail_on_unmatched_files: false

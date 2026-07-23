@@ -34,8 +34,16 @@ function flSeqOf(url) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function download(url, dest) {
-  const res = await fetch(url, { redirect: "follow" });
+async function download(url, dest, tries = 4) {
+  let res, lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      res = await fetch(url, { redirect: "follow" });
+      if (res.status >= 500 || res.status === 429) { lastErr = new Error(`HTTP ${res.status}`); await sleep(Math.min(500 * 2 ** i, 6000)); continue; }
+      break;
+    } catch (e) { lastErr = e; res = null; await sleep(Math.min(500 * 2 ** i, 6000)); }
+  }
+  if (!res) throw lastErr || new Error("fetch failed");
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   // 인증 실패는 HTML 안내페이지로 온다(수백 바이트). 파일이 아니면 버린다.

@@ -33,6 +33,34 @@ function requireOC() {
   return oc;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * fetch + 본문 텍스트. 법제처는 대량 호출에 연결을 끊거나(=Node "fetch failed") 5xx·429 를
+ * 주는데, 이건 일시적이라 재시도로 대부분 복구된다. 지수 백오프로 최대 5회.
+ */
+async function fetchTextRetry(url, tries = 5) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      // 5xx·429 는 일시적 → 재시도. 4xx(429 제외)는 재시도해도 소용없어 그대로 반환.
+      if (res.status >= 500 || res.status === 429) {
+        lastErr = new LawApiError(`HTTP ${res.status}`, { url: url.href, status: res.status });
+        await sleep(Math.min(500 * 2 ** i, 8000) + Math.random() * 300);
+        continue;
+      }
+      return { res, body: await res.text() };
+    } catch (e) {
+      // 네트워크 오류("fetch failed" 등) — 일시적 throttling 으로 보고 재시도.
+      lastErr = e;
+      await sleep(Math.min(500 * 2 ** i, 8000) + Math.random() * 300);
+    }
+  }
+  throw lastErr instanceof LawApiError ? lastErr
+    : new LawApiError(`네트워크 오류(재시도 ${tries}회 실패) — ${lastErr?.message || lastErr}`, { url: url.href });
+}
+
 /** JSON 응답을 받되, 법제처가 오류를 HTML/텍스트로 주는 경우를 구분해 알린다. */
 async function getJson(path, params) {
   const url = new URL(`${BASE}/${path}`);
@@ -42,8 +70,7 @@ async function getJson(path, params) {
     if (v != null) url.searchParams.set(k, String(v));
   }
 
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  const body = await res.text();
+  const { res, body } = await fetchTextRetry(url);
 
   if (!res.ok) {
     throw new LawApiError(`HTTP ${res.status} — ${path}`, { url: url.href, status: res.status, body: body.slice(0, 300) });

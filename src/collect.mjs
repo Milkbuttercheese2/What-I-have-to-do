@@ -56,7 +56,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 전수조사(법령 88 + 행정규칙 300여)는 순차로 받으면 오래 걸린다. 동시성을 제한한 풀로
 // 병렬 수집한다. 상한을 두는 이유는 법제처에 대한 예의 + 순간 폭주로 인한 차단 회피다.
 const concIdx = args.indexOf("--concurrency");
-const concurrency = concIdx >= 0 ? Math.max(1, Number(args[concIdx + 1]) || 1) : 6;
+// 법제처가 대량 동시호출에 연결을 끊는다(throttling). 4 정도가 병렬 이득과 안정의 균형.
+// (getJson 은 자체 재시도가 있어 일시 실패는 대부분 복구된다.)
+const concurrency = concIdx >= 0 ? Math.max(1, Number(args[concIdx + 1]) || 1) : 4;
 
 /** items 를 worker 로 처리하되 동시에 최대 limit 개만 진행한다. 입력 순서와 무관하게 완료. */
 async function mapPool(items, limit, worker) {
@@ -204,6 +206,7 @@ async function main() {
     }
   });
 
+  const attempted = documents.length + failures.length;
   const snapshot = {
     meta: {
       title: "조달 법령군 스냅샷 (법령 + 조달청 행정규칙 전수)",
@@ -212,6 +215,7 @@ async function main() {
       documents: documents.length,
       articles: documents.reduce((n, d) => n + d.articles.length, 0),
       annexes: documents.reduce((n, d) => n + (d.annexes?.length ?? 0), 0),
+      ...(failures.length ? { 수집실패: failures.length } : {}),
     },
     documents,
   };
@@ -221,8 +225,18 @@ async function main() {
   console.log(`\n수집 완료 → data/snapshot.json`);
   console.log(`  문서 ${snapshot.meta.documents} · 조문 ${snapshot.meta.articles} · 별표/서식 ${snapshot.meta.annexes}`);
   if (failures.length) {
-    console.log(`\n⚠️  실패 ${failures.length}건:`);
-    for (const f of failures) console.log(`  · ${f.name} — ${f.error}`);
+    console.log(`\n⚠️  실패 ${failures.length}/${attempted}건:`);
+    for (const f of failures.slice(0, 30)) console.log(`  · ${f.name} — ${f.error}`);
+    if (failures.length > 30) console.log(`  · … 외 ${failures.length - 30}건`);
+    writeFileSync(join(root, "data/collect-failures.json"), JSON.stringify(failures, null, 2));
+  }
+  // 부분 실패는 빌드를 막지 않는다 — 재시도 후에도 남은 소수 실패보다, 받은 대다수를 반영한
+  // 산출물이 낫다. 다만 전멸(0건)이나 절반 이상 실패는 근본 문제이므로 중단시킨다.
+  if (documents.length === 0) {
+    console.error("\n❌ 수집된 문서가 0건입니다 — OC/네트워크/스키마를 확인하세요.");
+    process.exitCode = 1;
+  } else if (failures.length > attempted * 0.5) {
+    console.error(`\n❌ 실패율이 과반(${failures.length}/${attempted})입니다 — throttling/네트워크 문제로 보고 중단합니다.`);
     process.exitCode = 1;
   }
 }

@@ -30,15 +30,14 @@ permissions:
 
 concurrency:
   group: build-desktop-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   # ── 1) 라이브 수집 + 빌드 (리눅스) ──────────────────────────────────────────
   collect:
     runs-on: ubuntu-latest
-    # LAW_OC 가 Environment 시크릿이면 그 Environment 를 지정해야 읽힌다.
-    # 리포지토리 Variables 에 BUILD_ENV=<환경이름> 을 넣으면 자동 적용된다(Repository 시크릿이면 비워둬도 됨).
-    environment: ${{ vars.BUILD_ENV }}
+    # LAW_OC 는 Environment '법' 의 시크릿이라, 그 Environment 를 지정해야 읽힌다.
+    environment: 법
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +54,7 @@ jobs:
             echo "::error::법제처 OC 시크릿이 비어 있습니다. 리포지토리 Settings → Secrets and variables → Actions 에 LAW_OC(또는 LAW_API_OC)를 등록하세요. Environment 시크릿이면 job 에 environment 를 지정해야 합니다."
             exit 1
           fi
-          node src/collect.mjs --concurrency 8
+          node src/collect.mjs --concurrency 4
 
       - name: 별표 원본 PDF 수집 (옵션)
         if: ${{ inputs.annexes != 'none' }}
@@ -105,11 +104,11 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Tauri CLI 설치
-        run: cargo install tauri-cli --version "^2" --locked
+      - name: Tauri CLI 설치 (npm prebuilt — cargo 컴파일 회피로 대폭 단축)
+        run: npm install -g @tauri-apps/cli@^2
 
-      - name: Tauri 빌드 (.exe/.msi)
-        run: cargo tauri build
+      - name: Tauri 빌드 (.exe)
+        run: tauri build
 
       - name: 산출물을 '최종 프로그램 산출물/' 로 모으기
         shell: pwsh

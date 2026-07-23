@@ -405,12 +405,15 @@
   .body.annexview{max-width:none}
   .annexview .pdfview{width:100%;height:min(78vh,960px);border:1px solid var(--line);
     border-radius:8px;background:#fff}
-  .annexview .novip{font-size:12.5px;color:var(--muted);background:var(--panel2);
-    border:1px dashed var(--line);border-radius:8px;padding:14px 16px;line-height:1.7}
-  .annexview .dlrow{display:flex;gap:8px;margin:12px 0}
+  .annexview .novip{font-size:13.5px;color:var(--text);background:var(--panel2);
+    border:1px dashed var(--line);border-radius:8px;padding:16px 18px;line-height:1.7}
+  .annexview .novip-sub{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.7}
+  .annexview .dlrow{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
   .annexview .dl{font-size:12px;color:var(--accent);text-decoration:none;
-    border:1px solid var(--line);border-radius:7px;padding:5px 12px}
+    border:1px solid var(--line);border-radius:7px;padding:6px 13px}
   .annexview .dl:hover{border-color:var(--accent);background:var(--hl)}
+  .annexview .dl.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+  .annexview .dl.primary:hover{filter:brightness(1.08)}
 
   /* ───────── 관계·미리보기 (오른쪽) ───────── */
   .rail{border-left:1px solid var(--line);background:var(--panel);
@@ -1064,7 +1067,8 @@ const ANNEX_AVAIL = new Set(/*__ANNEX_AVAIL__*/);
       // 별표(표)·별지(서식) 모두 원문 뷰어로만 보여준다. 罫線 텍스트 복원(파싱표)은
       // 굵은 罫線을 못 읽는 표가 많아 신뢰할 수 없어 화면에서 제거했다 — 원문이 진실이다.
       // (n.text 는 검색 색인용으로만 남는다. 화면엔 노출하지 않는다.)
-      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc});
+      // 원본 PDF 는 데스크톱 앱에만 동봉된다 — 앱일 때만 iframe, 브라우저는 법제처 링크 카드.
+      return AnnexView.render(n,{avail:ANNEX_AVAIL,esc,native:!!(window.__TAURI__)});
     }
     if(!n.text)return '<div class="body"><span style="color:var(--muted)">원문 없음</span></div>';
     // 화면에서만 계층 들여쓰기를 입힌다. 공백만 늘어나므로 인용 매칭은 영향이 없다
