@@ -285,6 +285,9 @@ pub fn show_capture_window(app: &AppHandle) {
     // "단축키가 안 먹는다"가 됐다. 뒤에 있으면 앞으로 끌어온다.
     if win.is_visible().unwrap_or(false) && win.is_focused().unwrap_or(false) {
         let _ = win.hide();
+        // v2.6.6: 이 경로에서는 웹뷰의 JS 가 돌지 않으므로, 화면을 비워 두라고 알려준다.
+        // (숨은 동안 비워 둬야 다음에 뜰 때 지난 검색어가 한 프레임 번쩍이지 않는다.)
+        let _ = app.emit_to("capture", "wmhh://capture-hidden", ());
         return;
     }
     if win.is_visible().unwrap_or(false) {
