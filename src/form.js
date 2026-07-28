@@ -43,7 +43,8 @@ const enabled = () => S.fields.filter(f=>f.on);
    - 마지막 저장본과 같아지면 임시저장분도 지운다(껍데기 누적 방지).
    설정(settings)은 자유 키/값 맵이라 Rust 스키마 변경 없이 얹을 수 있다. */
 const DRAFT_CAP=30;                      // 최근 N개만 보관 (설정 JSON 비대화 방지)
-let draftTimer=null, draftKey=null, baseline=null;
+const DRAFT_BUDGET=400_000;              // 초안 전체 상한(문자) — 넘으면 오래된 것부터 버린다
+let draftTimer=null, draftKey=null, baseline=null, lastWritten=null;
 
 function drafts(){
   const d=S.settings.formDrafts;
@@ -51,15 +52,23 @@ function drafts(){
   return S.settings.formDrafts;
 }
 function persistDrafts(){ window.SETTINGS=S.settings; STORE.saveSettings(S.settings); }
-/* 삭제된 항목의 잔여 초안 정리 + 최근 DRAFT_CAP개만 유지 */
-function pruneDrafts(){
+/* 삭제된 항목의 잔여 초안 정리 + 최근 DRAFT_CAP개 + 총량 상한 유지.
+   설정(settings)은 저장할 때마다 통째로 다시 쓰이는 테이블이라, 초안이 무한정 쌓이면
+   매 저장이 무거워진다. 지금 쓰고 있는 초안(keep)은 어떤 경우에도 버리지 않는다. */
+function pruneDrafts(keep){
   const d=drafts();
   for(const k of Object.keys(d)){
     if(k!=='new' && !S.items.some(x=>String(x.id)===k)) delete d[k];
   }
-  const keys=Object.keys(d);
-  if(keys.length>DRAFT_CAP)
-    keys.sort((a,b)=>(d[b]?.at||0)-(d[a]?.at||0)).slice(DRAFT_CAP).forEach(k=>delete d[k]);
+  const byNewest=()=>Object.keys(d).sort((a,b)=>(d[b]?.at||0)-(d[a]?.at||0));
+  let keys=byNewest();
+  if(keys.length>DRAFT_CAP) keys.slice(DRAFT_CAP).forEach(k=>{ if(k!==keep) delete d[k]; });
+  keys=byNewest();
+  while(keys.length>1 && JSON.stringify(d).length>DRAFT_BUDGET){
+    const oldest=keys.pop();
+    if(oldest===keep) break;              // 지금 쓰는 초안까지 버리지는 않는다
+    delete d[oldest];
+  }
 }
 function markDraft(at){
   const el=$('fm-draft'); if(!el) return;
@@ -74,12 +83,14 @@ export function saveDraftNow(){
   let d; try{ d=collectForm(); }catch{ return; }
   const store=drafts(), json=JSON.stringify(d);
   if(json===baseline){                              // 저장본과 동일 → 초안 불필요
-    if(store[draftKey]){ delete store[draftKey]; persistDrafts(); }
+    if(store[draftKey]){ delete store[draftKey]; lastWritten=null; persistDrafts(); }
     markDraft(0); return;
   }
+  if(json===lastWritten){ return; }                 // 내용이 그대로면 다시 쓰지 않는다(불필요한 설정 쓰기 방지)
   const at=Date.now();
   store[draftKey]={at, data:d};
-  pruneDrafts(); persistDrafts(); markDraft(at);
+  lastWritten=json;
+  pruneDrafts(draftKey); persistDrafts(); markDraft(at);
 }
 /* 양식이 '빈 상태'가 아닌가 — 새 양식 프리필(바로 입력 텍스트·프리셋) 판별용 */
 function hasContent(pre){
@@ -91,6 +102,7 @@ function scheduleDraft(){ clearTimeout(draftTimer); draftTimer=setTimeout(saveDr
 /* 임시저장분 폐기 — 최종 저장·되돌리기 공용 */
 function dropDraft(key){
   clearTimeout(draftTimer);
+  lastWritten=null;
   const d=drafts();
   if(key!=null && d[key]){ delete d[key]; persistDrafts(); }
   draftKey=null;                       // 이후 closeForm()의 플러시가 초안을 되살리지 않도록
@@ -102,6 +114,7 @@ export function openForm(pre){
   pre=pre||{};
   editingId=pre.id||null;
   draftKey = editingId ? String(editingId) : 'new';
+  lastWritten=null;
   fillForm(pre);
   baseline=JSON.stringify(collectForm());          // '마지막 저장본' 기준선
   /* 임시저장분이 있으면 그 내용으로 다시 채운다 (collectForm 결과 = openForm 입력 모양).

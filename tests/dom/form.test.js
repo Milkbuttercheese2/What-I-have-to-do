@@ -373,3 +373,32 @@ test('다른 양식으로 갈아탈 때 이전 양식의 임시저장을 먼저 
   assert.equal($('fm-memo').value, '미니 창에서 넘어온 새 메모');
   closeForm();
 });
+
+test('임시저장 안전장치: 내용이 그대로면 설정을 다시 쓰지 않는다', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '한 번만 쓰이면 된다';
+  input($('fm-memo')); mock.timers.tick(700); await env.flush();
+  const writes = env.invokeCalls.filter(c=>c.cmd==='save_settings').length;
+  input($('fm-memo')); mock.timers.tick(700); await env.flush();   // 같은 내용으로 다시 트리거
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_settings').length, writes);
+  closeForm();
+});
+
+test('임시저장 안전장치: 총량이 넘치면 오래된 초안부터 버리되 지금 쓰는 초안은 남긴다', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  const big = 'ㅁ'.repeat(120000);
+  S.items.push({...fullItem(), id: 9001}, {...fullItem(), id: 9002}, {...fullItem(), id: 9003});
+  S.settings.formDrafts = {
+    '9001': {at: 1, data:{memo:big}}, '9002': {at: 2, data:{memo:big}}, '9003': {at: 3, data:{memo:big}},
+  };
+  openForm(it);
+  $('fm-memo').value = big;
+  input($('fm-memo')); mock.timers.tick(700); await env.flush();
+  assert.ok(draftOf(it.id), '지금 쓰는 초안은 남는다');
+  assert.ok(JSON.stringify(S.settings.formDrafts).length <= 400000 + big.length, '총량이 상한 근처로 줄어든다');
+  assert.equal(draftOf(9001), undefined, '가장 오래된 초안부터 버려진다');
+  closeForm();
+});
