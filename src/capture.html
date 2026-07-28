@@ -65,7 +65,7 @@
  ::-webkit-scrollbar-thumb:hover{background:var(--cap-thumb-hover);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
  .cap-hit{font-size:13px;line-height:1.45;color:var(--cap-ink);padding:8px 11px;margin:1px 0;
    border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .cap-hit:hover{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
+ .cap-hit:hover,.cap-hit.sel{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}   /* .sel = 방향키 선택 (v2.6.4) */
  .cap-hit.done{color:var(--cap-muted)}
  .cap-empty{font-size:12.5px;color:var(--cap-muted);padding:12px}
  /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */

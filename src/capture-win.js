@@ -28,7 +28,7 @@ let cfg={theme:'light', capStart:'search', capSecond:'memo'};
 let ready=false;                            // 설정을 한 번이라도 받았는가
 
 const SCREEN_NAME={search:'내 업무 검색', memo:'빠른 메모', form:'양식 메모'};
-const HINT={search:'내 업무 검색', memo:'빠른 메모 · Ctrl+Enter 등록'};
+const HINT={search:'내 업무 검색 · ↑↓ 이동 · Enter 열기', memo:'빠른 메모 · Ctrl+Enter(또는 Ctrl+S) 등록'};
 /* 힌트줄 문구 — 배치(첫/둘째 화면)에 따라 'Alt 를 누르면 …' 부분이 달라진다 */
 function hintFor(m){
   const other = (m===cfg.capStart) ? cfg.capSecond : cfg.capStart;
@@ -47,6 +47,13 @@ export function applyCaptureConfig(c){
 /* 메인 창에 설정을 달라고 알린다 (부팅 직후·창이 다시 뜰 때마다) */
 function askConfig(){ window.__TAURI__.event.emitTo('main','wmhh://capture-hello',{}).catch(()=>{}); }
 let draftTimer=null, searchTimer=null, searchSeq=0;
+let selIdx=-1;                              // 검색 결과 선택 위치 (v2.6.4 방향키 이동)
+/* v2.6.4: 창이 막 뜬 직후의 blur 는 무시한다.
+   다른 앱(브라우저 등)이 뜨는 중에 단축키를 누르면, 창이 보이자마자 그 앱이 포커스를
+   가져가며 blur 가 날아온다 → 예전엔 그 blur 로 창을 곧장 숨겨서 "단축키를 눌렀는데
+   아무것도 안 뜬다 / 떴다가 사라진다"로 보였다. 뜬 직후 잠깐은 살려둔다. */
+let shownAt=0;
+const JUST_SHOWN_MS=450;
 
 const hideWin=()=>window.__TAURI__.window.getCurrentWindow().hide();   // 지연 접근 (테스트 하네스 제약)
 const invoke=(cmd,args)=>window.__TAURI__.core.invoke(cmd,args);
@@ -83,12 +90,46 @@ function setMode(m){
 async function runSearch(q){
   const seq=++searchSeq;
   const iw=$id('cap-items');
+  selIdx=-1;
   if(!q){ iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>'; return; }
   const items=await invoke('quick_search',{query:q}).catch(()=>[]);
   if(seq!==searchSeq) return;               // 그 사이 새 검색어 입력됨
   iw.innerHTML=items.length?items.map(h=>
     `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(h.memo||'(메모 없음)')}</span></div>`
   ).join(''):'<div class="cap-empty">일치하는 업무 없음</div>';
+  if(items.length) setSel(0);               // 첫 항목을 미리 골라둬 Enter 만 눌러도 열린다
+}
+
+/* ── 검색 결과 키보드 이동 (v2.6.4) ──────────────────────────────────────
+   ↑/↓ 로 고르고 Enter 로 연다. 선택은 화면(.sel)에만 있는 상태라 데이터와 무관하다. */
+function hits(){ return [...$id('cap-items').querySelectorAll('.cap-hit')]; }
+function setSel(i){
+  const list=hits(); if(!list.length){ selIdx=-1; return; }
+  selIdx=(i+list.length)%list.length;       // 끝에서 넘어가면 반대쪽으로 (순환)
+  list.forEach((el,n)=>el.classList.toggle('sel', n===selIdx));
+  const el=list[selIdx];
+  if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'});
+}
+function moveSel(d){ if(hits().length) setSel(selIdx<0 ? (d>0?0:-1) : selIdx+d); }
+function openSel(){
+  const el=hits()[selIdx]; if(!el) return false;
+  openItem(Number(el.dataset.item)); return true;
+}
+/* 업무 하나를 메인 창에서 열기 — 클릭·Enter 공용 */
+function openItem(id){
+  window.__TAURI__.event.emitTo('main','wmhh://open-item',{id}).catch(()=>{});
+  invoke('focus_main_window').catch(()=>{});
+  hideWin();
+}
+
+/* 빠른 메모 등록 — Ctrl+Enter / Ctrl+S 공용 (v2.6.4) */
+function submitMemo(){
+  const inp=$id('cap-inp');
+  const t=inp.value.trim(); if(!t){ hideWin(); return; }
+  window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
+  inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
+  submitting=true; document.body.classList.add('flash');
+  setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
 }
 
 export function initCaptureWin(){
@@ -108,21 +149,20 @@ export function initCaptureWin(){
   inp.addEventListener('keydown',e=>{
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
     if(e.key==='Escape'){ e.preventDefault(); sendDraft(inp.value); hideWin(); return; }   // 내용 유지!
-    /* 메인 바로 입력(form.js)과 동일: Ctrl(⌘)+Enter=등록, 맨 Enter=줄바꿈 */
-    if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){
-      e.preventDefault();
-      const t=inp.value.trim(); if(!t){ hideWin(); return; }
-      window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
-      inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
-      submitting=true; document.body.classList.add('flash');
-      setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
+    /* 메인 바로 입력(form.js)과 동일: Ctrl(⌘)+Enter=등록, 맨 Enter=줄바꿈.
+       v2.6.4: Ctrl+S 도 '저장' — 앱 전체에서 Ctrl+S=저장으로 통일한 규칙을 여기도 적용한다. */
+    if((e.key==='Enter'&&(e.ctrlKey||e.metaKey)) || ((e.key==='s'||e.key==='S')&&(e.ctrlKey||e.metaKey))){
+      e.preventDefault(); submitMemo();
     }
   });
 
   const searchInp=$id('cap-search');
   searchInp.addEventListener('keydown',e=>{
-    if(e.isComposing||e.keyCode===229) return;
+    if(e.isComposing||e.keyCode===229) return;   // 한글 조합 중에는 목록 조작·확정 금지
     if(e.key==='Escape'){ e.preventDefault(); hideWin(); return; }   // 다음에 열 때 어차피 검색 모드로 초기화
+    if(e.key==='ArrowDown'){ e.preventDefault(); moveSel(1); return; }
+    if(e.key==='ArrowUp'){ e.preventDefault(); moveSel(-1); return; }
+    if(e.key==='Enter'){ e.preventDefault(); openSel(); return; }
   });
   searchInp.addEventListener('input',()=>{
     clearTimeout(searchTimer);
@@ -143,19 +183,19 @@ export function initCaptureWin(){
   /* 검색 결과 클릭 — 업무를 메인 창에서 연다 */
   $id('cap-results').addEventListener('click',e=>{
     const ih=e.target.closest('[data-item]');
-    if(ih){
-      window.__TAURI__.event.emitTo('main','wmhh://open-item',{id:Number(ih.dataset.item)}).catch(()=>{});
-      invoke('focus_main_window').catch(()=>{});
-      hideWin(); return;
-    }
+    if(ih) openItem(Number(ih.dataset.item));
   });
 
   /* 포커스를 잃으면 숨김 — 초안은 유지 + 저장 플러시 */
   autoGrow(inp);   // 초기 높이(빈 상태 1줄) 세팅 — 첫 열 때 글자 배열 정상화
-  window.addEventListener('blur',()=>{ if(!submitting){ sendDraft(inp.value); hideWin(); } });
+  window.addEventListener('blur',()=>{
+    if(submitting) return;
+    if(Date.now()-shownAt < JUST_SHOWN_MS) return;   // 뜨자마자 온 blur = 다른 창이 포커스를 가져간 것
+    sendDraft(inp.value); hideWin();
+  });
   /* 창이 다시 뜨면(=focus) 항상 빈 검색 모드로 초기화 — 지난 검색어가 남아 있지 않게.
      메모 초안(textarea)은 건드리지 않는다: Alt 로 넘어가면 그대로 이어 쓴다. */
-  window.addEventListener('focus',()=>{ askConfig(); openFresh(); });
+  window.addEventListener('focus',()=>{ shownAt=Date.now(); askConfig(); openFresh(); });
   window.__TAURI__.event.listen('wmhh://capture-config', ev=>{
     const first = !ready; ready=true;
     applyCaptureConfig(ev.payload||{});
@@ -175,6 +215,7 @@ function openMainForm(){
 
 /* Ctrl+Alt+Space 로 열릴 때의 초기 상태: 입력칸을 비우고 설정된 첫 화면으로 */
 export function openFresh(){
+  shownAt=Date.now();
   $id('cap-search').value='';
   setMode(cfg.capStart==='memo'?'memo':'search');   // 'form' 이면 Rust 가 이 창을 안 띄운다(방어적으로 검색)
 }

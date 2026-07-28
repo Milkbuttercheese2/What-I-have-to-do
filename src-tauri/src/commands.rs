@@ -279,8 +279,16 @@ pub fn show_capture_window(app: &AppHandle) {
         return;
     }
     let Some(win) = app.get_webview_window("capture") else { return };
-    if win.is_visible().unwrap_or(false) {
+    // 토글: 이미 '보이고 포커스도 가진' 상태에서 다시 누르면 닫는다.
+    // v2.6.4: 예전엔 is_visible() 만 봤다 — 다른 앱(브라우저 등)이 뜨면서 포커스를 가져가
+    // 창이 뒤에 남아 있으면, 단축키를 눌러도 '이미 보임'으로 판정해 숨기기만 하고 끝나
+    // "단축키가 안 먹는다"가 됐다. 뒤에 있으면 앞으로 끌어온다.
+    if win.is_visible().unwrap_or(false) && win.is_focused().unwrap_or(false) {
         let _ = win.hide();
+        return;
+    }
+    if win.is_visible().unwrap_or(false) {
+        let _ = win.set_focus();
         return;
     }
     let monitor = app
