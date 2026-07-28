@@ -264,3 +264,32 @@ test('목록이 다시 그려져도 고른 항목을 유지한다 — 디바운�
     mock.timers.tick(250); await env.flush(5);
   }
 });
+
+test('감출 때 검색 화면을 미리 비운다 — 다음에 뜰 때 지난 검색어가 번쩍이지 않는다 (v2.6.6)', async () => {
+  reset();
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
+  openFresh();
+  env.onInvoke('quick_search', () => [{id:11, memo:'지난 결과', done:false}]);
+  searchInp.value = '지난 검색어';
+  searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(250); await env.flush(5);
+  assert.equal(env.document.querySelectorAll('.cap-hit').length, 1);
+  mock.timers.tick(500);                                   // 창이 뜬 직후 가드 지난 뒤
+  env.window.dispatchEvent(new env.window.Event('blur'));  // 다른 창으로 → 숨김
+  assert.equal(hides().length, 1);
+  assert.equal(searchInp.value, '', '숨는 순간 이미 비어 있다');
+  assert.equal(env.document.querySelectorAll('.cap-hit').length, 0);
+  assert.ok(body.classList.contains('search'));            // 첫 화면·창 높이까지 맞춰 둔다
+});
+
+test('Rust 토글로 숨은 경우에도 화면을 비운다 (capture-hidden, v2.6.6)', async () => {
+  reset();
+  openFresh();
+  env.onInvoke('quick_search', () => [{id:11, memo:'지난 결과', done:false}]);
+  searchInp.value = '지난 검색어';
+  searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(250); await env.flush(5);
+  env.fireEvent('wmhh://capture-hidden', {});
+  assert.equal(searchInp.value, '');
+  assert.equal(env.document.querySelectorAll('.cap-hit').length, 0);
+});

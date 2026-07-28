@@ -55,7 +55,21 @@ let selIdx=-1;                              // 검색 결과 선택 위치 (v2.6
 let shownAt=0;
 const JUST_SHOWN_MS=450;
 
-const hideWin=()=>window.__TAURI__.window.getCurrentWindow().hide();   // 지연 접근 (테스트 하네스 제약)
+/* 창을 감출 때 화면을 '미리' 비운다 (v2.6.6).
+   이 창은 닫히는 게 아니라 숨는 것뿐이라 DOM 이 그대로 남는다. 예전처럼 '다시 뜬 뒤에'
+   비우면, 뜨는 첫 프레임에 지난 검색어와 결과가 한 번 번쩍였다가 지워진다.
+   감출 때 비워 두면 다음에 뜰 때 처음부터 빈 화면이다. 메모 초안(textarea)은 건드리지 않는다. */
+function resetSearchUI(){
+  clearTimeout(searchTimer); searchSeq++;        // 진행 중이던 검색이 뒤늦게 그려지지 않게
+  const s=$id('cap-search'); if(s) s.value='';
+  selIdx=-1;
+  const iw=$id('cap-items'); if(iw) iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>';
+  setMode(cfg.capStart==='memo'?'memo':'search');  // 숨은 채로 첫 화면·창 높이까지 맞춰 둔다
+}
+const hideWin=()=>{                                   // 지연 접근 (테스트 하네스 제약)
+  resetSearchUI();
+  return window.__TAURI__.window.getCurrentWindow().hide();
+};
 const invoke=(cmd,args)=>window.__TAURI__.core.invoke(cmd,args);
 const $id=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -214,6 +228,8 @@ export function initCaptureWin(){
     t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   });
   window.__TAURI__.event.listen('wmhh://capture-shown', ()=>openFresh()).catch(()=>{});
+  /* Rust 가 토글로 창을 숨긴 경우(단축키 두 번) — 이때는 이 창의 JS 가 돌지 않으므로 알려준다 */
+  window.__TAURI__.event.listen('wmhh://capture-hidden', ()=>resetSearchUI()).catch(()=>{});
   window.__TAURI__.event.listen('wmhh://capture-config', ev=>{
     const first = !ready; ready=true;
     applyCaptureConfig(ev.payload||{});
