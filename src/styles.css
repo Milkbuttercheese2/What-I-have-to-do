@@ -33,6 +33,7 @@
     --focus-strong:#3f7d75;         /* 주 버튼 hover */
     --alt-btn:#1f2a33; --alt-btn-fg:#ffffff; --alt-btn-hover:#000000;   /* 양식 입력(짙은) 버튼 */
     --tab-on-bg:#e9efec;            /* 선택된 탭 */
+    --chip-bg:#f3f4f5;              /* 옅은 회색 면 — 보조 버튼·카운트 칩·탭 트랙 */
     --tag-imm-bg:#fbe3dd; --tag-imm-fg:#c0392b;   /* 임박 시각칩 */
     --tag-id-bg:#e9e4f2;  --tag-id-fg:#5b4a86;    /* 식별정보 태그 */
     --warn-border:#e0b9b4;
@@ -57,33 +58,40 @@
      한 단계 밝힌 값(#5fb3a7)을 쓰되 색상 자체는 라이트와 같은 계열을 유지한다. */
   html[data-theme="dark"]{
     color-scheme:dark;              /* 네이티브 스크롤바·날짜 피커도 어둡게 */
-    --ink:#e6e9ed; --ink-soft:#98a1ac;
-    --line:#333a43; --line-soft:#272d35;
-    --paper:#15181c; --card:#1e2128; --surface:#252a32;
-    --stage-inbox:#9aa1ab; --stage-today:#e08268; --stage-doing:#d6ac63; --stage-planned:#6cbba6;
-    --amber:#5fb3a7; --amber-bg:#1f3a37;
-    --slate:#5fb3a7; --slate-bg:#1f3a37;
-    --red:#ef7466;  --red-bg:#3a2320;
-    --green:#5fbb85; --green-bg:#1d3227;
-    --gray-bg:#2b313a; --gray-fg:#aab3bf;
+    /* v2.6.1 — 자매 앱 '어느 조항이었지'(Which-article-was-it)의 다크 팔레트를 그대로 물려받는다.
+       (그쪽 라이트 팔레트가 이미 이 앱 라이트를 참조하고 있어, 두 앱이 서로의 밝기 짝을 이룬다.)
+       핵심은 가시성: ① 면을 남색 계열 3단(#0f1420 배경 → #161c29 카드 → #1e2537 입력칸)으로
+       확실히 나눠 경계가 보이게, ② 보조 글자를 충분히 밝게(#aeb9cf), ③ 경계선을 또렷하게(#2b3346),
+       ④ 강조는 라이트와 같은 청록 계열(#5bb3a6). */
+    --ink:#e8ecf4; --ink-soft:#aeb9cf;
+    --line:#2b3346; --line-soft:#1c2333;
+    --paper:#0f1420; --card:#161c29; --surface:#1e2537;
+    --stage-inbox:#93a0b8; --stage-today:#f0876c; --stage-doing:#f6a94a; --stage-planned:#7fd6a0;
+    --amber:#5bb3a6; --amber-bg:#1d3a36;
+    --slate:#5bb3a6; --slate-bg:#1d3a36;
+    --red:#ff8071;  --red-bg:#3a2320;
+    --green:#7fd6a0; --green-bg:#1c3327;
+    --gray-bg:#232b3d; --gray-fg:#c2cbdd;
     --cal-due:#f08098; --cal-due-bg:#3a2029;
-    --cal-mid:#7fa9db; --cal-mid-bg:#1f2b3b;
-    --done:#8a94a1; --focus:#5fb3a7;
-    --icon-muted:#69727d;
-    --on-accent:#12171c;            /* 밝아진 강조색 위에는 어두운 글자가 더 또렷하다 */
-    --focus-strong:#6fc4b7;
-    --alt-btn:#2e3640; --alt-btn-fg:#e6e9ed; --alt-btn-hover:#3a4450;
-    --tab-on-bg:#243a37;
-    --tag-imm-bg:#43241f; --tag-imm-fg:#ff9b87;
-    --tag-id-bg:#2c2740;  --tag-id-fg:#b7a8e0;
+    --cal-mid:#5cc8ff; --cal-mid-bg:#17263a;
+    --done:#9aa6ba; --focus:#5bb3a6;
+    --icon-muted:#7c8798;
+    --on-accent:#0f1420;            /* 밝아진 강조색 위에는 어두운 글자가 또렷하다 */
+    --focus-strong:#74c7ba;
+    --alt-btn:#263049; --alt-btn-fg:#e8ecf4; --alt-btn-hover:#313d5c;
+    --tab-on-bg:#1d3a36;
+    --chip-bg:#1e2537;              /* 다크에서 --line-soft(#1c2333)는 카드와 구분이 안 돼 면 색을 따로 준다 */
+    --tag-imm-bg:#43241f; --tag-imm-fg:#ff9e8b;
+    --tag-id-bg:#2b2542;  --tag-id-fg:#c79bf0;
     --warn-border:#5e3630;
-    --cal-hover:#232830; --cal-other:#191d22; --cal-other-num:#5b636d;
-    --dash-bg:#20242b;
-    --toast-bg:#2b323b; --toast-fg:#f2f5fa; --toast-btn-border:#4a5461; --toast-btn-hover:#39424d;
-    --overlay:rgba(0,0,0,.6);
-    --focus-ring:rgba(95,179,167,.22);
-    --scroll-thumb:rgba(255,255,255,.16); --scroll-thumb-hover:rgba(255,255,255,.30);
+    --cal-hover:#1a2130; --cal-other:#121724; --cal-other-num:#6b7691;
+    --dash-bg:#1a2130;
+    --toast-bg:#1e2537; --toast-fg:#e8ecf4; --toast-btn-border:#3a465e; --toast-btn-hover:#2b3346;
+    --overlay:rgba(6,9,16,.62);
+    --focus-ring:rgba(91,179,166,.22);
+    --scroll-thumb:rgba(255,255,255,.18); --scroll-thumb-hover:rgba(255,255,255,.32);
   }
+
   /* Pretendard 가변 폰트 로컬 번들 (fonts/PretendardVariable.woff2, OFL 라이선스).
      이전엔 이름만 지정돼 있어 미설치 PC에선 맑은 고딕으로 폴백돼 화면이 다르게 보였다. */
   @font-face{
@@ -128,18 +136,18 @@
   .tb-btns{display:flex;height:100%}
   .tb-btn{width:46px;height:100%;border:none;background:none;cursor:pointer;font-size:13px;line-height:1;
     color:var(--ink-soft);border-radius:0;transition:background .12s,color .12s}
-  .tb-btn:hover{background:var(--line-soft);color:var(--ink)}
+  .tb-btn:hover{background:var(--chip-bg);color:var(--ink)}
   .tb-btn.tb-close:hover{background:#e81123;color:var(--on-accent)}   /* Windows 표준 닫기 hover 색 */
   header{padding:12px 28px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:34px;z-index:30}
   .header-inner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;width:auto;max-width:1460px;margin:0 auto}
   .brand{display:flex;align-items:baseline;gap:12px;flex:none}
   .brand h1{font-size:19px;font-weight:700;letter-spacing:-.02em}
   .brand .sub{font-size:12.5px;color:var(--ink-soft)}
-  nav.tabs{display:flex;gap:4px;background:var(--line-soft);padding:3px;border-radius:999px}
+  nav.tabs{display:flex;gap:4px;background:var(--chip-bg);padding:3px;border-radius:999px}
   .tab{font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 18px;border:none;border-radius:999px;background:transparent;color:var(--ink-soft);cursor:pointer}
   .tab.on{background:var(--tab-on-bg);color:var(--focus);box-shadow:none}
   .head-right{display:flex;align-items:center;gap:10px}
-  .btn-tool{font-size:12.5px;padding:7px 13px;background:var(--line-soft);color:var(--ink-soft)}
+  .btn-tool{font-size:12.5px;padding:7px 13px;background:var(--chip-bg);color:var(--ink-soft)}
   .btn-tool:hover{background:var(--line);color:var(--ink)}
   .clock{font-size:12.5px;color:var(--ink-soft);text-align:right;line-height:1.3}
   .clock .t{font-size:19px;color:var(--ink);font-weight:500}
@@ -202,7 +210,7 @@
   .set-lab{font-size:12.5px;color:var(--ink);min-width:0}
   .set-lab em{font-style:normal;font-size:11px;color:var(--ink-soft);margin-left:6px}
   /* 세그먼트 선택 — 헤더 탭과 같은 시각 언어(알약·청록 .on)를 그대로 쓴다 */
-  .seg{display:flex;gap:4px;background:var(--line-soft);padding:3px;border-radius:999px;flex:none}
+  .seg{display:flex;gap:4px;background:var(--chip-bg);padding:3px;border-radius:999px;flex:none}
   .seg-btn{font-family:inherit;font-size:12px;font-weight:600;padding:5px 14px;border:none;border-radius:999px;
     background:transparent;color:var(--ink-soft);cursor:pointer;white-space:nowrap}
   .seg-btn.on{background:var(--tab-on-bg);color:var(--focus)}
@@ -248,7 +256,7 @@
   .fsub-row input[type=text].sdone{text-decoration:line-through;color:var(--done)}
   .fsub-row input[type=datetime-local]{font-family:inherit;font-size:11px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink-soft)}
   .fsub-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
-  .fsub-add{font-size:11px;padding:4px 12px;background:var(--line-soft);color:var(--ink-soft);margin-top:4px}
+  .fsub-add{font-size:11px;padding:4px 12px;background:var(--chip-bg);color:var(--ink-soft);margin-top:4px}
   .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
   .fm-place{font-size:11px;color:var(--ink-soft);margin-right:auto}
   .fm-place b{color:var(--focus)}
@@ -256,7 +264,7 @@
   .fm-draft{font-size:11px;color:var(--ink-soft);margin-right:4px}
   .btn-ok{font-size:14px;padding:8px 22px;background:var(--focus);color:var(--on-accent)}
   .btn-ok:hover{background:var(--focus-strong)}
-  .btn-cancel{font-size:14px;padding:8px 16px;background:var(--line-soft);color:var(--ink-soft)}
+  .btn-cancel{font-size:14px;padding:8px 16px;background:var(--chip-bg);color:var(--ink-soft)}
 
   /* ---- 요약 스트립 ---- */
   .strip{display:flex;align-items:center;gap:8px;width:auto;max-width:1460px;margin:0 auto;padding:12px 28px 0;font-size:12.5px;flex-wrap:wrap}
@@ -284,7 +292,7 @@
   .dot-doing{background:var(--stage-doing)}
   .dot-planned{background:var(--stage-planned)}
   .col-head h2{font-size:14px;font-weight:600}
-  .col-head .count{margin-left:auto;font-size:12.5px;font-weight:600;padding:1px 9px;border-radius:9px;background:var(--line-soft);color:var(--ink-soft)}
+  .col-head .count{margin-left:auto;font-size:12.5px;font-weight:600;padding:1px 9px;border-radius:9px;background:var(--chip-bg);color:var(--ink-soft)}
   .col-desc{font-size:11px;color:var(--ink-soft);margin-bottom:12px;min-height:18px;line-height:1.45}
   .cards{display:flex;flex-direction:column;gap:8px;flex:1}
   .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:12px 13px 10px 15px;position:relative;transition:box-shadow .14s ease,transform .14s ease}
@@ -331,7 +339,7 @@
   #view-done.on{display:block}
   .done-head{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
   .done-head h2{font-size:19px;font-weight:700}
-  .done-cnt{font-size:14px;color:var(--done);background:var(--line-soft);padding:1px 10px;border-radius:9px;margin-left:4px;font-variant-numeric:tabular-nums}
+  .done-cnt{font-size:14px;color:var(--done);background:var(--chip-bg);padding:1px 10px;border-radius:9px;margin-left:4px;font-variant-numeric:tabular-nums}
   .done-tools{margin-left:auto;display:flex;gap:8px;align-items:center}
   #view-done .cards{gap:8px}
   #view-done .card{opacity:.92}
@@ -347,7 +355,7 @@
   .cal-legend span{display:flex;align-items:center;gap:4px}
   .lg{width:8px;height:8px;border-radius:4px;display:inline-block}
   .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
-  .cal-dow{font-size:11px;font-weight:600;color:var(--ink-soft);text-align:center;padding:8px 0;background:var(--line-soft);border-bottom:1px solid var(--line)}
+  .cal-dow{font-size:11px;font-weight:600;color:var(--ink-soft);text-align:center;padding:8px 0;background:var(--chip-bg);border-bottom:1px solid var(--line)}
   .cal-dow.sun{color:var(--red)}
   .cal-day{min-height:96px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);padding:6px 7px;cursor:pointer;position:relative;overflow:hidden;min-width:0}
   .cal-day:hover{background:var(--cal-hover)}
@@ -378,7 +386,7 @@
   .f-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-soft)}
   .f-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--focus);flex:none}
   .f-row .f-label{flex:1;font-size:14px}
-  .f-row .f-type{font-size:11px;color:var(--ink-soft);background:var(--line-soft);padding:1px 8px;border-radius:6px}
+  .f-row .f-type{font-size:11px;color:var(--ink-soft);background:var(--chip-bg);padding:1px 8px;border-radius:6px}
   .f-row .f-del{font-size:12.5px;color:var(--red);background:none;border:none;cursor:pointer;padding:2px 6px}
   .f-add{display:flex;gap:8px;margin-top:12px}
   .f-add input{flex:1;font-family:inherit;font-size:12.5px;padding:8px 10px;border:1px solid var(--line);border-radius:6px}
@@ -446,7 +454,7 @@
   .alarm .a-item b{color:var(--red);font-size:11px;margin-right:6px}
   .alarm .a-item .num{font-size:11px;color:var(--ink-soft);margin-left:6px}
   .a-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-  .btn-snooze{font-size:12.5px;padding:8px 16px;background:var(--line-soft);color:var(--ink-soft)}
+  .btn-snooze{font-size:12.5px;padding:8px 16px;background:var(--chip-bg);color:var(--ink-soft)}
 
   footer{text-align:center;font-size:11px;color:var(--ink-soft);padding:12px;border-top:1px solid var(--line);background:var(--card)}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);z-index:200;display:flex;align-items:center;gap:14px;background:var(--toast-bg);color:var(--toast-fg);font-size:12.5px;padding:11px 16px;border-radius:9px;box-shadow:0 8px 30px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}

@@ -17,11 +17,12 @@
     capture-win.js 가 body 클래스로 적용한다. 메인 창의 다크 팔레트와 같은 계열
     (#1e2128 면 / 청록 강조)이라 두 창이 한 시스템처럼 보인다. */
  :root{
-   --cap-panel:#1e2128; --cap-border:#2c313b; --cap-ink:#f2f5fa; --cap-muted:#8b95a7;
-   --cap-sep:rgba(255,255,255,.08); --cap-hit-bg:#173f3a; --cap-hit-fg:#4fe0c8;
-   --cap-tag-on-bg:#153f39; --cap-tag-on-fg:#54e2ca; --cap-tag-off-bg:#2b3039; --cap-tag-off-fg:#8b95a7;
-   --cap-flash:#3dd7bf; --cap-hint:#727d91;
-   --cap-thumb:rgba(255,255,255,.16); --cap-thumb-hover:rgba(255,255,255,.32);
+   /* v2.6.1: 메인 다크와 같은 팔레트(자매 앱 '어느 조항이었지' 정책) — 남색 면 + 밝은 회청색 글자 */
+   --cap-panel:#161c29; --cap-border:#2b3346; --cap-ink:#e8ecf4; --cap-muted:#aeb9cf;
+   --cap-sep:rgba(255,255,255,.10); --cap-hit-bg:#1d3a36; --cap-hit-fg:#7fd0c3;
+   --cap-tag-on-bg:#1d3a36; --cap-tag-on-fg:#7fd0c3; --cap-tag-off-bg:#1e2537; --cap-tag-off-fg:#93a0b8;
+   --cap-flash:#7fd0c3; --cap-hint:#93a0b8;
+   --cap-thumb:rgba(255,255,255,.18); --cap-thumb-hover:rgba(255,255,255,.32);
  }
  body.light{
    --cap-panel:#ffffff; --cap-border:#eceef0; --cap-ink:#1f2a33; --cap-muted:#68717c;
