@@ -7,6 +7,8 @@
 <!-- 외부(인터넷) 리소스 금지: 내부망(air-gapped) 배포 대상이므로 폰트도
      시스템 폰트만 사용한다. SheetJS를 인라인해둔 것과 같은 이유. -->
 <link rel="stylesheet" href="styles.css">
+<!-- 첫 페인트 테마(깜빡임 방지) — 캐시일 뿐, 진짜 설정은 로드 후 applyTheme()이 덮어쓴다 -->
+<script src="theme-boot.js"></script>
 </head>
 <body>
 

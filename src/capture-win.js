@@ -88,6 +88,13 @@ async function runSearch(q){
 }
 
 export function initCaptureWin(){
+  /* 구성(capture-config)이 도착하기 전 한 프레임: 지난번 값 캐시로 그려 깜빡임을 없앤다.
+     진실은 메인 창이 내려주는 값이고, 도착하면 그걸로 덮어쓴다(theme.js cacheForBoot). */
+  try{
+    applyCaptureConfig({capTheme:localStorage.getItem('wmhhCapTheme')||'dark',
+                        capStart:localStorage.getItem('wmhhCapStart')||'search',
+                        capSubmit:localStorage.getItem('wmhhCapSubmit')||'inbox'});
+  }catch{}
   const inp=$id('cap-inp');
   inp.addEventListener('input',()=>{
     autoGrow(inp);

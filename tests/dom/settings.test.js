@@ -82,3 +82,15 @@ test('syncSettings: 저장값이 깨져 있어도 기본값 쪽이 켜진다', a
   assert.ok(segBtn('segCapSubmit','inbox').classList.contains('on'));
   closeSettings();
 });
+
+test('부팅 캐시(v2.6.2): 선택 즉시 localStorage 에 반영 — 다음 실행 첫 페인트용', async () => {
+  await env.resetS(); S.loaded = true;
+  openSettings();
+  click(segBtn('segTheme','dark'));
+  click(segBtn('segCapTheme','light'));
+  click(segBtn('segCapStart','memo'));
+  assert.equal(env.window.localStorage.getItem('wmhhTheme'), 'dark');
+  assert.equal(env.window.localStorage.getItem('wmhhCapTheme'), 'light');
+  assert.equal(env.window.localStorage.getItem('wmhhCapStart'), 'memo');
+  closeSettings();
+});

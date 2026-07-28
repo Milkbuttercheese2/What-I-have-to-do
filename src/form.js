@@ -98,6 +98,7 @@ function dropDraft(key){
 }
 
 export function openForm(pre){
+  saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
   pre=pre||{};
   editingId=pre.id||null;
   draftKey = editingId ? String(editingId) : 'new';

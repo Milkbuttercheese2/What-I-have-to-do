@@ -360,3 +360,16 @@ test('새 양식을 채워진 채로 열면(바로 입력·프리셋) 남은 초
   assert.equal(draftOf('new'), undefined);           // 선택에 따라 초안 폐기
   closeForm(); await env.flush();
 });
+
+test('다른 양식으로 갈아탈 때 이전 양식의 임시저장을 먼저 확정한다 (미니 창 → 양식 열기)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '쓰다 만 채로 다른 양식이 열림';
+  input($('fm-memo'));
+  openForm({memo:'미니 창에서 넘어온 새 메모'});     // 디바운스 대기 없이 곧바로 전환
+  await env.flush();
+  assert.equal(draftOf(it.id).data.memo, '쓰다 만 채로 다른 양식이 열림');   // 잃지 않는다
+  assert.equal($('fm-memo').value, '미니 창에서 넘어온 새 메모');
+  closeForm();
+});
