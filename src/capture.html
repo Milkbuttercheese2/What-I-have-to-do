@@ -40,6 +40,7 @@
  #cap-shell{flex:1;display:flex;flex-direction:column;min-height:0;
    background:var(--cap-panel);border:1px solid var(--cap-border);border-radius:18px;overflow:hidden}
  #cap-bar{display:flex;align-items:center;flex:1;min-height:56px}
+ body.search #cap-bar,body.search #cap-hint{flex:none}   /* 검색칸·힌트는 상단 고정, 목록만 스크롤 */
  body.search #cap-bar{flex:none}
  /* v2.5.1: font 축약형에 inherit(전역 키워드)를 섞으면 선언 전체가 무효 처리돼
     입력창이 브라우저 기본 폼 폰트로 렌더되던 버그 — 롱핸드로 분리(파일 전체 동일). */
@@ -51,10 +52,12 @@
  #cap-inp::placeholder,#cap-search::placeholder{color:var(--cap-muted)}
  #cap-results{display:none;flex:1;min-height:0;flex-direction:column;
    border-top:1px solid var(--cap-sep)}
- .cap-col{flex:1;display:flex;flex-direction:column;min-width:0}
+ /* v2.6.8: min-height:0 이 없으면 flex 자식이 내용만큼 늘어나 '스크롤되는 목록'이 아니라
+    '길어지는 목록'이 된다 → 검색칸이 위로 밀리고 휠도 안 먹는다(§7-A 와 같은 이유, 세로판). */
+ .cap-col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
  .cap-col-h{flex:none;font-weight:600;font-size:11px;color:var(--cap-muted);
    padding:10px 16px 6px;letter-spacing:.04em}
- .cap-list{flex:1;overflow-y:auto;padding:0 8px 10px}
+ .cap-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 8px 10px}
  /* v2.5.3 스크롤바 — 검정 패널에 맞춘 유리 썸(트랙 없음·둥근 캡슐), 안 쓸 때 숨김.
     메모 입력칸(textarea)·검색 목록 모두 동일 적용 (창 전역 규칙). */
  ::-webkit-scrollbar{width:9px;height:9px}
@@ -65,7 +68,10 @@
  ::-webkit-scrollbar-thumb:hover{background:var(--cap-thumb-hover);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
  .cap-hit{font-size:13px;line-height:1.45;color:var(--cap-ink);padding:8px 11px;margin:1px 0;
    border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .cap-hit:hover,.cap-hit.sel{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}   /* .sel = 방향키 선택 (v2.6.4) */
+ /* v2.6.7: hover 는 body.mouse 일 때만 — 창이 커서 밑에 뜨면 그 자리의 줄이 곧바로 :hover 가 되고,
+    마우스를 안 움직이니 엉뚱한 줄이 계속 켜져 있는 것처럼 보였다. 마우스를 실제로 움직이면
+    켜지고, 키보드를 쓰기 시작하면 다시 꺼진다(선택 .sel 은 키보드 전용 표시). */
+ body.mouse .cap-hit:hover,.cap-hit.sel{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
  .cap-hit.done{color:var(--cap-muted)}
  .cap-empty{font-size:12.5px;color:var(--cap-muted);padding:12px}
  /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
