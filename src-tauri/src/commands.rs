@@ -304,6 +304,10 @@ pub fn show_capture_window(app: &AppHandle) {
     }
     let _ = win.show();
     let _ = win.set_focus();
+    // v2.6.5: '새로 떴다'를 알려 프런트가 화면을 초기화하게 한다(검색어 비우고 첫 화면으로).
+    // 웹뷰의 focus 이벤트로 하면, 창을 띄워둔 채 다른 창을 보고 돌아올 때도 초기화돼
+    // 치던 검색어가 사라진다 — 초기화 시점은 '표시'뿐이라는 걸 여기서만 정한다.
+    let _ = app.emit_to("capture", "wmhh://capture-shown", ());
 }
 
 fn capture_hotkey_handler(app: &AppHandle, _sc: &Shortcut, ev: ShortcutEvent) {
