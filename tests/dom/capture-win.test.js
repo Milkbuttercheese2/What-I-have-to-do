@@ -90,6 +90,44 @@ test('Ctrl+Enter 등록 시 초안을 빈 값으로 플러시 (재시작 중복 
 
 /* (v2.5.5) 'Ctrl 단독 → open_main_maximized' 기능 제거 — 관련 테스트 삭제 */
 
+/* v2.5.21: 기본 모드 = 검색, Alt 로 빠른 메모. placeholder 대신 힌트줄 안내 */
+const searchInp = env.document.getElementById('cap-search');
+const hint = env.document.getElementById('cap-hint');
+const alt = () => env.document.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Alt', bubbles:true, cancelable:true}));
+
+test('창을 열면 검색 모드로 시작한다 (메모칸은 감춰짐)', () => {
+  assert.ok(body.classList.contains('search'));
+  assert.equal(inp.style.display, 'none');
+  assert.equal(searchInp.style.display, '');
+  assert.match(hint.textContent, /검색/);
+});
+
+test('Alt: 빠른 메모 모드로 전환 → 다시 Alt 로 검색 모드', () => {
+  alt();
+  assert.equal(body.classList.contains('search'), false);
+  assert.equal(inp.style.display, '');
+  assert.match(hint.textContent, /빠른 메모/);
+  alt();
+  assert.ok(body.classList.contains('search'));
+});
+
+test('입력칸에는 placeholder 를 두지 않는다 (빈 칸의 회색 문구 오해 방지)', () => {
+  assert.equal(inp.getAttribute('placeholder'), null);
+  assert.equal(searchInp.getAttribute('placeholder'), null);
+});
+
+test('다시 열리면(focus) 검색어를 비운 검색 모드로 초기화 — 메모 초안은 유지', () => {
+  reset();
+  inp.value = '이어서 쓸 메모';
+  searchInp.value = '지난 검색어';
+  alt();                                            // 메모 모드로 이동한 상태에서
+  assert.equal(body.classList.contains('search'), false);
+  env.window.dispatchEvent(new env.window.Event('focus'));
+  assert.ok(body.classList.contains('search'));
+  assert.equal(searchInp.value, '');
+  assert.equal(inp.value, '이어서 쓸 메모');
+});
+
 test('입력 시 초안이 디바운스 후 전송된다', () => {
   reset();
   inp.value = '타이핑 중';

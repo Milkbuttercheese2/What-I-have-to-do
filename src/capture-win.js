@@ -5,15 +5,21 @@
    저장도 직접 하지 않는다 — 메모 텍스트를 이벤트로 메인 창에 던지면
    메인 창의 captureMemo()가 F1 로드 게이트·저장 큐를 그대로 태운다.
 
-   v2.4.0 동작:
-   - 메모 모드(기본): Ctrl+Enter 등록, Esc/blur = 숨김만 (내용은 절대 안 지움 —
+   동작 (v2.5.21에서 기본 모드가 검색으로 바뀜 — 소유자 지정):
+   - 검색 모드(기본): 창을 열 때마다 검색칸이 빈 상태로 뜬다. 내 업무(quick_search)를
+     검색해 클릭하면 메인 창에서 열린다.
+   - Alt: 빠른 메모 모드 토글. Ctrl+Enter 등록, Esc/blur = 숨김만 (내용은 절대 안 지움 —
      지우는 건 사용자 몫). 입력할 때마다 초안을 메인 창으로 흘려보내
      settings.captureDraft로 저장 → 앱이 꺼져도 다음 실행 때 분류 대기로 자동 등록.
-   - Alt: 검색 모드 토글 (Spotlight식). 내 업무(quick_search)를 검색해
-     클릭하면 메인 창에서 열린다. 메모 초안은 별도 입력칸이라 검색해도 남는다.
+     메모 초안은 별도 입력칸이라 검색 모드로 오가도 남는다.
+   - 입력칸에 placeholder를 두지 않는다(v2.5.21): 빈 칸의 회색 문구를 실제 글자로 오해해
+     "그 단어 뒤로 커서가 안 간다"는 혼선이 있었다. 안내는 아래 힌트줄(#cap-hint)이 맡는다.
    ========================================================================= */
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
-let mode='memo';                            // 'memo' | 'search'
+let mode='memo';                            // 'memo' | 'search' (init에서 'search'로 진입)
+
+const HINT={search:'내 업무 검색 · Alt 를 누르면 빠른 메모',
+            memo:'빠른 메모 · Ctrl+Enter 등록 · Alt 를 누르면 검색'};
 let draftTimer=null, searchTimer=null, searchSeq=0;
 
 const hideWin=()=>window.__TAURI__.window.getCurrentWindow().hide();   // 지연 접근 (테스트 하네스 제약)
@@ -41,6 +47,7 @@ function setMode(m){
   $id('cap-inp').style.display=search?'none':'';
   $id('cap-search').style.display=search?'':'none';
   $id('cap-results').style.display=search?'flex':'none';
+  $id('cap-hint').textContent=HINT[search?'search':'memo'];
   invoke('resize_capture',{height:search?406:126}).catch(()=>{});   // 메모 모드 = 낮은 바, 검색 모드 = 목록 높이
   const t=search?$id('cap-search'):$id('cap-inp');
   t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
@@ -82,7 +89,7 @@ export function initCaptureWin(){
   const searchInp=$id('cap-search');
   searchInp.addEventListener('keydown',e=>{
     if(e.isComposing||e.keyCode===229) return;
-    if(e.key==='Escape'){ e.preventDefault(); setMode('memo'); hideWin(); return; }
+    if(e.key==='Escape'){ e.preventDefault(); hideWin(); return; }   // 다음에 열 때 어차피 검색 모드로 초기화
   });
   searchInp.addEventListener('input',()=>{
     clearTimeout(searchTimer);
@@ -109,9 +116,14 @@ export function initCaptureWin(){
   /* 포커스를 잃으면 숨김 — 초안은 유지 + 저장 플러시 */
   autoGrow(inp);   // 초기 높이(빈 상태 1줄) 세팅 — 첫 열 때 글자 배열 정상화
   window.addEventListener('blur',()=>{ if(!submitting){ sendDraft(inp.value); hideWin(); } });
-  window.addEventListener('focus',()=>{
-    const t=mode==='search'?searchInp:inp;
-    t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
-  });
-  inp.focus();
+  /* 창이 다시 뜨면(=focus) 항상 빈 검색 모드로 초기화 — 지난 검색어가 남아 있지 않게.
+     메모 초안(textarea)은 건드리지 않는다: Alt 로 넘어가면 그대로 이어 쓴다. */
+  window.addEventListener('focus',()=>openFresh());
+  openFresh();
+}
+
+/* Ctrl+Alt+Space 로 열릴 때의 초기 상태: 검색어 비운 검색 모드 */
+function openFresh(){
+  $id('cap-search').value='';
+  setMode('search');
 }

@@ -6,7 +6,9 @@
 <!-- 미니 캡처 창 전용 페이지. 메인 앱 모듈 그래프와 완전히 독립 —
      store.js 등을 끌어오면 이 웹뷰에서도 최상위 부작용이 실행된다.
      외부(인터넷) 리소스 금지: 내부망(air-gapped) 배포 대상.
-     v2.4.0: 메모 모드(기본) + Alt로 내 업무 검색 모드 전환.
+     v2.5.21: 검색 모드(기본, 창을 열 때마다 새로) + Alt로 빠른 메모 모드 전환.
+     입력칸 placeholder 는 두지 않는다 — 빈 입력칸에 뜬 회색 문구를 실제 글자로
+     오해해 "그 단어 뒤로 커서가 안 간다"는 혼선이 있었다. 안내는 아래 힌트줄(#cap-hint).
      스타일: 창은 transparent(tauri.conf) + 둥근 검정 패널(스포트라이트풍, 그림자 없음).
      폰트는 앱과 통일(Pretendard/맑은 고딕), 글씨크기는 입력·검색·검색결과 모두 14px. -->
 <style>
@@ -47,8 +49,8 @@
  .cap-hit:hover{background:#173f3a;color:#4fe0c8}
  .cap-hit.done{color:#8b95a7}
  .cap-empty{font-size:12.5px;color:#8b95a7;padding:12px}
- #cap-hint{flex:none;font-size:11px;color:#727d91;padding:2px 16px 10px;display:none}
- body.search #cap-hint{display:none}
+ /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
+ #cap-hint{flex:none;font-size:11px;color:#727d91;padding:2px 18px 10px}
  #cap-flash{display:none;align-items:center;justify-content:center;flex:1;gap:7px;
    color:#3dd7bf;font-weight:600;font-size:15px}
  body.flash #cap-bar,body.flash #cap-results,body.flash #cap-hint{display:none}
@@ -62,16 +64,18 @@
  .cap-hit.done .cap-hit-txt{color:#8b95a7}
 </style>
 </head>
-<body>
+<!-- v2.5.21: 검색 모드가 기본이라 초기 마크업도 검색 모드로 둔다(JS 실행 전 깜빡임 방지) -->
+<body class="search">
 <div id="cap-shell">
   <div id="cap-bar">
-    <textarea id="cap-inp" rows="1" maxlength="50000" placeholder="빠른 메모 · Alt 검색"></textarea>
-    <input id="cap-search" placeholder="검색" style="display:none" autocomplete="off">
+    <textarea id="cap-inp" rows="1" maxlength="50000" style="display:none"></textarea>
+    <input id="cap-search" autocomplete="off">
   </div>
-  <div id="cap-results">
+  <!-- 힌트줄은 입력칸 바로 아래 (검색 모드에서 목록 위) — placeholder 자리를 대신하므로 -->
+  <div id="cap-hint">내 업무 검색 · Alt 를 누르면 빠른 메모</div>
+  <div id="cap-results" style="display:flex">
     <div class="cap-col"><div class="cap-col-h">내 업무</div><div class="cap-list" id="cap-items"></div></div>
   </div>
-  <div id="cap-hint">업무 클릭 = 메인 창에서 열기</div>
   <div id="cap-flash">등록됨</div>
 </div>
 <script type="module" src="capture-boot.js"></script>
