@@ -118,16 +118,24 @@ test('입력칸에는 placeholder 를 두지 않는다 (빈 칸의 회색 문구
   assert.equal(searchInp.getAttribute('placeholder'), null);
 });
 
-test('다시 열리면(focus) 검색어를 비운 검색 모드로 초기화 — 메모 초안은 유지', () => {
+test('단축키로 새로 뜨면(capture-shown) 검색어를 비운 첫 화면으로 초기화 — 메모 초안은 유지', () => {
   reset();
   inp.value = '이어서 쓸 메모';
   searchInp.value = '지난 검색어';
   alt();                                            // 메모 모드로 이동한 상태에서
   assert.equal(body.classList.contains('search'), false);
-  env.window.dispatchEvent(new env.window.Event('focus'));
+  env.fireEvent('wmhh://capture-shown', {});        // Rust 가 창을 띄우며 보내는 신호
   assert.ok(body.classList.contains('search'));
   assert.equal(searchInp.value, '');
   assert.equal(inp.value, '이어서 쓸 메모');
+});
+
+test('포커스만 돌아온 경우에는 초기화하지 않는다 — 치던 검색어가 살아 있다 (v2.6.5)', () => {
+  reset();
+  searchInp.value = '쓰던 검색어';
+  env.window.dispatchEvent(new env.window.Event('focus'));   // 다른 창 보고 돌아옴
+  assert.equal(searchInp.value, '쓰던 검색어');
+  assert.ok(body.classList.contains('search'));
 });
 
 test('입력 시 초안이 디바운스 후 전송된다', () => {
@@ -233,4 +241,26 @@ test('빠른 메모: Ctrl+S 로도 등록된다 (v2.6.4)', () => {
   assert.ok(body.classList.contains('flash'));
   mock.timers.tick(400);
   applyCaptureConfig({capStart:'search', capSecond:'memo'});
+});
+
+test('목록이 다시 그려져도 고른 항목을 유지한다 — 디바운스가 뒤늦게 터져도 제자리로 안 돌아간다 (v2.6.5)', async () => {
+  reset();
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
+  openFresh();
+  env.onInvoke('quick_search', () => [{id:11, memo:'첫째', done:false},
+                                      {id:22, memo:'둘째', done:false},
+                                      {id:33, memo:'셋째', done:false}]);
+  searchInp.value = '메모';
+  searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(250); await env.flush(5);
+  const hitEls = () => [...env.document.querySelectorAll('.cap-hit')];
+  const key2 = init => searchInp.dispatchEvent(new env.window.KeyboardEvent('keydown', Object.assign({bubbles:true, cancelable:true}, init)));
+  key2({key:'ArrowDown'}); key2({key:'ArrowDown'});
+  assert.ok(hitEls()[2].classList.contains('sel'));          // 셋째를 골라둔 상태
+  await runSearchAgain();                                     // 같은 검색어로 목록 재생성
+  assert.ok(hitEls()[2].classList.contains('sel'), '고른 자리를 그대로 이어간다');
+  async function runSearchAgain(){
+    searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+    mock.timers.tick(250); await env.flush(5);
+  }
 });

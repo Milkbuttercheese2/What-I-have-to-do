@@ -90,6 +90,11 @@ function setMode(m){
 async function runSearch(q){
   const seq=++searchSeq;
   const iw=$id('cap-items');
+  /* v2.6.5: 다시 그리기 전에 '지금 고른 업무'를 id 로 기억해 둔다.
+     검색어를 치자마자 ↓ 를 누르면 250ms 디바운스가 뒤늦게 터지며 목록을 다시 그리는데,
+     예전엔 그때 선택이 0 번으로 되돌아가 "내리다가 제자리로 돌아오는" 것처럼 보였다.
+     같은 업무가 새 목록에도 있으면 그 자리를 그대로 이어간다. */
+  const keepId=selectedId();
   selIdx=-1;
   if(!q){ iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>'; return; }
   const items=await invoke('quick_search',{query:q}).catch(()=>[]);
@@ -97,12 +102,16 @@ async function runSearch(q){
   iw.innerHTML=items.length?items.map(h=>
     `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(h.memo||'(메모 없음)')}</span></div>`
   ).join(''):'<div class="cap-empty">일치하는 업무 없음</div>';
-  if(items.length) setSel(0);               // 첫 항목을 미리 골라둬 Enter 만 눌러도 열린다
+  if(!items.length) return;
+  const back=keepId==null?-1:items.findIndex(h=>h.id===keepId);
+  setSel(back>=0?back:0);                   // 고른 게 남아 있으면 그 자리, 아니면 첫 항목
 }
 
 /* ── 검색 결과 키보드 이동 (v2.6.4) ──────────────────────────────────────
    ↑/↓ 로 고르고 Enter 로 연다. 선택은 화면(.sel)에만 있는 상태라 데이터와 무관하다. */
 function hits(){ return [...$id('cap-items').querySelectorAll('.cap-hit')]; }
+/* 지금 고른 업무의 id (없으면 null) — 목록을 다시 그려도 선택을 이어가기 위한 열쇠 */
+function selectedId(){ const el=hits()[selIdx]; return el?Number(el.dataset.item):null; }
 function setSel(i){
   const list=hits(); if(!list.length){ selIdx=-1; return; }
   selIdx=(i+list.length)%list.length;       // 끝에서 넘어가면 반대쪽으로 (순환)
@@ -195,7 +204,16 @@ export function initCaptureWin(){
   });
   /* 창이 다시 뜨면(=focus) 항상 빈 검색 모드로 초기화 — 지난 검색어가 남아 있지 않게.
      메모 초안(textarea)은 건드리지 않는다: Alt 로 넘어가면 그대로 이어 쓴다. */
-  window.addEventListener('focus',()=>{ shownAt=Date.now(); askConfig(); openFresh(); });
+  /* v2.6.5: 포커스가 돌아온 것만으로는 화면을 초기화하지 않는다.
+     예전엔 focus 마다 openFresh() 를 불러, 창을 띄워둔 채 잠깐 다른 창을 보고 돌아오면
+     치던 검색어가 지워지고 검색 모드로 되돌아갔다. 초기화는 단축키로 '새로 뜰 때'만
+     (Rust show_capture_window → wmhh://capture-shown). 여기서는 구성 갱신과 포커스 복구만. */
+  window.addEventListener('focus',()=>{
+    shownAt=Date.now(); askConfig();
+    const t=(mode==='search')?$id('cap-search'):$id('cap-inp');
+    t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
+  });
+  window.__TAURI__.event.listen('wmhh://capture-shown', ()=>openFresh()).catch(()=>{});
   window.__TAURI__.event.listen('wmhh://capture-config', ev=>{
     const first = !ready; ready=true;
     applyCaptureConfig(ev.payload||{});
