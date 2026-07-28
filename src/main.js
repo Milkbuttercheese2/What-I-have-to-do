@@ -8,7 +8,7 @@ import {S, reconcileCore, migrateItem} from './state.js';
 import {STORE} from './store.js';
 import {$, initToast} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
-import {initForm, closeForm} from './form.js';
+import {initForm, closeForm, toInbox} from './form.js';
 import {initPresets, renderPresets} from './presets.js';
 import {initRender, render, renderDone} from './render.js';
 import {initCalendar, renderCal} from './calendar.js';
@@ -87,6 +87,9 @@ document.addEventListener('keydown',e=>{
     if($('formPanel').classList.contains('on')){ $('fm-save').click(); }
     else if($('recurModal').classList.contains('on')){ $('rc-save').click(); }
     else if($('presetModal').classList.contains('on')){ $('np-save').click(); }
+    /* v2.6.4: 바로 입력칸에 쓰는 중이면 그 메모를 등록한다 — 커서가 그 칸에 있는데
+       Ctrl+S 가 백업 파일 대화상자를 띄우면 '저장'이라는 말과 어긋난다. */
+    else if(document.activeElement===$('inp') && $('inp').value.trim()){ toInbox(); }
     else { $('bkExp').click(); }
   }
 });
@@ -130,10 +133,14 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     /* 보드 모드 복원 (v2.5.0) — 저장된 boardMode 반영 후 아래 render()가 그린다 */
     const bm = S.settings.boardMode==='owner' ? 'owner' : 'time';
     setPlaceMode(bm); syncBoardModeSel(bm);
-    /* 화면 크기 복원 (v2.6.0) — 확대는 렌더와 무관(zoom)하므로 여기서 한 번만 */
-    applyUiScale(S.settings.uiScale);
-    /* 화면 테마 복원 + 미니 창에 구성 전달 (v2.6.0) — 미니 창은 스스로 설정을 읽지 않는다 */
-    applyTheme(S.settings); syncSettings(); sendCaptureConfig();
+    /* 화면 크기·테마 복원 + 미니 창에 구성 전달.
+       v2.6.4: 이 '보기 설정' 호출들은 각각 try 로 감싼다 — 여기서 예외가 나면 아래 초기 로드
+       전체가 catch 로 떨어져, 데이터는 멀쩡한데 "불러오지 못했습니다" 경고가 뜨고 S.loaded 가
+       false 로 남아 저장까지 막히는(=앱이 죽은 것처럼 보이는) 사고가 된다. 화면 꾸미기 실패가
+       데이터 로드를 무너뜨리면 안 된다. */
+    try{ applyUiScale(S.settings.uiScale); }catch(e){ console.warn('화면 크기 복원 실패',e); }
+    try{ applyTheme(S.settings); syncSettings(); }catch(e){ console.warn('테마 복원 실패',e); }
+    try{ sendCaptureConfig(); }catch(e){ console.warn('미니 창 구성 전달 실패',e); }
     /* 캡처 초안 회수(v3.1.0): 지난 세션이 미등록 초안을 남긴 채 꺼졌다면
        (전원 차단 포함) 분류 대기로 자동 등록하고 초안을 비운다. */
     const draft=(S.settings.captureDraft||'').trim();

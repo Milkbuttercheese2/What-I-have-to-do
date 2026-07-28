@@ -4,7 +4,8 @@ import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {setupEnv} from '../helpers/env.js';
 
-mock.timers.enable({apis:['setTimeout','setInterval']});
+/* Date 도 모의한다 — v2.6.4 '뜨자마자 온 blur 무시' 가드가 Date.now() 로 시간을 재기 때문 */
+mock.timers.enable({apis:['setTimeout','setInterval','Date']});
 const env = setupEnv({html: 'capture.html'});
 const {initCaptureWin} = await import('../../src/capture-win.js');
 initCaptureWin();
@@ -73,6 +74,7 @@ test('Esc: 내용을 유지한 채 숨기고 초안을 플러시 (v3.1.0 — 삭
 
 test('blur: 숨기되 드래프트는 유지 + 초안 플러시', () => {
   reset();
+  mock.timers.tick(500);                          // 창이 뜬 직후 가드(450ms)를 지난 뒤
   inp.value = '전화 중 끊긴 메모';
   env.window.dispatchEvent(new env.window.Event('blur'));
   assert.equal(hides().length, 1);
@@ -174,6 +176,61 @@ test("배치(3P2): Alt 목적지가 '양식 메모'면 미니 창을 접고 메�
   assert.equal(env.emitted.filter(e=>e.name==='wmhh://open-blank-form').length, 1);
   assert.ok(env.invokeCalls.some(c=>c.cmd==='focus_main_window'));
   assert.equal(hides().length, 1);
+  mock.timers.tick(400);
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
+});
+
+test('창이 뜬 직후의 blur 는 무시한다 — 다른 앱이 포커스를 가져가도 사라지지 않는다 (v2.6.4)', () => {
+  reset();
+  env.window.dispatchEvent(new env.window.Event('focus'));   // 창이 막 떴다
+  env.emitted.length = 0;
+  env.window.dispatchEvent(new env.window.Event('blur'));    // 브라우저가 뜨면서 포커스를 뺏음
+  assert.equal(hides().length, 0);                           // 숨지 않는다
+  mock.timers.tick(500);
+  env.window.dispatchEvent(new env.window.Event('blur'));    // 그 뒤의 blur 는 정상적으로 숨김
+  assert.equal(hides().length, 1);
+});
+
+test('검색 결과: ↑↓ 로 고르고 Enter 로 연다 (v2.6.4)', async () => {
+  reset();
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
+  openFresh();
+  env.onInvoke('quick_search', () => [{id:11, memo:'첫째', done:false},
+                                      {id:22, memo:'둘째', done:false},
+                                      {id:33, memo:'셋째', done:true}]);
+  searchInp.value = '메모';
+  searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(250);
+  await env.flush(5);
+  const hitEls = () => [...env.document.querySelectorAll('.cap-hit')];
+  assert.equal(hitEls().length, 3);
+  assert.ok(hitEls()[0].classList.contains('sel'));          // 첫 항목이 미리 선택돼 있다
+  const key2 = init => searchInp.dispatchEvent(new env.window.KeyboardEvent('keydown', Object.assign({bubbles:true, cancelable:true}, init)));
+  key2({key:'ArrowDown'});
+  assert.ok(hitEls()[1].classList.contains('sel'));
+  key2({key:'ArrowDown'});
+  assert.ok(hitEls()[2].classList.contains('sel'));
+  key2({key:'ArrowDown'});
+  assert.ok(hitEls()[0].classList.contains('sel'));          // 끝에서 순환
+  key2({key:'ArrowUp'});
+  assert.ok(hitEls()[2].classList.contains('sel'));
+  env.emitted.length = 0;
+  key2({key:'Enter'});
+  const opened = env.emitted.filter(e=>e.name==='wmhh://open-item');
+  assert.deepEqual(opened.at(-1).payload, {id:33});           // 고른 항목이 열린다
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='focus_main_window'));
+  assert.equal(hides().length, 1);
+});
+
+test('빠른 메모: Ctrl+S 로도 등록된다 (v2.6.4)', () => {
+  reset();
+  applyCaptureConfig({capStart:'memo', capSecond:'search'});
+  openFresh();
+  inp.value = 'Ctrl+S 로 저장할 메모';
+  key({key:'s', ctrlKey:true});
+  assert.deepEqual(emits().at(-1), {target:'main', name:'wmhh://capture-memo', payload:{text:'Ctrl+S 로 저장할 메모'}});
+  assert.equal(inp.value, '');
+  assert.ok(body.classList.contains('flash'));
   mock.timers.tick(400);
   applyCaptureConfig({capStart:'search', capSecond:'memo'});
 });
