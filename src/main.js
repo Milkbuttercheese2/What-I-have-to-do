@@ -14,12 +14,13 @@ import {initRender, render, renderDone} from './render.js';
 import {initCalendar, renderCal} from './calendar.js';
 import {initAlarms} from './alarms.js';
 import {initBackup, reconcileImported} from './backup.js';
-import {initCapture} from './capture-bridge.js';
-import {initSettingsMenu} from './settings-menu.js';
+import {initCapture, sendCaptureConfig} from './capture-bridge.js';
+import {initSettingsMenu, closeSettings, syncSettings} from './settings-menu.js';
 import {initRecurBox, runRecurSpawn} from './recur-box.js';
 import {makeItem} from './state.js';
 import {setPlaceMode, placeMode} from './placement.js';
 import {initUiScale, applyUiScale} from './ui-scale.js';
+import {applyTheme} from './theme.js';
 
 reconcileCore();
 /* 콘솔 디버깅용 전역 미러 (읽기 전용 용도 — 코드는 항상 S를 본다) */
@@ -105,6 +106,7 @@ document.addEventListener('keydown',e=>{
   if($('formPanel').classList.contains('on')){ closeForm(); return; }
   if($('presetModal').classList.contains('on')){ $('presetModal').classList.remove('on'); return; }
   if($('boardModeModal').classList.contains('on')){ closeBoardModeModal(); return; }
+  if($('settingsModal').classList.contains('on')){ closeSettings(); return; }
 });
 
 function tickClock(){ const n=new Date();
@@ -130,6 +132,8 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     setPlaceMode(bm); syncBoardModeSel(bm);
     /* 화면 크기 복원 (v2.6.0) — 확대는 렌더와 무관(zoom)하므로 여기서 한 번만 */
     applyUiScale(S.settings.uiScale);
+    /* 화면 테마 복원 + 미니 창에 구성 전달 (v2.6.0) — 미니 창은 스스로 설정을 읽지 않는다 */
+    applyTheme(S.settings); syncSettings(); sendCaptureConfig();
     /* 캡처 초안 회수(v3.1.0): 지난 세션이 미등록 초안을 남긴 채 꺼졌다면
        (전원 차단 포함) 분류 대기로 자동 등록하고 초안을 비운다. */
     const draft=(S.settings.captureDraft||'').trim();

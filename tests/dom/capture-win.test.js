@@ -136,3 +136,48 @@ test('입력 시 초안이 디바운스 후 전송된다', () => {
   mock.timers.tick(400);
   assert.equal(drafts().at(-1).payload.text, '타이핑 중');
 });
+
+/* ── 설정 연동 (v2.6.0): 테마·시작 화면·Ctrl+Enter 동작 ─────────────────── */
+const {applyCaptureConfig, openFresh} = await import('../../src/capture-win.js');
+const hellos = () => env.emitted.filter(e=>e.name==='wmhh://capture-hello');
+const forms  = () => env.emitted.filter(e=>e.name==='wmhh://capture-form');
+
+test('창이 뜰 때마다 메인 창에 구성을 요청한다 (capture-hello)', () => {
+  reset();
+  env.window.dispatchEvent(new env.window.Event('focus'));
+  assert.equal(hellos().length, 1);
+  assert.deepEqual(hellos()[0].target, 'main');
+});
+
+test('테마: capTheme=light 면 body.light, dark 면 해제', () => {
+  applyCaptureConfig({capTheme:'light'});
+  assert.ok(body.classList.contains('light'));
+  applyCaptureConfig({capTheme:'dark'});
+  assert.equal(body.classList.contains('light'), false);
+});
+
+test('시작 화면: capStart=memo 면 창을 열 때 빠른 메모로 시작', () => {
+  applyCaptureConfig({capStart:'memo'});
+  openFresh();
+  assert.equal(body.classList.contains('search'), false);
+  assert.equal(inp.style.display, '');
+  applyCaptureConfig({capStart:'search'});
+  openFresh();
+  assert.ok(body.classList.contains('search'));
+});
+
+test('Ctrl+Enter: capSubmit=form 이면 등록 대신 양식 열기 이벤트 + 메인 창 포커스', () => {
+  reset();
+  applyCaptureConfig({capStart:'memo', capSubmit:'form'});
+  openFresh();
+  inp.value = '양식으로 정리할 건';
+  key({key:'Enter', ctrlKey:true});
+  assert.equal(emits().length, 0);                       // capture-memo 는 나가지 않는다
+  assert.deepEqual(forms().at(-1), {target:'main', name:'wmhh://capture-form', payload:{text:'양식으로 정리할 건'}});
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='focus_main_window'));
+  assert.equal(inp.value, '');
+  assert.equal(hides().length, 1);                       // 플래시 없이 바로 숨김
+  assert.equal(body.classList.contains('flash'), false);
+  mock.timers.tick(400);
+  applyCaptureConfig({capStart:'search', capSubmit:'inbox'});
+});

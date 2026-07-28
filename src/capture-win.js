@@ -12,14 +12,36 @@
      지우는 건 사용자 몫). 입력할 때마다 초안을 메인 창으로 흘려보내
      settings.captureDraft로 저장 → 앱이 꺼져도 다음 실행 때 분류 대기로 자동 등록.
      메모 초안은 별도 입력칸이라 검색 모드로 오가도 남는다.
+   - v2.6.0: 테마(밝게/어둡게)·시작 화면(검색/메모)·Ctrl+Enter 동작(분류 대기 등록/양식 열기)은
+     설정에서 고른다. 이 창은 DB를 직접 읽지 않고 메인 창에 'capture-hello'로 물어보면
+     메인이 'capture-config'로 내려준다 — 설정의 소유자는 메인 창 하나다.
    - 입력칸에 placeholder를 두지 않는다(v2.5.21): 빈 칸의 회색 문구를 실제 글자로 오해해
      "그 단어 뒤로 커서가 안 간다"는 혼선이 있었다. 안내는 아래 힌트줄(#cap-hint)이 맡는다.
    ========================================================================= */
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
-let mode='memo';                            // 'memo' | 'search' (init에서 'search'로 진입)
+let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
+/* v2.6.0 설정값 — 메인 창이 'wmhh://capture-config' 로 내려준다(요청은 capture-hello).
+   이 창은 DB를 직접 읽지 않는다: 설정의 단일 소유자는 메인 창이다. */
+let cfg={capTheme:'dark', capStart:'search', capSubmit:'inbox'};
+let ready=false;                            // 설정을 한 번이라도 받았는가
 
 const HINT={search:'내 업무 검색 · Alt 를 누르면 빠른 메모',
             memo:'빠른 메모 · Ctrl+Enter 등록 · Alt 를 누르면 검색'};
+
+/* 설정 적용 — 테마는 body.light 한 줄로 갈린다(색은 capture.html 토큰) */
+export function applyCaptureConfig(c){
+  c=c||{};
+  if(c.capTheme) cfg.capTheme=c.capTheme;
+  if(c.capStart) cfg.capStart=c.capStart;
+  if(c.capSubmit) cfg.capSubmit=c.capSubmit;
+  document.body.classList.toggle('light', cfg.capTheme==='light');
+  const memo=cfg.capSubmit==='form';
+  HINT.memo = memo ? '빠른 메모 · Ctrl+Enter 로 양식 열기 · Alt 를 누르면 검색'
+                   : '빠른 메모 · Ctrl+Enter 등록 · Alt 를 누르면 검색';
+  if(mode==='memo') $id('cap-hint').textContent=HINT.memo;
+}
+/* 메인 창에 설정을 달라고 알린다 (부팅 직후·창이 다시 뜰 때마다) */
+function askConfig(){ window.__TAURI__.event.emitTo('main','wmhh://capture-hello',{}).catch(()=>{}); }
 let draftTimer=null, searchTimer=null, searchSeq=0;
 
 const hideWin=()=>window.__TAURI__.window.getCurrentWindow().hide();   // 지연 접근 (테스트 하네스 제약)
@@ -79,8 +101,13 @@ export function initCaptureWin(){
     if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){
       e.preventDefault();
       const t=inp.value.trim(); if(!t){ hideWin(); return; }
-      window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
-      inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
+      const toForm=cfg.capSubmit==='form';           // v2.6.0 설정: 양식으로 열기
+      window.__TAURI__.event.emitTo('main', toForm?'wmhh://capture-form':'wmhh://capture-memo', {text:t}).catch(()=>{});
+      inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 넘겼으니 초안 비움
+      if(toForm){                                    // 메인 창이 앞으로 나오므로 플래시 없이 즉시 숨김
+        invoke('focus_main_window').catch(()=>{});
+        submitting=true; setTimeout(()=>{ submitting=false; },400); hideWin(); return;
+      }
       submitting=true; document.body.classList.add('flash');
       setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
     }
@@ -118,12 +145,18 @@ export function initCaptureWin(){
   window.addEventListener('blur',()=>{ if(!submitting){ sendDraft(inp.value); hideWin(); } });
   /* 창이 다시 뜨면(=focus) 항상 빈 검색 모드로 초기화 — 지난 검색어가 남아 있지 않게.
      메모 초안(textarea)은 건드리지 않는다: Alt 로 넘어가면 그대로 이어 쓴다. */
-  window.addEventListener('focus',()=>openFresh());
+  window.addEventListener('focus',()=>{ askConfig(); openFresh(); });
+  window.__TAURI__.event.listen('wmhh://capture-config', ev=>{
+    const first = !ready; ready=true;
+    applyCaptureConfig(ev.payload||{});
+    if(first) openFresh();          // 설정이 도착한 뒤 시작 화면을 다시 잡는다
+  }).catch(()=>{});
+  askConfig();
   openFresh();
 }
 
-/* Ctrl+Alt+Space 로 열릴 때의 초기 상태: 검색어 비운 검색 모드 */
-function openFresh(){
+/* Ctrl+Alt+Space 로 열릴 때의 초기 상태: 입력칸을 비우고 설정된 시작 화면으로 */
+export function openFresh(){
   $id('cap-search').value='';
-  setMode('search');
+  setMode(cfg.capStart==='memo'?'memo':'search');
 }

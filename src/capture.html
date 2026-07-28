@@ -12,28 +12,46 @@
      스타일: 창은 transparent(tauri.conf) + 둥근 검정 패널(스포트라이트풍, 그림자 없음).
      폰트는 앱과 통일(Pretendard/맑은 고딕), 글씨크기는 입력·검색·검색결과 모두 14px. -->
 <style>
- /* 검정 계열 스포트라이트 바 (그림자 없음). 폰트는 앱과 통일(Pretendard 로컬 번들). */
+ /* 스포트라이트 바. 폰트는 앱과 통일(Pretendard 로컬 번들).
+    v2.6.0: 색은 전부 토큰 — 기본(어둡게) + body.light(밝게). 설정에서 고른 값을
+    capture-win.js 가 body 클래스로 적용한다. 메인 창의 다크 팔레트와 같은 계열
+    (#1e2128 면 / 청록 강조)이라 두 창이 한 시스템처럼 보인다. */
+ :root{
+   --cap-panel:#1e2128; --cap-border:#2c313b; --cap-ink:#f2f5fa; --cap-muted:#8b95a7;
+   --cap-sep:rgba(255,255,255,.08); --cap-hit-bg:#173f3a; --cap-hit-fg:#4fe0c8;
+   --cap-tag-on-bg:#153f39; --cap-tag-on-fg:#54e2ca; --cap-tag-off-bg:#2b3039; --cap-tag-off-fg:#8b95a7;
+   --cap-flash:#3dd7bf; --cap-hint:#727d91;
+   --cap-thumb:rgba(255,255,255,.16); --cap-thumb-hover:rgba(255,255,255,.32);
+ }
+ body.light{
+   --cap-panel:#ffffff; --cap-border:#eceef0; --cap-ink:#1f2a33; --cap-muted:#68717c;
+   --cap-sep:rgba(31,42,51,.10); --cap-hit-bg:#eef2f0; --cap-hit-fg:#3f7d75;
+   --cap-tag-on-bg:#eef2f0; --cap-tag-on-fg:#4d938a; --cap-tag-off-bg:#eef0f3; --cap-tag-off-fg:#5a6472;
+   --cap-flash:#3f7d75; --cap-hint:#8a919b;
+   --cap-thumb:rgba(31,42,51,.16); --cap-thumb-hover:rgba(31,42,51,.30);
+   color-scheme:light;
+ }
  @font-face{font-family:'Pretendard';src:url('fonts/PretendardVariable.woff2') format('woff2-variations');
    font-weight:45 920;font-style:normal;font-display:swap}
  html,body{margin:0;height:100%;overflow:hidden;background:transparent}
- body{display:flex;box-sizing:border-box;padding:0;color:#f2f5fa;
+ body{display:flex;box-sizing:border-box;padding:0;color:var(--cap-ink);
    font-family:'Pretendard','Malgun Gothic','맑은 고딕',system-ui,-apple-system,sans-serif}
  #cap-shell{flex:1;display:flex;flex-direction:column;min-height:0;
-   background:#1e2128;border:1px solid #2c313b;border-radius:18px;overflow:hidden}
+   background:var(--cap-panel);border:1px solid var(--cap-border);border-radius:18px;overflow:hidden}
  #cap-bar{display:flex;align-items:center;flex:1;min-height:56px}
  body.search #cap-bar{flex:none}
  /* v2.5.1: font 축약형에 inherit(전역 키워드)를 섞으면 선언 전체가 무효 처리돼
     입력창이 브라우저 기본 폼 폰트로 렌더되던 버그 — 롱핸드로 분리(파일 전체 동일). */
- #cap-inp,#cap-search{flex:1;border:0;outline:0;background:transparent;color:#f2f5fa;
+ #cap-inp,#cap-search{flex:1;border:0;outline:0;background:transparent;color:var(--cap-ink);
    font-family:inherit;font-size:14px;line-height:1.5;padding:15px 18px}
  /* v2.5.11: 한 줄 기본(rows=1) + box-sizing 으로 auto-grow 정확히. 기본 textarea rows=2 라
     한 줄 메모가 2줄 박스 위쪽에 붙어 "글자가 위로 뜬" 것처럼 보이던 문제 해결. */
  #cap-inp{resize:none;box-sizing:border-box;overflow:hidden}
- #cap-inp::placeholder,#cap-search::placeholder{color:#8b95a7}
+ #cap-inp::placeholder,#cap-search::placeholder{color:var(--cap-muted)}
  #cap-results{display:none;flex:1;min-height:0;flex-direction:column;
-   border-top:1px solid rgba(255,255,255,.08)}
+   border-top:1px solid var(--cap-sep)}
  .cap-col{flex:1;display:flex;flex-direction:column;min-width:0}
- .cap-col-h{flex:none;font-weight:600;font-size:11px;color:#8b95a7;
+ .cap-col-h{flex:none;font-weight:600;font-size:11px;color:var(--cap-muted);
    padding:10px 16px 6px;letter-spacing:.04em}
  .cap-list{flex:1;overflow-y:auto;padding:0 8px 10px}
  /* v2.5.3 스크롤바 — 검정 패널에 맞춘 유리 썸(트랙 없음·둥근 캡슐), 안 쓸 때 숨김.
@@ -42,26 +60,26 @@
  ::-webkit-scrollbar-track{background:transparent}
  ::-webkit-scrollbar-corner{background:transparent}
  ::-webkit-scrollbar-thumb{background:transparent;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
- :hover::-webkit-scrollbar-thumb,:focus-within::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
- ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
- .cap-hit{font-size:13px;line-height:1.45;color:#eef1f7;padding:8px 11px;margin:1px 0;
+ :hover::-webkit-scrollbar-thumb,:focus-within::-webkit-scrollbar-thumb{background:var(--cap-thumb);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+ ::-webkit-scrollbar-thumb:hover{background:var(--cap-thumb-hover);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+ .cap-hit{font-size:13px;line-height:1.45;color:var(--cap-ink);padding:8px 11px;margin:1px 0;
    border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .cap-hit:hover{background:#173f3a;color:#4fe0c8}
- .cap-hit.done{color:#8b95a7}
- .cap-empty{font-size:12.5px;color:#8b95a7;padding:12px}
+ .cap-hit:hover{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
+ .cap-hit.done{color:var(--cap-muted)}
+ .cap-empty{font-size:12.5px;color:var(--cap-muted);padding:12px}
  /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
- #cap-hint{flex:none;font-size:11px;color:#727d91;padding:2px 18px 10px}
+ #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:2px 18px 10px}
  #cap-flash{display:none;align-items:center;justify-content:center;flex:1;gap:7px;
-   color:#3dd7bf;font-weight:600;font-size:15px}
+   color:var(--cap-flash);font-weight:600;font-size:15px}
  body.flash #cap-bar,body.flash #cap-results,body.flash #cap-hint{display:none}
  body.flash #cap-flash{display:flex}
  .cap-col-h{display:none}
  .cap-hit{display:flex;align-items:center;gap:9px}
  .cap-hit-txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .cap-tag{flex:none;font-weight:700;font-size:10.5px;padding:2.5px 9px;border-radius:999px;letter-spacing:.02em}
- .cap-tag.ongoing{background:#153f39;color:#54e2ca}
- .cap-tag.done{background:#2b3039;color:#8b95a7}
- .cap-hit.done .cap-hit-txt{color:#8b95a7}
+ .cap-tag.ongoing{background:var(--cap-tag-on-bg);color:var(--cap-tag-on-fg)}
+ .cap-tag.done{background:var(--cap-tag-off-bg);color:var(--cap-tag-off-fg)}
+ .cap-hit.done .cap-hit-txt{color:var(--cap-muted)}
 </style>
 </head>
 <!-- v2.5.21: 검색 모드가 기본이라 초기 마크업도 검색 모드로 둔다(JS 실행 전 깜빡임 방지) -->

@@ -31,19 +31,7 @@
   </nav>
   <div class="head-right">
     <button class="btn btn-tool" id="alarmToggle" title="알람 켜기/끄기">알람</button>
-    <div class="settings-wrap">
-      <button class="btn btn-tool" id="settingsBtn" title="백업·저장 위치·프리셋·연동 설정">설정</button>
-      <div class="settings-menu" id="settingsMenu">
-        <button class="menu-item" id="dataDirBtn" title="데이터 저장 위치 확인·변경">저장 위치 확인·변경</button>
-        <button class="menu-item" id="bkExp">JSON파일 백업</button>
-        <button class="menu-item" id="bkImp" title="JSON 백업 파일 또는 자동 백업(.sqlite) 등 DB 파일에서 복원">JSON·DB파일 불러오기</button>
-        <button class="menu-item" id="xlsx">XLSX 다운로드</button>
-        <div class="menu-sep"></div>
-        <button class="menu-item" id="presetManageBtn">프리셋·식별정보 관리</button>
-        <button class="menu-item" id="recurManageBtn">주기 업무 입력·관리</button>
-        <button class="menu-item" id="boardModeBtn">보드 모드 선택</button>
-      </div>
-    </div>
+    <button class="btn btn-tool" id="settingsBtn" title="화면 테마·미니 창·백업·저장 위치·프리셋 설정">설정</button>
     <div class="clock"><div class="t num" id="clock">--:--</div><div id="today">—</div><div class="ver num" id="appVer"></div></div>
   </div>
  </div>
@@ -104,7 +92,7 @@
         <!-- v2.5.22 임시저장: 작성 중 내용은 자동으로 임시저장되고, [되돌리기]로 마지막 저장본 복구 -->
         <span class="fm-draft" id="fm-draft"></span>
         <button class="btn btn-cancel" id="fm-revert" title="마지막으로 저장한 내용으로 되돌립니다 (임시저장분 삭제)">되돌리기</button>
-        <button class="btn btn-ok" id="fm-save" title="Ctrl+S 로도 저장됩니다">저장 (Ctrl+S)</button>
+        <button class="btn btn-ok" id="fm-save" title="Ctrl+S · Ctrl+Enter 로도 저장됩니다">저장</button>
       </div>
      </div>
     </div>
@@ -280,6 +268,70 @@
 </div>
 
 <!-- 보드 모드 선택 (v2.5.6 — 헤더 모드 필에서 설정 팝업으로 이동) -->
+<!-- 설정 (v2.6.0) — 드롭다운 메뉴에서 표준 팝업으로. 액션 버튼 id 는 그대로라
+     실제 동작 리스너는 각 모듈(backup.js·presets.js·recur-box.js)에 그대로 남는다. -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h3>설정</h3>
+    <div class="m-sub">화면 테마와 입력 방식을 고르고, 데이터 관리 기능을 실행합니다.</div>
+
+    <div class="t-head">화면 테마</div>
+    <div class="set-rows">
+      <div class="set-row">
+        <span class="set-lab">메인 화면</span>
+        <div class="seg" id="segTheme">
+          <button class="seg-btn" data-v="light">밝게</button>
+          <button class="seg-btn" data-v="dark">어둡게</button>
+        </div>
+      </div>
+      <div class="set-row">
+        <span class="set-lab">미니 창 <em>Ctrl+Alt+Space</em></span>
+        <div class="seg" id="segCapTheme">
+          <button class="seg-btn" data-v="light">밝게</button>
+          <button class="seg-btn" data-v="dark">어둡게</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="t-head">미니 창 (Ctrl+Alt+Space)</div>
+    <div class="set-rows">
+      <div class="set-row">
+        <span class="set-lab">열면 먼저 뜨는 화면</span>
+        <div class="seg" id="segCapStart">
+          <button class="seg-btn" data-v="search">내 업무 검색</button>
+          <button class="seg-btn" data-v="memo">빠른 메모</button>
+        </div>
+      </div>
+      <div class="set-row">
+        <span class="set-lab">메모 등록 <em>Ctrl+Enter</em></span>
+        <div class="seg" id="segCapSubmit">
+          <button class="seg-btn" data-v="inbox">분류 대기로 바로</button>
+          <button class="seg-btn" data-v="form">양식으로 열기</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="t-head">보드 · 프리셋</div>
+    <div class="set-list">
+      <button class="menu-item" id="boardModeBtn">보드 모드 선택</button>
+      <button class="menu-item" id="presetManageBtn">프리셋·식별정보 관리</button>
+      <button class="menu-item" id="recurManageBtn">주기 업무 입력·관리</button>
+    </div>
+
+    <div class="t-head">데이터</div>
+    <div class="set-list">
+      <button class="menu-item" id="dataDirBtn" title="데이터 저장 위치 확인·변경">저장 위치 확인·변경</button>
+      <button class="menu-item" id="bkExp">JSON파일 백업</button>
+      <button class="menu-item" id="bkImp" title="JSON 백업 파일 또는 자동 백업(.sqlite) 등 DB 파일에서 복원">JSON·DB파일 불러오기</button>
+      <button class="menu-item" id="xlsx">XLSX 다운로드</button>
+    </div>
+
+    <div class="m-actions">
+      <button class="btn btn-ok" id="settingsClose">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="boardModeModal">
   <div class="modal">
     <h3>보드 모드 선택</h3>
