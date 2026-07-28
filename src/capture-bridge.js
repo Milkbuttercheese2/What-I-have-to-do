@@ -9,7 +9,7 @@
    최상위에서 구조분해하면 테스트 하네스(env.js)의 event 스텁보다 먼저 죽는다.
    ========================================================================= */
 import {S} from './state.js';
-import {STORE} from './store.js';
+import {STORE, invoke} from './store.js';
 import {showToast} from './dom-utils.js';
 import {captureMemo, openForm} from './form.js';
 import {captureConfig} from './theme.js';
@@ -21,7 +21,11 @@ let draftSaveTimer=null;
    미니 창이 뜰 때마다 'capture-hello' 로 물어보고, 설정을 바꿀 때도 여기서 밀어준다.
    미니 창이 DB를 직접 읽지 않게 해 설정의 소유자를 메인 창 하나로 유지한다. */
 export function sendCaptureConfig(){
-  window.__TAURI__.event.emitTo('capture','wmhh://capture-config',captureConfig(S.settings)).catch(()=>{});
+  const cfg=captureConfig(S.settings);
+  window.__TAURI__.event.emitTo('capture','wmhh://capture-config',cfg).catch(()=>{});
+  /* 첫 화면이 '양식 메모'면 단축키가 미니 창 대신 메인 양식을 열어야 한다. 이 분기는
+     단축키를 받는 Rust 가 해야 미니 창이 떴다 사라지는 깜빡임이 없다. */
+  invoke('set_capture_form_mode',{form:cfg.capStart==='form'}).catch(()=>{});
 }
 
 /* 캡처 초안 → settings.captureDraft. 앱이 초안을 남긴 채 꺼지면(전원 차단 포함)
@@ -52,11 +56,8 @@ export function initCapture(){
   /* 미니 창이 구성을 요청 (부팅 직후·창이 뜰 때마다) */
   window.__TAURI__.event.listen('wmhh://capture-hello', ()=>sendCaptureConfig());
 
-  /* 미니 창에서 'Ctrl+Enter = 양식 열기'로 설정한 경우 — 메모를 양식에 담아 연다 */
-  window.__TAURI__.event.listen('wmhh://capture-form', ev=>{
-    const t=String((ev.payload||{}).text||'').trim();
-    if(t) openForm({memo:t});
-  });
+  /* '양식 메모' 설정에서 단축키를 누르면 Rust 가 메인 창을 띄우고 이 이벤트를 보낸다 */
+  window.__TAURI__.event.listen('wmhh://open-blank-form', ()=>openForm({}));
 
   /* 캡처 창 초안 흘려받기 (입력 시마다·숨김 직전 플러시) */
   window.__TAURI__.event.listen('wmhh://capture-draft', ev=>{

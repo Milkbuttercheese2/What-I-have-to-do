@@ -7,7 +7,7 @@ import {setupEnv} from '../helpers/env.js';
 mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
 const {S} = await import('../../src/state.js');
-const {initCapture} = await import('../../src/capture-bridge.js');
+const {initCapture, sendCaptureConfig} = await import('../../src/capture-bridge.js');
 initCapture();
 
 const $ = id => env.document.getElementById(id);
@@ -58,20 +58,32 @@ test('트레이 첫 안내: hidden-to-tray 후 창 focus 시 1회만 토스트 +
 /* ── 미니 창 구성 전달 (v2.6.0) ─────────────────────────────────────────── */
 test('capture-hello 를 받으면 설정을 capture 창으로 내려보낸다', async () => {
   await env.resetS(); S.loaded = true;
-  S.settings.capTheme='light'; S.settings.capStart='memo'; S.settings.capSubmit='form';
+  S.settings.theme='dark'; S.settings.capStart='memo'; S.settings.capSecond='form';
   env.fireEvent('wmhh://capture-hello', {});
   await env.flush();
   const cfg = env.emitted.filter(e=>e.name==='wmhh://capture-config').at(-1);
   assert.equal(cfg.target, 'capture');
-  assert.deepEqual(cfg.payload, {capTheme:'light', capStart:'memo', capSubmit:'form'});
+  assert.deepEqual(cfg.payload, {theme:'dark', capStart:'memo', capSecond:'form'});
 });
 
-test('capture-form: 등록 대신 양식 팝업을 메모가 채워진 채로 연다 (아직 저장 아님)', async () => {
+
+test("첫 화면이 '양식 메모': Rust 에 모드를 알리고, open-blank-form 을 받으면 빈 양식을 연다 (v2.6.3)", async () => {
   await env.resetS(); S.loaded = true;
-  env.fireEvent('wmhh://capture-form', {text:'  양식으로 정리할 건  '});
+  S.settings.capStart = 'form';
+  sendCaptureConfig();
+  const call = env.invokeCalls.filter(c=>c.cmd==='set_capture_form_mode').at(-1);
+  assert.deepEqual(call.args, {form:true});
+  env.fireEvent('wmhh://open-blank-form', {});
   await env.flush();
   assert.ok($('formPanel').classList.contains('on'));
-  assert.equal($('fm-memo').value, '양식으로 정리할 건');
+  assert.equal($('fm-memo').value, '');
   assert.equal(S.items.length, 0);                    // 저장은 사용자가 [저장]을 눌러야
   $('formPanel').classList.remove('on');
+});
+
+test("첫 화면이 검색·빠른 메모면 Rust 에 form:false — 미니 창이 뜬다", async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.capStart = 'memo'; S.settings.capSecond = 'form';
+  sendCaptureConfig();
+  assert.deepEqual(env.invokeCalls.filter(c=>c.cmd==='set_capture_form_mode').at(-1).args, {form:false});
 });

@@ -280,37 +280,34 @@
     <div class="t-head">화면 테마</div>
     <div class="set-rows">
       <div class="set-row">
-        <span class="set-lab">메인 화면</span>
+        <span class="set-lab">화면 색</span>
         <div class="seg" id="segTheme">
           <button class="seg-btn" data-v="light">밝게</button>
           <button class="seg-btn" data-v="dark">어둡게</button>
         </div>
       </div>
-      <div class="set-row">
-        <span class="set-lab">미니 창 <em>Ctrl+Alt+Space</em></span>
-        <div class="seg" id="segCapTheme">
-          <button class="seg-btn" data-v="light">밝게</button>
-          <button class="seg-btn" data-v="dark">어둡게</button>
-        </div>
-      </div>
     </div>
+    <div class="set-note">보드·양식은 물론 <b>미니 창(Ctrl+Alt+Space)</b>까지 함께 바뀝니다 — 검색·빠른 메모·양식 메모가 항상 같은 색입니다.</div>
 
-    <div class="t-head">미니 창 (Ctrl+Alt+Space)</div>
+    <div class="t-head">단축키 (Ctrl+Alt+Space)</div>
     <div class="set-rows">
       <div class="set-row">
-        <span class="set-lab">열면 먼저 뜨는 화면</span>
+        <span class="set-lab">먼저 뜨는 화면</span>
         <div class="seg" id="segCapStart">
-          <button class="seg-btn" data-v="search">내 업무 검색</button>
-          <button class="seg-btn" data-v="memo">빠른 메모</button>
+          <button class="seg-btn" data-v="search" title="미니 창에서 내 업무를 검색합니다">내 업무 검색</button>
+          <button class="seg-btn" data-v="memo" title="미니 창에 그냥 적고 Ctrl+Enter 로 등록합니다">빠른 메모</button>
+          <button class="seg-btn" data-v="form" title="메인 창이 앞으로 나오며 빈 양식이 열립니다">양식 메모</button>
         </div>
       </div>
       <div class="set-row">
-        <span class="set-lab">메모 등록 <em>Ctrl+Enter</em></span>
-        <div class="seg" id="segCapSubmit">
-          <button class="seg-btn" data-v="inbox">분류 대기로 바로</button>
-          <button class="seg-btn" data-v="form">양식으로 열기</button>
+        <span class="set-lab">Alt 를 누르면</span>
+        <div class="seg" id="segCapSecond">
+          <button class="seg-btn" data-v="search">내 업무 검색</button>
+          <button class="seg-btn" data-v="memo">빠른 메모</button>
+          <button class="seg-btn" data-v="form">양식 메모</button>
         </div>
       </div>
+      <div class="set-note" id="capOrderNote"></div>
     </div>
 
     <div class="t-head">보드 · 프리셋</div>
