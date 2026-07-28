@@ -63,6 +63,7 @@ export function setupEnv({html} = {}){
   globalThis.Event = window.Event;
   globalThis.KeyboardEvent = window.KeyboardEvent;
   globalThis.MouseEvent = window.MouseEvent;
+  globalThis.localStorage = window.localStorage;   // theme.js 부팅 캐시(v2.6.2)가 bare 식별자로 참조
 
   return {
     window, document: window.document,

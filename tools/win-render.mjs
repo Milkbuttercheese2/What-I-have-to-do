@@ -156,6 +156,14 @@ const ownerMode = async page => {
   await page.click('.bm-opt[data-mode="owner"]'); await page.waitForTimeout(300);
   await page.click('#boardModeClose').catch(()=>{}); await page.waitForTimeout(300);
 };
+/* v2.6.0: 설정 팝업(테마·미니 창 선택) + 다크 모드 화면 */
+const openSettings = async page => {
+  await page.click('#settingsBtn'); await page.waitForTimeout(400);
+};
+const dark = async page => {
+  await page.evaluate(()=>document.documentElement.setAttribute('data-theme','dark'));
+  await page.waitForTimeout(200);
+};
 const goCal  = async page => { await page.click('.tab[data-view="cal"]');  await page.waitForTimeout(500); };
 const goDone = async page => { await page.click('.tab[data-view="done"]'); await page.waitForTimeout(500); };
 
@@ -170,6 +178,12 @@ await capture('form',       FULL,    openForm);
 await capture('preset',     COMPACT, openPreset);
 await capture('boardmode',  COMPACT, openBoardMode);
 await capture('recur',      COMPACT, openRecur);
+await capture('settings',   COMPACT, openSettings);
+await capture('settings',   FULL,    openSettings);
+await capture('dark-board', FULL,    dark);
+await capture('dark-form',  FULL,    async p => { await dark(p); await openForm(p); });
+await capture('dark-settings', COMPACT, async p => { await dark(p); await openSettings(p); });
+await capture('dark-cal',   FULL,    async p => { await dark(p); await goCal(p); });
 
 /* v2.5.15 화면 크기(Ctrl+휠) 검증 -----------------------------------------
    웹뷰 배율은 CSS 픽셀 뷰포트 자체를 줄이므로, 확대 = "그만큼 좁은 창"과 동치다.

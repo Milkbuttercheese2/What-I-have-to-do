@@ -12,9 +12,17 @@ import {S} from './state.js';
 import {STORE} from './store.js';
 import {showToast} from './dom-utils.js';
 import {captureMemo, openForm} from './form.js';
+import {captureConfig} from './theme.js';
 
 let trayNoticePending=false;
 let draftSaveTimer=null;
+
+/* v2.6.0: 미니 창 구성(테마·시작 화면·Ctrl+Enter 동작)을 내려보낸다.
+   미니 창이 뜰 때마다 'capture-hello' 로 물어보고, 설정을 바꿀 때도 여기서 밀어준다.
+   미니 창이 DB를 직접 읽지 않게 해 설정의 소유자를 메인 창 하나로 유지한다. */
+export function sendCaptureConfig(){
+  window.__TAURI__.event.emitTo('capture','wmhh://capture-config',captureConfig(S.settings)).catch(()=>{});
+}
 
 /* 캡처 초안 → settings.captureDraft. 앱이 초안을 남긴 채 꺼지면(전원 차단 포함)
    다음 실행의 초기 로드(main.js flushCaptureDraft)가 분류 대기로 자동 등록한다.
@@ -39,6 +47,15 @@ export function initCapture(){
          앱이 꺼지면 다음 실행의 초안 회수가 같은 메모를 한 번 더 등록(중복)하던 문제. */
       S.settings.captureDraft=''; window.SETTINGS=S.settings; STORE.saveSettings(S.settings);
     }
+  });
+
+  /* 미니 창이 구성을 요청 (부팅 직후·창이 뜰 때마다) */
+  window.__TAURI__.event.listen('wmhh://capture-hello', ()=>sendCaptureConfig());
+
+  /* 미니 창에서 'Ctrl+Enter = 양식 열기'로 설정한 경우 — 메모를 양식에 담아 연다 */
+  window.__TAURI__.event.listen('wmhh://capture-form', ev=>{
+    const t=String((ev.payload||{}).text||'').trim();
+    if(t) openForm({memo:t});
   });
 
   /* 캡처 창 초안 흘려받기 (입력 시마다·숨김 직전 플러시) */

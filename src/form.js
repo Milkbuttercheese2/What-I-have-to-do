@@ -2,7 +2,7 @@
    바로 입력 + 양식 패널
    ========================================================================= */
 import {S, newId, makeItem} from './state.js';
-import {invoke} from './store.js';
+import {invoke, STORE} from './store.js';
 import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
@@ -34,9 +34,109 @@ export function autoGrowInp(){
 let editingId=null;
 const enabled = () => S.fields.filter(f=>f.on);
 
+/* ── 임시저장 (v2.5.22) ───────────────────────────────────────────────────
+   양식에 쓰다가 ESC·되돌아가기·앱 종료로 나가면 내용이 통째로 날아가던 문제를 막는다.
+   - 입력이 멈추면(700ms) 화면 내용을 settings.formDrafts[key] 에 임시저장한다.
+     항목 자체(S.items)는 건드리지 않는다 — 보드/카드에 반영되는 건 [저장](Ctrl+S)뿐.
+   - key = 기존 항목이면 항목 id, 새 항목이면 'new'.
+   - 최종 저장(Ctrl+S)·되돌리기는 해당 임시저장분을 지운다.
+   - 마지막 저장본과 같아지면 임시저장분도 지운다(껍데기 누적 방지).
+   설정(settings)은 자유 키/값 맵이라 Rust 스키마 변경 없이 얹을 수 있다. */
+const DRAFT_CAP=30;                      // 최근 N개만 보관 (설정 JSON 비대화 방지)
+const DRAFT_BUDGET=400_000;              // 초안 전체 상한(문자) — 넘으면 오래된 것부터 버린다
+let draftTimer=null, draftKey=null, baseline=null, lastWritten=null;
+
+function drafts(){
+  const d=S.settings.formDrafts;
+  if(!d || typeof d!=='object' || Array.isArray(d)) S.settings.formDrafts={};
+  return S.settings.formDrafts;
+}
+function persistDrafts(){ window.SETTINGS=S.settings; STORE.saveSettings(S.settings); }
+/* 삭제된 항목의 잔여 초안 정리 + 최근 DRAFT_CAP개 + 총량 상한 유지.
+   설정(settings)은 저장할 때마다 통째로 다시 쓰이는 테이블이라, 초안이 무한정 쌓이면
+   매 저장이 무거워진다. 지금 쓰고 있는 초안(keep)은 어떤 경우에도 버리지 않는다. */
+function pruneDrafts(keep){
+  const d=drafts();
+  for(const k of Object.keys(d)){
+    if(k!=='new' && !S.items.some(x=>String(x.id)===k)) delete d[k];
+  }
+  const byNewest=()=>Object.keys(d).sort((a,b)=>(d[b]?.at||0)-(d[a]?.at||0));
+  let keys=byNewest();
+  if(keys.length>DRAFT_CAP) keys.slice(DRAFT_CAP).forEach(k=>{ if(k!==keep) delete d[k]; });
+  keys=byNewest();
+  while(keys.length>1 && JSON.stringify(d).length>DRAFT_BUDGET){
+    const oldest=keys.pop();
+    if(oldest===keep) break;              // 지금 쓰는 초안까지 버리지는 않는다
+    delete d[oldest];
+  }
+}
+function markDraft(at){
+  const el=$('fm-draft'); if(!el) return;
+  if(!at){ el.textContent=''; return; }
+  const t=new Date(at);
+  el.textContent=`임시저장됨 ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+/* 지금 화면 내용을 임시저장 (변경 없으면 지운다) */
+export function saveDraftNow(){
+  clearTimeout(draftTimer);
+  if(!draftKey || !$('formPanel').classList.contains('on')) return;
+  let d; try{ d=collectForm(); }catch{ return; }
+  const store=drafts(), json=JSON.stringify(d);
+  if(json===baseline){                              // 저장본과 동일 → 초안 불필요
+    if(store[draftKey]){ delete store[draftKey]; lastWritten=null; persistDrafts(); }
+    markDraft(0); return;
+  }
+  if(json===lastWritten){ return; }                 // 내용이 그대로면 다시 쓰지 않는다(불필요한 설정 쓰기 방지)
+  const at=Date.now();
+  store[draftKey]={at, data:d};
+  lastWritten=json;
+  pruneDrafts(draftKey); persistDrafts(); markDraft(at);
+}
+/* 양식이 '빈 상태'가 아닌가 — 새 양식 프리필(바로 입력 텍스트·프리셋) 판별용 */
+function hasContent(pre){
+  pre=pre||{};
+  return !!(String(pre.memo||'').trim() || (pre.subs||[]).length || (pre.ids||[]).length
+    || (pre.files||[]).length || (pre.contacts||[]).some(c=>c&&(c.who||c.org||c.phone)));
+}
+function scheduleDraft(){ clearTimeout(draftTimer); draftTimer=setTimeout(saveDraftNow,700); }
+/* 임시저장분 폐기 — 최종 저장·되돌리기 공용 */
+function dropDraft(key){
+  clearTimeout(draftTimer);
+  lastWritten=null;
+  const d=drafts();
+  if(key!=null && d[key]){ delete d[key]; persistDrafts(); }
+  draftKey=null;                       // 이후 closeForm()의 플러시가 초안을 되살리지 않도록
+  markDraft(0);
+}
+
 export function openForm(pre){
+  saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
   pre=pre||{};
   editingId=pre.id||null;
+  draftKey = editingId ? String(editingId) : 'new';
+  lastWritten=null;
+  fillForm(pre);
+  baseline=JSON.stringify(collectForm());          // '마지막 저장본' 기준선
+  /* 임시저장분이 있으면 그 내용으로 다시 채운다 (collectForm 결과 = openForm 입력 모양).
+     새 양식을 이미 채워진 상태로 여는 경우(바로 입력 텍스트·프리셋)만 예외 —
+     남아 있던 '새 업무' 초안과 충돌하므로 어느 쪽을 이어 쓸지 묻는다(조용한 유실 금지). */
+  const dr=drafts()[draftKey];
+  if(dr && dr.data && JSON.stringify(dr.data)!==baseline){
+    const conflict = !editingId && hasContent(pre);
+    if(!conflict || confirm('작성하다 남겨둔 새 업무 임시저장 내용이 있습니다.\n이어서 쓸까요?\n\n[취소]를 누르면 방금 넣은 내용으로 새로 시작합니다(임시저장분 삭제).')){
+      fillForm(Object.assign({id:editingId}, dr.data));
+      markDraft(dr.at);
+    } else { dropDraft(draftKey); draftKey='new'; markDraft(0); }
+  } else { if(dr) dropDraft(draftKey); draftKey = editingId ? String(editingId) : 'new'; markDraft(0); }
+  updatePlacePreview();
+  $('formPanel').classList.add('on');
+  const m=$('fm-memo'); m.focus();
+  const pos=m.value.indexOf('○○'); if(pos>=0)m.setSelectionRange(pos,pos+2);
+}
+
+/* 양식 칸 채우기 — openForm(신규/기존/임시저장 복원) 공용 */
+function fillForm(pre){
+  pre=pre||{};
   $('fm-title').textContent=editingId?'양식 채우기 — 저장하면 규칙에 따라 자동 배치됩니다':'양식 입력';
   $('fm-memo').value = pre.memo || '';
 
@@ -66,14 +166,14 @@ export function openForm(pre){
   // 파일 링크
   const fw=$('fm-files'); fw.innerHTML='';
   (pre.files||[]).forEach(p=>addFormFileRow(p));
-
-  updatePlacePreview();
-  $('formPanel').classList.add('on');
-  const m=$('fm-memo'); m.focus();
-  const pos=m.value.indexOf('○○'); if(pos>=0)m.setSelectionRange(pos,pos+2);
 }
-/* 팝업 닫기 — editingId 리셋까지 한 곳에서 (ESC·취소·저장 공용) */
-export function closeForm(){ $('formPanel').classList.remove('on'); editingId=null; }
+/* 팝업 닫기 — editingId 리셋까지 한 곳에서 (ESC·되돌리기·저장 공용).
+   v2.5.22: 닫기 전에 임시저장을 확정 플러시한다 (ESC·다른 창으로 나가도 내용 보존).
+   최종 저장/되돌리기는 dropDraft()로 초안을 먼저 지우므로 여기서 되살아나지 않는다. */
+export function closeForm(){
+  saveDraftNow();
+  $('formPanel').classList.remove('on'); editingId=null; draftKey=null; baseline=null; markDraft(0);
+}
 
 /* 관련인 행 — 연락처는 입력한 그대로 저장(자동 하이픈 없음: 지역번호·내선 등 파싱이 애매).
    대신 검색은 filters.js가 숫자만 버전도 haystack에 넣어 010-1234-5678 저장분이
@@ -91,6 +191,7 @@ function addContactRow(c){
      한글 IME 조합 중 Enter는 무시(조합 확정이 새 행을 만들지 않게). */
   row.querySelectorAll('input').forEach(inp=>inp.addEventListener('keydown',e=>{
     if(e.key!=='Enter'||e.isComposing||e.keyCode===229) return;
+    if(e.ctrlKey||e.metaKey) return;            // Ctrl+Enter 는 '저장'(main.js) — 행 추가와 겹치지 않게
     e.preventDefault();
     const rows=[...$('fm-contacts').querySelectorAll('.contact-row')];
     const isLast=rows[rows.length-1]===row;
@@ -138,6 +239,7 @@ function addFormSubRow(title,mid,focusIt,sub){
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
   const titleInput=row.querySelector('.fsub-title');
   titleInput.addEventListener('keydown',e=>{
+    if(e.ctrlKey||e.metaKey) return;            // Ctrl+Enter 는 '저장'(main.js)
     if(e.key==='Enter'){ e.preventDefault();
       const rows=[...$('fm-subs').querySelectorAll('.fsub-row')];
       const isLast = rows[rows.length-1]===row;
@@ -233,8 +335,19 @@ export function initForm(){
     if(p) addFormFileRow(p);
   });
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
-  $('fm-cancel').addEventListener('click',closeForm);
-  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); });
+  /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
+     새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */
+  $('fm-revert').addEventListener('click',()=>{
+    const cur = editingId ? S.items.find(x=>x.id===editingId) : null;
+    if(!confirm(cur ? '마지막으로 저장한 내용으로 되돌립니다.\n지금 화면의 임시저장 내용은 사라집니다. 계속할까요?'
+                    : '작성 중인 내용을 모두 비웁니다. 계속할까요?')) return;
+    dropDraft(draftKey);
+    openForm(cur || {});                                   // 저장본(또는 빈 양식)으로 다시 그림
+  });
+  /* 임시저장 트리거 — 입력·선택·행 추가/삭제 모두 (change 는 select·날짜 위젯용) */
+  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); scheduleDraft(); });
+  $('formPanel').addEventListener('change',scheduleDraft);
+  $('formPanel').addEventListener('click',e=>{ if(e.target.closest('.rm,.fsub-chk,.fsub-add')) scheduleDraft(); });
   $('fm-save').addEventListener('click',()=>{
     // F3: 저장 전 오입력 검사 (포커스 남아있으면 판정되도록 먼저 blur)
     if(document.activeElement && $('formPanel').contains(document.activeElement)) document.activeElement.blur();
@@ -256,6 +369,7 @@ export function initForm(){
     }else{
       S.items.push(makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs, files:d.files}));
     }
+    dropDraft(draftKey);                       // 최종 저장 = 임시저장분 폐기
     closeForm(); persist();
   });
 }

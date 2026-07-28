@@ -90,6 +90,44 @@ test('Ctrl+Enter 등록 시 초안을 빈 값으로 플러시 (재시작 중복 
 
 /* (v2.5.5) 'Ctrl 단독 → open_main_maximized' 기능 제거 — 관련 테스트 삭제 */
 
+/* v2.5.21: 기본 모드 = 검색, Alt 로 빠른 메모. placeholder 대신 힌트줄 안내 */
+const searchInp = env.document.getElementById('cap-search');
+const hint = env.document.getElementById('cap-hint');
+const alt = () => env.document.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Alt', bubbles:true, cancelable:true}));
+
+test('창을 열면 검색 모드로 시작한다 (메모칸은 감춰짐)', () => {
+  assert.ok(body.classList.contains('search'));
+  assert.equal(inp.style.display, 'none');
+  assert.equal(searchInp.style.display, '');
+  assert.match(hint.textContent, /검색/);
+});
+
+test('Alt: 빠른 메모 모드로 전환 → 다시 Alt 로 검색 모드', () => {
+  alt();
+  assert.equal(body.classList.contains('search'), false);
+  assert.equal(inp.style.display, '');
+  assert.match(hint.textContent, /빠른 메모/);
+  alt();
+  assert.ok(body.classList.contains('search'));
+});
+
+test('입력칸에는 placeholder 를 두지 않는다 (빈 칸의 회색 문구 오해 방지)', () => {
+  assert.equal(inp.getAttribute('placeholder'), null);
+  assert.equal(searchInp.getAttribute('placeholder'), null);
+});
+
+test('다시 열리면(focus) 검색어를 비운 검색 모드로 초기화 — 메모 초안은 유지', () => {
+  reset();
+  inp.value = '이어서 쓸 메모';
+  searchInp.value = '지난 검색어';
+  alt();                                            // 메모 모드로 이동한 상태에서
+  assert.equal(body.classList.contains('search'), false);
+  env.window.dispatchEvent(new env.window.Event('focus'));
+  assert.ok(body.classList.contains('search'));
+  assert.equal(searchInp.value, '');
+  assert.equal(inp.value, '이어서 쓸 메모');
+});
+
 test('입력 시 초안이 디바운스 후 전송된다', () => {
   reset();
   inp.value = '타이핑 중';
@@ -97,4 +135,49 @@ test('입력 시 초안이 디바운스 후 전송된다', () => {
   assert.equal(drafts().length, 0);               // 아직 (400ms 디바운스)
   mock.timers.tick(400);
   assert.equal(drafts().at(-1).payload.text, '타이핑 중');
+});
+
+/* ── 설정 연동 (v2.6.0): 테마·시작 화면·Ctrl+Enter 동작 ─────────────────── */
+const {applyCaptureConfig, openFresh} = await import('../../src/capture-win.js');
+const hellos = () => env.emitted.filter(e=>e.name==='wmhh://capture-hello');
+const forms  = () => env.emitted.filter(e=>e.name==='wmhh://capture-form');
+
+test('창이 뜰 때마다 메인 창에 구성을 요청한다 (capture-hello)', () => {
+  reset();
+  env.window.dispatchEvent(new env.window.Event('focus'));
+  assert.equal(hellos().length, 1);
+  assert.deepEqual(hellos()[0].target, 'main');
+});
+
+test('테마: capTheme=light 면 body.light, dark 면 해제', () => {
+  applyCaptureConfig({capTheme:'light'});
+  assert.ok(body.classList.contains('light'));
+  applyCaptureConfig({capTheme:'dark'});
+  assert.equal(body.classList.contains('light'), false);
+});
+
+test('시작 화면: capStart=memo 면 창을 열 때 빠른 메모로 시작', () => {
+  applyCaptureConfig({capStart:'memo'});
+  openFresh();
+  assert.equal(body.classList.contains('search'), false);
+  assert.equal(inp.style.display, '');
+  applyCaptureConfig({capStart:'search'});
+  openFresh();
+  assert.ok(body.classList.contains('search'));
+});
+
+test('Ctrl+Enter: capSubmit=form 이면 등록 대신 양식 열기 이벤트 + 메인 창 포커스', () => {
+  reset();
+  applyCaptureConfig({capStart:'memo', capSubmit:'form'});
+  openFresh();
+  inp.value = '양식으로 정리할 건';
+  key({key:'Enter', ctrlKey:true});
+  assert.equal(emits().length, 0);                       // capture-memo 는 나가지 않는다
+  assert.deepEqual(forms().at(-1), {target:'main', name:'wmhh://capture-form', payload:{text:'양식으로 정리할 건'}});
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='focus_main_window'));
+  assert.equal(inp.value, '');
+  assert.equal(hides().length, 1);                       // 플래시 없이 바로 숨김
+  assert.equal(body.classList.contains('flash'), false);
+  mock.timers.tick(400);
+  applyCaptureConfig({capStart:'search', capSubmit:'inbox'});
 });

@@ -12,9 +12,13 @@ import {persist} from './render.js';
 /* [JSON파일 백업] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
    한 번 지정하면 그 파일 핸들을 기억해 이후엔 같은 파일에 조용히 저장. */
 /* v2.5.11: 백업에 임시 상태 captureDraft 를 넣지 않는다 — 넣으면 복원 후 다음 실행에
+   (v2.6.2) 양식 임시저장 formDrafts 도 같은 이유로 뺀다: 복원한 항목을 열었을 때
+   백업 시점의 옛 초안이 되살아나 '저장된 내용이 아닌 것'이 보이면 안 된다.
    초안이 유령 항목으로 등록돼(main.js 초안 회수), 백업 안 원본 항목과 중복될 수 있다. */
-function backupPayload(){ const settings={...S.settings, captureDraft:''};
+function backupPayload(){ const settings=stripTemp(S.settings);
   return JSON.stringify({v:5,exported:new Date().toISOString(),fields:S.fields,presets:S.presets,idKinds:S.idKinds,settings,recurDefs:S.recurDefs,items:S.items},null,1); }
+/* 백업 왕복에서 제외하는 임시 상태 — 내보내기(backupPayload)·불러오기 양쪽에서 쓴다 */
+function stripTemp(settings){ return {...settings, captureDraft:'', formDrafts:{}}; }
 function backupName(){ const n=new Date(); return `뭐하려했더라_백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.json`; }
 async function doBackup(){
   const text=backupPayload();
@@ -131,7 +135,10 @@ export function initBackup(){
         fields:Array.isArray(d.fields)?d.fields:S.fields,
         presets:Array.isArray(d.presets)?d.presets:S.presets,
         idKinds:Array.isArray(d.idKinds)?d.idKinds:S.idKinds,
-        settings:(d.settings&&typeof d.settings==='object')?d.settings:S.settings,
+        /* 임시 상태는 들어오지도 나가지도 않는다(v2.6.2) — 내보낼 때 빼는 것과 대칭.
+           손으로 고친 파일이나 예전 개발 빌드가 만든 백업에 초안이 들어 있어도,
+           복원 직후 "저장한 적 없는 내용"이 되살아나지 않게 여기서 한 번 더 턴다. */
+        settings:stripTemp((d.settings&&typeof d.settings==='object')?d.settings:S.settings),
         recurDefs:Array.isArray(d.recurDefs)?d.recurDefs:S.recurDefs,
         items:migrated
       };

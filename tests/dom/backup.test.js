@@ -136,3 +136,48 @@ test('저장 위치 변경 해피패스: get_data_dir → choose_data_dir → re
   const cmds = env.invokeCalls.map(c=>c.cmd);
   assert.deepEqual(cmds, ['get_data_dir', 'choose_data_dir', 'restart_app']);
 });
+
+/* ── 옛 백업 ↔ 현재 설정의 호환 계약 (v2.6.2) ─────────────────────────────
+   설정은 스키마가 아니라 key/value 가방이라 새 키가 늘어도 마이그레이션이 없다.
+   빠진 키는 기본값으로 채우고, 모르는 옛 키는 버리지 않고 보존하며,
+   임시 상태(초안)는 내보낼 때도 들어올 때도 제외한다. */
+test('옛 백업 복원: 빠진 설정 키는 기본값으로, 모르는 옛 키는 보존, 초안은 제외', async () => {
+  await env.resetS(); S.loaded = true;
+  const oldBackup = {
+    v: 4,
+    items: [{id: 7, memo:'옛 업무', f:{}, subs:[]}],
+    settings: {                       // 테마 관련 키가 아예 없는 옛 설정
+      alarmOn: false,
+      captureShortcut: 'Ctrl+Alt+Q',  // v2.31에서 없어진 키 — 버리지 않는다
+      captureDraft: '옛 초안',        // 임시 상태 — 들어오면 안 된다
+      formDrafts: {'7': {at:1, data:{memo:'옛 임시저장'}}},
+    },
+  };
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify(oldBackup)}));
+  env.onInvoke('backup_import', () => null);      // 앞 테스트가 걸어둔 실패 핸들러 해제
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(20);
+  const sent = env.invokeCalls.filter(c=>c.cmd==='backup_import')[0].args.payload.settings;
+  assert.equal(sent.captureDraft, '');                 // 초안은 털어서 보낸다
+  assert.deepEqual(sent.formDrafts, {});
+  assert.equal(sent.captureShortcut, 'Ctrl+Alt+Q');    // 모르는 옛 키는 보존
+  assert.equal(S.settings.alarmOn, false);             // 백업 값이 이긴다
+  assert.equal(S.settings.closeToTray, true);          // 빠진 키는 DEFAULT_SETTINGS 로 채워진다
+  assert.equal(S.settings.theme, undefined);           // 테마 키 없음 → norm*() 이 기본값으로 접는다
+});
+
+test('내보내기: 임시 상태(초안)는 백업 파일에 담기지 않는다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.captureDraft = '쓰다 만 캡처';
+  S.settings.formDrafts = {'1': {at: 1, data:{memo:'쓰다 만 양식'}}};
+  S.settings.theme = 'dark';
+  env.onInvoke('save_text_file', () => true);
+  $('bkExp').click();
+  await env.flush(8);
+  const text = env.invokeCalls.filter(c=>c.cmd==='save_text_file')[0].args.content;
+  const out = JSON.parse(text);
+  assert.equal(out.settings.captureDraft, '');
+  assert.deepEqual(out.settings.formDrafts, {});
+  assert.equal(out.settings.theme, 'dark');            // 진짜 설정은 그대로 간다
+});
