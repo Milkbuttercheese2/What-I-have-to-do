@@ -12,8 +12,10 @@
      지우는 건 사용자 몫). 입력할 때마다 초안을 메인 창으로 흘려보내
      settings.captureDraft로 저장 → 앱이 꺼져도 다음 실행 때 분류 대기로 자동 등록.
      메모 초안은 별도 입력칸이라 검색 모드로 오가도 남는다.
-   - v2.6.0: 테마(밝게/어둡게)·시작 화면(검색/메모)·Ctrl+Enter 동작(분류 대기 등록/양식 열기)은
-     설정에서 고른다. 이 창은 DB를 직접 읽지 않고 메인 창에 'capture-hello'로 물어보면
+   - v2.6.3: 테마는 앱 전체에 하나다(메인 창과 같은 값 — 검색·빠른 메모·양식 메모가 같은 색).
+     화면 배치(첫 화면 / Alt 로 넘어갈 화면 — 검색·빠른 메모·
+     양식 메모 중 둘, 3P2 = 6가지)를 설정에서 고른다. '양식 메모'는 이 창이 담지 못하므로
+     메인 창 양식을 연다(첫 화면이 양식 메모면 Rust 가 아예 이 창을 띄우지 않는다). 이 창은 DB를 직접 읽지 않고 메인 창에 'capture-hello'로 물어보면
      메인이 'capture-config'로 내려준다 — 설정의 소유자는 메인 창 하나다.
    - 입력칸에 placeholder를 두지 않는다(v2.5.21): 빈 칸의 회색 문구를 실제 글자로 오해해
      "그 단어 뒤로 커서가 안 간다"는 혼선이 있었다. 안내는 아래 힌트줄(#cap-hint)이 맡는다.
@@ -22,23 +24,25 @@ let submitting=false;                       // 등록 플래시 중 blur로 조�
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
 /* v2.6.0 설정값 — 메인 창이 'wmhh://capture-config' 로 내려준다(요청은 capture-hello).
    이 창은 DB를 직접 읽지 않는다: 설정의 단일 소유자는 메인 창이다. */
-let cfg={capTheme:'dark', capStart:'search', capSubmit:'inbox'};
+let cfg={theme:'light', capStart:'search', capSecond:'memo'};
 let ready=false;                            // 설정을 한 번이라도 받았는가
 
-const HINT={search:'내 업무 검색 · Alt 를 누르면 빠른 메모',
-            memo:'빠른 메모 · Ctrl+Enter 등록 · Alt 를 누르면 검색'};
+const SCREEN_NAME={search:'내 업무 검색', memo:'빠른 메모', form:'양식 메모'};
+const HINT={search:'내 업무 검색', memo:'빠른 메모 · Ctrl+Enter 등록'};
+/* 힌트줄 문구 — 배치(첫/둘째 화면)에 따라 'Alt 를 누르면 …' 부분이 달라진다 */
+function hintFor(m){
+  const other = (m===cfg.capStart) ? cfg.capSecond : cfg.capStart;
+  return HINT[m] + (other&&other!==m ? ` · Alt 를 누르면 ${SCREEN_NAME[other]}` : '');
+}
 
 /* 설정 적용 — 테마는 body.light 한 줄로 갈린다(색은 capture.html 토큰) */
 export function applyCaptureConfig(c){
   c=c||{};
-  if(c.capTheme) cfg.capTheme=c.capTheme;
+  if(c.theme) cfg.theme=c.theme;
   if(c.capStart) cfg.capStart=c.capStart;
-  if(c.capSubmit) cfg.capSubmit=c.capSubmit;
-  document.body.classList.toggle('light', cfg.capTheme==='light');
-  const memo=cfg.capSubmit==='form';
-  HINT.memo = memo ? '빠른 메모 · Ctrl+Enter 로 양식 열기 · Alt 를 누르면 검색'
-                   : '빠른 메모 · Ctrl+Enter 등록 · Alt 를 누르면 검색';
-  if(mode==='memo') $id('cap-hint').textContent=HINT.memo;
+  if(c.capSecond) cfg.capSecond=c.capSecond;
+  document.body.classList.toggle('light', cfg.theme!=='dark');   // 앱 전체 테마를 그대로 따른다
+  $id('cap-hint').textContent=hintFor(mode);
 }
 /* 메인 창에 설정을 달라고 알린다 (부팅 직후·창이 다시 뜰 때마다) */
 function askConfig(){ window.__TAURI__.event.emitTo('main','wmhh://capture-hello',{}).catch(()=>{}); }
@@ -69,7 +73,7 @@ function setMode(m){
   $id('cap-inp').style.display=search?'none':'';
   $id('cap-search').style.display=search?'':'none';
   $id('cap-results').style.display=search?'flex':'none';
-  $id('cap-hint').textContent=HINT[search?'search':'memo'];
+  $id('cap-hint').textContent=hintFor(m);
   invoke('resize_capture',{height:search?406:126}).catch(()=>{});   // 메모 모드 = 낮은 바, 검색 모드 = 목록 높이
   const t=search?$id('cap-search'):$id('cap-inp');
   t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
@@ -91,9 +95,9 @@ export function initCaptureWin(){
   /* 구성(capture-config)이 도착하기 전 한 프레임: 지난번 값 캐시로 그려 깜빡임을 없앤다.
      진실은 메인 창이 내려주는 값이고, 도착하면 그걸로 덮어쓴다(theme.js cacheForBoot). */
   try{
-    applyCaptureConfig({capTheme:localStorage.getItem('wmhhCapTheme')||'dark',
+    applyCaptureConfig({theme:localStorage.getItem('wmhhTheme')||'light',
                         capStart:localStorage.getItem('wmhhCapStart')||'search',
-                        capSubmit:localStorage.getItem('wmhhCapSubmit')||'inbox'});
+                        capSecond:localStorage.getItem('wmhhCapSecond')||'memo'});
   }catch{}
   const inp=$id('cap-inp');
   inp.addEventListener('input',()=>{
@@ -108,13 +112,8 @@ export function initCaptureWin(){
     if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){
       e.preventDefault();
       const t=inp.value.trim(); if(!t){ hideWin(); return; }
-      const toForm=cfg.capSubmit==='form';           // v2.6.0 설정: 양식으로 열기
-      window.__TAURI__.event.emitTo('main', toForm?'wmhh://capture-form':'wmhh://capture-memo', {text:t}).catch(()=>{});
-      inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 넘겼으니 초안 비움
-      if(toForm){                                    // 메인 창이 앞으로 나오므로 플래시 없이 즉시 숨김
-        invoke('focus_main_window').catch(()=>{});
-        submitting=true; setTimeout(()=>{ submitting=false; },400); hideWin(); return;
-      }
+      window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
+      inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
       submitting=true; document.body.classList.add('flash');
       setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
     }
@@ -130,9 +129,13 @@ export function initCaptureWin(){
     searchTimer=setTimeout(()=>runSearch(searchInp.value.trim()),250);
   });
 
-  /* Alt 단독 키로 메모 ↔ 검색 토글 (양쪽 모드 공통) */
+  /* Alt = 설정한 '다른 화면'으로 전환. 양식 메모는 이 창이 담지 못하므로 메인 창으로 넘긴다. */
   document.addEventListener('keydown',e=>{
-    if(e.key==='Alt'&&!e.repeat){ e.preventDefault(); setMode(mode==='memo'?'search':'memo'); }
+    if(e.key!=='Alt'||e.repeat) return;
+    e.preventDefault();
+    const target = (mode===cfg.capStart) ? cfg.capSecond : cfg.capStart;
+    if(target==='form'){ openMainForm(); return; }
+    setMode(target==='memo'?'memo':'search');
   });
 
   /* (v2.5.5 제거) 'Ctrl 단독 → 메인 창 최대화' 기능 삭제 — 의도치 않게 자주 발동돼 제거. */
@@ -162,8 +165,16 @@ export function initCaptureWin(){
   openFresh();
 }
 
-/* Ctrl+Alt+Space 로 열릴 때의 초기 상태: 입력칸을 비우고 설정된 시작 화면으로 */
+/* '양식 메모' — 미니 창을 접고 메인 창의 빈 양식을 연다 (Rust 가 여는 경로와 같은 이벤트) */
+function openMainForm(){
+  window.__TAURI__.event.emitTo('main','wmhh://open-blank-form',{}).catch(()=>{});
+  invoke('focus_main_window').catch(()=>{});
+  submitting=true; setTimeout(()=>{ submitting=false; },400);   // blur 로 인한 중복 숨김 방지
+  hideWin();
+}
+
+/* Ctrl+Alt+Space 로 열릴 때의 초기 상태: 입력칸을 비우고 설정된 첫 화면으로 */
 export function openFresh(){
   $id('cap-search').value='';
-  setMode(cfg.capStart==='memo'?'memo':'search');
+  setMode(cfg.capStart==='memo'?'memo':'search');   // 'form' 이면 Rust 가 이 창을 안 띄운다(방어적으로 검색)
 }

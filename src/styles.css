@@ -29,10 +29,11 @@
        컴포넌트 규칙은 색을 직접 쓰지 않는다(§1 '하드코딩 색 지양'). 아래 토큰만
        html[data-theme="dark"] 에서 갈아끼우면 화면 전체가 한 번에 바뀐다. */
     --surface:#ffffff;              /* 입력칸·옵션카드·알림 항목 등 '흰 면' */
-    --on-accent:#ffffff;            /* 청록·빨강 같은 색면 위 글자 */
+    --on-accent:#ffffff;            /* **테마 토큰 색면**(청록 --focus/--amber, --red) 위 글자 전용.
+                                       고정색 면(#e81123 닫기)·토스트 위 글자에는 쓰지 않는다 — 아래 규칙 참고 */
     --focus-strong:#3f7d75;         /* 주 버튼 hover */
     --alt-btn:#1f2a33; --alt-btn-fg:#ffffff; --alt-btn-hover:#000000;   /* 양식 입력(짙은) 버튼 */
-    --tab-on-bg:#e9efec;            /* 선택된 탭 */
+    --tab-on-bg:#dcebe5;            /* 선택된 탭·세그먼트 — 트랙(--chip-bg) 대비 다크와 같은 정도로 또렷하게 */
     --chip-bg:#f3f4f5;              /* 옅은 회색 면 — 보조 버튼·카운트 칩·탭 트랙 */
     --tag-imm-bg:#fbe3dd; --tag-imm-fg:#c0392b;   /* 임박 시각칩 */
     --tag-id-bg:#e9e4f2;  --tag-id-fg:#5b4a86;    /* 식별정보 태그 */
@@ -137,7 +138,7 @@
   .tb-btn{width:46px;height:100%;border:none;background:none;cursor:pointer;font-size:13px;line-height:1;
     color:var(--ink-soft);border-radius:0;transition:background .12s,color .12s}
   .tb-btn:hover{background:var(--chip-bg);color:var(--ink)}
-  .tb-btn.tb-close:hover{background:#e81123;color:var(--on-accent)}   /* Windows 표준 닫기 hover 색 */
+  .tb-btn.tb-close:hover{background:#e81123;color:#fff}   /* Windows 표준 닫기 hover 색 — 면이 테마와 무관한 고정색이라 글자도 고정 흰색 */
   header{padding:12px 28px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:34px;z-index:30}
   .header-inner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;width:auto;max-width:1460px;margin:0 auto}
   .brand{display:flex;align-items:baseline;gap:12px;flex:none}
@@ -194,7 +195,8 @@
      본문 14px로 렌더되던 문제(개별 스코프 규칙의 누락) 방지 */
   /* 섹션 제목은 공용 규칙 하나로 — 양식과 모달(설정 등)이 같은 모양을 쓴다(디자인 정책 §5.3) */
   .fm-inner .t-head,.modal .t-head{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.04em}
-  .modal .t-head{margin-top:14px;padding-left:2px}
+  /* 설정 팝업 등 모달의 섹션 제목은 선택지(12.5px)보다 확실히 크게 — 훑어볼 때 구역이 먼저 읽히게 (v2.6.3) */
+  .modal .t-head{font-size:14px;font-weight:700;color:var(--ink);letter-spacing:0;margin-top:20px;margin-bottom:8px;padding-left:2px}
   .modal .t-head:first-of-type{margin-top:0}
   .fid-row{display:flex;align-items:center;gap:7px;padding:3px 0}
   .fid-row select{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);flex:none;width:130px}
@@ -214,6 +216,8 @@
   .seg-btn{font-family:inherit;font-size:12px;font-weight:600;padding:5px 14px;border:none;border-radius:999px;
     background:transparent;color:var(--ink-soft);cursor:pointer;white-space:nowrap}
   .seg-btn.on{background:var(--tab-on-bg);color:var(--focus)}
+  .seg-btn:disabled{opacity:.35;cursor:default}      /* 첫 화면과 같은 항목은 고를 수 없다 */
+  .set-note{font-size:11px;color:var(--ink-soft);line-height:1.5;margin:2px 2px 10px}
   .set-list{display:flex;flex-direction:column;gap:2px;margin-bottom:2px}
   .set-list .menu-item{padding:8px 2px}          /* 항목 줄 라벨과 시작선 정렬 */
   .set-list .menu-item:hover{padding-left:8px;transition:padding .1s}
@@ -459,7 +463,7 @@
   footer{text-align:center;font-size:11px;color:var(--ink-soft);padding:12px;border-top:1px solid var(--line);background:var(--card)}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);z-index:200;display:flex;align-items:center;gap:14px;background:var(--toast-bg);color:var(--toast-fg);font-size:12.5px;padding:11px 16px;border-radius:9px;box-shadow:0 8px 30px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
-  .toast button{font-family:inherit;font-size:12.5px;font-weight:600;background:transparent;border:1px solid var(--toast-btn-border);color:var(--on-accent);border-radius:6px;padding:5px 12px;cursor:pointer;word-break:keep-all}   /* v2.5.12: 좁을 때 '실행 취소'가 음절 중간(실행취/소)이 아니라 어절 경계(실행/취소)로 줄바꿈 */
+  .toast button{font-family:inherit;font-size:12.5px;font-weight:600;background:transparent;border:1px solid var(--toast-btn-border);color:var(--toast-fg);border-radius:6px;padding:5px 12px;cursor:pointer;word-break:keep-all}   /* v2.5.12: 좁을 때 '실행 취소'가 음절 중간(실행취/소)이 아니라 어절 경계(실행/취소)로 줄바꿈 */
   .toast button:hover{background:var(--toast-btn-hover)}
   /* 저장 실패 경고 배너 — 조용한 성공/시끄러운 실패. 성공 토스트와 달리 자동으로
      사라지지 않고 다음 저장이 성공할 때까지 계속 떠 있어(store.js가 on/off) 사용자가

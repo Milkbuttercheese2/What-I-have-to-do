@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
@@ -256,7 +256,28 @@ pub const CAPTURE_SHORTCUT: &str = "Ctrl+Alt+Space";
 /// 전역 단축키 핸들러 본체 — 메인 창은 절대 건드리지 않는다(사용자 필수 요구:
 /// 다른 앱 작업 중 미니 팝업만 비침습적으로 떴다가 사라져야 한다).
 /// 이미 보이면 숨김(토글), 아니면 커서가 있는 모니터 중앙 상단에 표시.
+/// v2.6.3 미니 창 시작 화면이 '양식 메모'인가.
+/// 프런트(settings)가 단일 진실 공급원이고, Rust 는 단축키를 어떻게 처리할지만 알면 되므로
+/// 값을 여기 캐시해 둔다(`set_capture_form_mode`). Rust 가 DB 를 읽지 않는 원칙은 그대로.
+/// 이 판단을 웹뷰에서 하면 미니 창이 떴다가 사라지는 깜빡임이 생기므로 여기서 갈라야 한다.
+static CAPTURE_FORM_MODE: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn set_capture_form_mode(form: bool) {
+    CAPTURE_FORM_MODE.store(form, Ordering::Relaxed);
+}
+
 pub fn show_capture_window(app: &AppHandle) {
+    // '양식 메모' 설정: 미니 창을 아예 띄우지 않고 메인 창의 양식을 연다.
+    if CAPTURE_FORM_MODE.load(Ordering::Relaxed) {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.unminimize();
+            let _ = main.show();
+            let _ = main.set_focus();
+            let _ = app.emit_to("main", "wmhh://open-blank-form", ());
+        }
+        return;
+    }
     let Some(win) = app.get_webview_window("capture") else { return };
     if win.is_visible().unwrap_or(false) {
         let _ = win.hide();

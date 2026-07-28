@@ -140,7 +140,6 @@ test('입력 시 초안이 디바운스 후 전송된다', () => {
 /* ── 설정 연동 (v2.6.0): 테마·시작 화면·Ctrl+Enter 동작 ─────────────────── */
 const {applyCaptureConfig, openFresh} = await import('../../src/capture-win.js');
 const hellos = () => env.emitted.filter(e=>e.name==='wmhh://capture-hello');
-const forms  = () => env.emitted.filter(e=>e.name==='wmhh://capture-form');
 
 test('창이 뜰 때마다 메인 창에 구성을 요청한다 (capture-hello)', () => {
   reset();
@@ -149,35 +148,32 @@ test('창이 뜰 때마다 메인 창에 구성을 요청한다 (capture-hello)'
   assert.deepEqual(hellos()[0].target, 'main');
 });
 
-test('테마: capTheme=light 면 body.light, dark 면 해제', () => {
-  applyCaptureConfig({capTheme:'light'});
-  assert.ok(body.classList.contains('light'));
-  applyCaptureConfig({capTheme:'dark'});
+test('테마: 앱 전체 테마를 그대로 따른다 (dark 면 검정 패널, light 면 흰 패널)', () => {
+  applyCaptureConfig({theme:'dark'});
   assert.equal(body.classList.contains('light'), false);
+  applyCaptureConfig({theme:'light'});
+  assert.ok(body.classList.contains('light'));
 });
 
-test('시작 화면: capStart=memo 면 창을 열 때 빠른 메모로 시작', () => {
-  applyCaptureConfig({capStart:'memo'});
+test('첫 화면: capStart=memo 면 창을 열 때 빠른 메모로 시작', () => {
+  applyCaptureConfig({capStart:'memo', capSecond:'search'});
   openFresh();
   assert.equal(body.classList.contains('search'), false);
   assert.equal(inp.style.display, '');
-  applyCaptureConfig({capStart:'search'});
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
   openFresh();
   assert.ok(body.classList.contains('search'));
 });
 
-test('Ctrl+Enter: capSubmit=form 이면 등록 대신 양식 열기 이벤트 + 메인 창 포커스', () => {
+test("배치(3P2): Alt 목적지가 '양식 메모'면 미니 창을 접고 메인 양식을 연다", () => {
   reset();
-  applyCaptureConfig({capStart:'memo', capSubmit:'form'});
+  applyCaptureConfig({capStart:'search', capSecond:'form'});
   openFresh();
-  inp.value = '양식으로 정리할 건';
-  key({key:'Enter', ctrlKey:true});
-  assert.equal(emits().length, 0);                       // capture-memo 는 나가지 않는다
-  assert.deepEqual(forms().at(-1), {target:'main', name:'wmhh://capture-form', payload:{text:'양식으로 정리할 건'}});
+  assert.match(hint.textContent, /Alt 를 누르면 양식 메모/);
+  alt();
+  assert.equal(env.emitted.filter(e=>e.name==='wmhh://open-blank-form').length, 1);
   assert.ok(env.invokeCalls.some(c=>c.cmd==='focus_main_window'));
-  assert.equal(inp.value, '');
-  assert.equal(hides().length, 1);                       // 플래시 없이 바로 숨김
-  assert.equal(body.classList.contains('flash'), false);
+  assert.equal(hides().length, 1);
   mock.timers.tick(400);
-  applyCaptureConfig({capStart:'search', capSubmit:'inbox'});
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
 });
