@@ -188,6 +188,8 @@
   .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
   .fm-place{font-size:11px;color:var(--ink-soft);margin-right:auto}
   .fm-place b{color:var(--focus)}
+  /* v2.5.22 임시저장 표시 — 저장 버튼 왼쪽의 조용한 상태 문구 */
+  .fm-draft{font-size:11px;color:var(--ink-soft);margin-right:4px}
   .btn-ok{font-size:14px;padding:8px 22px;background:var(--focus);color:#fff}
   .btn-ok:hover{background:#3f7d75}
   .btn-cancel{font-size:14px;padding:8px 16px;background:var(--line-soft);color:var(--ink-soft)}

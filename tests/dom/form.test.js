@@ -236,3 +236,127 @@ test('closeForm 후에는 편집 대상이 리셋됨 — 새 저장은 새 아�
   assert.equal(S.items.length, 2);
   assert.equal(S.items[0].memo, it.memo);   // 원본 무변경
 });
+
+/* ── 임시저장/되돌리기 (v2.5.22) ─────────────────────────────────────────── */
+const draftOf = key => (S.settings.formDrafts||{})[String(key)];
+
+test('임시저장: 입력 후 700ms → settings.formDrafts 에 저장, 항목 자체는 불변', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '통화 내용 추가 기록';
+  input($('fm-memo'));
+  assert.equal(draftOf(it.id), undefined);          // 아직 디바운스 중
+  mock.timers.tick(700);
+  await env.flush();
+  assert.equal(draftOf(it.id).data.memo, '통화 내용 추가 기록');
+  assert.equal(S.items[0].memo, '전화 문의 건');    // 최종 저장 전에는 항목 불변
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_settings'));
+});
+
+test('ESC/닫기: 임시저장이 즉시 플러시되고, 다시 열면 그 내용이 복원된다', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '쓰다 만 메모';
+  input($('fm-memo'));
+  closeForm();                                       // 디바운스 대기 없이 확정 플러시
+  await env.flush();
+  assert.equal(draftOf(it.id).data.memo, '쓰다 만 메모');
+  openForm(it);
+  assert.equal($('fm-memo').value, '쓰다 만 메모');  // 항목이 아니라 임시저장분이 뜬다
+  assert.match($('fm-draft').textContent, /임시저장됨/);
+  closeForm();
+});
+
+test('저장(Ctrl+S): 항목에 반영되고 임시저장분은 폐기된다', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '최종 확정 메모';
+  input($('fm-memo'));
+  mock.timers.tick(700);
+  await env.flush();
+  assert.ok(draftOf(it.id));
+  $('fm-save').click();
+  await env.flush();
+  assert.equal(S.items[0].memo, '최종 확정 메모');
+  assert.equal(draftOf(it.id), undefined);           // 최종 저장 = 초안 폐기
+  openForm(S.items[0]);
+  assert.equal($('fm-memo').value, '최종 확정 메모');
+  assert.equal($('fm-draft').textContent, '');
+  closeForm();
+});
+
+test('되돌리기: 마지막 저장본으로 복구 + 임시저장분 삭제 (항목은 원래대로)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '잘못 쓴 내용';
+  input($('fm-memo'));
+  mock.timers.tick(700);
+  await env.flush();
+  assert.ok(draftOf(it.id));
+  $('fm-revert').click();                            // confirm 은 기본 true
+  await env.flush();
+  assert.equal($('fm-memo').value, '전화 문의 건');  // 저장본으로 복구
+  assert.equal(draftOf(it.id), undefined);
+  assert.equal(S.items[0].memo, '전화 문의 건');
+  assert.ok($('formPanel').classList.contains('on'));// 팝업은 열린 채로
+  closeForm();
+});
+
+test('저장본과 같아지면 임시저장분은 스스로 지워진다', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  openForm(it);
+  $('fm-memo').value = '임시 변경';
+  input($('fm-memo')); mock.timers.tick(700); await env.flush();
+  assert.ok(draftOf(it.id));
+  $('fm-memo').value = '전화 문의 건';               // 원래대로 되돌려 씀
+  input($('fm-memo')); mock.timers.tick(700); await env.flush();
+  assert.equal(draftOf(it.id), undefined);
+  assert.equal($('fm-draft').textContent, '');
+  closeForm();
+});
+
+test('삭제된 항목의 임시저장분은 정리된다 (설정 비대화 방지)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  S.settings.formDrafts = {'999999': {at: 1, data:{memo:'사라진 항목'}}};
+  openForm(it);
+  $('fm-memo').value = '살아있는 항목 메모';
+  input($('fm-memo')); mock.timers.tick(700); await env.flush();
+  assert.equal(draftOf(999999), undefined);
+  assert.ok(draftOf(it.id));
+  closeForm();
+});
+
+test('새 항목: 쓰다 닫아도 남고, 빈 양식을 다시 열면 이어서 쓴다', async () => {
+  await env.resetS(); S.loaded = true;
+  openForm({});
+  $('fm-memo').value = '새로 받은 민원 정리';
+  input($('fm-memo'));
+  closeForm();
+  await env.flush();
+  assert.equal(draftOf('new').data.memo, '새로 받은 민원 정리');
+  openForm({});
+  assert.equal($('fm-memo').value, '새로 받은 민원 정리');
+  $('fm-save').click();                              // 최종 저장 → 초안 폐기
+  await env.flush();
+  assert.equal(S.items.length, 1);
+  assert.equal(draftOf('new'), undefined);
+});
+
+test('새 양식을 채워진 채로 열면(바로 입력·프리셋) 남은 초안과 어느 쪽을 쓸지 묻는다', async () => {
+  await env.resetS(); S.loaded = true;
+  openForm({});
+  $('fm-memo').value = '남겨둔 초안';
+  input($('fm-memo'));
+  closeForm(); await env.flush();
+  env.answerConfirm(false);                          // "새로 시작"
+  openForm({memo:'방금 입력한 내용'});
+  assert.equal($('fm-memo').value, '방금 입력한 내용');
+  assert.equal(draftOf('new'), undefined);           // 선택에 따라 초안 폐기
+  closeForm(); await env.flush();
+});

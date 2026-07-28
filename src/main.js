@@ -78,14 +78,25 @@ $('boardModeModal').addEventListener('click',e=>{
   if(e.target.id==='boardModeModal') closeBoardModeModal();   // 배경 클릭 닫기
 });
 
-/* Ctrl+S: 양식 팝업 열려 있으면 저장, 아니면 JSON 백업 */
+/* Ctrl+S = '저장'으로 통일 (v2.5.22): 열려 있는 편집 화면을 저장한다.
+   양식 팝업 > 주기 업무 > 프리셋 순으로 위에 떠 있는 것부터, 아무것도 없으면 JSON 백업. */
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='S')){
     e.preventDefault();
     if($('formPanel').classList.contains('on')){ $('fm-save').click(); }
+    else if($('recurModal').classList.contains('on')){ $('rc-save').click(); }
     else if($('presetModal').classList.contains('on')){ $('np-save').click(); }
     else { $('bkExp').click(); }
   }
+});
+/* Ctrl+Enter 도 '저장' — 바로 입력(#inp)에 익숙해진 손을 양식·모달에서도 그대로 쓰게
+   (v2.5.22, 사용자 요청). 아무 편집 화면도 없으면 아무 일도 하지 않는다(백업 실행 금지).
+   #inp 의 Ctrl+Enter=등록은 form.js 가 따로 처리한다. IME 조합 중은 무시. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'||!(e.ctrlKey||e.metaKey)||e.isComposing||e.keyCode===229) return;
+  if($('formPanel').classList.contains('on')){ e.preventDefault(); $('fm-save').click(); }
+  else if($('recurModal').classList.contains('on')){ e.preventDefault(); $('rc-save').click(); }
+  else if($('presetModal').classList.contains('on')){ e.preventDefault(); $('np-save').click(); }
 });
 /* F14: ESC 로 팝업 닫기. 배경 클릭 닫기는 드래그 선택 시 오작동하므로 의도적으로 제외.
    알람 모달은 명시적 확인이 필요하므로 대상에서 제외. */

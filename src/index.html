@@ -101,8 +101,10 @@
 
       <div class="fm-actions">
         <span class="fm-place" id="fm-place"></span>
-        <button class="btn btn-cancel" id="fm-cancel">취소</button>
-        <button class="btn btn-ok" id="fm-save">저장</button>
+        <!-- v2.5.22 임시저장: 작성 중 내용은 자동으로 임시저장되고, [되돌리기]로 마지막 저장본 복구 -->
+        <span class="fm-draft" id="fm-draft"></span>
+        <button class="btn btn-cancel" id="fm-revert" title="마지막으로 저장한 내용으로 되돌립니다 (임시저장분 삭제)">되돌리기</button>
+        <button class="btn btn-ok" id="fm-save" title="Ctrl+S 로도 저장됩니다">저장 (Ctrl+S)</button>
       </div>
      </div>
     </div>
