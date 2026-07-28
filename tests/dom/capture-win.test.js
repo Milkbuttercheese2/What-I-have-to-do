@@ -212,16 +212,23 @@ test('검색 결과: ↑↓ 로 고르고 Enter 로 연다 (v2.6.4)', async () =
   await env.flush(5);
   const hitEls = () => [...env.document.querySelectorAll('.cap-hit')];
   assert.equal(hitEls().length, 3);
-  assert.ok(hitEls()[0].classList.contains('sel'));          // 첫 항목이 미리 선택돼 있다
+  /* v2.6.7: 검색만 해서는 아무 줄도 켜지지 않는다 — 손대지 않은 하이라이트가 남지 않게 */
+  assert.equal(hitEls().filter(el=>el.classList.contains('sel')).length, 0);
   const key2 = init => searchInp.dispatchEvent(new env.window.KeyboardEvent('keydown', Object.assign({bubbles:true, cancelable:true}, init)));
   key2({key:'ArrowDown'});
-  assert.ok(hitEls()[1].classList.contains('sel'));
+  assert.ok(hitEls()[0].classList.contains('sel'));          // 첫 ↓ = 첫 줄
   key2({key:'ArrowDown'});
-  assert.ok(hitEls()[2].classList.contains('sel'));
   key2({key:'ArrowDown'});
-  assert.ok(hitEls()[0].classList.contains('sel'));          // 끝에서 순환
+  assert.ok(hitEls()[2].classList.contains('sel'));          // 마지막 줄
+  key2({key:'ArrowDown'});
+  assert.ok(hitEls()[2].classList.contains('sel'), '맨 아래에서 더 내려가지 않는다(순환 없음)');
   key2({key:'ArrowUp'});
-  assert.ok(hitEls()[2].classList.contains('sel'));
+  assert.ok(hitEls()[1].classList.contains('sel'), '맨 아래에서도 ↑ 로 다시 올라간다');
+  key2({key:'ArrowUp'});
+  assert.ok(hitEls()[0].classList.contains('sel'));
+  key2({key:'ArrowUp'});
+  assert.ok(hitEls()[0].classList.contains('sel'), '맨 위에서 더 올라가지 않는다');
+  key2({key:'ArrowDown'}); key2({key:'ArrowDown'});          // 다시 마지막 줄로
   env.emitted.length = 0;
   key2({key:'Enter'});
   const opened = env.emitted.filter(e=>e.name==='wmhh://open-item');
@@ -255,7 +262,7 @@ test('목록이 다시 그려져도 고른 항목을 유지한다 — 디바운�
   mock.timers.tick(250); await env.flush(5);
   const hitEls = () => [...env.document.querySelectorAll('.cap-hit')];
   const key2 = init => searchInp.dispatchEvent(new env.window.KeyboardEvent('keydown', Object.assign({bubbles:true, cancelable:true}, init)));
-  key2({key:'ArrowDown'}); key2({key:'ArrowDown'});
+  key2({key:'ArrowDown'}); key2({key:'ArrowDown'}); key2({key:'ArrowDown'});
   assert.ok(hitEls()[2].classList.contains('sel'));          // 셋째를 골라둔 상태
   await runSearchAgain();                                     // 같은 검색어로 목록 재생성
   assert.ok(hitEls()[2].classList.contains('sel'), '고른 자리를 그대로 이어간다');
@@ -292,4 +299,44 @@ test('Rust 토글로 숨은 경우에도 화면을 비운다 (capture-hidden, v2
   env.fireEvent('wmhh://capture-hidden', {});
   assert.equal(searchInp.value, '');
   assert.equal(env.document.querySelectorAll('.cap-hit').length, 0);
+});
+
+test('아무 줄도 고르지 않은 채 Enter 를 누르면 첫 결과가 열린다 (v2.6.7)', async () => {
+  reset();
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
+  openFresh();
+  env.onInvoke('quick_search', () => [{id:77, memo:'첫 결과', done:false},
+                                      {id:88, memo:'둘째', done:false}]);
+  searchInp.value = '결과';
+  searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(250); await env.flush(5);
+  assert.equal([...env.document.querySelectorAll('.cap-hit.sel')].length, 0);
+  env.emitted.length = 0;
+  searchInp.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Enter', bubbles:true, cancelable:true}));
+  assert.deepEqual(env.emitted.filter(e=>e.name==='wmhh://open-item').at(-1).payload, {id:77});
+});
+
+test('hover 하이라이트는 마우스를 움직였을 때만 켠다 — 창이 커서 밑에 떠도 줄이 켜지지 않는다 (v2.6.7)', () => {
+  reset();
+  openFresh();
+  assert.equal(body.classList.contains('mouse'), false, '새로 뜰 때는 마우스 모드 아님');
+  env.document.dispatchEvent(new env.window.MouseEvent('mousemove', {bubbles:true}));
+  assert.ok(body.classList.contains('mouse'));
+  searchInp.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true, cancelable:true}));
+  assert.equal(body.classList.contains('mouse'), false, '키보드를 쓰면 hover 표시는 꺼진다');
+});
+
+test('목록 밖에서 휠을 굴려도 결과 목록이 스크롤된다 (v2.6.8)', async () => {
+  reset();
+  applyCaptureConfig({capStart:'search', capSecond:'memo'});
+  openFresh();
+  env.onInvoke('quick_search', () => Array.from({length:20}, (_,i)=>({id:i+1, memo:'업무 '+(i+1), done:false})));
+  searchInp.value = '업무';
+  searchInp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(250); await env.flush(5);
+  const list = env.document.getElementById('cap-items');
+  list.scrollTop = 0;
+  const ev = new env.window.WheelEvent('wheel', {deltaY:120, bubbles:true, cancelable:true});
+  searchInp.dispatchEvent(ev);                       // 검색칸(목록 밖) 위에서 휠
+  assert.equal(list.scrollTop, 120, '목록으로 넘어가 스크롤된다');
 });

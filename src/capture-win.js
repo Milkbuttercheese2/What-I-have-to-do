@@ -60,6 +60,7 @@ const JUST_SHOWN_MS=450;
    비우면, 뜨는 첫 프레임에 지난 검색어와 결과가 한 번 번쩍였다가 지워진다.
    감출 때 비워 두면 다음에 뜰 때 처음부터 빈 화면이다. 메모 초안(textarea)은 건드리지 않는다. */
 function resetSearchUI(){
+  document.body.classList.remove('mouse');       // 새로 뜰 땐 hover 하이라이트 없이 시작
   clearTimeout(searchTimer); searchSeq++;        // 진행 중이던 검색이 뒤늦게 그려지지 않게
   const s=$id('cap-search'); if(s) s.value='';
   selIdx=-1;
@@ -117,8 +118,13 @@ async function runSearch(q){
     `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(h.memo||'(메모 없음)')}</span></div>`
   ).join(''):'<div class="cap-empty">일치하는 업무 없음</div>';
   if(!items.length) return;
-  const back=keepId==null?-1:items.findIndex(h=>h.id===keepId);
-  setSel(back>=0?back:0);                   // 고른 게 남아 있으면 그 자리, 아니면 첫 항목
+  /* v2.6.7: 검색만 했을 때는 아무 줄도 고르지 않는다(하이라이트 없음).
+     예전엔 첫 줄을 자동으로 골라둬, 손대지도 않은 줄이 계속 켜져 있는 것처럼 보였다.
+     이미 ↑↓ 로 고른 게 있고 그 업무가 새 목록에도 있으면 그 자리만 이어간다. */
+  if(keepId!=null){
+    const back=items.findIndex(h=>h.id===keepId);
+    if(back>=0) setSel(back);
+  }
 }
 
 /* ── 검색 결과 키보드 이동 (v2.6.4) ──────────────────────────────────────
@@ -128,14 +134,23 @@ function hits(){ return [...$id('cap-items').querySelectorAll('.cap-hit')]; }
 function selectedId(){ const el=hits()[selIdx]; return el?Number(el.dataset.item):null; }
 function setSel(i){
   const list=hits(); if(!list.length){ selIdx=-1; return; }
-  selIdx=(i+list.length)%list.length;       // 끝에서 넘어가면 반대쪽으로 (순환)
+  selIdx=Math.max(0, Math.min(i, list.length-1));
   list.forEach((el,n)=>el.classList.toggle('sel', n===selIdx));
   const el=list[selIdx];
   if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'});
 }
-function moveSel(d){ if(hits().length) setSel(selIdx<0 ? (d>0?0:-1) : selIdx+d); }
+/* ↑↓ 이동 — 끝에서는 멈춘다(순환 없음). 아직 아무것도 안 골랐으면 ↓=첫 줄 / ↑=마지막 줄. */
+function moveSel(d){
+  const list=hits(); if(!list.length) return;
+  if(selIdx<0){ setSel(d>0 ? 0 : list.length-1); return; }
+  const next=selIdx+d;
+  if(next<0 || next>=list.length) return;   // 맨 위/맨 아래에서 더 가지 않는다
+  setSel(next);
+}
 function openSel(){
-  const el=hits()[selIdx]; if(!el) return false;
+  const list=hits(); if(!list.length) return false;
+  const el=list[selIdx<0?0:selIdx];         // 아무것도 안 골랐으면 첫 결과
+  if(!el) return false;
   openItem(Number(el.dataset.item)); return true;
 }
 /* 업무 하나를 메인 창에서 열기 — 클릭·Enter 공용 */
@@ -202,6 +217,21 @@ export function initCaptureWin(){
   });
 
   /* (v2.5.5 제거) 'Ctrl 단독 → 메인 창 최대화' 기능 삭제 — 의도치 않게 자주 발동돼 제거. */
+
+  /* v2.6.8: 창 어디에 커서가 있어도 휠로 결과 목록을 오르내린다.
+     목록 밖(검색칸·힌트줄) 위에서 굴리면 스크롤이 먹지 않던 것을 목록으로 넘겨준다. */
+  document.addEventListener('wheel',e=>{
+    const list=$id('cap-items');
+    if(!list || mode!=='search') return;
+    if(e.target.closest && e.target.closest('.cap-list')) return;   // 목록 위면 브라우저 기본 스크롤
+    list.scrollTop += e.deltaY;
+    e.preventDefault();
+  }, {passive:false});
+
+  /* v2.6.7 마우스/키보드 모드 — hover 하이라이트는 마우스를 실제로 움직였을 때만 켠다.
+     창이 커서 밑에 떠서 생기는 '가만히 있는데 켜진 줄'을 없앤다. */
+  document.addEventListener('mousemove',()=>document.body.classList.add('mouse'));
+  document.addEventListener('keydown',()=>document.body.classList.remove('mouse'), true);
 
   /* 검색 결과 클릭 — 업무를 메인 창에서 연다 */
   $id('cap-results').addEventListener('click',e=>{
