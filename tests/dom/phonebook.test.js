@@ -150,34 +150,29 @@ test('양식 메모 @자동완성: @태그는 완성형으로 남고 관련인 �
   assert.equal(filled.length, 1);
 });
 
-test('양식 메모 본문 @태그: 하이라이트 + 태그 위 클릭 → 관련 업무 팝업, 카드 태그는 클릭 안 됨', async () => {
+test('양식 메모 본문 @태그: 하이라이트 + hover 클릭 → 관련 업무(strict), 카드·비hover 클릭은 무시', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   S.items=[
-    {id:1, memo:'이름으로 적은 건', contacts:[{who:'김철수', org:'', phone:''}], done:false},
-    {id:2, memo:'번호만 적은 건', contacts:[{who:'', org:'', phone:'01012345678'}], done:true},
-    {id:3, memo:'메모에 @김철수 태그만', contacts:[], done:false},
-    {id:4, memo:'무관한 업무', contacts:[{who:'박영수', org:'', phone:'010-9'}], done:false},
+    {id:1, memo:'3칸 일치 관련인', contacts:[{who:'김철수', org:'행정과', phone:'01012345678'}], done:false},
+    {id:2, memo:'이름만 적은 건(제외)', contacts:[{who:'김철수', org:'', phone:''}], done:false},
+    {id:3, memo:'메모에 @김철수 태그', contacts:[], done:true},
+    {id:4, memo:'평문 김철수 언급(제외)', contacts:[], done:false},
   ];
-  // 양식을 열면 백드롭 층에 본문 태그 하이라이트가 깔린다 (v2.11.0 — 별도 칩 없음)
   openForm({memo:'통화 @김철수 건'});
   const hl=env.document.getElementById('fm-memo-hl');
   assert.equal(hl.querySelectorAll('.at-tag').length, 1);
-  // 본문에서 캐럿을 태그 위에 놓고 클릭 → 팝업
   const memo=$('fm-memo');
-  const at=memo.value.indexOf('@')+1;
-  memo.setSelectionRange(at, at);
+  /* v3.0.2: 클릭은 hover(기하 판정) 상태에서만 — 캐럿 스냅으로 인한 오작동 방지 */
   memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
+  assert.ok(!modal.classList.contains('on'));                    // hover 없이는 안 열림
+  hl.querySelector('.at-tag').classList.add('hover');
+  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
-  assert.deepEqual(hits, [3,1,2]);                              // 미완료 먼저·최신순, 무관한 4는 제외
-  // 행 클릭 → 팝업 닫힘 (양식 열기 자체는 render.js data-open 위임 몫)
+  assert.deepEqual(hits, [1,3]);                                 // strict: 3칸 일치 + 정확한 태그만
   modal.querySelector('[data-open="1"]').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));
-  assert.ok(!modal.classList.contains('on'));
-  // 태그 밖(일반 본문)을 클릭하면 그냥 편집 — 팝업 없음
-  memo.setSelectionRange(0, 0);
-  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   assert.ok(!modal.classList.contains('on'));
   // 카드 위 .at-tag 는 클릭해도 팝업이 뜨지 않는다 (색 표시만)
   const cardTag=env.document.createElement('span');
@@ -187,7 +182,6 @@ test('양식 메모 본문 @태그: 하이라이트 + 태그 위 클릭 → 관�
   assert.ok(!modal.classList.contains('on'));
   cardTag.remove();
 });
-
 test('양식 저장 시 관련인 → 전화번호부 자동 흡수 (3칸 완비만, 번호 보강 포함)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'이영희', org:'세무과', phone:''}]);   // 번호 없는 기존 항목 (보강 대상)
@@ -210,19 +204,18 @@ test('양식 저장 시 관련인 → 전화번호부 자동 흡수 (3칸 완비
   assert.ok(env.invokeCalls.some(c=>c.cmd==='save_phonebook'));
 });
 
-test('번호꼴 @태그(@010-…) 본문 클릭도 연락처(숫자만 비교)로 검색된다 — 구버전 번호만 항목 호환', async () => {
+test('번호꼴 @태그(@010-…): 구버전 번호만 항목 — 3칸(빈 이름·빈 소속·번호) 일치로 검색', async () => {
   await env.resetS(); S.loaded = true;
-  adoptPhonebook([{id:11, who:'', org:'', phone:'010-1234-5678'}]);   // 구버전 데이터 pass-through (신규 입력은 3칸 필수)
+  adoptPhonebook([{id:11, who:'', org:'', phone:'010-1234-5678'}]);   // 구버전 pass-through
   S.items=[
     {id:1, memo:'표기 다른 번호', contacts:[{who:'', org:'', phone:'01012345678'}], done:false},
     {id:2, memo:'무관', contacts:[{who:'', org:'', phone:'02-000'}], done:false},
   ];
   openForm({memo:'회신 @010-1234-5678'});
-  assert.equal(env.document.getElementById('fm-memo-hl').querySelectorAll('.at-tag').length, 1);
-  const memo=$('fm-memo');
-  const at=memo.value.indexOf('@')+3;
-  memo.setSelectionRange(at, at);
-  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  const hl=env.document.getElementById('fm-memo-hl');
+  assert.equal(hl.querySelectorAll('.at-tag').length, 1);
+  hl.querySelector('.at-tag').classList.add('hover');
+  $('fm-memo').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
@@ -241,8 +234,7 @@ test('본문 하이라이트: 전화번호부 실존 관련인만 — 한 글자
   memo.dispatchEvent(new env.window.Event('input', {bubbles:true}));
   assert.equal(hl.querySelectorAll('.at-tag').length, 0);       // 하이라이트 해제 — 평문
   assert.ok(hl.textContent.includes('@우성'));                  // 본문 자체는 그대로 비친다
-  // 해제된 태그 위 클릭은 그냥 편집 — 팝업 없음
-  memo.setSelectionRange(memo.value.indexOf('@')+1, memo.value.indexOf('@')+1);
+  // 해제된 태그는 hover 대상 자체가 없다 — 클릭해도 팝업 없음
   memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   assert.ok(!env.document.getElementById('relModal').classList.contains('on'));
 });
@@ -274,7 +266,7 @@ test('바로 입력 본문 하이라이트: 실존 태그만 표시, 태그 클�
   inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
   const hl=env.document.getElementById('inp-hl');
   assert.equal(hl.querySelectorAll('.at-tag').length, 1);        // 실존 관련인만
-  inp.setSelectionRange(inp.value.indexOf('@')+2, inp.value.indexOf('@')+2);
+  hl.querySelector('.at-tag').classList.add('hover');
   inp.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
   assert.ok(modal.classList.contains('on'));

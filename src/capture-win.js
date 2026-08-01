@@ -282,6 +282,15 @@ export function initCaptureWin(){
     schedulePb();                               // v2.7.0: @토큰이면 전화번호부 자동완성
   });
   wireTagHover(inp, $id('cap-hl'));             // v3.0.1: 태그 hover 반응
+  /* v3.0.2 통일 정책: 빠른 메모의 태그도 클릭 = 관련 업무 검색. 이 창엔 팝업이
+     없으므로 검색 화면으로 점프해 그 이름을 검색한다(hover 기하 판정 — 태그 위
+     커서일 때만, 메인 창과 동일 규칙). */
+  inp.addEventListener('click',()=>{
+    const sp=$id('cap-hl') && $id('cap-hl').querySelector('.at-tag.hover');
+    if(!sp) return;
+    $id('cap-search').value=sp.dataset.at;
+    setMode('search');                          // setMode 가 검색 실행·포커스까지 처리
+  });
   inp.addEventListener('keydown',e=>{
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
     /* v2.7.0: 자동완성이 펴져 있으면 그 목록부터 조작한다 (Ctrl 조합은 통과 — 등록/저장) */

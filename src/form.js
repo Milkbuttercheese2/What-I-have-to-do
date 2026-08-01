@@ -7,7 +7,7 @@ import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
-import {entryKey, extractTags, entriesForTag, linkifyAt, tagAtCaret} from './phonebook-core.js';
+import {entryKey, extractTags, entriesForTag, linkifyAt} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
@@ -393,12 +393,10 @@ export function initForm(){
   $('toInbox').addEventListener('click', toInbox);
   $('inp').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();toInbox();} });
   $('inp').addEventListener('input', ()=>{ autoGrowInp(); renderInpHl(); });   // v2.5.4 자동 확장 + v3.0.1 태그 하이라이트
-  /* v3.0.1: 바로 입력도 본문 태그 클릭 → 관련 업무, hover 반응, 스크롤 동기 */
+  /* v3.0.1 바로 입력 태그 클릭 → 관련 업무. v3.0.2: 기하 판정(.hover)으로 통일 */
   $('inp').addEventListener('click',()=>{
-    const t=$('inp');
-    if(t.selectionStart!==t.selectionEnd) return;
-    const name=tagAtCaret(t.value, t.selectionStart, S.phonebook);
-    if(name) openRelated(name);
+    const sp=$('inp-hl') && $('inp-hl').querySelector('.at-tag.hover');
+    if(sp) openRelated(sp.dataset.at);
   });
   $('inp').addEventListener('scroll',()=>{ const hl=$('inp-hl'); if(hl) hl.scrollTop=$('inp').scrollTop; });
   wireTagHover($('inp'), 'inp-hl');
@@ -440,13 +438,12 @@ export function initForm(){
     dropDraft(draftKey);
     openForm(cur || {});                                   // 저장본(또는 빈 양식)으로 다시 그림
   });
-  /* 본문 @태그 클릭 → 관련 업무 팝업 (v2.11.0). 클릭으로 캐럿이 태그 위에 놓이면 연다 —
-     실존 관련인 태그만이므로 한 글자라도 어긋난 태그는 그냥 편집 클릭이다. */
+  /* 본문 @태그 클릭 → 관련 업무 팝업. v3.0.2: 캐럿 판정 폐지 — 줄 끝 클릭 시 캐럿이
+     태그 끝으로 스냅돼 태그에 닿지도 않았는데 팝업이 뜨던 오작동(소유자 피드백).
+     hover 와 같은 기하 판정: 커서가 실제로 태그 사각형 위(.hover)일 때만 연다. */
   $('fm-memo').addEventListener('click',()=>{
-    const m=$('fm-memo');
-    if(m.selectionStart!==m.selectionEnd) return;               // 드래그 선택은 편집 행위
-    const name=tagAtCaret(m.value, m.selectionStart, S.phonebook);
-    if(name) openRelated(name);
+    const sp=$('fm-memo-hl') && $('fm-memo-hl').querySelector('.at-tag.hover');
+    if(sp) openRelated(sp.dataset.at);
   });
   /* 백드롭 하이라이트 스크롤 동기 — 안 맞으면 하이라이트가 글자와 어긋난다 */
   $('fm-memo').addEventListener('scroll',()=>{ const hl=$('fm-memo-hl'); if(hl) hl.scrollTop=$('fm-memo').scrollTop; });
