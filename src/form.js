@@ -169,6 +169,11 @@ function renderInpHl(){
   hl.innerHTML=linkifyAt(esc($('inp').value), S.phonebook)+'\n';
   hl.scrollTop=$('inp').scrollTop;
 }
+/* 하이라이트 일괄 갱신 (v3.0.3) — 전화번호부가 '나중에' 바뀌는 경로용 훅.
+   초기 로드 완료·백업 복원 전에 타이핑한 텍스트는 그 시점의 (빈) 전화번호부로
+   그려진 채 남는다 — input 이벤트가 없으면 다시 안 그려지므로, 로드/복원이
+   끝난 뒤 이 훅으로 실존 판정을 다시 태운다(실사용 "하이라이트 안 뜸" 버그의 원인). */
+export function refreshTagHl(){ renderInpHl(); renderMemoHl(); }
 /* 태그 hover 반응 (v3.0.1) — 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로
    판정한다(textarea 가 위라 CSS :hover 불가). 맞으면 .hover + 포인터 커서. */
 function wireTagHover(ta, hlId){
