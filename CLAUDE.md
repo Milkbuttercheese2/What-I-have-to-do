@@ -17,7 +17,7 @@ Branch-protection rules on `main` (require PR, block direct push) have **not** b
 
 ## Versioning convention (user-defined)
 
-Current release = **v3.1.0** (직전 정식 v3.0.0 (2026-08-02 — v2.7.0~v2.10.0 의 대규모 기능 개편(전화번호부·@태그·
+Current release = **v3.0.1** (직전 정식 v3.0.0 (2026-08-02 — v2.7.0~v2.10.0 의 대규모 기능 개편(전화번호부·@태그·
 메모 합치기·통합 디자인)을 마무리해 묶은 정식 배포. 소유자 결정으로 아래 경고의 '3.x 금지'를
 해제하고 번호를 재사용했다 — CHANGELOG 의 2026-07-14 자 구 v3.0.0·v3.1.0 항목은 여전히
 미배포 내부 이력이며 이 판과 무관, '(구·미배포)' 표기로 구분).
@@ -25,13 +25,13 @@ Current release = **v3.1.0** (직전 정식 v3.0.0 (2026-08-02 — v2.7.0~v2.10.
 **버전 정책 갱신(소유자 지정, 2026-08-02): Y=기능 추가, Z=기능이 아닌 로직 변경·디버깅·조정.**
 
 > ⚠️ **버전 이력 주의 (반드시 읽을 것 — 과거에 여기서 혼선이 있었다):** 저장소 git 히스토리에는
-> `v3.0.0`·`v3.1.0` 커밋과 CHANGELOG 항목이 남아 있지만, **v3.x는 실제로 배포된 적이 없다.**
+> `v3.0.0`·`v3.0.1` 커밋과 CHANGELOG 항목이 남아 있지만, **v3.x는 실제로 배포된 적이 없다.**
 > 그 작업은 *다른 계정에서 진행되던 미배포 개편*이었고, 당시 파일 링크·이름 변경 정도의 변화를
 > 두고 **대규모 개편(major)도 아닌데 버전을 3.0.0으로 임의 상향**해 버린 것이다(잘못된 범프).
 > 저장소 소유자 결정으로 이를 바로잡아, 실제 정식 배포는 **구 v2.31 라인을 잇는 `v2.4.0`**
 > 으로 되돌렸다. 따라서:
 > - **현재/실제 배포 버전 = v2.5.14.** 세 매니페스트(package.json·Cargo.toml·tauri.conf.json) 동일.
-> - v3.0.0·v3.1.0 CHANGELOG 항목은 *내부 이력*으로만 읽고, 실 배포 번호로 착각하지 말 것.
+> - v3.0.0·v3.0.1 CHANGELOG 항목은 *내부 이력*으로만 읽고, 실 배포 번호로 착각하지 말 것.
 > - **다음 버전은 v2.5.x(버그·사소한 조정) / v2.6.0(기능 추가)로 이어간다.** 진짜 호환성 깨지는
 >   대규모 개편이 아닌 한 다시 3.x로 올리지 말 것. (자동 업데이터·버전 비교 로직이 없어 역전은 무해.)
 > - **버전업 정책(소유자 지정): 사소한 수정이라도 새로 배포(빌드/머지)할 때마다 패치(Z)를 올린다.**
@@ -67,7 +67,7 @@ Historically (pre-migration) this project bumped the HTML filename itself per ve
 ## Rust backend layout (`src-tauri/src/`)
 
 - `lib.rs` — Tauri builder/setup: resolves the DB path under `%LOCALAPPDATA%` (per-user, no admin rights needed — see `app.path().app_local_data_dir()`), opens the DB, runs `PRAGMA integrity_check` once at startup and stores the result in `AppDb.integrity_ok` (an `AtomicBool`), registers all commands.
-- `commands.rs` — thin `#[tauri::command]` wrappers (`load_all`, `save_all`, `save_fields`, `save_presets`, `save_id_kinds`, `save_settings`, `backup_export`, `backup_import`, …) that just call into `db::*` and map errors to `String`, plus the global mini-capture shortcut: `CAPTURE_SHORTCUT` is **fixed to Ctrl+Alt+Space since v2.31** (no runtime re-binding; the old `set_capture_shortcut`/`set_autostart`/`save_recur_defs` commands were removed). it also has `pick_file_path`/`pick_folder_path`(v2.10.0 폴더 링크)/`open_file_path`/`reveal_file_path` (file/folder links, via the dialog/opener plugins — opener 는 폴더를 탐색기로 연다) and `quick_search`/`resize_capture` (mini capture window), plus v2.7.0 `save_phonebook`/`phonebook_search`/v3.1.0 `phonebook_list` (전화번호부 — 뒤 둘은 capture webview 전용 읽기 전용: 검색/전체 목록(본문 태그 하이라이트 실존 판정), same rationale as `quick_search`). **v2.5.20:** `choose_data_dir` refuses to relocate INTO a folder that already holds a `data/wmhh.sqlite` (returns an error before staging anything), so the next-launch `apply_pending_move` copy can't clobber another install's dataset. (The `everything_search`/`launch_everything`/`load_settings_only` commands were **removed in v2.4.0** along with the whole Everything integration — search got slow.) Business logic does **not** belong here or in `db/` — it stays in the frontend JS (see Migration-in-progress note above); Rust is CRUD-only.
+- `commands.rs` — thin `#[tauri::command]` wrappers (`load_all`, `save_all`, `save_fields`, `save_presets`, `save_id_kinds`, `save_settings`, `backup_export`, `backup_import`, …) that just call into `db::*` and map errors to `String`, plus the global mini-capture shortcut: `CAPTURE_SHORTCUT` is **fixed to Ctrl+Alt+Space since v2.31** (no runtime re-binding; the old `set_capture_shortcut`/`set_autostart`/`save_recur_defs` commands were removed). it also has `pick_file_path`/`pick_folder_path`(v2.10.0 폴더 링크)/`open_file_path`/`reveal_file_path` (file/folder links, via the dialog/opener plugins — opener 는 폴더를 탐색기로 연다) and `quick_search`/`resize_capture` (mini capture window), plus v2.7.0 `save_phonebook`/`phonebook_search`/v3.0.1 `phonebook_list` (전화번호부 — 뒤 둘은 capture webview 전용 읽기 전용: 검색/전체 목록(본문 태그 하이라이트 실존 판정), same rationale as `quick_search`). **v2.5.20:** `choose_data_dir` refuses to relocate INTO a folder that already holds a `data/wmhh.sqlite` (returns an error before staging anything), so the next-launch `apply_pending_move` copy can't clobber another install's dataset. (The `everything_search`/`launch_everything`/`load_settings_only` commands were **removed in v2.4.0** along with the whole Everything integration — search got slow.) Business logic does **not** belong here or in `db/` — it stays in the frontend JS (see Migration-in-progress note above); Rust is CRUD-only.
 - `db/model.rs` — serde structs matching the frontend's JSON shapes exactly (`Item`, `Contact`, `Identifier`, `SubTask`, `FieldDef`, `Preset`, `PhonebookEntry`, `Settings`, `AppState`, `BackupPayload`). Field names/renames here are load-bearing — they define the wire format `invoke()` calls and JSON backups use.
 - `db/schema.rs` + `db/migrations/*.sql` — ordered migrations run via `rusqlite_migration`, tracked through SQLite's `PRAGMA user_version`. **Only ever append new `M::up(...)` migrations; never edit or reorder a shipped one** — there's no auto-updater on the target intranet, so an install may jump straight from an old schema version to the newest, skipping releases.
 - `db/items.rs`, `fields.rs`, `presets.rs`, `id_kinds.rs`, `settings.rs`, `phonebook.rs` (v2.7.0 전화번호부 — search_phonebook 은 미니 창 @ 자동완성용 읽기 전용 검색), `recur_defs.rs` (v2.3 정기함 definitions — the 정기함 *feature* was removed in v2.31, but this module and its table stay so old data keeps round-tripping through `load_all`/backups; migrations are append-only) — one module per table group, each exposing a `save_*_tx(&Transaction, ...)` (the actual delete+reinsert logic) plus a `save_*(&mut Connection, ...)` convenience wrapper that opens its own transaction and calls the `_tx` version. This split exists so `db/backup.rs::import_payload` can compose all of them into **one** all-or-nothing transaction when restoring a JSON backup.

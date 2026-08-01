@@ -62,7 +62,7 @@ test('빈 입력에서 Ctrl+Enter → 발신 없이 숨기기만', () => {
 
 const drafts = () => env.emitted.filter(e=>e.name==='wmhh://capture-draft');
 
-test('Esc: 내용을 유지한 채 숨기고 초안을 플러시 (v3.1.0 — 삭제는 사용자만)', () => {
+test('Esc: 내용을 유지한 채 숨기고 초안을 플러시 (v3.0.1 — 삭제는 사용자만)', () => {
   reset();
   inp.value = '이어서 쓸 메모';
   key({key:'Escape'});

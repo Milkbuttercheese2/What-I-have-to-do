@@ -23,7 +23,7 @@
    --cap-tag-on-bg:#1c3a35; --cap-tag-on-fg:#74cdbd; --cap-tag-off-bg:#1e2537; --cap-tag-off-fg:#93a0b8;
    --cap-flash:#74cdbd; --cap-hint:#93a0b8;
    --cap-thumb:rgba(255,255,255,.18); --cap-thumb-hover:rgba(255,255,255,.32);
-   --cap-tag-hl:#24443e;   /* 본문 태그 하이라이트 (v3.1.0) */
+   --cap-tag-hl:#24443e;   /* 본문 태그 하이라이트 (v3.0.1) */
  }
  body.light{
    --cap-panel:#ffffff; --cap-border:#eceef0; --cap-ink:#1f2a33; --cap-muted:#68717c;
@@ -42,7 +42,7 @@
  #cap-shell{flex:1;display:flex;flex-direction:column;min-height:0;
    background:var(--cap-panel);border:1px solid var(--cap-border);border-radius:18px;overflow:hidden}
  #cap-bar{display:flex;align-items:center;flex:1;min-height:56px;position:relative}
- /* v3.1.0 빠른 메모 본문 @태그 하이라이트 — 양식 메모와 같은 백드롭 층.
+ /* v3.0.1 빠른 메모 본문 @태그 하이라이트 — 양식 메모와 같은 백드롭 층.
     ⚠️ textarea(#cap-inp)와 글꼴·크기·행간·패딩이 한 값이라도 다르면 어긋난다.
     스택(#cap-inp-stack)이 textarea 를 감싸 위치를 정확히 공유한다. 검색 모드 숨김. */
  #cap-inp-stack{position:relative;flex:1;min-width:0}
@@ -70,7 +70,7 @@
  .cap-col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
  .cap-col-h{flex:none;font-weight:600;font-size:11px;color:var(--cap-muted);
    padding:10px 16px 6px;letter-spacing:.04em}
- /* v3.1.0: 목록을 세로 flex 로 — 빈 안내문(.cap-empty)을 넓은 영역 가운데에 띄워
+ /* v3.0.1: 목록을 세로 flex 로 — 빈 안내문(.cap-empty)을 넓은 영역 가운데에 띄워
     '좁은 안내 슬리버' 대신 차분한 한 판으로 보이게 한다(결과 행 배치는 동일). */
  .cap-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 8px 10px;
    display:flex;flex-direction:column}
@@ -123,7 +123,7 @@
 <body class="search">
 <div id="cap-shell">
   <div id="cap-bar">
-    <!-- v3.1.0 본문 태그 하이라이트 — 스택이 textarea 를 감싸야 백드롭이 textarea 의
+    <!-- v3.0.1 본문 태그 하이라이트 — 스택이 textarea 를 감싸야 백드롭이 textarea 의
          실제 위치를 따라간다(#cap-bar 는 세로 중앙정렬이라 bar 기준 백드롭은 어긋난다) -->
     <div id="cap-inp-stack">
       <div id="cap-hl" aria-hidden="true"></div>

@@ -56,7 +56,7 @@ let draftTimer=null, searchTimer=null, searchSeq=0;
 let selIdx=-1;                              // 검색 결과 선택 위치 (v2.6.4 방향키 이동)
 /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부(phonebook_search) 드롭다운 상태 */
 let pbItems=[], pbSel=0, pbToken=null, pbTimer=null, pbSeq=0, pbOpen=false;
-/* v3.1.0 본문 @태그 하이라이트용 전체 목록 — 실존 관련인 판정(linkifyAt book 인자).
+/* v3.0.1 본문 @태그 하이라이트용 전체 목록 — 실존 관련인 판정(linkifyAt book 인자).
    phonebook_list 로 창이 뜰 때마다 갱신(메인 창에서 전화번호부를 고쳐도 다음 표시에 반영). */
 let pbBook=[];
 /* v2.6.4: 창이 막 뜬 직후의 blur 는 무시한다.
@@ -91,7 +91,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
    기본 textarea가 2줄이라 한 줄 메모가 위로 떠 보이던 문제를 없앤다. */
 function autoGrow(el){ if(!el)return; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
 
-/* ── v3.1.0 빠른 메모 본문 @태그 하이라이트 + hover 반응 ────────────────
+/* ── v3.0.1 빠른 메모 본문 @태그 하이라이트 + hover 반응 ────────────────
    양식 메모(form.js renderMemoHl)와 같은 백드롭 층 기법 — 실존 관련인 태그만.
    hover 는 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로 판정한다
    (textarea 가 위에 있어 CSS :hover 가 불가능한 구조). */
@@ -177,7 +177,7 @@ function applyPb(i){
   closePb(); inp.focus();
 }
 
-/* v3.1.0 소유자 지정 — v3.0.0의 '검색 모드 동적 높이'는 철회. 실렌더 스크린샷으로
+/* v3.0.1 소유자 지정 — v3.0.0의 '검색 모드 동적 높이'는 철회. 실렌더 스크린샷으로
    확인한 결과, 빈 검색을 150px 로 줄이는 것이 오히려 입력칸·힌트·좁은 안내의
    3단 슬리버를 만들었다. 검색 모드는 예전처럼 **고정 406** 한 판이 맞다
    (빈 안내문은 넓은 목록 영역 가운데 정렬 — capture.html .cap-empty). */
@@ -276,12 +276,12 @@ export function initCaptureWin(){
   const inp=$id('cap-inp');
   inp.addEventListener('input',()=>{
     autoGrow(inp);
-    renderCapHl();                              // v3.1.0: 본문 태그 하이라이트 갱신
+    renderCapHl();                              // v3.0.1: 본문 태그 하이라이트 갱신
     clearTimeout(draftTimer);
     draftTimer=setTimeout(()=>sendDraft(inp.value),400);
     schedulePb();                               // v2.7.0: @토큰이면 전화번호부 자동완성
   });
-  wireTagHover(inp, $id('cap-hl'));             // v3.1.0: 태그 hover 반응
+  wireTagHover(inp, $id('cap-hl'));             // v3.0.1: 태그 hover 반응
   inp.addEventListener('keydown',e=>{
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
     /* v2.7.0: 자동완성이 펴져 있으면 그 목록부터 조작한다 (Ctrl 조합은 통과 — 등록/저장) */
@@ -378,7 +378,7 @@ export function initCaptureWin(){
     if(first) openFresh();          // 설정이 도착한 뒤 시작 화면을 다시 잡는다
   }).catch(()=>{});
   askConfig();
-  loadBook();                                   // v3.1.0: 태그 하이라이트용 전화번호부
+  loadBook();                                   // v3.0.1: 태그 하이라이트용 전화번호부
   openFresh();
 }
 
