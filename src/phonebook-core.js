@@ -44,6 +44,20 @@ export function gatherFromItems(items, existing){
   return out;
 }
 
+/* 자동완성을 열 만큼 검색어가 익었는가 (v2.10.0 소유자 지정 문턱값).
+   - 숫자(전화)형: 3자리 이상, 단 '010'(모든 휴대전화의 공통 접두)은 제외 —
+     010 만 쳐도 전부 매칭돼 소음이 되던 문제.
+   - 글자(이름)형: 2글자 이상 — '김' 한 글자로 온 동네 김씨가 뜨지 않게. */
+export function queryReady(q){
+  q=String(q||'').trim();
+  if(!q) return false;
+  if(/^[\d\-\s]+$/.test(q)){                  // 숫자·하이픈만 = 전화번호 검색
+    const d=phoneDigits(q);
+    return d.length>=3 && d!=='010';
+  }
+  return q.length>=2;
+}
+
 /* 검색 — 이름·소속·전화(숫자만 버전 포함) 부분일치, limit 건까지.
    빈 검색어는 빈 목록(@ 뒤 한 글자부터 검색 — 미니 창 phonebook_search 와 동일 규칙). */
 export function matchEntries(list, q, limit=8){

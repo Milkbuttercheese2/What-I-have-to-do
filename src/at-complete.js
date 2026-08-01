@@ -9,7 +9,7 @@
    ========================================================================= */
 import {S} from './state.js';
 import {$, esc} from './dom-utils.js';
-import {atToken, applyInsert, tagText, matchEntries} from './phonebook-core.js';
+import {atToken, applyInsert, tagText, matchEntries, queryReady} from './phonebook-core.js';
 import {fillContactFromEntry} from './form.js';
 
 let drop=null;            // 드롭다운 요소 (#atDrop, body 직속)
@@ -21,7 +21,9 @@ let applying=false;       // 선택 적용 중 재진입 방지 (프로그램적
 let mirror=null;          // textarea 커서 좌표 측정용 미러
 
 const isMemo=el=>el && (el.id==='inp'||el.id==='fm-memo');
-const isContact=el=>el && el.matches && el.matches('#fm-contacts .contact-row input');
+/* v2.10.0: 관련소속(.c-org)은 자동완성 제외(소유자 지정) — 소속은 같은 값이 수십 명에
+   걸려 목록이 소음이 된다. 이름·연락처 칸만 검색한다. */
+const isContact=el=>el && el.matches && el.matches('#fm-contacts .contact-row .c-who, #fm-contacts .contact-row .c-phone');
 
 function close(){ if(drop) drop.style.display='none'; anchor=null; items=[]; token=null; }
 
@@ -100,13 +102,14 @@ function onInput(e){
   if(isMemo(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
     const t=atToken(el.value, el.selectionStart);
-    const list=t?matchEntries(S.phonebook, t.query, 8):[];
+    const list=(t&&queryReady(t.query))?matchEntries(S.phonebook, t.query, 8):[];   // v2.10.0 문턱값
     if(!list.length){ if(anchor===el) close(); return; }
     token={start:t.start, caret:el.selectionStart};
     openAt(el, list, caretRect(el));
   }else if(isContact(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
-    const list=matchEntries(S.phonebook, el.value.trim(), 8);
+    const q=el.value.trim();
+    const list=queryReady(q)?matchEntries(S.phonebook, q, 8):[];                    // v2.10.0 문턱값
     if(!list.length){ if(anchor===el) close(); return; }
     token=null;
     const r=el.getBoundingClientRect();

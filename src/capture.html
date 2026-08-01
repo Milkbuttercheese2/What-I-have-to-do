@@ -19,16 +19,16 @@
  :root{
    /* v2.6.1: 메인 다크와 같은 팔레트(자매 앱 '어느 조항이었지' 정책) — 남색 면 + 밝은 회청색 글자 */
    --cap-panel:#161c29; --cap-border:#2b3346; --cap-ink:#e8ecf4; --cap-muted:#aeb9cf;
-   --cap-sep:rgba(255,255,255,.10); --cap-hit-bg:#1d3a36; --cap-hit-fg:#7fd0c3;
-   --cap-tag-on-bg:#1d3a36; --cap-tag-on-fg:#7fd0c3; --cap-tag-off-bg:#1e2537; --cap-tag-off-fg:#93a0b8;
-   --cap-flash:#7fd0c3; --cap-hint:#93a0b8;
+   --cap-sep:rgba(255,255,255,.10); --cap-hit-bg:#1c3a35; --cap-hit-fg:#74cdbd;
+   --cap-tag-on-bg:#1c3a35; --cap-tag-on-fg:#74cdbd; --cap-tag-off-bg:#1e2537; --cap-tag-off-fg:#93a0b8;
+   --cap-flash:#74cdbd; --cap-hint:#93a0b8;
    --cap-thumb:rgba(255,255,255,.18); --cap-thumb-hover:rgba(255,255,255,.32);
  }
  body.light{
    --cap-panel:#ffffff; --cap-border:#eceef0; --cap-ink:#1f2a33; --cap-muted:#68717c;
-   --cap-sep:rgba(31,42,51,.10); --cap-hit-bg:#eef2f0; --cap-hit-fg:#3f7d75;
-   --cap-tag-on-bg:#eef2f0; --cap-tag-on-fg:#4d938a; --cap-tag-off-bg:#eef0f3; --cap-tag-off-fg:#5a6472;
-   --cap-flash:#3f7d75; --cap-hint:#8a919b;
+   --cap-sep:rgba(31,42,51,.10); --cap-hit-bg:#edf4f2; --cap-hit-fg:#226659;
+   --cap-tag-on-bg:#edf4f2; --cap-tag-on-fg:#2a7c6e; --cap-tag-off-bg:#eef0f3; --cap-tag-off-fg:#5a6472;
+   --cap-flash:#226659; --cap-hint:#8a919b;
    --cap-thumb:rgba(31,42,51,.16); --cap-thumb-hover:rgba(31,42,51,.30);
    color-scheme:light;
  }
@@ -73,7 +73,7 @@
     켜지고, 키보드를 쓰기 시작하면 다시 꺼진다(선택 .sel 은 키보드 전용 표시). */
  body.mouse .cap-hit:hover,.cap-hit.sel{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
  .cap-hit.done{color:var(--cap-muted)}
- .cap-empty{font-size:12.5px;color:var(--cap-muted);padding:12px}
+ .cap-empty{font-size:13px;color:var(--cap-muted);padding:12px}
  /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
  #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:2px 18px 10px}
  /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어.

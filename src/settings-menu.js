@@ -12,7 +12,7 @@
    Alt 전환이 없으므로 둘째 줄 전체를 비활성화하고 이유를 적어준다.
    ========================================================================= */
 import {S} from './state.js';
-import {STORE} from './store.js';
+import {STORE, invoke} from './store.js';
 import {$} from './dom-utils.js';
 import {openPresetModal} from './presets.js';
 import {applyTheme, normTheme, normCapScreen, normCapPair, CAP_SCREEN_NAME} from './theme.js';
@@ -25,7 +25,13 @@ const SEGS=[
   {id:'segCapSecond', key:'capSecond', norm:normCapScreen},
 ];
 
-export function openSettings(){ syncSettings(); $('settingsModal').classList.add('on'); }
+export function openSettings(){
+  syncSettings();
+  /* v2.10.0 저장 위치 상시 표기 — 열 때마다 갱신(위치 변경 예약 후에도 최신을 보여주도록) */
+  const p=$('dataDirPath');
+  if(p){ p.textContent='저장 위치 확인 중…'; invoke('get_data_dir').then(d=>{ p.textContent='저장 위치: '+d; }).catch(()=>{ p.textContent=''; }); }
+  $('settingsModal').classList.add('on');
+}
 export function closeSettings(){ $('settingsModal').classList.remove('on'); }
 
 /* 저장된 값 → 버튼 on/비활성 표시 */

@@ -24,7 +24,7 @@
    안전하다 — "메인 모듈 import 금지"의 이유(최상위 부작용·모듈 상태 이중 실행)가
    둘 다 없다. 전화번호부 데이터 자체는 DB 를 직접 읽지 않고 phonebook_search
    커맨드로 조회한다(quick_search 와 같은 경로). */
-import {atToken, applyInsert, tagText} from './phonebook-core.js';
+import {atToken, applyInsert, tagText, queryReady} from './phonebook-core.js';
 
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
@@ -119,7 +119,7 @@ function renderPb(){
 async function runPb(){
   const inp=$id('cap-inp');
   const t=atToken(inp.value, inp.selectionStart);
-  if(!t||!t.query){ closePb(); return; }
+  if(!t||!queryReady(t.query)){ closePb(); return; }   // v2.10.0 문턱값(이름 2글자·번호 3자리, 010 제외)
   const seq=++pbSeq;
   const found=(await invoke('phonebook_search',{query:t.query}).catch(()=>[]))||[];
   if(seq!==pbSeq || mode!=='memo') return;    // 그 사이 입력이 바뀌었거나 모드 이탈

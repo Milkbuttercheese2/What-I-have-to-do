@@ -383,6 +383,7 @@ pub fn run() {
             commands::import_backup_file,
             commands::cancel_pending_import,
             commands::pick_file_path,
+            commands::pick_folder_path,
             commands::open_file_path,
             commands::reveal_file_path,
             commands::quick_search,
