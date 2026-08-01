@@ -12,6 +12,7 @@
     /* UI 액센트 (태그 · 버튼 · 프리셋 등) — 기존 청록 유지 */
     --amber:#2a7c6e; --amber-bg:#edf4f2;
     --slate:#2a7c6e; --slate-bg:#edf4f2;   /* 청록 */
+    --tag-hl-bg:#d9ebe6;                   /* 본문 태그 하이라이트 — slate-bg 는 흰 면에서 안 보인다(v3.1.0) */
     --red:#C0271C;  --red-bg:#FBE9E7;
     --green:#2C7A4B; --green-bg:#E4F1E9;
     --gray-bg:#eef0f3; --gray-fg:#5a6472;
@@ -70,6 +71,7 @@
     --stage-inbox:#93a0b8; --stage-today:#f0876c; --stage-doing:#f6a94a; --stage-planned:#7fd6a0;
     --amber:#56bdab; --amber-bg:#1c3a35;
     --slate:#56bdab; --slate-bg:#1c3a35;
+    --tag-hl-bg:#24443e;
     --red:#ff8071;  --red-bg:#3a2320;
     --green:#7fd6a0; --green-bg:#1c3327;
     --gray-bg:#232b3d; --gray-fg:#c2cbdd;
@@ -386,8 +388,15 @@
   .card.dragging{opacity:.45}
   .card.merge-over{border-color:var(--focus);background:var(--slate-bg)}
 
-  /* 파일·폴더 찾아보기 선택지 (v2.11.0) — 문 하나(＋버튼) 뒤에 갈림길 두 개 */
-  #fm-linkchoice{gap:6px;align-items:center}
+  /* 파일·폴더 찾아보기 메뉴 버튼 (v3.1.0) — 상위 버튼 + 아래로 열리는 하위 메뉴.
+     @ 자동완성 드롭다운(#atDrop)과 같은 시각 언어(카드 면·1px 경계·둥근 모서리). */
+  .linkmenu-wrap{position:relative;display:inline-block}
+  #fm-linkmenu{position:absolute;top:calc(100% + 4px);left:0;z-index:5;min-width:170px;
+    background:var(--card);border:1px solid var(--line);border-radius:11px;
+    box-shadow:0 8px 26px var(--overlay);padding:4px}
+  .lm-item{display:block;width:100%;text-align:left;font-family:inherit;font-size:13px;
+    padding:7px 11px;border:none;background:none;border-radius:8px;cursor:pointer;color:var(--ink)}
+  .lm-item:hover{background:var(--slate-bg)}
 
   /* 카드 메모 속 @태그 — 색 표시만(클릭은 양식 메모 아래 칩에서, v2.9.0 소유자 피드백:
      카드 위 태그가 클릭을 받으면 카드를 열려던 클릭이 팝업을 띄우는 오동작이 됐다) */
@@ -406,8 +415,8 @@
     overflow:hidden;pointer-events:none;color:transparent}
   /* 백드롭 태그: 배경 하이라이트만 — 글자는 textarea 것이 위에 그려진다.
      font-weight·padding 을 바꾸면 글자 폭이 어긋나므로 절대 주지 말 것. */
-  #fm-memo-hl .at-tag{color:transparent;font-weight:inherit;background:var(--slate-bg);
-    border-radius:4px;box-shadow:0 0 0 1px var(--slate-bg);padding:0}
+  #fm-memo-hl .at-tag{color:transparent;font-weight:inherit;background:var(--tag-hl-bg);
+    border-radius:4px;box-shadow:0 0 0 1px var(--tag-hl-bg);padding:0}
   /* 관련 업무 팝업은 양식(z 60) 위에서도 떠야 한다 — 칩 클릭 경로 */
   #relModal{z-index:70}
   /* 새로고침·엑셀 확인 팝업의 후보 행 — 전화번호부 목록 행과 같은 3열 */
@@ -562,6 +571,19 @@
   }
   /* ---- v5 추가 ---- */
   /* v2.5.4: height→min-height (JS auto-grow가 내용에 맞춰 늘림, 최소는 210px 유지) · 배경 순백(#fff)으로 입력밴드 주변 회색 톤 제거 */
+  /* v3.1.0 바로 입력 본문 @태그 하이라이트 — 양식 메모와 같은 백드롭 층 구조.
+     ⚠️ 메트릭 일치 규칙은 #fm-memo-hl 주석과 동일(글꼴·패딩·스크롤바 거터). */
+  .inp-stack{position:relative;flex:1;min-width:0}
+  .inp-stack textarea#inp{width:100%;background:transparent;position:relative;z-index:1;scrollbar-gutter:stable}
+  #inp-hl{position:absolute;inset:1.5px;border-radius:8px;background:var(--surface);
+    padding:11px calc(14px + 9px) 11px 14px;   /* textarea 패딩 + 스크롤바 거터 9px */
+    font-family:inherit;font-size:14px;line-height:1.5;
+    white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;
+    overflow:hidden;pointer-events:none;color:transparent}
+  #inp-hl .at-tag,#fm-memo-hl .at-tag{color:transparent;font-weight:inherit;background:var(--tag-hl-bg);
+    border-radius:4px;box-shadow:0 0 0 1px var(--tag-hl-bg);padding:0}
+  /* hover 반응 (v3.1.0 소유자 지정) — 청록 링으로 '눌리는 것'임을 알린다 */
+  #inp-hl .at-tag.hover,#fm-memo-hl .at-tag.hover{box-shadow:0 0 0 1.5px var(--focus)}
   textarea#inp{flex:1;min-width:0;resize:vertical;min-height:210px;font-family:inherit;font-size:14px;line-height:1.5;padding:11px 14px;border:1.5px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}
   textarea#inp::placeholder{color:var(--ink-soft);opacity:.7}
   textarea#inp:focus{outline:none;border-color:var(--focus);background:var(--surface);box-shadow:0 0 0 3px var(--focus-ring)}

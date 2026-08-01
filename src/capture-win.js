@@ -24,7 +24,7 @@
    안전하다 — "메인 모듈 import 금지"의 이유(최상위 부작용·모듈 상태 이중 실행)가
    둘 다 없다. 전화번호부 데이터 자체는 DB 를 직접 읽지 않고 phonebook_search
    커맨드로 조회한다(quick_search 와 같은 경로). */
-import {atToken, applyInsert, tagText, queryReady} from './phonebook-core.js';
+import {atToken, applyInsert, tagText, queryReady, linkifyAt} from './phonebook-core.js';
 
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
@@ -56,6 +56,9 @@ let draftTimer=null, searchTimer=null, searchSeq=0;
 let selIdx=-1;                              // 검색 결과 선택 위치 (v2.6.4 방향키 이동)
 /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부(phonebook_search) 드롭다운 상태 */
 let pbItems=[], pbSel=0, pbToken=null, pbTimer=null, pbSeq=0, pbOpen=false;
+/* v3.1.0 본문 @태그 하이라이트용 전체 목록 — 실존 관련인 판정(linkifyAt book 인자).
+   phonebook_list 로 창이 뜰 때마다 갱신(메인 창에서 전화번호부를 고쳐도 다음 표시에 반영). */
+let pbBook=[];
 /* v2.6.4: 창이 막 뜬 직후의 blur 는 무시한다.
    다른 앱(브라우저 등)이 뜨는 중에 단축키를 누르면, 창이 보이자마자 그 앱이 포커스를
    가져가며 blur 가 날아온다 → 예전엔 그 blur 로 창을 곧장 숨겨서 "단축키를 눌렀는데
@@ -87,6 +90,35 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 /* 메모 입력칸 세로 자동 확장 (rows=1 시작 → 내용 따라 늘어남, 상한 110px).
    기본 textarea가 2줄이라 한 줄 메모가 위로 떠 보이던 문제를 없앤다. */
 function autoGrow(el){ if(!el)return; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
+
+/* ── v3.1.0 빠른 메모 본문 @태그 하이라이트 + hover 반응 ────────────────
+   양식 메모(form.js renderMemoHl)와 같은 백드롭 층 기법 — 실존 관련인 태그만.
+   hover 는 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로 판정한다
+   (textarea 가 위에 있어 CSS :hover 가 불가능한 구조). */
+function loadBook(){
+  invoke('phonebook_list').then(b=>{ pbBook=Array.isArray(b)?b:[]; renderCapHl(); }).catch(()=>{});
+}
+function renderCapHl(){
+  const hl=$id('cap-hl'); if(!hl) return;
+  hl.innerHTML=linkifyAt(esc($id('cap-inp').value), pbBook)+'\n';
+}
+function wireTagHover(ta, hl){
+  let raf=0;
+  ta.addEventListener('mousemove',e=>{
+    if(raf) return;
+    raf=requestAnimationFrame(()=>{ raf=0;
+      let hit=null;
+      hl.querySelectorAll('.at-tag').forEach(sp=>{
+        const r=sp.getBoundingClientRect();
+        if(!hit && e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom) hit=sp;
+        sp.classList.remove('hover');
+      });
+      if(hit) hit.classList.add('hover');
+      ta.style.cursor=hit?'pointer':'';
+    });
+  });
+  ta.addEventListener('mouseleave',()=>{ hl.querySelectorAll('.at-tag.hover').forEach(s=>s.classList.remove('hover')); ta.style.cursor=''; });
+}
 
 /* 초안을 메인 창으로 (메인이 settings.captureDraft에 저장) — 등록/삭제 포함 모든 변경 */
 function sendDraft(text){
@@ -140,16 +172,15 @@ function applyPb(i){
   /* 완성형 @태그만 삽입 (메인 창 바로 입력과 동일 — 관련인 정보는 등록 시 자동 첨부) */
   const r=applyInsert(inp.value, pbToken.caret, pbToken.start, tagText(e));
   inp.value=r.text; try{inp.setSelectionRange(r.caret,r.caret);}catch{}
-  autoGrow(inp);
+  autoGrow(inp); renderCapHl();
   clearTimeout(draftTimer); sendDraft(inp.value);   // 삽입분도 초안에 즉시 반영
   closePb(); inp.focus();
 }
 
-/* v2.11.0 검색 모드 동적 높이 — '입력칸·힌트·거대한 빈 목록'이 3단으로 쪼개져 보이던
-   근본 원인은 결과가 없어도 창을 406px 로 늘려 두던 것. 이제 결과가 없으면 컴팩트하게,
-   결과 수만큼만 늘리고 최대 406 에서 스크롤한다(@ 자동완성과 같은 원리). */
-const SEARCH_MIN_H=150, SEARCH_MAX_H=406, SEARCH_ROW_H=33;
-function searchHeight(rows){ return rows?Math.min(SEARCH_MIN_H+rows*SEARCH_ROW_H, SEARCH_MAX_H):SEARCH_MIN_H; }
+/* v3.1.0 소유자 지정 — v3.0.0의 '검색 모드 동적 높이'는 철회. 실렌더 스크린샷으로
+   확인한 결과, 빈 검색을 150px 로 줄이는 것이 오히려 입력칸·힌트·좁은 안내의
+   3단 슬리버를 만들었다. 검색 모드는 예전처럼 **고정 406** 한 판이 맞다
+   (빈 안내문은 넓은 목록 영역 가운데 정렬 — capture.html .cap-empty). */
 
 function setMode(m){
   closePb(true);                               // 모드 전환 시 자동완성 접기 (아래에서 높이를 새로 정한다)
@@ -160,7 +191,7 @@ function setMode(m){
   $id('cap-search').style.display=search?'':'none';
   $id('cap-results').style.display=search?'flex':'none';
   $id('cap-hint').textContent=hintFor(m);
-  invoke('resize_capture',{height:search?searchHeight(hits().length):126}).catch(()=>{});   // 메모=낮은 바, 검색=결과에 맞춤
+  invoke('resize_capture',{height:search?406:126}).catch(()=>{});   // 메모 모드 = 낮은 바, 검색 모드 = 고정 한 판
   const t=search?$id('cap-search'):$id('cap-inp');
   t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   if(search) runSearch($id('cap-search').value.trim());
@@ -175,15 +206,12 @@ async function runSearch(q){
      같은 업무가 새 목록에도 있으면 그 자리를 그대로 이어간다. */
   const keepId=selectedId();
   selIdx=-1;
-  if(!q){ iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>';
-    if(mode==='search') invoke('resize_capture',{height:searchHeight(0)}).catch(()=>{});   // v2.11.0 빈 결과 = 컴팩트
-    return; }
+  if(!q){ iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>'; return; }
   const items=await invoke('quick_search',{query:q}).catch(()=>[]);
   if(seq!==searchSeq) return;               // 그 사이 새 검색어 입력됨
   iw.innerHTML=items.length?items.map(h=>
     `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(h.memo||'(메모 없음)')}</span></div>`
   ).join(''):'<div class="cap-empty">일치하는 업무 없음</div>';
-  if(mode==='search') invoke('resize_capture',{height:searchHeight(items.length)}).catch(()=>{});   // v2.11.0 결과에 맞춤
   if(!items.length) return;
   /* v2.6.7: 검색만 했을 때는 아무 줄도 고르지 않는다(하이라이트 없음).
      예전엔 첫 줄을 자동으로 골라둬, 손대지도 않은 줄이 계속 켜져 있는 것처럼 보였다.
@@ -232,7 +260,7 @@ function submitMemo(){
   const inp=$id('cap-inp');
   const t=inp.value.trim(); if(!t){ hideWin(); return; }
   window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
-  inp.value=''; autoGrow(inp); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
+  inp.value=''; autoGrow(inp); renderCapHl(); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
   submitting=true; document.body.classList.add('flash');
   setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
 }
@@ -248,10 +276,12 @@ export function initCaptureWin(){
   const inp=$id('cap-inp');
   inp.addEventListener('input',()=>{
     autoGrow(inp);
+    renderCapHl();                              // v3.1.0: 본문 태그 하이라이트 갱신
     clearTimeout(draftTimer);
     draftTimer=setTimeout(()=>sendDraft(inp.value),400);
     schedulePb();                               // v2.7.0: @토큰이면 전화번호부 자동완성
   });
+  wireTagHover(inp, $id('cap-hl'));             // v3.1.0: 태그 hover 반응
   inp.addEventListener('keydown',e=>{
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
     /* v2.7.0: 자동완성이 펴져 있으면 그 목록부터 조작한다 (Ctrl 조합은 통과 — 등록/저장) */
@@ -339,7 +369,7 @@ export function initCaptureWin(){
     const t=(mode==='search')?$id('cap-search'):$id('cap-inp');
     t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   });
-  window.__TAURI__.event.listen('wmhh://capture-shown', ()=>openFresh()).catch(()=>{});
+  window.__TAURI__.event.listen('wmhh://capture-shown', ()=>{ loadBook(); openFresh(); }).catch(()=>{});
   /* Rust 가 토글로 창을 숨긴 경우(단축키 두 번) — 이때는 이 창의 JS 가 돌지 않으므로 알려준다 */
   window.__TAURI__.event.listen('wmhh://capture-hidden', ()=>resetSearchUI()).catch(()=>{});
   window.__TAURI__.event.listen('wmhh://capture-config', ev=>{
@@ -348,6 +378,7 @@ export function initCaptureWin(){
     if(first) openFresh();          // 설정이 도착한 뒤 시작 화면을 다시 잡는다
   }).catch(()=>{});
   askConfig();
+  loadBook();                                   // v3.1.0: 태그 하이라이트용 전화번호부
   openFresh();
 }
 
