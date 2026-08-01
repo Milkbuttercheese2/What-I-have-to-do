@@ -6,7 +6,7 @@
    순수 로직(중복 판정·엑셀 매핑)은 phonebook-core.js 에 있다.
    ========================================================================= */
 import {S, newId} from './state.js';
-import {STORE} from './store.js';
+import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast} from './dom-utils.js';
 import {normEntry, entryKey, isComplete, entriesForTag, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
 
@@ -154,6 +154,23 @@ function importFromXlsx(file){
   reader.readAsArrayBuffer(file);
 }
 
+/* [엑셀 양식] (v3.0.4) — 제목 줄(소속·이름·연락처)만 있는 빈 xlsx 를 저장한다.
+   '무엇을 어떤 열에 적어야 하나'를 파일 자체가 말해 주게 하는 것이 목적이라
+   예시 행은 넣지 않는다(지우지 않고 불러오면 가짜 관련인이 등록되므로).
+   제목 문구는 mapSheetRows 의 헤더 정규식(소속·이름·연락처)에 그대로 맞춘다.
+   저장 경로는 XLSX 내보내기(backup.js)와 같다 — F14 주석 참조: {type:'array'} 를
+   Uint8Array 로 감싸지 않으면 0바이트 파일이 나온다. */
+async function saveXlsxTemplate(){
+  try{
+    const ws=XLSX.utils.aoa_to_sheet([['소속','이름','연락처']]);
+    ws['!cols']=[{wch:24},{wch:14},{wch:20}];
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
+    const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
+    const saved=await invoke('save_binary_file',{suggestedName:'전화번호부_양식.xlsx', data:bytes});
+    if(saved) showToast('제목 줄 아래에 채운 뒤 [엑셀 불러오기]로 넣으세요');
+  }catch(e){ alert('엑셀 양식 저장 실패: '+e); }
+}
+
 /* ── 아이템 관련인 → 전화번호부 자동 흡수 (v2.9.0 소유자 지정) ───────────
    양식을 저장할 때(form.js) 그 관련인들을 전화번호부에 자동 반영한다.
    규칙·꼬임 방지는 phonebook-core.absorbContacts — 여기서는 적용·저장만.
@@ -207,6 +224,7 @@ export function initPhonebook(){
   }));
   $('pb-search').addEventListener('input',()=>{ q=$('pb-search').value.trim().toLowerCase(); renderPhonebook(); });
   $('pb-import').addEventListener('click',refreshFromItems);
+  $('pb-tmpl').addEventListener('click',saveXlsxTemplate);
   $('pb-xlsx').addEventListener('click',()=>$('pb-file').click());
   $('pb-file').addEventListener('change',()=>{
     const f=$('pb-file').files[0];

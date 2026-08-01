@@ -33,7 +33,6 @@
     --on-accent:#ffffff;            /* **테마 토큰 색면**(청록 --focus/--amber, --red) 위 글자 전용.
                                        고정색 면(#e81123 닫기)·토스트 위 글자에는 쓰지 않는다 — 아래 규칙 참고 */
     --focus-strong:#226659;         /* 주 버튼 hover */
-    --alt-btn:#1f2a33; --alt-btn-fg:#ffffff; --alt-btn-hover:#000000;   /* 양식 입력(짙은) 버튼 */
     --tab-on-bg:#dcebe5;            /* 선택된 탭·세그먼트 — 트랙(--chip-bg) 대비 다크와 같은 정도로 또렷하게 */
     --chip-bg:#f3f4f5;              /* 옅은 회색 면 — 보조 버튼·카운트 칩·탭 트랙 */
     --tag-imm-bg:#fbe3dd; --tag-imm-fg:#c0392b;   /* 임박 시각칩 */
@@ -81,7 +80,6 @@
     --icon-muted:#7c8798;
     --on-accent:#0f1420;            /* 밝아진 강조색 위에는 어두운 글자가 또렷하다 */
     --focus-strong:#74cdbd;
-    --alt-btn:#263049; --alt-btn-fg:#e8ecf4; --alt-btn-hover:#313d5c;
     --tab-on-bg:#1c3a35;
     --chip-bg:#1e2537;              /* 다크에서 --line-soft(#1c2333)는 카드와 구분이 안 돼 면 색을 따로 준다 */
     --tag-imm-bg:#43241f; --tag-imm-fg:#ff9e8b;
@@ -162,14 +160,20 @@
   .cap-row{display:flex;gap:8px;align-items:flex-start}
   .btn-inbox{font-size:14px;height:42px;padding:0 18px;background:var(--amber);color:var(--on-accent)}
   .btn-inbox:hover{background:var(--focus-strong)}
-  .btn-form{font-size:14px;height:42px;padding:0 18px;background:var(--alt-btn);color:var(--alt-btn-fg)}
-  .btn-form:hover{background:var(--alt-btn-hover)}
+  /* v3.1.0: 검정 솔리드 폐지. 버튼 역할은 셋뿐이다(주=브랜드 솔리드 / 보조=옅은 회색 면 /
+     삭제=위험 빨강 — 통합 디자인 정책 §3). '양식 입력'은 '바로 입력'의 대안 경로이므로
+     보조 면을 쓴다(btn-tool·btn-cancel 과 같은 면). */
+  .btn-form{font-size:14px;height:42px;padding:0 18px;background:var(--chip-bg);color:var(--ink-soft)}
+  .btn-form:hover{background:var(--line);color:var(--ink)}
   .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
-  .preset{font-family:inherit;font-size:11px;padding:3px 11px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink-soft);cursor:pointer}
-  .preset:hover{border-color:var(--slate);color:var(--slate);background:var(--slate-bg)}
-  .preset-wrap{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--paper)}
-  .preset-wrap:hover{border-color:var(--slate)}
-  .preset-wrap .preset{border:none;border-radius:0;background:transparent;padding:3px 6px 3px 11px}
+  /* 프리셋 = 보조 버튼(옅은 회색 면). v3.1.0: 곡률 9px→10px(버튼 스케일), 테두리 대신
+     면으로. 다크에서 --paper 는 '대지'(카드보다 어두운 층)라 버튼 면으로 쓰면 눌린 홈처럼
+     보였다 — 보조 버튼 면은 --chip-bg 하나로 통일(통합 디자인 정책 §1.3/§3). */
+  .preset{font-family:inherit;font-size:11px;padding:4px 11px;border:none;border-radius:10px;background:var(--chip-bg);color:var(--ink-soft);cursor:pointer}
+  .preset:hover{color:var(--slate);background:var(--slate-bg)}
+  .preset-wrap{display:inline-flex;align-items:stretch;border:none;border-radius:10px;overflow:hidden;background:var(--chip-bg)}
+  .preset-wrap:hover{background:var(--slate-bg)}
+  .preset-wrap .preset{border:none;border-radius:0;background:transparent;padding:4px 6px 4px 11px}
   .preset-wrap:hover .preset{color:var(--slate)}
   .preset-wrap .preset-del{border:none;background:transparent;color:var(--icon-muted);font-size:14px;line-height:1;cursor:pointer;padding:0 9px 0 5px;border-left:1px solid var(--line-soft);transition:color .12s,background .12s}
   .preset-wrap .preset-del:hover{color:var(--red);background:var(--red-bg)}
@@ -206,10 +210,10 @@
   .fid-row select{font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);flex:none;width:130px}
   .fid-row input[type=text]{flex:1;min-width:0;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
   .fid-row input.fid-etc{flex:none;width:110px}
-  .fid-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
+  .fid-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
   /* 설정 팝업 (v2.6.0 — 드롭다운에서 표준 모달로. 항목 줄 + 선택 세그먼트 + 실행 버튼 목록) */
   .menu-item{display:block;width:100%;text-align:left;font-family:inherit;font-size:13px;padding:8px 10px;background:none;
-    border:0;border-radius:7px;cursor:pointer;color:var(--ink)}
+    border:0;border-radius:10px;cursor:pointer;color:var(--ink)}
   .menu-item:hover{background:var(--slate-bg);color:var(--slate)}
   .set-rows{display:flex;flex-direction:column;margin-bottom:2px}
   .set-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:5px 2px}
@@ -236,17 +240,17 @@
   .rc-spawn-wrap{display:inline-flex;align-items:center;gap:6px;color:var(--ink-soft)}
   #rc-dow,#rc-monthly{display:inline-flex;align-items:center;gap:6px;color:var(--ink-soft)}
   #fm-recur-time{width:64px;font-family:inherit;font-size:13px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;font-variant-numeric:tabular-nums}
-  .recur-dow-btn{cursor:pointer;font-size:12px;height:34px;min-width:34px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink-soft)}
+  .recur-dow-btn{cursor:pointer;font-size:12px;height:34px;min-width:34px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink-soft)}
   .recur-dow-btn.on{background:var(--slate-bg);color:var(--slate);border-color:var(--slate);font-weight:600}
   .ffile-row{display:flex;align-items:center;gap:7px;padding:3px 0}
   .ffile-toggle{margin-top:0}
   .ffile-link{flex:1;min-width:0;cursor:pointer;font-size:13px;color:var(--slate);padding:6px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ffile-link:hover{text-decoration:underline}
-  .ffile-browse{flex:none;font-size:13px;padding:6px 11px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink-soft);cursor:pointer}
-  .ffile-browse:hover{border-color:var(--focus);color:var(--ink)}
+  .ffile-browse{flex:none;font-size:13px;padding:7px 11px;border:none;border-radius:10px;background:var(--chip-bg);color:var(--ink-soft);cursor:pointer}
+  .ffile-browse:hover{background:var(--line);color:var(--ink)}
   /* 파일 경로는 본문 텍스트 — 폰트 정책(v2.5.2)에 따라 앱 서체 13px (모노는 숫자 전용) */
   .ffile-row input[type=text]{flex:1;min-width:0;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
-  .ffile-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
+  .ffile-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
   .fsub-row{display:flex;align-items:center;gap:7px;padding:3px 0}
   .fsub-chk{flex:none;cursor:pointer}
   .drag-handle{flex:none;cursor:grab;color:var(--line);font-size:13px;line-height:1;padding:0 2px;user-select:none;letter-spacing:-2px}
@@ -263,7 +267,7 @@
   .fsub-row input.sub-owner{flex:none;width:96px;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
   .fsub-row input[type=text].sdone{text-decoration:line-through;color:var(--done)}
   .fsub-row input[type=datetime-local]{font-family:inherit;font-size:11px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink-soft)}
-  .fsub-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
+  .fsub-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
   .fsub-add{font-size:11px;padding:4px 12px;background:var(--chip-bg);color:var(--ink-soft);margin-top:4px}
   /* v2.11.0: 링크 버튼 줄과 저장 액션 줄이 붙어 답답하다는 소유자 피드백 —
      액션 줄을 옅은 선으로 구분하고 위아래 숨 쉴 여백을 준다. */
@@ -279,7 +283,7 @@
 
   /* ---- 요약 스트립 ---- */
   .strip{display:flex;align-items:center;gap:8px;width:auto;max-width:1460px;margin:0 auto;padding:12px 28px 0;font-size:13px;flex-wrap:wrap}
-  .s-pill{display:flex;align-items:center;gap:6px;padding:4px 13px;border-radius:9px;background:var(--card);border:1px solid var(--line);font-weight:600;color:var(--ink-soft)}
+  .s-pill{display:flex;align-items:center;gap:6px;padding:4px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-weight:600;color:var(--ink-soft)}
   .s-pill b{color:var(--ink);font-variant-numeric:tabular-nums}
   .s-pill.warn{border-color:var(--warn-border);color:var(--red);background:var(--red-bg)}
   .s-pill.warn b{color:var(--red)}
@@ -303,7 +307,7 @@
   .dot-doing{background:var(--stage-doing)}
   .dot-planned{background:var(--stage-planned)}
   .col-head h2{font-size:14px;font-weight:600}
-  .col-head .count{margin-left:auto;font-size:13px;font-weight:600;padding:1px 9px;border-radius:9px;background:var(--chip-bg);color:var(--ink-soft)}
+  .col-head .count{margin-left:auto;font-size:13px;font-weight:600;padding:1px 9px;border-radius:999px;background:var(--chip-bg);color:var(--ink-soft)}
   .col-desc{font-size:11px;color:var(--ink-soft);margin-bottom:12px;min-height:18px;line-height:1.45}
   .cards{display:flex;flex-direction:column;gap:8px;flex:1}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 13px 10px 15px;position:relative;transition:box-shadow .14s ease,transform .14s ease}
@@ -339,7 +343,7 @@
   .tag .k{opacity:.72;margin-right:2px;font-weight:600}
   /* × 아이콘 버튼 공통 hover */
   .rm:hover,.del:hover{color:var(--red);background:var(--red-bg)}
-  .del{margin-left:auto;font-size:16px;line-height:1;color:var(--icon-muted);cursor:pointer;padding:3px 6px;background:none;border:none;border-radius:4px;transition:color .12s,background .12s}
+  .del{margin-left:auto;font-size:16px;line-height:1;color:var(--icon-muted);cursor:pointer;padding:3px 6px;background:none;border:none;border-radius:8px;transition:color .12s,background .12s}
   .empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:22px 8px;border:1.5px dashed var(--line);border-radius:9px;line-height:1.6}
   .empty b{color:var(--ink)}
 
@@ -350,7 +354,7 @@
   #view-done.on{display:block}
   .done-head{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
   .done-head h2{font-size:19px;font-weight:700}
-  .done-cnt{font-size:14px;color:var(--done);background:var(--chip-bg);padding:1px 10px;border-radius:9px;margin-left:4px;font-variant-numeric:tabular-nums}
+  .done-cnt{font-size:14px;color:var(--done);background:var(--chip-bg);padding:1px 10px;border-radius:999px;margin-left:4px;font-variant-numeric:tabular-nums}
   .done-tools{margin-left:auto;display:flex;gap:8px;align-items:center}
   #view-done .cards{gap:8px}
   #view-done .card{opacity:.92}
@@ -447,8 +451,8 @@
   .cal-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
   .cal-head h2{font-size:19px;font-weight:700}
   .cal-nav{display:flex;gap:4px}
-  .cal-nav button{font-family:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);background:var(--card);border-radius:6px;cursor:pointer;color:var(--ink-soft)}
-  .cal-nav button:hover{border-color:var(--focus);color:var(--focus)}
+  .cal-nav button{font-family:inherit;font-size:13px;padding:6px 12px;border:none;background:var(--chip-bg);border-radius:10px;cursor:pointer;color:var(--ink-soft)}
+  .cal-nav button:hover{background:var(--slate-bg);color:var(--slate)}
   .cal-legend{margin-left:auto;display:flex;gap:10px;font-size:11px;color:var(--ink-soft)}
   .cal-legend span{display:flex;align-items:center;gap:4px}
   .lg{width:8px;height:8px;border-radius:4px;display:inline-block}
@@ -480,7 +484,11 @@
   .modal{background:var(--card);border-radius:16px;width:100%;max-width:560px;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.28);
          max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain}
   .modal h3{font-size:16px;font-weight:700;margin-bottom:4px}
-  .modal .m-sub{font-size:13px;color:var(--ink-soft);margin-bottom:14px}
+  /* 한 줄 설명(§5.5). v3.1.0: `.modal` 하위로 한정돼 있어서 화면 본문(전화번호부)에
+     쓴 설명줄이 아무 스타일도 못 받고 본문 글자색·크기로 나왔다 — 설명은 어디에 있든
+     같은 톤(13px / --ink-soft)이어야 하므로 한정을 풀었다. 선언은 그대로라 모달 안
+     모양은 변하지 않는다. */
+  .m-sub{font-size:13px;color:var(--ink-soft);margin-bottom:14px}
   .f-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-soft)}
   .f-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--focus);flex:none}
   .f-row .f-label{flex:1;font-size:14px}
@@ -557,7 +565,7 @@
   footer{text-align:center;font-size:11px;color:var(--ink-soft);padding:12px;border-top:1px solid var(--line);background:var(--card)}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);z-index:200;display:flex;align-items:center;gap:14px;background:var(--toast-bg);color:var(--toast-fg);font-size:13px;padding:11px 16px;border-radius:9px;box-shadow:0 8px 30px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
-  .toast button{font-family:inherit;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--toast-btn-border);color:var(--toast-fg);border-radius:6px;padding:5px 12px;cursor:pointer;word-break:keep-all}   /* v2.5.12: 좁을 때 '실행 취소'가 음절 중간(실행취/소)이 아니라 어절 경계(실행/취소)로 줄바꿈 */
+  .toast button{font-family:inherit;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--toast-btn-border);color:var(--toast-fg);border-radius:10px;padding:5px 12px;cursor:pointer;word-break:keep-all}   /* v2.5.12: 좁을 때 '실행 취소'가 음절 중간(실행취/소)이 아니라 어절 경계(실행/취소)로 줄바꿈 */
   .toast button:hover{background:var(--toast-btn-hover)}
   /* 저장 실패 경고 배너 — 조용한 성공/시끄러운 실패. 성공 토스트와 달리 자동으로
      사라지지 않고 다음 저장이 성공할 때까지 계속 떠 있어(store.js가 on/off) 사용자가
@@ -574,7 +582,11 @@
   /* v3.0.1 바로 입력 본문 @태그 하이라이트 — 양식 메모와 같은 백드롭 층 구조.
      ⚠️ 메트릭 일치 규칙은 #fm-memo-hl 주석과 동일(글꼴·패딩·스크롤바 거터). */
   .inp-stack{position:relative;flex:1;min-width:0}
-  .inp-stack textarea#inp{width:100%;background:transparent;position:relative;z-index:1;scrollbar-gutter:stable}
+  /* ⚠️ :focus 까지 함께 투명으로 못 박는다(v3.0.4). 아래 `textarea#inp:focus` 는
+     배경을 다시 불투명(--surface)으로 칠하는데 특정도가 이 규칙과 같아(id+class+type
+     vs id+pseudo+type) **뒤에 오는 :focus 가 이긴다** → 글 쓰는 동안(=항상 포커스)
+     백드롭 층이 가려져 @태그 하이라이트가 안 보이던 버그. 배경은 #inp-hl 이 칠한다. */
+  .inp-stack textarea#inp,.inp-stack textarea#inp:focus{width:100%;background:transparent;position:relative;z-index:1;scrollbar-gutter:stable}
   #inp-hl{position:absolute;inset:1.5px;border-radius:8px;background:var(--surface);
     padding:11px calc(14px + 9px) 11px 14px;   /* textarea 패딩 + 스크롤바 거터 9px */
     font-family:inherit;font-size:14px;line-height:1.5;
@@ -597,7 +609,7 @@
   .contact-row input{font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
   .contact-row .c-org,.contact-row .c-who,.contact-row .c-phone{flex:1 1 0;min-width:0;width:0}
   .contact-row input:focus{outline:none;border-color:var(--focus)}
-  .contact-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
+  .contact-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
   /* 분리 날짜/시간 입력 */
   .dt-inp{display:inline-flex;gap:5px}
   /* v2.5.16: 양식의 날짜·시각 입력칸도 본문 폰트로 통일(소유자 지정). 폭(112/64px)은
@@ -607,7 +619,7 @@
   .dt-inp .dt-date{width:112px;font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
   .dt-inp .dt-time{width:64px;font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
   .dt-inp input:focus{outline:none;border-color:var(--focus)}
-  .dt-pick{border:1px solid var(--line);background:var(--paper);border-radius:6px;cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;flex:none;
+  .dt-pick{border:1px solid var(--line);background:var(--paper);border-radius:8px;cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;flex:none;
     font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif}
   .dt-pick:hover{border-color:var(--focus);background:var(--surface)}
   .dt-native{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
@@ -649,9 +661,9 @@
   @keyframes adotpulse{0%,100%{opacity:1}50%{opacity:.35}}
   /* 카드 파일 링크 */
   .card-files{display:flex;flex-wrap:wrap;gap:3px 5px;margin-top:5px;align-items:center;min-width:0}
-  .file-link{cursor:pointer;font-size:11.5px;color:var(--slate);background:var(--slate-bg);border-radius:6px;padding:1px 7px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-link{cursor:pointer;font-size:11px;color:var(--slate);background:var(--slate-bg);border-radius:6px;padding:1px 7px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .file-link:hover{text-decoration:underline}
-  .file-reveal{cursor:pointer;font-size:11.5px;opacity:.55;padding:1px 2px}
+  .file-reveal{cursor:pointer;font-size:11px;opacity:.55;padding:1px 2px}
   .file-reveal:hover{opacity:1}
 
   /* ===== 반응형(v2.5.4 통일) — 중간 크기(≤1080)부터 작은 크기까지 전부 '560px식 단일 열'로 통일.
@@ -667,8 +679,12 @@
     .strip .s-search{margin-left:0;width:100%;min-width:0}
     .done-tools{margin-left:0;width:100%}
     .done-tools .s-search{width:100%;min-width:0}
-    /* 전화번호부: 좁은 폭에선 입력 3칸을 세로 스택 (§6 반응형 정책) */
-    .pb-new{flex-direction:column}
+    /* 전화번호부(v3.1.0 소유자 지정): 좁은 폭에서도 **관련소속·관련인은 한 줄**로 둔다
+       (한 사람을 적는 짝이라 갈라놓으면 눈이 두 번 움직인다). 연락처·버튼은 다음 줄로
+       흘러내린다 — 세로 3단 스택은 폐지. */
+    .pb-new{flex-wrap:wrap}
+    .pb-new input{flex:1 1 calc(50% - 4px)}     /* 소속·이름이 각각 반 칸 → 한 줄 */
+    .pb-new .btn{flex:1 1 auto}
     /* 헤더 컴팩트: 시계는 오른쪽 끝, 부제 숨김, 브랜드 줄바꿈 허용 */
     .head-right{margin-left:auto}
     .brand{flex-wrap:wrap;min-width:0}
