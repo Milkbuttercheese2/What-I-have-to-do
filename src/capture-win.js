@@ -24,7 +24,7 @@
    안전하다 — "메인 모듈 import 금지"의 이유(최상위 부작용·모듈 상태 이중 실행)가
    둘 다 없다. 전화번호부 데이터 자체는 DB 를 직접 읽지 않고 phonebook_search
    커맨드로 조회한다(quick_search 와 같은 경로). */
-import {atToken, applyInsert, entryLabel} from './phonebook-core.js';
+import {atToken, applyInsert, tagText} from './phonebook-core.js';
 
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
@@ -105,6 +105,7 @@ function closePb(skipResize){
   clearTimeout(pbTimer); pbSeq++;
   if(!pbOpen) return;
   pbOpen=false; pbItems=[]; pbToken=null;
+  document.body.classList.remove('pb');
   const w=$id('cap-pb'); if(w){ w.style.display='none'; w.innerHTML=''; }
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
   if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
@@ -120,11 +121,14 @@ async function runPb(){
   const t=atToken(inp.value, inp.selectionStart);
   if(!t||!t.query){ closePb(); return; }
   const seq=++pbSeq;
-  const found=await invoke('phonebook_search',{query:t.query}).catch(()=>[]);
+  const found=(await invoke('phonebook_search',{query:t.query}).catch(()=>[]))||[];
   if(seq!==pbSeq || mode!=='memo') return;    // 그 사이 입력이 바뀌었거나 모드 이탈
   if(!found.length){ closePb(); return; }
   pbItems=found; pbSel=0; pbToken={start:t.start, caret:inp.selectionStart};
   const w=$id('cap-pb'); if(w) w.style.display='block';
+  /* v2.9.0: 목록이 펴질 땐 입력칸의 flex:1 을 끈다(body.pb) — 안 끄면 늘어난 창
+     높이를 입력칸이 흡수해 입력·힌트·목록이 벌어진 3분할로 찢어져 보인다. */
+  document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }
   invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,6)*33+12}).catch(()=>{});
@@ -133,8 +137,8 @@ function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
   const inp=$id('cap-inp'); const e=pbItems[i??pbSel];
   if(!e||!pbToken){ closePb(); return; }
-  /* @태그 + 정보 병기 — 메인 창 바로 입력과 동일 형식(카드에서 이름 부분이 클릭 태그가 된다) */
-  const r=applyInsert(inp.value, pbToken.caret, pbToken.start, '@'+entryLabel(e));
+  /* 완성형 @태그만 삽입 (메인 창 바로 입력과 동일 — 관련인 정보는 등록 시 자동 첨부) */
+  const r=applyInsert(inp.value, pbToken.caret, pbToken.start, tagText(e));
   inp.value=r.text; try{inp.setSelectionRange(r.caret,r.caret);}catch{}
   autoGrow(inp);
   clearTimeout(draftTimer); sendDraft(inp.value);   // 삽입분도 초안에 즉시 반영

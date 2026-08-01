@@ -9,7 +9,7 @@ const env = setupEnv();
 const {S} = await import('../../src/state.js');
 const {initPhonebook, renderPhonebook, adoptPhonebook} = await import('../../src/phonebook.js');
 const {initAtComplete} = await import('../../src/at-complete.js');
-const {initForm, openForm} = await import('../../src/form.js');
+const {initForm, openForm, captureMemo} = await import('../../src/form.js');
 initPhonebook(); initAtComplete(); initForm();
 
 const $ = id => env.document.getElementById(id);
@@ -31,6 +31,11 @@ test('직접 추가: 저장(save_phonebook) + 목록 렌더 + 중복 차단', as
   $('pb-save').click();
   assert.equal(S.phonebook.length, 1);
   assert.ok(env.alerts.some(a=>a.includes('이미')));
+  // v2.9.0 무결성: 3칸이 다 없으면 거부 (일부만 아는 관련인은 메모에)
+  $('pb-org').value=''; $('pb-who').value='이영희'; $('pb-phone').value='';
+  $('pb-save').click();
+  assert.equal(S.phonebook.length, 1);
+  assert.ok(env.alerts.some(a=>a.includes('모두 입력')));
 });
 
 test('수정·삭제: 수정 저장이 항목을 갱신하고 삭제가 목록·저장에 반영', async () => {
@@ -47,17 +52,23 @@ test('수정·삭제: 수정 저장이 항목을 갱신하고 삭제가 목록·
   assert.ok(!$('pb-list').textContent.includes('이영희'));
 });
 
-test('아이템에서 가져오기: 없는 관련인만 일괄 추가 (중복 제외)', async () => {
+test('새로고침: 3칸 완비 관련인만 확인 팝업(표준 모달)에 모아 [모두 추가]', async () => {
   await env.resetS(); S.loaded = true;
-  adoptPhonebook([{id:11, who:'이영희', org:'', phone:''}]);
-  S.items=[{id:1, contacts:[{who:'김철수', org:'행정과', phone:'010-1'}, {who:'이영희', org:'', phone:''}]},
-           {id:2, contacts:[{who:'김철수', org:'행정과', phone:'010-1'}]}];
+  adoptPhonebook([{id:11, who:'이영희', org:'세무과', phone:'010-2'}]);
+  S.items=[{id:1, contacts:[{who:'김철수', org:'행정과', phone:'010-1'}, {who:'박이름만', org:'', phone:''}]},
+           {id:2, contacts:[{who:'김철수', org:'행정과', phone:'010-1'}, {who:'이영희', org:'세무과', phone:'010-2'}]}];
   $('pb-import').click();
-  assert.equal(S.phonebook.length, 2);                          // 김철수만 새로 추가
-  assert.ok(S.phonebook.some(e=>e.who==='김철수'&&e.id>0));
-  $('pb-import').click();                                       // 다시 눌러도 추가할 게 없음
+  const modal=env.document.getElementById('pbSyncModal');
+  assert.ok(modal.classList.contains('on'));                    // confirm 대신 앱 모달
+  assert.equal(modal.querySelectorAll('.pbs-row').length, 1);   // 김철수만 (이름만인 박이름만·이미 있는 이영희 제외)
+  env.document.getElementById('pbs-add').click();
+  assert.ok(!modal.classList.contains('on'));
   assert.equal(S.phonebook.length, 2);
-  assert.ok(env.alerts.some(a=>a.includes('없습니다')));
+  assert.ok(S.phonebook.some(e=>e.who==='김철수'&&e.id>0));
+  $('pb-import').click();                                       // 다시 눌러도 추가할 게 없음 → 토스트
+  assert.ok(!modal.classList.contains('on'));
+  assert.equal(S.phonebook.length, 2);
+  assert.ok(env.document.getElementById('toast-msg').textContent.includes('없습니다'));
 });
 
 test('바로 입력 @자동완성: @김철 → 드롭다운 → Enter 로 텍스트 삽입', async () => {
@@ -70,8 +81,25 @@ test('바로 입력 @자동완성: @김철 → 드롭다운 → Enter 로 텍스
   assert.equal(drop.style.display, 'block');
   assert.ok(drop.textContent.includes('김철수'));
   key(inp, 'Enter');
-  assert.equal(inp.value, '민원 @김철수(행정과 010-1234-5678)');   // @태그 + 정보 병기
+  assert.equal(inp.value, '민원 @김철수');   // v2.9.0: 완성형 태그만 (정보는 등록 시 관련인으로)
   assert.equal(drop.style.display, 'none');
+});
+
+test('빠른 메모 등록: 메모 속 @태그의 관련인이 자동 첨부된다 (중복 없이)', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'},
+                  {id:12, who:'이영희', org:'세무과', phone:'010-2'}]);
+  captureMemo('통화함 @김철수 회신 요망 @김철수 @이영희');
+  await env.flush();
+  assert.equal(S.items.length, 1);
+  const cs=S.items[0].contacts;
+  assert.deepEqual(cs.map(c=>c.who), ['김철수','이영희']);       // 같은 태그 두 번 = 한 번만
+  assert.equal(cs[0].org, '행정과');
+  assert.equal(cs[0].phone, '010-1234-5678');
+  // 전화번호부에 없는 태그는 그냥 텍스트 — 관련인 없음
+  captureMemo('@모르는사람 메모');
+  await env.flush();
+  assert.deepEqual(S.items[1].contacts, []);
 });
 
 test('바로 입력 @자동완성: 일치 없으면 드롭다운이 열리지 않는다', async () => {
@@ -122,7 +150,7 @@ test('양식 메모 @자동완성: @태그는 완성형으로 남고 관련인 �
   assert.equal(filled.length, 1);
 });
 
-test('@태그 클릭 → 관련 업무 팝업 (이름 OR 연락처 일치), 행 클릭이 팝업을 닫는다', async () => {
+test('양식 메모의 @태그 칩 클릭 → 관련 업무 팝업 (이름 OR 연락처), 카드 태그는 클릭 안 됨', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   S.items=[
@@ -131,11 +159,12 @@ test('@태그 클릭 → 관련 업무 팝업 (이름 OR 연락처 일치), 행 
     {id:3, memo:'메모에 @김철수 태그만', contacts:[], done:false},
     {id:4, memo:'무관한 업무', contacts:[{who:'박영수', org:'', phone:'010-9'}], done:false},
   ];
-  // 카드에 렌더된 것과 같은 @태그를 클릭한 상황
-  const tag=env.document.createElement('span');
-  tag.className='at-tag'; tag.dataset.at='김철수';
-  env.document.body.appendChild(tag);
-  tag.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  // 양식을 열면 메모 속 태그가 아래 칩으로 뜬다
+  openForm({memo:'통화 @김철수 건'});
+  const chip=$('fm-tags').querySelector('.at-tag');
+  assert.ok(chip);
+  assert.equal(chip.dataset.at, '김철수');
+  chip.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
@@ -143,25 +172,53 @@ test('@태그 클릭 → 관련 업무 팝업 (이름 OR 연락처 일치), 행 
   // 행 클릭 → 팝업 닫힘 (양식 열기 자체는 render.js data-open 위임 몫)
   modal.querySelector('[data-open="1"]').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));
   assert.ok(!modal.classList.contains('on'));
-  tag.remove();
+  // v2.9.0: 칩 밖(카드 위 등)의 .at-tag 는 클릭해도 팝업이 뜨지 않는다
+  const cardTag=env.document.createElement('span');
+  cardTag.className='at-tag'; cardTag.dataset.at='김철수';
+  env.document.body.appendChild(cardTag);
+  cardTag.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  assert.ok(!modal.classList.contains('on'));
+  cardTag.remove();
 });
 
-test('번호만 저장된 항목의 @태그(@010-…) 클릭도 연락처(숫자만 비교)로 검색된다', async () => {
+test('양식 저장 시 관련인 → 전화번호부 자동 흡수 (3칸 완비만, 번호 보강 포함)', async () => {
   await env.resetS(); S.loaded = true;
-  adoptPhonebook([{id:11, who:'', org:'', phone:'010-1234-5678'}]);   // 번호만 있는 관련인
+  adoptPhonebook([{id:11, who:'이영희', org:'세무과', phone:''}]);   // 번호 없는 기존 항목 (보강 대상)
+  openForm({});
+  $('fm-memo').value='새 업무';
+  const row=$('fm-contacts').querySelector('.contact-row');
+  row.querySelector('.c-org').value='행정과'; row.querySelector('.c-who').value='김철수'; row.querySelector('.c-phone').value='010-1';
+  // 둘째 행: 이영희(번호 보강) / 셋째 행: 이름만(자동 흡수 제외)
+  env.document.getElementById('fm-contactadd').click();
+  const rows=$('fm-contacts').querySelectorAll('.contact-row');
+  rows[1].querySelector('.c-org').value='세무과'; rows[1].querySelector('.c-who').value='이영희'; rows[1].querySelector('.c-phone').value='010-2';
+  env.document.getElementById('fm-contactadd').click();
+  const rows2=$('fm-contacts').querySelectorAll('.contact-row');
+  rows2[2].querySelector('.c-who').value='박이름만';
+  $('fm-save').click();
+  await env.flush();
+  assert.equal(S.phonebook.length, 2);                          // 김철수 추가 (박이름만 제외)
+  assert.ok(S.phonebook.some(e=>e.who==='김철수'&&e.org==='행정과'&&e.phone==='010-1'));
+  assert.equal(S.phonebook.find(e=>e.id===11).phone, '010-2');  // 이영희 번호 보강
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_phonebook'));
+});
+
+test('번호꼴 @태그(@010-…) 칩 클릭도 연락처(숫자만 비교)로 검색된다 — 구버전 번호만 항목 호환', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'', org:'', phone:'010-1234-5678'}]);   // 구버전 데이터 pass-through (신규 입력은 3칸 필수)
   S.items=[
     {id:1, memo:'표기 다른 번호', contacts:[{who:'', org:'', phone:'01012345678'}], done:false},
     {id:2, memo:'무관', contacts:[{who:'', org:'', phone:'02-000'}], done:false},
   ];
-  const tag=env.document.createElement('span');
-  tag.className='at-tag'; tag.dataset.at='010-1234-5678';
-  env.document.body.appendChild(tag);
-  tag.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  openForm({memo:'회신 @010-1234-5678'});                             // 칩으로 렌더 → 클릭
+  const chip=$('fm-tags').querySelector('.at-tag');
+  assert.equal(chip.dataset.at, '010-1234-5678');
+  chip.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
   assert.deepEqual(hits, [1]);
-  modal.classList.remove('on'); tag.remove();
+  modal.classList.remove('on');
 });
 
 test('백업 왕복: adoptPhonebook 이 id 없는 항목에 id 를 채우고 lastId 를 시드한다 (F12)', async () => {

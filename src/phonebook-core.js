@@ -18,15 +18,24 @@ export function normEntry(e){
 /* 중복 판정 키 — 이름·소속은 trim 그대로, 전화는 숫자만 비교(표기 차이 무시) */
 export function entryKey(e){ return `${String(e.who||'').trim()}|${String(e.org||'').trim()}|${phoneDigits(e.phone)}`; }
 
+/* 전화번호부 입력 자격(v2.9.0 소유자 지정): 소속·이름·연락처 **3칸 완비**.
+   메모는 자유 형식이지만 전화번호부는 "명함 한 장"만 받는다 — 일부만 아는
+   관련인은 메모에 적는다. 모든 입력 경로(직접·엑셀·가져오기·자동 연동) 공통. */
+export function isComplete(e){
+  e=e||{};
+  return !!(String(e.who||'').trim() && String(e.org||'').trim() && phoneDigits(e.phone));
+}
+
 /* 아이템들의 관련인(contacts) 중 전화번호부에 아직 없는 것만 모은다 —
-   [아이템에서 가져오기]용. 자기들끼리도 중복 제거. id 는 없는 채로 돌려준다. */
+   [아이템에서 가져오기]용. 자기들끼리도 중복 제거. id 는 없는 채로 돌려준다.
+   v2.9.0: 3칸 완비 관련인만(전화번호부 입력 자격). */
 export function gatherFromItems(items, existing){
   const seen=new Set((existing||[]).map(entryKey));
   const out=[];
   for(const it of (items||[])){
     for(const c of (it.contacts||[])){
       const e=normEntry(c);
-      if(!(e.who||e.org||e.phone)) continue;
+      if(!isComplete(e)) continue;
       const k=entryKey(e);
       if(seen.has(k)) continue;
       seen.add(k); out.push(e);
@@ -95,6 +104,53 @@ export function relatedItems(items, {name, phones}={}){
     if(byName||byPhone) out.push(it);
   }
   return out.sort((a,b)=>(a.done?1:0)-(b.done?1:0) || b.id-a.id);
+}
+
+/* 원문(이스케이프 전) 텍스트에서 @태그 이름들을 뽑는다 — 중복 제거, 등장 순서.
+   linkifyAt 과 같은 문법(줄 시작/공백 뒤 @, '(' 앞까지, 꼬리 문장부호 제거). */
+export function extractTags(text){
+  const out=[]; const re=/(^|\s)@([^\s@&<>"'(]{1,30})/g; let m;
+  text=String(text||'');
+  while((m=re.exec(text))){
+    const name=m[2].replace(/[.,;:!?·)\]]+$/,'');
+    if(name && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/* 태그 이름에 해당하는 전화번호부 항목들 — 이름 일치, (이름 없는 항목의) 소속 일치,
+   번호꼴 태그(숫자 7자리 이상)의 번호 일치(숫자만 비교). 빠른 메모 등록 시
+   관련인 자동 첨부(form.js contactsFromTags)가 쓴다. */
+export function entriesForTag(list, name){
+  name=String(name||'').trim(); if(!name) return [];
+  const d=phoneDigits(name);
+  return (list||[]).filter(e=>
+    e.who===name || (!e.who && e.org===name) || (d.length>=7 && phoneDigits(e.phone)===d));
+}
+
+/* 아이템 관련인 → 전화번호부 자동 흡수(v2.9.0, 양식 저장 시) 계산 — 순수.
+   반환: {added:[{who,org,phone}], updates:[{id, phone}]} (적용은 호출부).
+   무결성 규칙(소유자 지정): **자동 경로는 이름·소속·연락처 3칸이 모두 있는
+   관련인만 받는다** — 검토 없이 쌓이는 경로라 반쪽 데이터가 오염의 주범이다.
+   (직접 입력·엑셀·[아이템에서 가져오기]는 의도적 행동이므로 부분 입력 허용 유지.)
+   꼬임 방지 규칙:
+   - 완전히 같은 사람(entryKey: 이름·소속·번호 숫자 비교)은 건너뜀
+   - 같은 이름·소속인데 기존 번호가 비어 있으면 **번호만 보강**(항목 추가 없음)
+   - 번호가 서로 다르면 새 항목(한 사람이 번호 둘인 것은 전화번호부에서 정상)
+   삭제는 계산하지 않는다 — 아이템에서 지워도 전화번호부는 그대로. */
+export function absorbContacts(book, contacts){
+  const added=[], updates=[];
+  const cur=(book||[]).map(e=>({...e}));           // 보강 중복 계산을 위한 작업 사본
+  for(const raw of (contacts||[])){
+    const c=normEntry(raw);
+    if(!isComplete(c)) continue;                 // 3칸 완비만 (전화번호부 입력 자격)
+    const k=entryKey(c);
+    if(cur.some(e=>entryKey(e)===k) || added.some(e=>entryKey(e)===k)) continue;
+    const mate=cur.find(e=>e.who===c.who && e.org===c.org);
+    if(mate && !phoneDigits(mate.phone)){ mate.phone=c.phone; updates.push({id:mate.id, phone:c.phone}); continue; }
+    added.push({who:c.who, org:c.org, phone:c.phone});
+  }
+  return {added, updates};
 }
 
 /* 커서 앞의 @토큰 — {start, query} 또는 null.

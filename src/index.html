@@ -60,6 +60,8 @@
       <div class="fm-memo-wrap">
         <label class="fm-label">메모</label>
         <textarea id="fm-memo" class="fm-memo" maxlength="50000" placeholder="업무 내용을 자유롭게 적으세요"></textarea>
+        <!-- v2.9.0 @태그 칩 — 메모 속 @태그를 클릭 가능한 칩으로 (클릭=관련 업무 팝업) -->
+        <div id="fm-tags" style="display:none"></div>
       </div>
 
       <!-- v2.5.3 양식 순서: 메모 → 세부 할 일 → 접수·마감 → 식별번호 → 관련소속·관련인·연락처 → 파일 링크 -->
@@ -193,12 +195,12 @@
   <div class="done-head">
     <h2>전화번호부 <span id="pb-count" class="done-cnt">0</span></h2>
     <div class="done-tools">
-      <button class="btn btn-tool" id="pb-import" title="아이템에 입력된 관련인 중 여기 없는 사람을 일괄 추가">아이템에서 가져오기</button>
+      <button class="btn btn-tool" id="pb-import" title="아이템에 입력된 관련인 중 여기 없는 사람(소속·이름·연락처 완비)을 다시 훑어 추가">새로고침</button>
       <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 이름·소속·전화 제목)에서 일괄 추가">엑셀 불러오기</button>
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
-  <div class="m-sub" style="margin-bottom:12px">바로 입력·양식 메모에서 <b>@이름</b>(또는 @소속·@번호)처럼 치면 여기 저장된 관련인이 자동완성됩니다. 양식의 관련인 칸은 @ 없이 입력만 해도 검색됩니다. 메모에 남은 <b>@태그를 카드에서 클릭</b>하면(또는 아래 목록의 행을 누르면) 그 관련인과 엮인 업무를 모아 보여줍니다.</div>
+  <div class="m-sub" style="margin-bottom:12px">전화번호부에는 <b>관련소속·관련인·연락처가 모두 있는 사람만</b> 저장됩니다(일부만 아는 관련인은 메모에 자유롭게 적으세요). 바로 입력·양식 메모에서 <b>@이름</b>처럼 치면 자동완성되고, 양식을 저장하면 그 관련인이 여기 자동 반영됩니다. <b>양식 메모 아래 @태그</b>나 아래 목록의 행을 클릭하면 그 관련인과 엮인 업무를 모아 보여줍니다.</div>
   <div class="pb-new">
     <input type="text" id="pb-org" maxlength="100" placeholder="관련소속" autocomplete="off">
     <input type="text" id="pb-who" maxlength="100" placeholder="관련인" autocomplete="off">
@@ -210,7 +212,20 @@
   <input type="file" id="pb-file" accept=".xlsx,.xls" style="display:none">
 </section>
 
-<!-- @태그 관련 업무 팝업 (v2.7.0) — 카드의 @태그·전화번호부 행 클릭으로 뜬다.
+<!-- 전화번호부 새로고침·엑셀 확인 팝업 (v2.9.0) — 네이티브 confirm 대신 표준 모달 -->
+<div class="modal-bg" id="pbSyncModal">
+  <div class="modal">
+    <h3 id="pbs-title">전화번호부 새로고침</h3>
+    <div class="m-sub" id="pbs-sub"></div>
+    <div class="rel-list" id="pbs-list"></div>
+    <div class="m-actions">
+      <button class="btn btn-cancel" id="pbs-cancel">닫기</button>
+      <button class="btn btn-ok" id="pbs-add">모두 추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- @태그 관련 업무 팝업 (v2.7.0; v2.9.0부터 양식 메모 아래 태그 칩·전화번호부 행 클릭으로 뜬다.
      행의 data-open 은 render.js 의 카드 열기 위임을 그대로 탄다. -->
 <div class="modal-bg" id="relModal">
   <div class="modal">

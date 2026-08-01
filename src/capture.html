@@ -76,7 +76,10 @@
  .cap-empty{font-size:12.5px;color:var(--cap-muted);padding:12px}
  /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
  #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:2px 18px 10px}
- /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어 */
+ /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어.
+    v2.9.0 body.pb: 목록이 펴진 동안 입력칸 flex:1 을 꺼서 늘어난 창 높이를 목록이 갖는다
+    (안 끄면 입력·힌트·목록이 벌어진 3분할로 찢어져 보이던 버그). */
+ body.pb #cap-bar{flex:none}
  #cap-pb{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
    border-top:1px solid var(--cap-sep);padding:6px 8px}
  .cap-pb-it{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.45;color:var(--cap-ink);

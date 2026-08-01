@@ -3,7 +3,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 
-const {phoneDigits, normEntry, entryKey, gatherFromItems, matchEntries, entryLabel, tagText, linkifyAt, relatedItems, atToken, applyInsert, mapSheetRows}
+const {phoneDigits, normEntry, entryKey, isComplete, gatherFromItems, matchEntries, entryLabel, tagText, linkifyAt, relatedItems, atToken, applyInsert, mapSheetRows, extractTags, entriesForTag, absorbContacts}
   = await import('../../src/phonebook-core.js');
 
 test('entryKey: 전화 표기 차이(하이픈·공백)는 같은 사람으로 판정', () => {
@@ -114,6 +114,47 @@ test('relatedItems: 이름 OR 연락처(숫자만) 일치 — 미완료 먼저·
   // 이름 없이 연락처만으로도 검색된다 (관련인 이름만/연락처만 적었을 가능성 — OR 조건)
   assert.deepEqual(relatedItems(items, {phones:['01012345678']}).map(it=>it.id), [2]);
   assert.deepEqual(relatedItems(items, {name:'박영수'}).map(it=>it.id), [4]);
+});
+
+test('isComplete: 소속·이름·연락처(숫자 있는) 3칸 완비 판정 (v2.9.0 무결성 규칙)', () => {
+  assert.equal(isComplete({who:'김철수', org:'행정과', phone:'010-1'}), true);
+  assert.equal(isComplete({who:'김철수', org:'', phone:'010-1'}), false);
+  assert.equal(isComplete({who:'', org:'행정과', phone:'010-1'}), false);
+  assert.equal(isComplete({who:'김철수', org:'행정과', phone:'없음'}), false);   // 숫자 없는 연락처
+});
+
+test('extractTags: 메모 원문에서 @태그 이름들 (중복 제거·괄호 앞까지·꼬리 문장부호 제거)', () => {
+  assert.deepEqual(extractTags('통화 @김철수 회신 @김철수, 그리고 @이영희(세무과)'), ['김철수','이영희']);
+  assert.deepEqual(extractTags('a@b.com 은 태그 아님'), []);
+  assert.deepEqual(extractTags(''), []);
+});
+
+test('entriesForTag: 이름 일치 / 이름 없는 항목의 소속 일치 / 번호꼴 태그의 번호 일치', () => {
+  const book=[
+    {id:1, who:'김철수', org:'행정과', phone:'010-1'},
+    {id:2, who:'', org:'행정과', phone:'02-1234-5678'},          // 구버전 소속만 항목
+    {id:3, who:'', org:'', phone:'010-9999-8888'},               // 구버전 번호만 항목
+  ];
+  assert.deepEqual(entriesForTag(book, '김철수').map(e=>e.id), [1]);
+  assert.deepEqual(entriesForTag(book, '행정과').map(e=>e.id), [2]);   // 이름 있는 1번은 소속으로 안 걸림
+  assert.deepEqual(entriesForTag(book, '01099998888').map(e=>e.id), [3]);
+  assert.deepEqual(entriesForTag(book, '없는사람'), []);
+});
+
+test('absorbContacts: 3칸 완비만 흡수, 완전 중복 건너뜀, 빈 번호는 보강, 다른 번호는 새 항목', () => {
+  const book=[
+    {id:1, who:'김철수', org:'행정과', phone:'010-1'},
+    {id:2, who:'이영희', org:'세무과', phone:''},
+  ];
+  const {added, updates}=absorbContacts(book, [
+    {who:'김철수', org:'행정과', phone:'010-1'},        // 완전 중복 → 건너뜀
+    {who:'이영희', org:'세무과', phone:'010-2'},        // 기존 번호 없음 → 보강
+    {who:'김철수', org:'행정과', phone:'010-3'},        // 같은 사람 다른 번호 → 새 항목
+    {who:'박이름만', org:'', phone:''},                 // 불완전 → 제외
+    {who:'', org:'', phone:''},
+  ]);
+  assert.deepEqual(updates, [{id:2, phone:'010-2'}]);
+  assert.deepEqual(added, [{who:'김철수', org:'행정과', phone:'010-3'}]);
 });
 
 test('normEntry/phoneDigits: 문자열 강제·trim·숫자 추출', () => {

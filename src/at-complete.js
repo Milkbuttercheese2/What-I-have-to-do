@@ -9,7 +9,7 @@
    ========================================================================= */
 import {S} from './state.js';
 import {$, esc} from './dom-utils.js';
-import {atToken, applyInsert, entryLabel, tagText, matchEntries} from './phonebook-core.js';
+import {atToken, applyInsert, tagText, matchEntries} from './phonebook-core.js';
 import {fillContactFromEntry} from './form.js';
 
 let drop=null;            // 드롭다운 요소 (#atDrop, body 직속)
@@ -83,9 +83,10 @@ function apply(i){
       fillContactFromEntry(entry);
       el.dispatchEvent(new Event('input',{bubbles:true}));
     }else{
-      /* 바로 입력: @태그 + 정보 병기 — "@김철수(행정과 010-…)". 카드에서 이름 부분만
-         클릭 가능한 태그가 된다 (linkifyAt 이 '(' 앞까지를 태그로 본다). */
-      const r=applyInsert(el.value, token.caret, token.start, '@'+entryLabel(entry));
+      /* 바로 입력: 완성형 @태그만 삽입 (v2.9.0 — 괄호 정보 병기는 폐지). 소속·번호는
+         등록 시점에 captureMemo 가 태그를 전화번호부와 대조해 관련인으로 자동 첨부하므로
+         메모 텍스트에 중복으로 남길 이유가 없다(메모가 어수선해지는 비용만 있었다). */
+      const r=applyInsert(el.value, token.caret, token.start, tagText(entry));
       el.value=r.text; el.setSelectionRange(r.caret, r.caret);
       el.dispatchEvent(new Event('input',{bubbles:true}));           // autoGrowInp·초안 흐름 유지
     }
