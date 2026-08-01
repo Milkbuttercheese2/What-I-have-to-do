@@ -70,7 +70,7 @@ test('바로 입력 @자동완성: @김철 → 드롭다운 → Enter 로 텍스
   assert.equal(drop.style.display, 'block');
   assert.ok(drop.textContent.includes('김철수'));
   key(inp, 'Enter');
-  assert.equal(inp.value, '민원 김철수(행정과 010-1234-5678)');
+  assert.equal(inp.value, '민원 @김철수(행정과 010-1234-5678)');   // @태그 + 정보 병기
   assert.equal(drop.style.display, 'none');
 });
 
@@ -100,7 +100,7 @@ test('양식 관련인 칸: 이름 일부만 쳐도 드롭다운 → 클릭 시 
   assert.equal(drop.style.display, 'none');
 });
 
-test('양식 메모 @자동완성: 선택하면 @토큰이 지워지고 관련인 행이 채워진다', async () => {
+test('양식 메모 @자동완성: @태그는 완성형으로 남고 관련인 행이 채워진다 (중복 선택은 1번만)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   openForm({});
@@ -110,9 +110,40 @@ test('양식 메모 @자동완성: 선택하면 @토큰이 지워지고 관련�
   const drop=env.document.getElementById('atDrop');
   assert.equal(drop.style.display, 'block');
   key(memo, 'Enter');
-  assert.equal(memo.value, '회신 요청 ');                       // 토큰 제거 (텍스트 삽입 없음)
-  const row=$('fm-contacts').querySelector('.contact-row');
-  assert.equal(row.querySelector('.c-who').value, '김철수');
+  assert.equal(memo.value, '회신 요청 @김철수');                // 태그는 지우지 않는다 (소유자 지정)
+  const rows=()=>[...$('fm-contacts').querySelectorAll('.contact-row')];
+  assert.equal(rows()[0].querySelector('.c-who').value, '김철수');
+  // 같은 사람을 다시 골라도 관련인은 한 번만 — 태그만 하나 더 남는다
+  memo.value=memo.value+' 그리고 @김철'; memo.setSelectionRange(memo.value.length, memo.value.length);
+  input(memo);
+  key(memo, 'Enter');
+  assert.equal(memo.value, '회신 요청 @김철수 그리고 @김철수');
+  const filled=rows().filter(r=>r.querySelector('.c-who').value==='김철수');
+  assert.equal(filled.length, 1);
+});
+
+test('@태그 클릭 → 관련 업무 팝업 (이름 OR 연락처 일치), 행 클릭이 팝업을 닫는다', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
+  S.items=[
+    {id:1, memo:'이름으로 적은 건', contacts:[{who:'김철수', org:'', phone:''}], done:false},
+    {id:2, memo:'번호만 적은 건', contacts:[{who:'', org:'', phone:'01012345678'}], done:true},
+    {id:3, memo:'메모에 @김철수 태그만', contacts:[], done:false},
+    {id:4, memo:'무관한 업무', contacts:[{who:'박영수', org:'', phone:'010-9'}], done:false},
+  ];
+  // 카드에 렌더된 것과 같은 @태그를 클릭한 상황
+  const tag=env.document.createElement('span');
+  tag.className='at-tag'; tag.dataset.at='김철수';
+  env.document.body.appendChild(tag);
+  tag.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  const modal=env.document.getElementById('relModal');
+  assert.ok(modal.classList.contains('on'));
+  const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
+  assert.deepEqual(hits, [3,1,2]);                              // 미완료 먼저·최신순, 무관한 4는 제외
+  // 행 클릭 → 팝업 닫힘 (양식 열기 자체는 render.js data-open 위임 몫)
+  modal.querySelector('[data-open="1"]').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));
+  assert.ok(!modal.classList.contains('on'));
+  tag.remove();
 });
 
 test('백업 왕복: adoptPhonebook 이 id 없는 항목에 id 를 채우고 lastId 를 시드한다 (F12)', async () => {

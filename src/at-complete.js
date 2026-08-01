@@ -9,7 +9,7 @@
    ========================================================================= */
 import {S} from './state.js';
 import {$, esc} from './dom-utils.js';
-import {atToken, applyInsert, entryLabel, matchEntries} from './phonebook-core.js';
+import {atToken, applyInsert, entryLabel, tagText, matchEntries} from './phonebook-core.js';
 import {fillContactFromEntry} from './form.js';
 
 let drop=null;            // 드롭다운 요소 (#atDrop, body 직속)
@@ -75,14 +75,17 @@ function apply(i){
       fillContactFromEntry(entry, el.closest('.contact-row'));
       el.dispatchEvent(new Event('input',{bubbles:true}));           // 양식 임시저장 트리거
     }else if(el.id==='fm-memo'){
-      /* 양식 메모: @토큰은 지우고 관련인 행에 넣는다 (사용자 지정 동작) */
-      const r=applyInsert(el.value, token.caret, token.start, '');
+      /* 양식 메모: 토큰을 완성형 @태그로 남기고(소유자 지정 — 태그는 지우지 않는다)
+         관련인 행을 채운다. 같은 사람을 여러 번 골라도 관련인은 한 번만 들어간다
+         (중복 판정은 fillContactFromEntry 쪽). */
+      const r=applyInsert(el.value, token.caret, token.start, tagText(entry));
       el.value=r.text; el.setSelectionRange(r.caret, r.caret);
       fillContactFromEntry(entry);
       el.dispatchEvent(new Event('input',{bubbles:true}));
     }else{
-      /* 바로 입력: 텍스트로 삽입 */
-      const r=applyInsert(el.value, token.caret, token.start, entryLabel(entry));
+      /* 바로 입력: @태그 + 정보 병기 — "@김철수(행정과 010-…)". 카드에서 이름 부분만
+         클릭 가능한 태그가 된다 (linkifyAt 이 '(' 앞까지를 태그로 본다). */
+      const r=applyInsert(el.value, token.caret, token.start, '@'+entryLabel(entry));
       el.value=r.text; el.setSelectionRange(r.caret, r.caret);
       el.dispatchEvent(new Event('input',{bubbles:true}));           // autoGrowInp·초안 흐름 유지
     }

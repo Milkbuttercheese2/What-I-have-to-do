@@ -8,7 +8,7 @@
 import {S, newId} from './state.js';
 import {STORE} from './store.js';
 import {$, esc, escAttr, showToast} from './dom-utils.js';
-import {normEntry, entryKey, gatherFromItems, mapSheetRows, phoneDigits} from './phonebook-core.js';
+import {normEntry, entryKey, gatherFromItems, mapSheetRows, phoneDigits, relatedItems} from './phonebook-core.js';
 
 let q='';                 // 탭 안 검색어 (모듈 로컬 — render.js 의 q/dq 와 같은 패턴)
 let editingPbId=null;     // 수정 중인 항목 id (null = 새로 추가 모드)
@@ -117,7 +117,42 @@ function importFromXlsx(file){
   reader.readAsArrayBuffer(file);
 }
 
+/* ── 관련 업무 팝업 (v2.7.0 소유자 지정) ─────────────────────────────────
+   카드의 @태그(또는 전화번호부 행)를 클릭하면, 그 관련인과 엮인 업무를 모아
+   보여준다. 검색은 이름 OR 연락처(숫자만 비교) — 아이템에 이름만 적었거나
+   연락처만 적었을 수 있기 때문. 행 클릭은 render.js 의 data-open 위임이 받아
+   양식을 연다(여기서는 팝업만 닫는다). */
+export function openRelated(name, extraPhones){
+  name=String(name||'').trim(); if(!name) return;
+  /* 태그 이름으로 전화번호부를 찾아 연락처를 얹는다 — 이름이 같은 사람이 여럿이면 전부 */
+  const phones=S.phonebook.filter(e=>e.who===name||e.org===name).map(e=>e.phone)
+    .concat(extraPhones||[]);
+  const matched=relatedItems(S.items, {name, phones});
+  $('rel-title').textContent=`@${name} 관련 업무`;
+  $('rel-sub').textContent=`관련인·메모에 "${name}"이(가) 있거나 연락처가 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;
+  $('rel-list').innerHTML=matched.length?matched.map(it=>{
+    const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
+    return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span></div>`;
+  }).join(''):'<div class="empty" style="padding:14px">엮인 업무가 없습니다.</div>';
+  $('relModal').classList.add('on');
+}
+export function closeRelated(){ $('relModal').classList.remove('on'); }
+
 export function initPhonebook(){
+  document.body.appendChild($('relModal'));           // 어느 탭에서든 뜨도록 (표준 모달 규칙)
+  $('relClose').addEventListener('click',closeRelated);
+  $('relModal').addEventListener('click',e=>{
+    if(e.target.id==='relModal'){ closeRelated(); return; }          // 배경 클릭 닫기
+    if(e.target.closest('[data-open]')) closeRelated();             // 업무를 열었으니 팝업은 닫는다 (열기는 render.js 위임)
+  });
+  /* 카드 메모의 @태그 클릭 — 캡처 단계라 카드 열기(data-open, render.js 버블 위임)보다
+     먼저 받고 전파를 끊는다. 카드가 아니라 관련 업무 팝업이 뜬다. */
+  document.addEventListener('click',e=>{
+    const t=e.target.closest&&e.target.closest('.at-tag');
+    if(!t) return;
+    e.preventDefault(); e.stopPropagation();
+    openRelated(t.dataset.at);
+  }, true);
   $('pb-save').addEventListener('click',submitPbForm);
   $('pb-cancel').addEventListener('click',()=>{ clearPbForm(); });
   [$('pb-org'),$('pb-who'),$('pb-phone')].forEach(inp=>inp.addEventListener('keydown',e=>{
@@ -135,7 +170,13 @@ export function initPhonebook(){
     const ed=e.target.closest('[data-pbedit]');
     if(ed){ loadPbForm(Number(ed.dataset.pbedit)); return; }
     const del=e.target.closest('[data-pbdel]');
-    if(!del) return;
+    if(!del){
+      /* 행의 빈 곳 클릭 = 이 사람과 엮인 업무 보기 (카드 @태그 클릭과 같은 팝업) */
+      const rowEl=e.target.closest('.pb-item');
+      if(rowEl){ const en=S.phonebook.find(x=>x.id===Number(rowEl.dataset.pbid));
+        if(en) openRelated(en.who||en.org||en.phone, [en.phone]); }
+      return;
+    }
     const id=Number(del.dataset.pbdel), entry=S.phonebook.find(x=>x.id===id);
     if(!entry) return;
     if(!confirm(`"${[entry.org,entry.who].filter(Boolean).join(' ')||entry.phone}"을(를) 삭제할까요?`)) return;

@@ -133,7 +133,8 @@ function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
   const inp=$id('cap-inp'); const e=pbItems[i??pbSel];
   if(!e||!pbToken){ closePb(); return; }
-  const r=applyInsert(inp.value, pbToken.caret, pbToken.start, entryLabel(e));
+  /* @태그 + 정보 병기 — 메인 창 바로 입력과 동일 형식(카드에서 이름 부분이 클릭 태그가 된다) */
+  const r=applyInsert(inp.value, pbToken.caret, pbToken.start, '@'+entryLabel(e));
   inp.value=r.text; try{inp.setSelectionRange(r.caret,r.caret);}catch{}
   autoGrow(inp);
   clearTimeout(draftTimer); sendDraft(inp.value);   // 삽입분도 초안에 즉시 반영

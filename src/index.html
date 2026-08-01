@@ -198,7 +198,7 @@
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
-  <div class="m-sub" style="margin-bottom:12px">바로 입력·양식 메모에서 <b>@이름</b>(또는 @소속·@번호)처럼 치면 여기 저장된 관련인이 자동완성됩니다. 양식의 관련인 칸은 @ 없이 입력만 해도 검색됩니다.</div>
+  <div class="m-sub" style="margin-bottom:12px">바로 입력·양식 메모에서 <b>@이름</b>(또는 @소속·@번호)처럼 치면 여기 저장된 관련인이 자동완성됩니다. 양식의 관련인 칸은 @ 없이 입력만 해도 검색됩니다. 메모에 남은 <b>@태그를 카드에서 클릭</b>하면(또는 아래 목록의 행을 누르면) 그 관련인과 엮인 업무를 모아 보여줍니다.</div>
   <div class="pb-new">
     <input type="text" id="pb-org" maxlength="100" placeholder="관련소속" autocomplete="off">
     <input type="text" id="pb-who" maxlength="100" placeholder="관련인" autocomplete="off">
@@ -209,6 +209,19 @@
   <div class="pb-list" id="pb-list"></div>
   <input type="file" id="pb-file" accept=".xlsx,.xls" style="display:none">
 </section>
+
+<!-- @태그 관련 업무 팝업 (v2.7.0) — 카드의 @태그·전화번호부 행 클릭으로 뜬다.
+     행의 data-open 은 render.js 의 카드 열기 위임을 그대로 탄다. -->
+<div class="modal-bg" id="relModal">
+  <div class="modal">
+    <h3 id="rel-title">관련 업무</h3>
+    <div class="m-sub" id="rel-sub"></div>
+    <div class="rel-list" id="rel-list"></div>
+    <div class="m-actions">
+      <button class="btn btn-ok" id="relClose">닫기</button>
+    </div>
+  </div>
+</div>
 
 <!-- 업무 프리셋 설정 -->
 <div class="modal-bg" id="presetModal">

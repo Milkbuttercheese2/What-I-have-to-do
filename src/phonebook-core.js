@@ -59,6 +59,44 @@ export function entryLabel(e){
   return paren ? `${head}(${paren})` : head;
 }
 
+/* 메모에 남는 @태그 텍스트 — @김철수 (이름 없으면 소속, 그것도 없으면 번호) */
+export function tagText(e){
+  e=e||{};
+  return '@'+(String(e.who||'').trim() || String(e.org||'').trim() || String(e.phone||'').trim());
+}
+
+/* 이스케이프된 메모 HTML 의 @태그를 클릭 가능한 span 으로 감싼다 (render.js 카드용).
+   줄 시작·공백 뒤 @만, '(' 앞까지만 태그로 본다 — 바로 입력의 "@김철수(행정과 010…)" 는
+   이름 부분만 태그가 되고 괄호 정보는 평문으로 남는다. 꼬리 문장부호는 태그 밖으로.
+   입력이 esc() 를 거친 뒤라 &·<·>·" 는 엔티티(&…;)로 존재한다 — 문자 집합에서 &를
+   제외하므로 엔티티를 관통해 태그가 이어지지 않고, data-at 속성 주입도 불가능하다. */
+export function linkifyAt(escaped){
+  return String(escaped||'').replace(/(^|\s)@([^\s@&<>"'(]{1,30})/g,(m,pre,raw)=>{
+    const name=raw.replace(/[.,;:!?·)\]]+$/,'');
+    if(!name) return m;
+    return `${pre}<span class="at-tag" data-at="${name}">@${name}</span>${raw.slice(name.length)}`;
+  });
+}
+
+/* @태그 클릭 → 관련 업무 검색 (소유자 지정: 이름 OR 연락처 — 아이템에 이름만
+   적었거나 연락처만 적었을 수 있어서). 이름은 관련인·관련소속·메모 본문에서,
+   연락처는 관련인 연락처(숫자만 비교)에서 찾는다. 미완료 먼저, 최신순. */
+export function relatedItems(items, {name, phones}={}){
+  name=String(name||'').trim();
+  phones=(phones||[]).map(phoneDigits).filter(Boolean);
+  const out=[];
+  for(const it of (items||[])){
+    if(it.recur) continue;                       // 주기 부모는 보드 밖 — 목록에서 제외
+    const cs=it.contacts||[];
+    const byName = !!name && (
+      cs.some(c=>String(c.who||'').includes(name)||String(c.org||'').includes(name))
+      || String(it.memo||'').includes(name));
+    const byPhone = !!phones.length && cs.some(c=>phones.includes(phoneDigits(c.phone)));
+    if(byName||byPhone) out.push(it);
+  }
+  return out.sort((a,b)=>(a.done?1:0)-(b.done?1:0) || b.id-a.id);
+}
+
 /* 커서 앞의 @토큰 — {start, query} 또는 null.
    @ 는 줄 시작이나 공백 뒤에서만 트리거(이메일 주소 한가운데 @ 는 무시),
    토큰은 공백·@ 없는 1~30자. 커서가 토큰 끝에 있을 때만 활성. */
