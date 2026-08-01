@@ -22,10 +22,19 @@ export function adoptPhonebook(list){
     .map(e=>{ if(e.id==null||e.id===''){ e.id=newId(); } else { e.id=Number(e.id); if(e.id>S.lastId) S.lastId=e.id; } return e; });
 }
 
-/* 표시 정렬 — 소속 → 이름 (ko locale). 원본 배열은 건드리지 않는다. */
+/* 관련 업무 수 — 이 사람이 엮인(이름 OR 연락처) 업무 개수. 태그 클릭 팝업과 같은 기준 */
+function relCount(e){
+  return relatedItems(S.items, {name:e.who||e.org||e.phone, phones:[e.phone]}).length;
+}
+/* 표시 정렬(v2.11.0 소유자 지정) — ① 관련 업무 수 많은 순 ② 소속 ③ 이름 (ko locale).
+   원본 배열은 건드리지 않는다(배열 순서 = 저장 순서). */
 function sorted(){
+  const cnt=new Map(S.phonebook.map(e=>[e.id, relCount(e)]));
   return S.phonebook.slice().sort((a,b)=>
-    (a.org||'').localeCompare(b.org||'','ko') || (a.who||'').localeCompare(b.who||'','ko'));
+    (cnt.get(b.id)-cnt.get(a.id))
+    || (a.org||'').localeCompare(b.org||'','ko')
+    || (a.who||'').localeCompare(b.who||'','ko'))
+    .map(e=>({e, n:cnt.get(e.id)}));
 }
 function matches(e){
   if(!q) return true;
@@ -35,15 +44,16 @@ function matches(e){
 export function renderPhonebook(){
   const w=$('pb-list'); if(!w) return;
   $('pb-count').textContent=S.phonebook.length;
-  const list=sorted().filter(matches);
+  const list=sorted().filter(x=>matches(x.e));
   if(!list.length){
-    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. 위에서 직접 추가하거나, 아이템에서 가져오기·엑셀 불러오기를 쓰세요.'}</div>`;
+    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. 위에서 직접 추가하거나, [새로고침]·[엑셀 불러오기]를 쓰세요.'}</div>`;
     return;
   }
-  w.innerHTML=list.map(e=>`<div class="pb-item" data-pbid="${e.id}">
+  w.innerHTML=list.map(({e,n})=>`<div class="pb-item" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
     <span class="pb-org">${esc(e.org||'—')}</span>
     <span class="pb-who">${esc(e.who||'—')}</span>
     <span class="pb-phone num">${esc(e.phone||'—')}</span>
+    <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
     <button class="ps-edit" data-pbedit="${e.id}">수정</button>
     <button class="ps-del" data-pbdel="${e.id}">삭제</button>
   </div>`).join('');

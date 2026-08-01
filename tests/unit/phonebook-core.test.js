@@ -85,6 +85,16 @@ test('tagText: 이름 → 소속 → 번호 순으로 @태그 텍스트', () => 
   assert.equal(tagText({who:'', org:'', phone:'010-1'}), '@010-1');
 });
 
+test('linkifyAt(book): 전화번호부 실존 관련인 태그만 감싼다 — 부분 삭제 시 태그 해제 (v2.11.0)', () => {
+  const book=[{id:1, who:'우성균', org:'행정과', phone:'010-1'}];
+  assert.equal(linkifyAt('회신 @우성균 건', book),
+    '회신 <span class="at-tag" data-at="우성균">@우성균</span> 건');
+  // '균' 한 글자만 지워도 실존 관련인이 아니므로 평문 — 태그 삭제 (소유자 지정)
+  assert.equal(linkifyAt('회신 @우성 건', book), '회신 @우성 건');
+  // book 을 안 주면(구 시그니처) 전부 감싼다 — 하위 호환
+  assert.ok(linkifyAt('회신 @우성 건').includes('at-tag'));
+});
+
 test('linkifyAt: @태그를 span 으로, 괄호 정보·꼬리 문장부호는 태그 밖으로', () => {
   assert.equal(linkifyAt('민원 @김철수 회신'),
     '민원 <span class="at-tag" data-at="김철수">@김철수</span> 회신');

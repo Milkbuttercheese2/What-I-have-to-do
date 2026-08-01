@@ -8,7 +8,7 @@ import {S, reconcileCore, migrateItem} from './state.js';
 import {STORE} from './store.js';
 import {$, initToast} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
-import {initForm, closeForm, toInbox} from './form.js';
+import {initForm, closeForm, toInbox, contactsFromTags} from './form.js';
 import {initPresets, renderPresets} from './presets.js';
 import {initRender, render, renderDone} from './render.js';
 import {initCalendar, renderCal} from './calendar.js';
@@ -110,12 +110,14 @@ document.addEventListener('keydown',e=>{
    알람 모달은 명시적 확인이 필요하므로 대상에서 제외. */
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
+  /* v2.11.0: 양식 위에 뜨는 팝업(관련 업무 z70 등)을 먼저 닫는다 — 예전 순서(양식 먼저)는
+     칩 팝업이 떠 있는데 ESC 가 밑의 양식을 닫아버리는 역전이었다. */
+  if($('relModal').classList.contains('on')){ $('relModal').classList.remove('on'); return; }
+  if($('pbSyncModal').classList.contains('on')){ $('pbSyncModal').classList.remove('on'); return; }
   if($('formPanel').classList.contains('on')){ closeForm(); return; }
   if($('presetModal').classList.contains('on')){ $('presetModal').classList.remove('on'); return; }
   if($('boardModeModal').classList.contains('on')){ closeBoardModeModal(); return; }
   if($('settingsModal').classList.contains('on')){ closeSettings(); return; }
-  if($('relModal').classList.contains('on')){ $('relModal').classList.remove('on'); return; }
-  if($('pbSyncModal').classList.contains('on')){ $('pbSyncModal').classList.remove('on'); return; }
 });
 
 function tickClock(){ const n=new Date();
@@ -152,7 +154,8 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     const draft=(S.settings.captureDraft||'').trim();
     let draftItem=null;
     if(draft){
-      draftItem=makeItem({memo:draft, staged:true, f:{received:new Date().toISOString()}});
+      /* v2.11.0: 초안 회수도 빠른 메모 등록과 같은 규칙 — @태그의 관련인 자동 첨부 */
+      draftItem=makeItem({memo:draft, staged:true, f:{received:new Date().toISOString()}, contacts:contactsFromTags(draft)});
       S.items.push(draftItem);
       S.settings.captureDraft='';
       STORE.saveSettings(S.settings);

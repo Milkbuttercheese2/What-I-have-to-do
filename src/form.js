@@ -11,8 +11,9 @@ import {entryKey, extractTags, entriesForTag} from './phonebook-core.js';
 import {absorbIntoPhonebook} from './phonebook.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
-   업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부. */
-function contactsFromTags(text){
+   업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
+   (v2.11.0 export: main.js 의 미니 창 초안 회수 경로도 같은 규칙을 타야 한다) */
+export function contactsFromTags(text){
   const out=[], seen=new Set();
   for(const name of extractTags(text)){
     for(const e of entriesForTag(S.phonebook, name)){
@@ -156,7 +157,9 @@ export function openForm(pre){
    textarea 안 글자는 클릭할 수 없으므로 태그는 메모 바로 아래 칩 줄로 보여준다. */
 function renderFmTags(){
   const w=$('fm-tags'); if(!w) return;
-  const tags=extractTags($('fm-memo').value);
+  /* v2.11.0: 전화번호부에 실존하는 관련인의 태그만 칩으로 — @우성균 에서 한 글자만
+     지워도(@우성) 칩이 사라진다(소유자 지정). 카드 색 표시(linkifyAt)와 같은 규칙. */
+  const tags=extractTags($('fm-memo').value).filter(n=>entriesForTag(S.phonebook, n).length);
   w.innerHTML=tags.map(n=>`<span class="at-tag" data-at="${escAttr(n)}" title="이 관련인과 엮인 업무 보기">@${esc(n)}</span>`).join('');
   w.style.display=tags.length?'flex':'none';
 }
@@ -375,19 +378,22 @@ export function initForm(){
   /* v2.5.18 파일 링크도 드래그 정렬 — collectForm 이 .ffile-path 를 DOM 순서대로 읽으므로
      onDrop 콜백 없이 순서가 그대로 저장된다(fm-subs 와 동일 패턴). */
   enableDragReorder($('fm-files'), '.ffile-row', '.drag-handle');
-  $('fm-fileadd').addEventListener('click', async ()=>{
+  /* 파일·폴더 링크 (v2.11.0 통합) — 버튼 하나를 누르면 파일/폴더 선택지가 펼쳐진다.
+     네이티브 선택창이 파일용·폴더용으로 분리돼 있어 대화상자 자체는 못 합치므로,
+     들어가는 문 하나 + 갈림길 두 개로 만든다. 행 구조·열기는 종류와 무관하게 동일
+     (open_file_path — opener 가 폴더면 탐색기로 연다). */
+  const linkChoice=on=>{ $('fm-linkadd').style.display=on?'none':''; $('fm-linkchoice').style.display=on?'inline-flex':'none'; };
+  $('fm-linkadd').addEventListener('click',()=>linkChoice(true));
+  $('fm-pickcancel').addEventListener('click',()=>linkChoice(false));
+  const pickLink=async cmd=>{
+    linkChoice(false);
     let p=null;
-    try{ p=await invoke('pick_file_path'); }
-    catch(e){ alert('파일 선택 실패: '+e); return; }
+    try{ p=await invoke(cmd); }
+    catch(e){ alert('선택 실패: '+e); return; }
     if(p) addFormFileRow(p);
-  });
-  /* 폴더 링크 (v2.10.0) — 행 구조·열기(open_file_path: 폴더면 탐색기)는 파일과 동일 */
-  $('fm-folderadd').addEventListener('click', async ()=>{
-    let p=null;
-    try{ p=await invoke('pick_folder_path'); }
-    catch(e){ alert('폴더 선택 실패: '+e); return; }
-    if(p) addFormFileRow(p);
-  });
+  };
+  $('fm-pickfile').addEventListener('click',()=>pickLink('pick_file_path'));
+  $('fm-pickfolder').addEventListener('click',()=>pickLink('pick_folder_path'));
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
   /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
      새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */

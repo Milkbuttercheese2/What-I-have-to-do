@@ -42,7 +42,7 @@
     --dash-bg:#fcfcfb;              /* 점선 박스(새 프리셋) 안쪽 */
     --toast-bg:#1f2a33; --toast-fg:#ffffff; --toast-btn-border:#55606d; --toast-btn-hover:#2a333d;
     --overlay:rgba(20,27,36,.45);   /* 팝업 뒤 어둠막 */
-    --focus-ring:rgba(26,95,110,.14);
+    --focus-ring:rgba(42,124,110,.16);
     --scroll-thumb:rgba(31,42,51,.16); --scroll-thumb-hover:rgba(31,42,51,.30);
 
     /* 내부망 배포 대상: 외부 웹폰트 금지 — Pretendard는 아래 @font-face로 로컬 번들(v2.4.6).
@@ -89,7 +89,7 @@
     --dash-bg:#1a2130;
     --toast-bg:#1e2537; --toast-fg:#e8ecf4; --toast-btn-border:#3a465e; --toast-btn-hover:#2b3346;
     --overlay:rgba(6,9,16,.62);
-    --focus-ring:rgba(91,179,166,.22);
+    --focus-ring:rgba(86,189,171,.22);
     --scroll-thumb:rgba(255,255,255,.18); --scroll-thumb-hover:rgba(255,255,255,.32);
   }
 
@@ -261,7 +261,10 @@
   .fsub-row input[type=datetime-local]{font-family:inherit;font-size:11px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink-soft)}
   .fsub-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
   .fsub-add{font-size:11px;padding:4px 12px;background:var(--chip-bg);color:var(--ink-soft);margin-top:4px}
-  .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+  /* v2.11.0: 링크 버튼 줄과 저장 액션 줄이 붙어 답답하다는 소유자 피드백 —
+     액션 줄을 옅은 선으로 구분하고 위아래 숨 쉴 여백을 준다. */
+  .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;
+    margin-top:18px;padding-top:14px;border-top:1px solid var(--line-soft)}
   .fm-place{font-size:11px;color:var(--ink-soft);margin-right:auto}
   .fm-place b{color:var(--focus)}
   /* v2.5.22 임시저장 표시 — 저장 버튼 왼쪽의 조용한 상태 문구 */
@@ -359,8 +362,15 @@
   .pb-new input:focus{outline:none;border-color:var(--focus)}
   .pb-new .btn{flex:none}
   .pb-list{display:flex;flex-direction:column;gap:6px}
+  /* v2.11.0 행 hover 반응(소유자 지정) — 카드 hover 와 같은 시각 언어(소프트 리프트 + 청록 경계).
+     행 클릭 = 관련 업무 팝업이므로 커서도 포인터. */
   .pb-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
-    border-radius:9px;background:var(--card);font-size:13px}
+    border-radius:9px;background:var(--card);font-size:13px;cursor:pointer;
+    transition:box-shadow .14s ease,transform .14s ease,border-color .14s ease}
+  .pb-item:hover{border-color:var(--focus);box-shadow:0 2px 6px rgba(20,27,36,.06),0 10px 24px rgba(20,27,36,.09);transform:translateY(-1px)}
+  /* 엮인 업무 수 배지 — 정렬(1차 기준)의 근거를 행에서 바로 보여준다 */
+  .pb-cnt{flex:none;font-size:10.5px;font-weight:700;padding:2.5px 9px;border-radius:999px;
+    background:var(--slate-bg);color:var(--slate);letter-spacing:.02em}
   .pb-item .pb-org,.pbs-row .pb-org{flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
   .pb-item .pb-who,.pbs-row .pb-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
   .pb-item .pb-phone,.pbs-row .pb-phone{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -373,6 +383,9 @@
   /* 메모 합치기 드래그 (v2.8.0) — 끌리는 카드는 반투명, 받는 카드는 청록 강조 */
   .card.dragging{opacity:.45}
   .card.merge-over{border-color:var(--focus);background:var(--slate-bg)}
+
+  /* 파일·폴더 찾아보기 선택지 (v2.11.0) — 문 하나(＋버튼) 뒤에 갈림길 두 개 */
+  #fm-linkchoice{gap:6px;align-items:center}
 
   /* 카드 메모 속 @태그 — 색 표시만(클릭은 양식 메모 아래 칩에서, v2.9.0 소유자 피드백:
      카드 위 태그가 클릭을 받으면 카드를 열려던 클릭이 팝업을 띄우는 오동작이 됐다) */

@@ -221,6 +221,36 @@ test('번호꼴 @태그(@010-…) 칩 클릭도 연락처(숫자만 비교)로 �
   modal.classList.remove('on');
 });
 
+test('양식 태그 칩: 전화번호부 실존 관련인만 — 한 글자만 지워도 칩이 사라진다 (v2.11.0)', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'우성균', org:'행정과', phone:'010-1'}]);
+  openForm({memo:'회신 @우성균 건'});
+  assert.equal($('fm-tags').querySelectorAll('.at-tag').length, 1);
+  const memo=$('fm-memo');
+  memo.value='회신 @우성 건';                                   // '균' 삭제
+  memo.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  assert.equal($('fm-tags').querySelectorAll('.at-tag').length, 0);   // 칩 해제
+  assert.equal($('fm-tags').style.display, 'none');
+});
+
+test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 업무 수 배지 (v2.11.0)', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([
+    {id:1, who:'가나다', org:'가과', phone:'010-1'},            // 업무 0건
+    {id:2, who:'마바사', org:'나과', phone:'010-2'},            // 업무 2건
+    {id:3, who:'아자차', org:'나과', phone:'010-3'},            // 업무 0건 — 2번과 소속 같음
+  ]);
+  S.items=[
+    {id:100, memo:'통화 @마바사', contacts:[], done:false},
+    {id:101, memo:'', contacts:[{who:'마바사', org:'나과', phone:'010-2'}], done:false},
+  ];
+  renderPhonebook();
+  const rows=[...$('pb-list').querySelectorAll('.pb-item')].map(el=>Number(el.dataset.pbid));
+  assert.deepEqual(rows, [2,1,3]);                              // 업무 많은 마바사 먼저, 나머지는 소속순(가과<나과)
+  const first=$('pb-list').querySelector('.pb-item .pb-cnt');
+  assert.equal(first.textContent, '업무 2');
+});
+
 test('백업 왕복: adoptPhonebook 이 id 없는 항목에 id 를 채우고 lastId 를 시드한다 (F12)', async () => {
   await env.resetS();
   adoptPhonebook([{who:'김철수', org:'행정과', phone:'010-1'}, {id:99999, who:'이영희', org:'', phone:'010-2'}, {who:'', org:'', phone:''}]);

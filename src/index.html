@@ -87,10 +87,16 @@
       </div>
 
       <div class="fm-files-wrap">
-        <div class="t-head">파일 링크</div><!-- (관련 문서 연결 — 체크 켜면 이름 클릭으로 열기, 끄면 경로 수정·찾기) — 명칭 간결화 v2.5.13 -->
+        <div class="t-head">파일·폴더 링크</div><!-- (관련 문서·폴더 연결 — 체크 켜면 이름 클릭으로 열기, 끄면 경로 수정·찾기) — v2.11.0 파일·폴더 통합 -->
         <div id="fm-files"></div>
-        <button class="btn fsub-add" id="fm-fileadd">＋ 파일 찾아보기</button>
-        <button class="btn fsub-add" id="fm-folderadd">＋ 폴더 찾아보기</button>
+        <!-- v2.11.0: 버튼 하나로 통합 — 누르면 파일/폴더 선택지가 그 자리에 펼쳐진다
+             (네이티브 선택창은 파일용·폴더용이 분리돼 있어 한 창으로 못 합침) -->
+        <button class="btn fsub-add" id="fm-linkadd">＋ 파일·폴더 찾아보기</button>
+        <span id="fm-linkchoice" style="display:none">
+          <button class="btn fsub-add" id="fm-pickfile">파일 선택</button>
+          <button class="btn fsub-add" id="fm-pickfolder">폴더 선택</button>
+          <button class="btn fsub-add" id="fm-pickcancel">취소</button>
+        </span>
       </div>
 
       <div class="fm-actions">
@@ -201,7 +207,12 @@
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
-  <div class="m-sub" style="margin-bottom:12px">전화번호부에는 <b>관련소속·관련인·연락처가 모두 있는 사람만</b> 저장됩니다(일부만 아는 관련인은 메모에 자유롭게 적으세요). 바로 입력·양식 메모에서 <b>@이름</b>처럼 치면 자동완성되고, 양식을 저장하면 그 관련인이 여기 자동 반영됩니다. <b>양식 메모 아래 @태그</b>나 아래 목록의 행을 클릭하면 그 관련인과 엮인 업무를 모아 보여줍니다.</div>
+  <!-- v2.11.0 설명 간결화(소유자 지정): 규칙 나열 대신 쓰는 순서대로 세 줄 -->
+  <div class="m-sub" style="margin-bottom:12px">
+    <b>등록</b> — 소속·이름·연락처를 모두 아는 사람만. 양식에 적으면 자동으로 들어옵니다.<br>
+    <b>사용</b> — 메모에서 <b>@이름</b>을 치면 자동완성 · 관련인 정보가 업무에 붙습니다.<br>
+    <b>추적</b> — 행(또는 양식의 @태그)을 누르면 그 사람과 엮인 업무가 모입니다.
+  </div>
   <div class="pb-new">
     <input type="text" id="pb-org" maxlength="100" placeholder="관련소속" autocomplete="off">
     <input type="text" id="pb-who" maxlength="100" placeholder="관련인" autocomplete="off">
