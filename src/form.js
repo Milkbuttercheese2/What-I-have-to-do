@@ -7,12 +7,28 @@ import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
-import {entryKey} from './phonebook-core.js';
+import {entryKey, extractTags, entriesForTag} from './phonebook-core.js';
+import {absorbIntoPhonebook} from './phonebook.js';
 
-/* (1) 메모 텍스트 → 분류 대기. 바로 입력 버튼과 미니 캡처 창(capture-bridge)이 공용 */
+/* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
+   업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부. */
+function contactsFromTags(text){
+  const out=[], seen=new Set();
+  for(const name of extractTags(text)){
+    for(const e of entriesForTag(S.phonebook, name)){
+      const k=entryKey(e);
+      if(seen.has(k)) continue;
+      seen.add(k); out.push({who:e.who, org:e.org, phone:e.phone});
+    }
+  }
+  return out;
+}
+
+/* (1) 메모 텍스트 → 분류 대기. 바로 입력 버튼과 미니 캡처 창(capture-bridge)이 공용.
+   v2.9.0: 메모 속 @태그의 관련인을 자동 첨부. */
 export function captureMemo(t){
   t=String(t||'').trim(); if(!t) return false;
-  S.items.push(makeItem({memo:t, staged:true, f:{received:new Date().toISOString()}}));
+  S.items.push(makeItem({memo:t, staged:true, f:{received:new Date().toISOString()}, contacts:contactsFromTags(t)}));
   persist(); return true;
 }
 /* 바로 입력 버튼/Ctrl+Enter — #inp 를 읽어 captureMemo 로 위임 */
@@ -136,10 +152,20 @@ export function openForm(pre){
 }
 
 /* 양식 칸 채우기 — openForm(신규/기존/임시저장 복원) 공용 */
+/* 메모 속 @태그를 칩으로 (v2.9.0) — 칩 클릭이 관련 업무 팝업(phonebook.js 위임).
+   textarea 안 글자는 클릭할 수 없으므로 태그는 메모 바로 아래 칩 줄로 보여준다. */
+function renderFmTags(){
+  const w=$('fm-tags'); if(!w) return;
+  const tags=extractTags($('fm-memo').value);
+  w.innerHTML=tags.map(n=>`<span class="at-tag" data-at="${escAttr(n)}" title="이 관련인과 엮인 업무 보기">@${esc(n)}</span>`).join('');
+  w.style.display=tags.length?'flex':'none';
+}
+
 function fillForm(pre){
   pre=pre||{};
   $('fm-title').textContent=editingId?'양식 채우기 — 저장하면 규칙에 따라 자동 배치됩니다':'양식 입력';
   $('fm-memo').value = pre.memo || '';
+  renderFmTags();
 
   // 상위 시각 필드 (접수·마감)
   const g=$('fm-grid'); g.innerHTML='';
@@ -366,7 +392,7 @@ export function initForm(){
     openForm(cur || {});                                   // 저장본(또는 빈 양식)으로 다시 그림
   });
   /* 임시저장 트리거 — 입력·선택·행 추가/삭제 모두 (change 는 select·날짜 위젯용) */
-  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); scheduleDraft(); });
+  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); if(e.target.id==='fm-memo') renderFmTags(); scheduleDraft(); });
   $('formPanel').addEventListener('change',scheduleDraft);
   $('formPanel').addEventListener('click',e=>{ if(e.target.closest('.rm,.fsub-chk,.fsub-add')) scheduleDraft(); });
   $('fm-save').addEventListener('click',()=>{
@@ -392,5 +418,7 @@ export function initForm(){
     }
     dropDraft(draftKey);                       // 최종 저장 = 임시저장분 폐기
     closeForm(); persist();
+    /* v2.9.0 자동 연동(소유자 지정): 저장한 관련인 중 3칸 완비만 전화번호부에 흡수 */
+    absorbIntoPhonebook(d.contacts);
   });
 }

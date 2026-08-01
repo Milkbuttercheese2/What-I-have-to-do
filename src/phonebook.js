@@ -8,7 +8,7 @@
 import {S, newId} from './state.js';
 import {STORE} from './store.js';
 import {$, esc, escAttr, showToast} from './dom-utils.js';
-import {normEntry, entryKey, gatherFromItems, mapSheetRows, phoneDigits, relatedItems} from './phonebook-core.js';
+import {normEntry, entryKey, isComplete, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
 
 let q='';                 // 탭 안 검색어 (모듈 로컬 — render.js 의 q/dq 와 같은 패턴)
 let editingPbId=null;     // 수정 중인 항목 id (null = 새로 추가 모드)
@@ -66,6 +66,12 @@ function loadPbForm(id){
 function submitPbForm(){
   const e=normEntry({who:$('pb-who').value, org:$('pb-org').value, phone:$('pb-phone').value});
   if(!(e.who||e.org||e.phone)){ $('pb-who').focus(); return; }
+  /* v2.9.0 무결성(소유자 지정): 전화번호부는 3칸 완비만 — 일부만 아는 관련인은 메모에 */
+  if(!isComplete(e)){
+    alert('전화번호부에는 관련소속·관련인·연락처를 모두 입력해야 합니다.\n(일부만 아는 관련인은 바로 입력·양식 메모에 자유롭게 적어두세요.)');
+    (!e.org?$('pb-org'):!e.who?$('pb-who'):$('pb-phone')).focus();
+    return;
+  }
   const dup=S.phonebook.find(x=>x.id!==editingPbId && entryKey(x)===entryKey(e));
   if(dup){ alert('같은 관련인이 이미 있습니다.'); return; }
   if(editingPbId){
@@ -77,20 +83,39 @@ function submitPbForm(){
   savePb(); clearPbForm(); renderPhonebook(); $('pb-who').focus();
 }
 
-/* [아이템에서 가져오기] — 아이템 관련인 중 아직 없는 것만 모아 확인 후 일괄 추가.
-   자동 동기화가 아니라 명시적 1회 흡수(소유자 결정) — 이후 정리는 목록에서. */
-function importFromItems(){
+/* ── 새로고침·엑셀 공용 확인 팝업 (v2.9.0 — 네이티브 confirm 대신 앱 표준 모달) ──
+   찾은 관련인을 목록으로 보여주고 [모두 추가]로 확정한다. */
+let pendingSync=[];                 // 팝업에 떠 있는 후보 (id 없는 {who,org,phone})
+function openPbSync(title, sub, found){
+  pendingSync=found;
+  $('pbs-title').textContent=title;
+  $('pbs-sub').textContent=sub;
+  $('pbs-list').innerHTML=found.map(e=>`<div class="pbs-row">
+    <span class="pb-org">${esc(e.org)}</span><span class="pb-who">${esc(e.who)}</span><span class="pb-phone num">${esc(e.phone)}</span>
+  </div>`).join('');
+  $('pbSyncModal').classList.add('on');
+}
+function closePbSync(){ $('pbSyncModal').classList.remove('on'); pendingSync=[]; }
+function applyPbSync(){
+  const n=pendingSync.length;
+  pendingSync.forEach(e=>{ S.phonebook.push({id:newId(), who:e.who, org:e.org, phone:e.phone}); });
+  closePbSync();
+  if(n){ savePb(); renderPhonebook(); showToast(`관련인 ${n}명을 추가했습니다`); }
+}
+
+/* [새로고침] — 아이템 관련인 중 전화번호부에 없는 3칸 완비 관련인을 다시 훑어
+   추가한다(양식 저장 시 자동 연동을 놓친 과거 데이터·복원분 회수용). */
+function refreshFromItems(){
   const found=gatherFromItems(S.items, S.phonebook);
-  if(!found.length){ alert('아이템에서 가져올 새 관련인이 없습니다.\n(이미 전화번호부에 있는 관련인은 제외됩니다.)'); return; }
-  const preview=found.slice(0,5).map(e=>[e.org,e.who,e.phone].filter(Boolean).join(' · ')).join('\n');
-  if(!confirm(`아이템의 관련인 중 전화번호부에 없는 ${found.length}명을 찾았습니다.\n\n${preview}${found.length>5?'\n…':''}\n\n전화번호부에 추가할까요?`)) return;
-  found.forEach(e=>{ e.id=newId(); S.phonebook.push(e); });
-  savePb(); renderPhonebook();
-  showToast(`관련인 ${found.length}명을 가져왔습니다`);
+  if(!found.length){ showToast('추가할 새 관련인이 없습니다'); return; }
+  openPbSync('전화번호부 새로고침',
+    `아이템의 관련인 중 전화번호부에 없는 ${found.length}명을 찾았습니다. (소속·이름·연락처가 모두 있는 관련인만)`,
+    found);
 }
 
 /* 엑셀(.xlsx/.xls) 불러오기 — vendored SheetJS(XLSX 전역)로 첫 시트를 읽고
-   헤더(이름/소속/전화 계열)를 찾아 매핑한다. 파싱은 phonebook-core.mapSheetRows. */
+   헤더(이름/소속/전화 계열)를 찾아 매핑한다. 파싱은 phonebook-core.mapSheetRows.
+   v2.9.0: 3칸 완비 행만 받는다(무결성 규칙). */
 function importFromXlsx(file){
   const reader=new FileReader();
   reader.onerror=()=>alert('파일을 읽지 못했습니다.');
@@ -106,15 +131,28 @@ function importFromXlsx(file){
       alert('이름/소속/전화 열을 찾지 못했습니다.\n첫 몇 줄 안에 "이름(또는 성명)", "소속(또는 기관·부서)", "전화(또는 연락처)" 같은 제목 줄이 있어야 합니다.');
       return;
     }
-    const fresh=mapped.entries.filter(e=>!S.phonebook.some(x=>entryKey(x)===entryKey(e)));
-    if(!fresh.length){ alert('추가할 새 관련인이 없습니다.\n(파일의 관련인이 모두 이미 전화번호부에 있습니다.)'); return; }
-    const skipped=mapped.entries.length-fresh.length;
-    if(!confirm(`엑셀에서 관련인 ${fresh.length}명을 찾았습니다.${skipped?`\n(이미 있는 ${skipped}명은 제외)`:''}\n전화번호부에 추가할까요?`)) return;
-    fresh.forEach(e=>{ e.id=newId(); S.phonebook.push(normEntry(e)); });
-    savePb(); renderPhonebook();
-    showToast(`엑셀에서 ${fresh.length}명을 가져왔습니다`);
+    const complete=mapped.entries.filter(isComplete);
+    const fresh=complete.filter(e=>!S.phonebook.some(x=>entryKey(x)===entryKey(e))).map(normEntry);
+    if(!fresh.length){ showToast('추가할 새 관련인이 없습니다'); return; }
+    const dupes=complete.length-fresh.length, partial=mapped.entries.length-complete.length;
+    const notes=[dupes?`이미 있는 ${dupes}명`:'', partial?`정보가 빠진 ${partial}명`:''].filter(Boolean).join(' · ');
+    openPbSync('엑셀에서 가져오기',
+      `관련인 ${fresh.length}명을 찾았습니다.${notes?` (${notes} 제외)`:''}`,
+      fresh);
   };
   reader.readAsArrayBuffer(file);
+}
+
+/* ── 아이템 관련인 → 전화번호부 자동 흡수 (v2.9.0 소유자 지정) ───────────
+   양식을 저장할 때(form.js) 그 관련인들을 전화번호부에 자동 반영한다.
+   규칙·꼬임 방지는 phonebook-core.absorbContacts — 여기서는 적용·저장만.
+   [아이템에서 가져오기] 버튼은 기존 데이터 일괄 흡수용으로 그대로 남는다. */
+export function absorbIntoPhonebook(contacts){
+  const {added, updates}=absorbContacts(S.phonebook, contacts);
+  if(!added.length && !updates.length) return;
+  updates.forEach(u=>{ const e=S.phonebook.find(x=>x.id===u.id); if(e) e.phone=u.phone; });
+  added.forEach(c=>{ S.phonebook.push({id:newId(), who:c.who, org:c.org, phone:c.phone}); });
+  savePb(); renderPhonebook();
 }
 
 /* ── 관련 업무 팝업 (v2.7.0 소유자 지정) ─────────────────────────────────
@@ -146,15 +184,21 @@ export function closeRelated(){ $('relModal').classList.remove('on'); }
 
 export function initPhonebook(){
   document.body.appendChild($('relModal'));           // 어느 탭에서든 뜨도록 (표준 모달 규칙)
+  document.body.appendChild($('pbSyncModal'));
+  $('pbs-add').addEventListener('click',applyPbSync);
+  $('pbs-cancel').addEventListener('click',closePbSync);
+  $('pbSyncModal').addEventListener('click',e=>{ if(e.target.id==='pbSyncModal') closePbSync(); });
   $('relClose').addEventListener('click',closeRelated);
   $('relModal').addEventListener('click',e=>{
     if(e.target.id==='relModal'){ closeRelated(); return; }          // 배경 클릭 닫기
     if(e.target.closest('[data-open]')) closeRelated();             // 업무를 열었으니 팝업은 닫는다 (열기는 render.js 위임)
   });
-  /* 카드 메모의 @태그 클릭 — 캡처 단계라 카드 열기(data-open, render.js 버블 위임)보다
-     먼저 받고 전파를 끊는다. 카드가 아니라 관련 업무 팝업이 뜬다. */
+  /* @태그 클릭 → 관련 업무 팝업. v2.9.0: 클릭 대상은 **양식 메모 아래 태그 칩(#fm-tags)**
+     으로 한정한다(소유자 피드백) — 카드 위 태그까지 클릭을 받으면 카드를 열려던 클릭이
+     태그에 맞아 팝업이 뜨는 오동작이 됐다. 카드의 @태그는 이제 색 표시일 뿐이다.
+     캡처 단계인 이유: 양식 패널 안 클릭이 다른 위임과 겹치지 않게 먼저 끊는다. */
   document.addEventListener('click',e=>{
-    const t=e.target.closest&&e.target.closest('.at-tag');
+    const t=e.target.closest&&e.target.closest('#fm-tags .at-tag');
     if(!t) return;
     e.preventDefault(); e.stopPropagation();
     openRelated(t.dataset.at);
@@ -165,7 +209,7 @@ export function initPhonebook(){
     if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); submitPbForm(); }
   }));
   $('pb-search').addEventListener('input',()=>{ q=$('pb-search').value.trim().toLowerCase(); renderPhonebook(); });
-  $('pb-import').addEventListener('click',importFromItems);
+  $('pb-import').addEventListener('click',refreshFromItems);
   $('pb-xlsx').addEventListener('click',()=>$('pb-file').click());
   $('pb-file').addEventListener('change',()=>{
     const f=$('pb-file').files[0];

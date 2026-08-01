@@ -361,9 +361,9 @@
   .pb-list{display:flex;flex-direction:column;gap:6px}
   .pb-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
     border-radius:9px;background:var(--card);font-size:12.5px}
-  .pb-item .pb-org{flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
-  .pb-item .pb-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
-  .pb-item .pb-phone{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pb-item .pb-org,.pbs-row .pb-org{flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
+  .pb-item .pb-who,.pbs-row .pb-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .pb-item .pb-phone,.pbs-row .pb-phone{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* 행 액션 — 프리셋 목록의 텍스트형 버튼 규칙 재사용 */
   .pb-item .ps-edit,.pb-item .ps-del{font-family:inherit;font-size:11px;font-weight:600;background:none;border:none;
     border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--ink-soft);flex:none;transition:background .12s,color .12s}
@@ -374,9 +374,18 @@
   .card.dragging{opacity:.45}
   .card.merge-over{border-color:var(--focus);background:var(--slate-bg)}
 
-  /* 카드 메모 속 @태그 — 클릭하면 관련 업무 팝업(phonebook.js openRelated) */
-  .at-tag{color:var(--focus);font-weight:600;cursor:pointer}
-  .at-tag:hover{text-decoration:underline}
+  /* 카드 메모 속 @태그 — 색 표시만(클릭은 양식 메모 아래 칩에서, v2.9.0 소유자 피드백:
+     카드 위 태그가 클릭을 받으면 카드를 열려던 클릭이 팝업을 띄우는 오동작이 됐다) */
+  .at-tag{color:var(--focus);font-weight:600}
+  /* 양식 메모 아래 @태그 칩 — 여기서만 클릭 가능(관련 업무 팝업) */
+  #fm-tags{flex-wrap:wrap;gap:6px;margin-top:6px}
+  #fm-tags .at-tag{font-size:11px;background:var(--slate-bg);padding:2.5px 10px;border-radius:999px;cursor:pointer}
+  #fm-tags .at-tag:hover{text-decoration:underline}
+  /* 관련 업무 팝업은 양식(z 60) 위에서도 떠야 한다 — 칩 클릭 경로 */
+  #relModal{z-index:70}
+  /* 새로고침·엑셀 확인 팝업의 후보 행 — 전화번호부 목록 행과 같은 3열 */
+  .pbs-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
+    border-radius:9px;background:var(--card);font-size:12.5px}
 
   /* @태그 관련 업무 팝업 목록 — 미니 창 검색 결과와 같은 시각 언어(태그 + 한 줄 말줄임) */
   .rel-list{display:flex;flex-direction:column;gap:4px;max-height:min(52vh,420px);overflow-y:auto;margin:4px 0 2px}

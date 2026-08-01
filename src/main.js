@@ -115,6 +115,7 @@ document.addEventListener('keydown',e=>{
   if($('boardModeModal').classList.contains('on')){ closeBoardModeModal(); return; }
   if($('settingsModal').classList.contains('on')){ closeSettings(); return; }
   if($('relModal').classList.contains('on')){ $('relModal').classList.remove('on'); return; }
+  if($('pbSyncModal').classList.contains('on')){ $('pbSyncModal').classList.remove('on'); return; }
 });
 
 function tickClock(){ const n=new Date();
