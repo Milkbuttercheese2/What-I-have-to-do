@@ -110,24 +110,27 @@ test('linkifyAt: @태그를 span 으로, 괄호 정보·꼬리 문장부호는 �
   assert.equal(linkifyAt('@김&quot;철'), '<span class="at-tag" data-at="김">@김</span>&quot;철');
 });
 
-test('relatedItems(strict, v3.0.2): 관련인 3칸 완전 일치 OR 메모의 정확한 @태그만', () => {
+test('relatedItems(v3.1.1): 전화번호부 3칸(관련소속·관련인·연락처) 완전 일치만 — 메모 @태그 경로 폐지', () => {
   const entry={id:1, who:'김철수', org:'행정과', phone:'010-1234-5678'};
   const items=[
     {id:1, memo:'', contacts:[{who:'김철수', org:'행정과', phone:'010 1234 5678'}], done:false}, // 3칸 일치(번호 표기만 다름) ✓
     {id:2, memo:'', contacts:[{who:'김철수', org:'', phone:''}], done:false},                    // 이름만 — 제외 (소유자 지정)
-    {id:3, memo:'통화 @김철수 건', contacts:[], done:true},                                       // 정확한 태그 ✓
+    {id:3, memo:'통화 @김철수 건', contacts:[], done:true},                                       // 태그만 — v3.1.1 제외
     {id:4, memo:'김철수 언급만(태그 아님)', contacts:[], done:false},                             // 평문 언급 — 제외
     {id:5, memo:'@김철 부분 태그', contacts:[], done:false},                                      // 다른 태그 — 제외
     {id:6, memo:'', contacts:[{who:'김철수', org:'세무과', phone:'010-1234-5678'}], done:false}, // 소속 다름 — 제외
-    {id:7, memo:'@김철수 주기', contacts:[], done:false, recur:{type:'dow'}},                     // 주기 부모 — 제외
+    {id:7, memo:'@김철수 주기', contacts:[{who:'김철수', org:'행정과', phone:'010-1234-5678'}], done:false, recur:{type:'dow'}},  // 주기 부모 — 제외
+    {id:8, memo:'@김철수 태그 + 관련인까지', contacts:[{who:'김철수', org:'행정과', phone:'01012345678'}], done:true},            // 3칸 일치 ✓(완료)
   ];
-  const hits=relatedItems(items, {name:'김철수', entries:[entry]}).map(it=>it.id);
-  assert.deepEqual(hits, [1,3]);                 // 미완료 먼저(1) → 완료(3)
+  const hits=relatedItems(items, {entries:[entry]}).map(it=>it.id);
+  assert.deepEqual(hits, [1,8]);                 // 미완료 먼저(1) → 완료(8)
+  // 기준이 되는 전화번호부 항목이 없으면 아무것도 엮지 않는다
+  assert.deepEqual(relatedItems(items, {entries:[]}), []);
   // 구버전 번호만 항목: 세 칸('','',digits)이 그대로 일치하는 관련인만 걸린다
   const phoneOnly={id:9, who:'', org:'', phone:'010-9999-8888'};
   const items2=[{id:10, memo:'', contacts:[{who:'', org:'', phone:'01099998888'}], done:false},
                 {id:11, memo:'', contacts:[{who:'박', org:'', phone:'010-9999-8888'}], done:false}];
-  assert.deepEqual(relatedItems(items2, {name:'010-9999-8888', entries:[phoneOnly]}).map(i=>i.id), [10]);
+  assert.deepEqual(relatedItems(items2, {entries:[phoneOnly]}).map(i=>i.id), [10]);
 });
 
 test('isComplete: 소속·이름·연락처(숫자 있는) 3칸 완비 판정 (v2.9.0 무결성 규칙)', () => {

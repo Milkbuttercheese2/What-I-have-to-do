@@ -61,7 +61,10 @@ const INIT = `(()=>{
     mk({id:6,memo:'완료된 주간 실적 보고 제출',done:true,f:{received:iso,due:at(-1,10,0)}}),
     mk({id:7,memo:'매주 월요일 주간회의 자료 준비',recur:{type:'dow',dow:[1],time:'09:00',next:at(3,9,0),paused:false}}),
   ];
-  let store={items,fields:null,
+  const phonebook=[{id:901,who:'김주무관',org:'재무팀',phone:'02-1234-5678'},
+                   {id:902,who:'박주무관',org:'감사담당관실',phone:'02-9876-5432'},
+                   {id:903,who:'최주무관',org:'총무과',phone:'010-2222-3333'}];
+  let store={items,phonebook,fields:null,
     presets:[{label:'계약 변경 통보 접수건 처리',memo:'○○ 사업 계약변경 통보 접수 및 검토',subs:[]},
              {label:'감사 자료 제출',memo:'○○ 감사 대비 증빙자료 정리',subs:[]}],
     idKinds:['입찰공고번호','SR번호'],settings:{alarmOn:false,boardMode:'time',captureDraft:''},recurDefs:[]};
@@ -71,16 +74,22 @@ const INIT = `(()=>{
       if(c==='load_all')return store;
       if(c==='save_all'){store.items=(a&&a.items)||store.items;return null;}
       if(c==='save_settings'){store.settings=(a&&a.settings)||store.settings;return null;}
-      if(c==='quick_search')return (store.items||[]).filter(function(it){return (it.memo||'').indexOf(a&&a.q||'')>=0;}).map(function(it){return {id:it.id,memo:it.memo,done:!!it.done};});
+      if(c==='quick_search'){var q=(a&&(a.query||a.q))||'';return (store.items||[]).filter(function(it){return !it.recur&&(it.memo||'').indexOf(q)>=0;}).map(function(it){return {id:it.id,memo:it.memo,done:!!it.done};});}
+      if(c==='phonebook_list')return store.phonebook;
+      if(c==='phonebook_search'){var q2=(a&&a.query)||'';return store.phonebook.filter(function(e){return (e.who+e.org+e.phone).indexOf(q2)>=0;});}
+      if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
       if(c==='pick_file_path')return 'C:\\\\업무\\\\2026\\\\회의실_예약대장.hwp';
       return null;}},
-    app:{getVersion:async()=>'2.5.14'},
+    app:{getVersion:async()=>'3.1.1'},
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,maximize:noop,minimize:noop,toggleMaximize:noop,close:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};
 })()`;
 
-const browser = await chromium.launch({executablePath: EXEC});
+/* 실행 채널: Windows 는 PW_CHANNEL=msedge (러너/개발 PC 에 기본 설치된 Edge),
+   리눅스는 PLAYWRIGHT_CHROMIUM 경로. win-render.mjs 와 같은 규칙. */
+const channel = process.env.PW_CHANNEL || '';
+const browser = await chromium.launch(channel ? {channel} : {executablePath: EXEC});
 
 async function open(viewport, page_url='index.html') {
   const page = await browser.newPage({viewport, deviceScaleFactor: 2});
@@ -141,7 +150,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
     await page.click('.card:has-text("예산 집행")'); await page.waitForTimeout(600);
     // 이 항목은 파일 1개(활성/링크 상태). 두 번째 행을 추가(mock pick_file_path가 경로 반환)한 뒤
     // 그 행의 토글을 눌러 편집(경로 입력 + 찾기) 상태로 바꿔 두 상태를 한 컷에 보여준다.
-    await page.click('#fm-fileadd'); await page.waitForTimeout(300);
+    await page.click('#fm-linkadd'); await page.waitForTimeout(300);
     await page.click('#fm-files .ffile-row:last-child .ffile-toggle'); await page.waitForTimeout(250);
   }catch(e){ console.log('filelink prep warn:', e.message); }
   await shotEl(page, '.fm-files-wrap', 'filelink.png');
@@ -188,12 +197,44 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
 {
   const page = await open({width: 620, height: 150}, 'capture.html');
   await page.evaluate(()=>{ document.documentElement.style.background='#e9e7e2'; document.body.style.padding='10px'; });
+  /* v2.5.21 이후 미니 창은 '내 업무 검색'으로 뜬다 — Alt 로 빠른 메모 화면을 꺼내야 한다 */
+  await page.keyboard.press('Alt'); await page.waitForTimeout(300);
   const inp = await page.$('#cap-inp');
   if(inp){ await inp.click(); await page.keyboard.type('행정과 회의실 예약 대장 정비 요청 — 내일까지 회신', {delay:12}); }
   await page.waitForTimeout(300);
   await shotPage(page, 'capture-memo.png');
   await page.close();
   console.log('capture-memo.png');
+}
+
+/* ---- 11. phonebook.png : 전화번호부 탭(입력줄 + 목록) ---------------- */
+{
+  const page = await open({width: 1180, height: 620});
+  await page.click('.tab[data-view="phone"]'); await page.waitForTimeout(500);
+  await shotPage(page, 'phonebook.png', {x:0, y:0, width:1180, height:520});
+  await page.close();
+  console.log('phonebook.png');
+}
+/* ---- 12. related.png : @태그·행 클릭 → 관련 업무 팝업 ---------------- */
+{
+  const page = await open({width: 1180, height: 700});
+  await page.click('.tab[data-view="phone"]'); await page.waitForTimeout(400);
+  await page.click('.pb-item'); await page.waitForTimeout(500);          // 행 클릭 = 관련 업무
+  const modal = await page.$('#relModal .modal');
+  if(modal) await modal.screenshot({path: path.join(OUT,'related.png')});
+  await page.close();
+  console.log('related.png');
+}
+/* ---- 13. capture-search.png : 미니 창 '내 업무 검색' ----------------- */
+{
+  const page = await open({width: 620, height: 406}, 'capture.html');
+  await page.evaluate(()=>{ document.documentElement.style.background='#e9e7e2'; document.body.style.padding='10px'; });
+  const s = await page.$('#cap-search');
+  if(s){ await s.click(); await page.keyboard.type('정리', {delay:14}); }
+  await page.waitForTimeout(500);
+  await shotPage(page, 'capture-search.png');
+  await page.close();
+  console.log('capture-search.png');
 }
 
 await browser.close();

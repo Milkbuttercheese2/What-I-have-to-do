@@ -213,8 +213,8 @@
     <h2>전화번호부 <span id="pb-count" class="done-cnt">0</span></h2>
     <div class="done-tools">
       <button class="btn btn-tool" id="pb-import" title="아이템에 입력된 관련인 중 여기 없는 사람(소속·이름·연락처 완비)을 다시 훑어 추가">새로고침</button>
-      <button class="btn btn-tool" id="pb-tmpl" title="소속·이름·연락처 제목 줄만 있는 빈 엑셀 파일을 저장합니다 — 채워서 [엑셀 불러오기]로 넣으세요">엑셀 양식</button>
-      <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 이름·소속·전화 제목)에서 일괄 추가">엑셀 불러오기</button>
+      <button class="btn btn-tool" id="pb-tmpl" title="관련소속·관련인·연락처 제목 줄만 있는 빈 엑셀 파일을 저장합니다 — 채워서 [엑셀 불러오기]로 넣으세요">엑셀 양식</button>
+      <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 관련소속·관련인·연락처 제목)에서 일괄 추가">엑셀 불러오기</button>
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
@@ -224,8 +224,11 @@
     <input type="text" id="pb-org" maxlength="100" placeholder="관련소속" autocomplete="off">
     <input type="text" id="pb-who" maxlength="100" placeholder="관련인" autocomplete="off">
     <input type="text" id="pb-phone" maxlength="40" placeholder="연락처" autocomplete="off">
-    <button class="btn btn-ok" id="pb-save">추가</button>
-    <button class="btn btn-cancel" id="pb-cancel" style="display:none">취소</button>
+    <!-- 버튼 둘은 격자의 '꼬리 칸' 하나를 함께 쓴다 (목록 행의 업무 배지·수정·삭제와 같은 칸) -->
+    <div class="pb-acts">
+      <button class="btn btn-ok" id="pb-save">추가</button>
+      <button class="btn btn-cancel" id="pb-cancel" style="display:none">취소</button>
+    </div>
   </div>
   <div class="pb-list" id="pb-list"></div>
   <input type="file" id="pb-file" accept=".xlsx,.xls" style="display:none">

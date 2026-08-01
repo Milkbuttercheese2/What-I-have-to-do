@@ -22,10 +22,10 @@ export function adoptPhonebook(list){
     .map(e=>{ if(e.id==null||e.id===''){ e.id=newId(); } else { e.id=Number(e.id); if(e.id>S.lastId) S.lastId=e.id; } return e; });
 }
 
-/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 태그 클릭 팝업과 같은 strict 기준
-   (v3.0.2: 관련인 3칸 완전 일치 OR 메모의 정확한 @태그) */
+/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 팝업과 같은 기준
+   (v3.1.1: 관련인 3칸(관련소속·관련인·연락처) 완전 일치만) */
 function relCount(e){
-  return relatedItems(S.items, {name:e.who||e.org||e.phone, entries:[e]}).length;
+  return relatedItems(S.items, {entries:[e]}).length;
 }
 /* 표시 정렬(v2.11.0 소유자 지정) — ① 관련 업무 수 많은 순 ② 소속 ③ 이름 (ko locale).
    원본 배열은 건드리지 않는다(배열 순서 = 저장 순서). */
@@ -54,9 +54,11 @@ export function renderPhonebook(){
     <span class="pb-org">${esc(e.org||'—')}</span>
     <span class="pb-who">${esc(e.who||'—')}</span>
     <span class="pb-phone num">${esc(e.phone||'—')}</span>
-    <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
-    <button class="ps-edit" data-pbedit="${e.id}">수정</button>
-    <button class="ps-del" data-pbdel="${e.id}">삭제</button>
+    <span class="pb-tail">
+      <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
+      <button class="ps-edit" data-pbedit="${e.id}">수정</button>
+      <button class="ps-del" data-pbdel="${e.id}">삭제</button>
+    </span>
   </div>`).join('');
 }
 
@@ -139,7 +141,7 @@ function importFromXlsx(file){
     }catch(e){ alert('엑셀 파일을 읽지 못했습니다: '+e); return; }
     const mapped=mapSheetRows(rows);
     if(!mapped){
-      alert('이름/소속/전화 열을 찾지 못했습니다.\n첫 몇 줄 안에 "이름(또는 성명)", "소속(또는 기관·부서)", "전화(또는 연락처)" 같은 제목 줄이 있어야 합니다.');
+      alert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다 — [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다.)');
       return;
     }
     const complete=mapped.entries.filter(isComplete);
@@ -154,15 +156,17 @@ function importFromXlsx(file){
   reader.readAsArrayBuffer(file);
 }
 
-/* [엑셀 양식] (v3.0.4) — 제목 줄(소속·이름·연락처)만 있는 빈 xlsx 를 저장한다.
+/* [엑셀 양식] (v3.1.0) — 제목 줄만 있는 빈 xlsx 를 저장한다.
    '무엇을 어떤 열에 적어야 하나'를 파일 자체가 말해 주게 하는 것이 목적이라
    예시 행은 넣지 않는다(지우지 않고 불러오면 가짜 관련인이 등록되므로).
-   제목 문구는 mapSheetRows 의 헤더 정규식(소속·이름·연락처)에 그대로 맞춘다.
+   v3.1.1(소유자 지정): 제목을 **화면 입력칸과 같은 이름**(관련소속·관련인·연락처)으로.
+   불러오기의 헤더 인식(mapSheetRows)은 '소속'·'관련인'·'연락처'를 모두 포함하므로
+   이 이름 그대로 왕복된다 — 제목 문구를 바꿀 땐 그 정규식과 함께 본다.
    저장 경로는 XLSX 내보내기(backup.js)와 같다 — F14 주석 참조: {type:'array'} 를
    Uint8Array 로 감싸지 않으면 0바이트 파일이 나온다. */
 async function saveXlsxTemplate(){
   try{
-    const ws=XLSX.utils.aoa_to_sheet([['소속','이름','연락처']]);
+    const ws=XLSX.utils.aoa_to_sheet([['관련소속','관련인','연락처']]);   // 화면 입력칸과 같은 이름
     ws['!cols']=[{wch:24},{wch:14},{wch:20}];
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
     const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
@@ -185,16 +189,17 @@ export function absorbIntoPhonebook(contacts){
 
 /* ── 관련 업무 팝업 (v2.7.0 소유자 지정) ─────────────────────────────────
    카드의 @태그(또는 전화번호부 행)를 클릭하면, 그 관련인과 엮인 업무를 모아
-   보여준다. v3.0.2 strict: 관련인 3칸 완전 일치 OR 메모의 정확한 @태그만. 행 클릭은 render.js 의 data-open 위임이 받아
+   보여준다. v3.1.1: 기준은 **전화번호부 정보 3칸 완전 일치** 하나뿐. 행 클릭은 render.js 의 data-open 위임이 받아
    양식을 연다(여기서는 팝업만 닫는다). */
 export function openRelated(name, extraEntries){
   name=String(name||'').trim(); if(!name) return;
-  /* v3.0.2 strict: 태그 이름에 해당하는 전화번호부 항목(entriesForTag)만 기준으로,
-     관련인 3칸 완전 일치 OR 메모의 정확한 @태그만 엮는다 (부분일치 폐지 — 소유자 지정) */
+  /* 태그 이름 → 그 이름의 전화번호부 항목(entriesForTag)을 찾고, 그 항목의 3칸과
+     완전히 같은 관련인을 가진 업무만 엮는다 (v3.1.1 소유자 지정 — 이름·번호 부분일치,
+     메모 @태그 경로 모두 폐지: 동명이인이 걸리던 문제) */
   const entries=entriesForTag(S.phonebook, name).concat(extraEntries||[]);
-  const matched=relatedItems(S.items, {name, entries});
+  const matched=relatedItems(S.items, {entries});
   $('rel-title').textContent=`@${name} 관련 업무`;
-  $('rel-sub').textContent=`관련인·메모에 "${name}"이(가) 있거나 연락처가 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;
+  $('rel-sub').textContent=`전화번호부 정보(관련소속·관련인·연락처)가 모두 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;
   $('rel-list').innerHTML=matched.length?matched.map(it=>{
     const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
     return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span></div>`;

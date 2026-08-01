@@ -150,13 +150,13 @@ test('양식 메모 @자동완성: @태그는 완성형으로 남고 관련인 �
   assert.equal(filled.length, 1);
 });
 
-test('양식 메모 본문 @태그: 하이라이트 + hover 클릭 → 관련 업무(strict), 카드·비hover 클릭은 무시', async () => {
+test('양식 메모 본문 @태그: 하이라이트 + hover 클릭 → 관련 업무(3칸 일치), 카드·비hover 클릭은 무시', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   S.items=[
     {id:1, memo:'3칸 일치 관련인', contacts:[{who:'김철수', org:'행정과', phone:'01012345678'}], done:false},
     {id:2, memo:'이름만 적은 건(제외)', contacts:[{who:'김철수', org:'', phone:''}], done:false},
-    {id:3, memo:'메모에 @김철수 태그', contacts:[], done:true},
+    {id:3, memo:'메모에 @김철수 태그만(v3.1.1 제외 — 관련인 3칸이 없다)', contacts:[], done:true},
     {id:4, memo:'평문 김철수 언급(제외)', contacts:[], done:false},
   ];
   openForm({memo:'통화 @김철수 건'});
@@ -171,7 +171,7 @@ test('양식 메모 본문 @태그: 하이라이트 + hover 클릭 → 관련 �
   memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
-  assert.deepEqual(hits, [1,3]);                                 // strict: 3칸 일치 + 정확한 태그만
+  assert.deepEqual(hits, [1]);                                   // v3.1.1: 전화번호부 3칸과 완전히 같은 관련인만
   modal.querySelector('[data-open="1"]').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));
   assert.ok(!modal.classList.contains('on'));
   // 카드 위 .at-tag 는 클릭해도 팝업이 뜨지 않는다 (색 표시만)
@@ -243,10 +243,11 @@ test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 �
   await env.resetS(); S.loaded = true;
   adoptPhonebook([
     {id:1, who:'가나다', org:'가과', phone:'010-1'},            // 업무 0건
-    {id:2, who:'마바사', org:'나과', phone:'010-2'},            // 업무 2건
+    {id:2, who:'마바사', org:'나과', phone:'010-2'},            // 업무 1건 (관련인 3칸 일치)
     {id:3, who:'아자차', org:'나과', phone:'010-3'},            // 업무 0건 — 2번과 소속 같음
   ]);
   S.items=[
+    /* v3.1.1: 태그만 있는 업무(100)는 더는 엮이지 않는다 — 관련인 3칸이 기준 */
     {id:100, memo:'통화 @마바사', contacts:[], done:false},
     {id:101, memo:'', contacts:[{who:'마바사', org:'나과', phone:'010-2'}], done:false},
   ];
@@ -254,7 +255,7 @@ test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 �
   const rows=[...$('pb-list').querySelectorAll('.pb-item')].map(el=>Number(el.dataset.pbid));
   assert.deepEqual(rows, [2,1,3]);                              // 업무 많은 마바사 먼저, 나머지는 소속순(가과<나과)
   const first=$('pb-list').querySelector('.pb-item .pb-cnt');
-  assert.equal(first.textContent, '업무 2');
+  assert.equal(first.textContent, '업무 1');
 });
 
 test('바로 입력 본문 하이라이트: 실존 태그만 표시, 태그 클릭 → 관련 업무 (v3.0.1)', async () => {
