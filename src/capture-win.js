@@ -20,6 +20,12 @@
    - 입력칸에 placeholder를 두지 않는다(v2.5.21): 빈 칸의 회색 문구를 실제 글자로 오해해
      "그 단어 뒤로 커서가 안 간다"는 혼선이 있었다. 안내는 아래 힌트줄(#cap-hint)이 맡는다.
    ========================================================================= */
+/* phonebook-core.js 는 상태·DOM·Tauri 접근이 없는 순수 모듈이라 여기서 import 해도
+   안전하다 — "메인 모듈 import 금지"의 이유(최상위 부작용·모듈 상태 이중 실행)가
+   둘 다 없다. 전화번호부 데이터 자체는 DB 를 직접 읽지 않고 phonebook_search
+   커맨드로 조회한다(quick_search 와 같은 경로). */
+import {atToken, applyInsert, entryLabel} from './phonebook-core.js';
+
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
 /* v2.6.0 설정값 — 메인 창이 'wmhh://capture-config' 로 내려준다(요청은 capture-hello).
@@ -48,6 +54,8 @@ export function applyCaptureConfig(c){
 function askConfig(){ window.__TAURI__.event.emitTo('main','wmhh://capture-hello',{}).catch(()=>{}); }
 let draftTimer=null, searchTimer=null, searchSeq=0;
 let selIdx=-1;                              // 검색 결과 선택 위치 (v2.6.4 방향키 이동)
+/* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부(phonebook_search) 드롭다운 상태 */
+let pbItems=[], pbSel=0, pbToken=null, pbTimer=null, pbSeq=0, pbOpen=false;
 /* v2.6.4: 창이 막 뜬 직후의 blur 는 무시한다.
    다른 앱(브라우저 등)이 뜨는 중에 단축키를 누르면, 창이 보이자마자 그 앱이 포커스를
    가져가며 blur 가 날아온다 → 예전엔 그 blur 로 창을 곧장 숨겨서 "단축키를 눌렀는데
@@ -61,6 +69,7 @@ const JUST_SHOWN_MS=450;
    감출 때 비워 두면 다음에 뜰 때 처음부터 빈 화면이다. 메모 초안(textarea)은 건드리지 않는다. */
 function resetSearchUI(){
   document.body.classList.remove('mouse');       // 새로 뜰 땐 hover 하이라이트 없이 시작
+  closePb(true);                                 // v2.7.0: 숨는 김에 @ 자동완성도 접는다 (setMode 가 높이 복원)
   clearTimeout(searchTimer); searchSeq++;        // 진행 중이던 검색이 뒤늦게 그려지지 않게
   const s=$id('cap-search'); if(s) s.value='';
   selIdx=-1;
@@ -88,7 +97,51 @@ function sendDraft(text){
    바꾸면 Rust(set_ui_scale)가 이 웹뷰의 배율과 네이티브 창 크기를 함께 맞춰준다.
    여기서 논리 높이(126/406)만 알려주면 Rust 가 현재 배율을 곱해 적용한다. */
 
+/* ── 빠른 메모 @ 자동완성 (v2.7.0) ───────────────────────────────────────
+   @김철 처럼 치면 전화번호부를 검색해 목록을 펴고(창 높이도 잠깐 늘린다),
+   고르면 "김철수(소속 전화)" 텍스트가 커서 자리에 들어간다. 메모 모드 전용. */
+const PB_BASE_H=126;                        // 메모 모드 기본 창 높이 (setMode 와 동일 값)
+function closePb(skipResize){
+  clearTimeout(pbTimer); pbSeq++;
+  if(!pbOpen) return;
+  pbOpen=false; pbItems=[]; pbToken=null;
+  const w=$id('cap-pb'); if(w){ w.style.display='none'; w.innerHTML=''; }
+  /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
+  if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
+}
+function renderPb(){
+  const w=$id('cap-pb'); if(!w) return;
+  w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
+    <span class="cap-pb-who">${esc(e.who||'—')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
+  </div>`).join('');
+}
+async function runPb(){
+  const inp=$id('cap-inp');
+  const t=atToken(inp.value, inp.selectionStart);
+  if(!t||!t.query){ closePb(); return; }
+  const seq=++pbSeq;
+  const found=await invoke('phonebook_search',{query:t.query}).catch(()=>[]);
+  if(seq!==pbSeq || mode!=='memo') return;    // 그 사이 입력이 바뀌었거나 모드 이탈
+  if(!found.length){ closePb(); return; }
+  pbItems=found; pbSel=0; pbToken={start:t.start, caret:inp.selectionStart};
+  const w=$id('cap-pb'); if(w) w.style.display='block';
+  renderPb();
+  if(!pbOpen){ pbOpen=true; }
+  invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,6)*33+12}).catch(()=>{});
+}
+function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
+function applyPb(i){
+  const inp=$id('cap-inp'); const e=pbItems[i??pbSel];
+  if(!e||!pbToken){ closePb(); return; }
+  const r=applyInsert(inp.value, pbToken.caret, pbToken.start, entryLabel(e));
+  inp.value=r.text; try{inp.setSelectionRange(r.caret,r.caret);}catch{}
+  autoGrow(inp);
+  clearTimeout(draftTimer); sendDraft(inp.value);   // 삽입분도 초안에 즉시 반영
+  closePb(); inp.focus();
+}
+
 function setMode(m){
+  closePb(true);                               // 모드 전환 시 자동완성 접기 (아래에서 높이를 새로 정한다)
   mode=m;
   const search=m==='search';
   document.body.classList.toggle('search',search);
@@ -183,9 +236,17 @@ export function initCaptureWin(){
     autoGrow(inp);
     clearTimeout(draftTimer);
     draftTimer=setTimeout(()=>sendDraft(inp.value),400);
+    schedulePb();                               // v2.7.0: @토큰이면 전화번호부 자동완성
   });
   inp.addEventListener('keydown',e=>{
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
+    /* v2.7.0: 자동완성이 펴져 있으면 그 목록부터 조작한다 (Ctrl 조합은 통과 — 등록/저장) */
+    if(pbOpen && !e.ctrlKey && !e.metaKey){
+      if(e.key==='ArrowDown'){ e.preventDefault(); pbSel=Math.min(pbSel+1,pbItems.length-1); renderPb(); return; }
+      if(e.key==='ArrowUp'){ e.preventDefault(); pbSel=Math.max(pbSel-1,0); renderPb(); return; }
+      if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); applyPb(); return; }
+      if(e.key==='Escape'){ e.preventDefault(); closePb(); return; }   // 드롭다운만 접는다 (창 유지)
+    }
     if(e.key==='Escape'){ e.preventDefault(); sendDraft(inp.value); hideWin(); return; }   // 내용 유지!
     /* 메인 바로 입력(form.js)과 동일: Ctrl(⌘)+Enter=등록, 맨 Enter=줄바꿈.
        v2.6.4: Ctrl+S 도 '저장' — 앱 전체에서 Ctrl+S=저장으로 통일한 규칙을 여기도 적용한다. */
@@ -237,6 +298,13 @@ export function initCaptureWin(){
   $id('cap-results').addEventListener('click',e=>{
     const ih=e.target.closest('[data-item]');
     if(ih) openItem(Number(ih.dataset.item));
+  });
+
+  /* @ 자동완성 클릭 — mousedown 에서 잡아 blur(창 숨김)보다 먼저 적용한다 */
+  $id('cap-pb').addEventListener('mousedown',e=>{
+    e.preventDefault();
+    const it=e.target.closest('[data-pb]');
+    if(it) applyPb(Number(it.dataset.pb));
   });
 
   /* 포커스를 잃으면 숨김 — 초안은 유지 + 저장 플러시 */

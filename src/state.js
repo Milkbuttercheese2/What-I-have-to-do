@@ -26,13 +26,15 @@ export const S = {
   /* 구 정기함(v2.3) 정의들 — 기능은 v2.31에서 제거됐지만 DB·JSON 백업에 남은
      데이터가 유실되지 않도록 로드/백업 왕복만 유지한다 (생성기·UI 없음) */
   recurDefs: [],
+  /* v2.7.0 전화번호부 — 아이템과 독립적으로 저장되는 관련인 목록 ({id,who,org,phone}) */
+  phonebook: [],
   /* F1: 초기 로드 완료 게이트. 로드 전 저장을 막아 기존 데이터 소실을 방지 */
   loaded: false,
   /* F12: 단조 증가 ID — 같은 ms 내 충돌 방지 */
   lastId: 0,
   /* 비동기 핸드오프 채널 — STORE.load()·백업 복원이 채우고 reconcileImported()가 소비
      (구 window.__imported* 를 모듈 상태로 대체) */
-  imported: {fields:null, presets:null, idKinds:null, settings:null, recurDefs:null},
+  imported: {fields:null, presets:null, idKinds:null, settings:null, recurDefs:null, phonebook:null},
 };
 
 /* F12: 단조 증가 ID — 같은 ms 내 충돌 방지 */

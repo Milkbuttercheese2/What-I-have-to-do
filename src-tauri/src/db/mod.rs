@@ -5,6 +5,7 @@ pub mod fields;
 pub mod id_kinds;
 pub mod items;
 pub mod model;
+pub mod phonebook;
 pub mod presets;
 pub mod recur_defs;
 mod schema;

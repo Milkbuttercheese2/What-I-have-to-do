@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rusqlite::Connection;
 
 use super::model::*;
-use super::{backup, fields, id_kinds, items, presets, recur_defs, settings};
+use super::{backup, fields, id_kinds, items, phonebook, presets, recur_defs, settings};
 
 fn test_conn() -> Connection {
     let mut conn = Connection::open_in_memory().unwrap();
@@ -274,10 +274,19 @@ fn backup_export_import_round_trip() {
     }];
     recur_defs::save_recur_defs(&mut conn, &defs).unwrap();
 
+    let book = vec![PhonebookEntry {
+        id: 4001,
+        who: "홍길동".into(),
+        org: "행정과".into(),
+        phone: "010-1111-2222".into(),
+    }];
+    phonebook::save_phonebook(&mut conn, &book).unwrap();
+
     let payload = backup::export_payload(&conn).unwrap();
     assert_eq!(payload.v, backup::BACKUP_VERSION);
     assert_eq!(payload.items.len(), 2);
     assert_eq!(payload.recur_defs.len(), 1);
+    assert_eq!(payload.phonebook.len(), 1);
 
     // Simulate importing into a fresh database, as would happen migrating
     // from the legacy HTML app's JSON backup.
@@ -299,6 +308,41 @@ fn backup_export_import_round_trip() {
     assert_eq!(restored_defs.len(), 1);
     assert_eq!(restored_defs[0].id, 3001);
     assert_eq!(restored_defs[0].next, "2026-07-13T09:00:00.000Z");
+    // v2.7.0 전화번호부도 백업에 실려 왕복한다.
+    let restored_book = phonebook::load_phonebook(&fresh).unwrap();
+    assert_eq!(restored_book.len(), 1);
+    assert_eq!(restored_book[0].who, "홍길동");
+}
+
+#[test]
+fn phonebook_round_trip_replace_and_search() {
+    let mut conn = test_conn();
+    let book = vec![
+        PhonebookEntry { id: 1, who: "김철수".into(), org: "○○세무서".into(), phone: "010-1234-5678".into() },
+        PhonebookEntry { id: 2, who: "이영희".into(), org: "행정과".into(), phone: "02-123-4567".into() },
+    ];
+    phonebook::save_phonebook(&mut conn, &book).unwrap();
+    let loaded = phonebook::load_phonebook(&conn).unwrap();
+    assert_eq!(loaded.len(), 2);
+    assert_eq!(loaded[0].who, "김철수");
+    assert_eq!(loaded[0].phone, "010-1234-5678");
+
+    // 저장은 replace-not-merge — 한 건짜리로 다시 저장하면 한 건만 남는다.
+    phonebook::save_phonebook(&mut conn, &book[..1].to_vec()).unwrap();
+    assert_eq!(phonebook::load_phonebook(&conn).unwrap().len(), 1);
+
+    // 검색: 이름·소속·전화, 하이픈 없는 번호로도 걸린다 (미니 창 @ 자동완성 경로).
+    phonebook::save_phonebook(&mut conn, &book).unwrap();
+    let by_name = phonebook::search_phonebook(&conn, "철수", 8).unwrap();
+    assert_eq!(by_name.len(), 1);
+    assert_eq!(by_name[0].id, 1);
+    let by_org = phonebook::search_phonebook(&conn, "행정", 8).unwrap();
+    assert_eq!(by_org.len(), 1);
+    let by_digits = phonebook::search_phonebook(&conn, "01012345678", 8).unwrap();
+    assert_eq!(by_digits.len(), 1);
+    assert_eq!(by_digits[0].who, "김철수");
+    // LIKE 와일드카드는 이스케이프 — '%' 검색이 전체를 반환하지 않는다.
+    assert!(phonebook::search_phonebook(&conn, "%", 8).unwrap().is_empty());
 }
 
 #[test]

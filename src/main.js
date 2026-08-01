@@ -17,6 +17,8 @@ import {initBackup, reconcileImported} from './backup.js';
 import {initCapture, sendCaptureConfig} from './capture-bridge.js';
 import {initSettingsMenu, closeSettings, syncSettings} from './settings-menu.js';
 import {initRecurBox, runRecurSpawn} from './recur-box.js';
+import {initPhonebook, renderPhonebook} from './phonebook.js';
+import {initAtComplete} from './at-complete.js';
 import {makeItem} from './state.js';
 import {setPlaceMode, placeMode} from './placement.js';
 import {initUiScale, applyUiScale} from './ui-scale.js';
@@ -30,6 +32,7 @@ window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
 initSettingsMenu(); initRecurBox(); initUiScale();
+initPhonebook(); initAtComplete();
 renderPresets();
 
 /* 탭 */
@@ -41,8 +44,9 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   $('strip').style.display=v==='board'?'flex':'none';
   $('view-cal').classList.toggle('on',v==='cal');
   $('view-done').classList.toggle('on',v==='done');
+  $('view-phone').classList.toggle('on',v==='phone');
   $('capture').style.display=v==='board'?'block':'none';
-  if(v==='cal')renderCal(); if(v==='done')renderDone();
+  if(v==='cal')renderCal(); if(v==='done')renderDone(); if(v==='phone')renderPhonebook();
 }));
 /* '완료 전체 비우기' 제거됨 */
 

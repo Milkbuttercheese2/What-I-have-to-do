@@ -30,6 +30,7 @@
     <button class="tab on" data-view="board">보드</button>
     <button class="tab" data-view="cal">캘린더</button>
     <button class="tab" data-view="done">완료</button>
+    <button class="tab" data-view="phone">전화번호부</button>
   </nav>
   <div class="head-right">
     <button class="btn btn-tool" id="alarmToggle" title="알람 켜기/끄기">알람</button>
@@ -185,6 +186,28 @@
     </div>
   </div>
   <div class="cards" id="col-done"></div>
+</section>
+
+<!-- 전화번호부 (v2.7.0) — 아이템과 독립적인 관련인 목록. @ 자동완성의 데이터 원천 -->
+<section id="view-phone">
+  <div class="done-head">
+    <h2>전화번호부 <span id="pb-count" class="done-cnt">0</span></h2>
+    <div class="done-tools">
+      <button class="btn btn-tool" id="pb-import" title="아이템에 입력된 관련인 중 여기 없는 사람을 일괄 추가">아이템에서 가져오기</button>
+      <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 이름·소속·전화 제목)에서 일괄 추가">엑셀 불러오기</button>
+      <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
+    </div>
+  </div>
+  <div class="m-sub" style="margin-bottom:12px">바로 입력·양식 메모에서 <b>@이름</b>(또는 @소속·@번호)처럼 치면 여기 저장된 관련인이 자동완성됩니다. 양식의 관련인 칸은 @ 없이 입력만 해도 검색됩니다.</div>
+  <div class="pb-new">
+    <input type="text" id="pb-org" maxlength="100" placeholder="관련소속" autocomplete="off">
+    <input type="text" id="pb-who" maxlength="100" placeholder="관련인" autocomplete="off">
+    <input type="text" id="pb-phone" maxlength="40" placeholder="연락처" autocomplete="off">
+    <button class="btn btn-ok" id="pb-save">추가</button>
+    <button class="btn btn-cancel" id="pb-cancel" style="display:none">취소</button>
+  </div>
+  <div class="pb-list" id="pb-list"></div>
+  <input type="file" id="pb-file" accept=".xlsx,.xls" style="display:none">
 </section>
 
 <!-- 업무 프리셋 설정 -->

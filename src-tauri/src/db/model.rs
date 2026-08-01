@@ -153,6 +153,20 @@ pub struct Preset {
     pub subs: Vec<String>,
 }
 
+/// v2.7.0 전화번호부 한 건 — 아이템의 Contact 와 같은 필드 구성에 id 만 얹은
+/// 모양(who/org/phone). '아이템에서 가져오기'와 @ 자동완성이 두 모양을 그대로
+/// 오가도록 일부러 맞췄다.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhonebookEntry {
+    pub id: i64,
+    #[serde(default)]
+    pub who: String,
+    #[serde(default)]
+    pub org: String,
+    #[serde(default)]
+    pub phone: String,
+}
+
 /// Free-form settings bag (currently just {alarmOn:bool}), kept generic so
 /// new settings don't require a schema/struct change.
 pub type Settings = serde_json::Map<String, serde_json::Value>;
@@ -172,6 +186,9 @@ pub struct AppState {
     pub settings: Settings,
     #[serde(rename = "recurDefs", default)]
     pub recur_defs: Vec<RecurDef>,
+    /// v2.7.0 전화번호부 — 구버전 클라이언트/백업에는 없으므로 default.
+    #[serde(default)]
+    pub phonebook: Vec<PhonebookEntry>,
 }
 
 /// Same shape as the legacy HTML app's `backupPayload()` JSON, so backups
@@ -197,4 +214,8 @@ pub struct BackupPayload {
     pub items: Vec<Item>,
     #[serde(rename = "recurDefs", default)]
     pub recur_defs: Vec<RecurDef>,
+    /// v2.7.0 전화번호부 — pre-v2.7 백업에는 키가 없어 빈 목록으로 복원되고,
+    /// 프런트(backup.js)가 현재 값으로 채워 관대한 복원 계약을 지킨다.
+    #[serde(default)]
+    pub phonebook: Vec<PhonebookEntry>,
 }

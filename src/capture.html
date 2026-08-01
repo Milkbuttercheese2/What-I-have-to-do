@@ -76,6 +76,16 @@
  .cap-empty{font-size:12.5px;color:var(--cap-muted);padding:12px}
  /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
  #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:2px 18px 10px}
+ /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어 */
+ #cap-pb{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+   border-top:1px solid var(--cap-sep);padding:6px 8px}
+ .cap-pb-it{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.45;color:var(--cap-ink);
+   padding:7px 11px;margin:1px 0;border-radius:8px;cursor:pointer}
+ .cap-pb-it.sel,body.mouse .cap-pb-it:hover{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
+ .cap-pb-who{flex:none;font-weight:600;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .cap-pb-org{flex:1;min-width:0;color:var(--cap-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .cap-pb-phone{flex:none;color:var(--cap-muted);font-variant-numeric:tabular-nums}
+ body.flash #cap-pb{display:none}
  #cap-flash{display:none;align-items:center;justify-content:center;flex:1;gap:7px;
    color:var(--cap-flash);font-weight:600;font-size:15px}
  body.flash #cap-bar,body.flash #cap-results,body.flash #cap-hint{display:none}
@@ -98,6 +108,8 @@
   </div>
   <!-- 힌트줄은 입력칸 바로 아래 (검색 모드에서 목록 위) — placeholder 자리를 대신하므로 -->
   <div id="cap-hint">내 업무 검색 · Alt 를 누르면 빠른 메모</div>
+  <!-- v2.7.0 빠른 메모 @ 자동완성 (전화번호부) — @토큰을 칠 때만 capture-win.js 가 편다 -->
+  <div id="cap-pb" style="display:none"></div>
   <div id="cap-results" style="display:flex">
     <div class="cap-col"><div class="cap-col-h">내 업무</div><div class="cap-list" id="cap-items"></div></div>
   </div>

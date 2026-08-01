@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::error::DbResult;
 use super::model::{AppState, BackupPayload};
-use super::{fields, id_kinds, items, presets, recur_defs, settings};
+use super::{fields, id_kinds, items, phonebook, presets, recur_defs, settings};
 
 /// Matches the legacy HTML app's `backupPayload()` `v:5` shape so JSON
 /// backups remain interchangeable between the old and new app.
@@ -16,6 +16,7 @@ pub fn load_app_state(conn: &Connection) -> DbResult<AppState> {
         id_kinds: id_kinds::load_id_kinds(conn)?,
         settings: settings::load_settings(conn)?,
         recur_defs: recur_defs::load_recur_defs(conn)?,
+        phonebook: phonebook::load_phonebook(conn)?,
     })
 }
 
@@ -32,6 +33,7 @@ pub fn export_payload(conn: &Connection) -> DbResult<BackupPayload> {
         settings: state.settings,
         items: state.items,
         recur_defs: state.recur_defs,
+        phonebook: state.phonebook,
     })
 }
 
@@ -46,6 +48,7 @@ pub fn import_payload(conn: &mut Connection, payload: BackupPayload) -> DbResult
     id_kinds::save_id_kinds_tx(&tx, &payload.id_kinds)?;
     settings::save_settings_tx(&tx, &payload.settings)?;
     recur_defs::save_recur_defs_tx(&tx, &payload.recur_defs)?;
+    phonebook::save_phonebook_tx(&tx, &payload.phonebook)?;
     items::save_items_tx(&tx, &payload.items)?;
     tx.commit()?;
     Ok(())

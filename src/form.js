@@ -201,6 +201,21 @@ function addContactRow(c){
   $('fm-contacts').appendChild(row);
 }
 
+/* 전화번호부 @ 자동완성(at-complete.js)이 고른 항목을 관련인에 반영 (v2.7.0).
+   row 가 주어지면 그 행(관련인 칸에서 직접 검색한 경우)을, 아니면 첫 빈 행을
+   채우고 빈 행이 없으면 새 행을 추가한다. at-complete → form 일방향 import. */
+export function fillContactFromEntry(entry, row){
+  entry=entry||{};
+  if(!row){
+    row=[...$('fm-contacts').querySelectorAll('.contact-row')].find(r=>
+      !r.querySelector('.c-who').value.trim() && !r.querySelector('.c-org').value.trim() && !r.querySelector('.c-phone').value.trim());
+  }
+  if(!row){ addContactRow({who:entry.who||'', org:entry.org||'', phone:entry.phone||''}); return; }
+  row.querySelector('.c-who').value=entry.who||'';
+  row.querySelector('.c-org').value=entry.org||'';
+  row.querySelector('.c-phone').value=entry.phone||'';
+}
+
 /* 식별번호 행 */
 function idKindOptions(){ return S.idKinds.concat(['기타']); }
 function addFormIdRow(kind,val){

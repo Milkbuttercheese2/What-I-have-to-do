@@ -80,9 +80,9 @@ export function setupEnv({html} = {}){
       S.items = []; S.fields = JSON.parse(JSON.stringify(CORE_FIELDS));
       S.presets = []; S.idKinds = DEFAULT_ID_KINDS.slice();
       S.settings = Object.assign({}, DEFAULT_SETTINGS);
-      S.recurDefs = [];
+      S.recurDefs = []; S.phonebook = [];
       S.loaded = false; S.lastId = 0;
-      S.imported = {fields:null, presets:null, idKinds:null, settings:null, recurDefs:null};
+      S.imported = {fields:null, presets:null, idKinds:null, settings:null, recurDefs:null, phonebook:null};
       invokeCalls.length = 0; alerts.length = 0; confirmQueue.length = 0; emitted.length = 0;
       // 파일 내 이전 테스트가 남긴 UI 상태 정리
       const g = id => window.document.getElementById(id);
