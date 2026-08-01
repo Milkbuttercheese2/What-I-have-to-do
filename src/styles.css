@@ -348,6 +348,51 @@
   #view-done .cards{gap:8px}
   #view-done .card{opacity:.92}
 
+  /* ---- 전화번호부 (v2.7.0) — 완료 탭과 같은 골격(.done-head 재사용) ---- */
+  #view-phone{display:none;max-width:1000px;margin:0 auto;padding:22px 28px 40px}
+  #view-phone.on{display:block}
+  #view-phone .done-tools{flex-wrap:wrap}
+  /* 직접 입력 줄 — 양식 관련인 행과 같은 3칸 배치 (§5 정렬 규칙) */
+  .pb-new{display:flex;gap:8px;margin-bottom:14px}
+  .pb-new input{flex:1;min-width:0;font-family:inherit;font-size:12.5px;padding:7px 11px;
+    border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+  .pb-new input:focus{outline:none;border-color:var(--focus)}
+  .pb-new .btn{flex:none}
+  .pb-list{display:flex;flex-direction:column;gap:6px}
+  .pb-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
+    border-radius:9px;background:var(--card);font-size:12.5px}
+  .pb-item .pb-org{flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
+  .pb-item .pb-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .pb-item .pb-phone{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 행 액션 — 프리셋 목록의 텍스트형 버튼 규칙 재사용 */
+  .pb-item .ps-edit,.pb-item .ps-del{font-family:inherit;font-size:11px;font-weight:600;background:none;border:none;
+    border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--ink-soft);flex:none;transition:background .12s,color .12s}
+  .pb-item .ps-edit:hover{background:var(--slate-bg);color:var(--slate)}
+  .pb-item .ps-del:hover{background:var(--red-bg);color:var(--red)}
+
+  /* 카드 메모 속 @태그 — 클릭하면 관련 업무 팝업(phonebook.js openRelated) */
+  .at-tag{color:var(--focus);font-weight:600;cursor:pointer}
+  .at-tag:hover{text-decoration:underline}
+
+  /* @태그 관련 업무 팝업 목록 — 미니 창 검색 결과와 같은 시각 언어(태그 + 한 줄 말줄임) */
+  .rel-list{display:flex;flex-direction:column;gap:4px;max-height:min(52vh,420px);overflow-y:auto;margin:4px 0 2px}
+  .rel-hit{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--line);
+    border-radius:9px;background:var(--card);cursor:pointer;font-size:12.5px}
+  .rel-hit:hover{border-color:var(--focus);background:var(--slate-bg)}
+  .rel-txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rel-tag{flex:none;font-weight:700;font-size:10.5px;padding:2.5px 9px;border-radius:999px;letter-spacing:.02em}
+  .rel-tag.ongoing{background:var(--slate-bg);color:var(--slate)}
+  .rel-tag.done{background:var(--chip-bg);color:var(--ink-soft)}
+
+  /* @ 자동완성 드롭다운 — 카드 규칙(흰 면·1px 경계·둥근 모서리)을 따르는 떠 있는 목록 */
+  #atDrop{position:fixed;z-index:200;min-width:240px;max-width:380px;background:var(--card);
+    border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 26px var(--overlay);padding:4px;overflow:hidden}
+  #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:12.5px}
+  #atDrop .at-item.sel,#atDrop .at-item:hover{background:var(--slate-bg)}
+  #atDrop .at-who{flex:none;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #atDrop .at-org{flex:1;min-width:0;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #atDrop .at-phone{flex:none;color:var(--ink-soft)}
+
   #view-cal{display:none;max-width:1180px;margin:0 auto;padding:22px 28px 40px}
   #view-cal.on{display:block}
   .cal-head{display:flex;align-items:center;gap:14px;margin-bottom:14px}
@@ -552,7 +597,7 @@
      (창 최소 폭은 560px으로 고정 — 이보다 좁아지지 않는다. 2열 중간 단계는 폐지.) ===== */
   @media(max-width:1080px){
     /* 모든 주요 컨테이너를 560px 폭으로 고정·가운데 정렬 (헤더/입력/검색줄/보드/완료/캘린더) */
-    .header-inner,.cap-box,.strip,main,#view-board5,#view-done,#view-cal{max-width:560px}
+    .header-inner,.cap-box,.strip,main,#view-board5,#view-done,#view-cal,#view-phone{max-width:560px}
     /* 보드는 단일 열 */
     main,#view-board5{grid-template-columns:1fr}
     /* v2.5.8: 단일 열에서 검색창을 오른쪽에 띄우지 말고 한 줄 전체로 — 빈 띠에 홀로 떠
@@ -560,6 +605,8 @@
     .strip .s-search{margin-left:0;width:100%;min-width:0}
     .done-tools{margin-left:0;width:100%}
     .done-tools .s-search{width:100%;min-width:0}
+    /* 전화번호부: 좁은 폭에선 입력 3칸을 세로 스택 (§6 반응형 정책) */
+    .pb-new{flex-direction:column}
     /* 헤더 컴팩트: 시계는 오른쪽 끝, 부제 숨김, 브랜드 줄바꿈 허용 */
     .head-right{margin-left:auto}
     .brand{flex-wrap:wrap;min-width:0}

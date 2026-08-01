@@ -7,6 +7,7 @@ import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
+import {entryKey} from './phonebook-core.js';
 
 /* (1) 메모 텍스트 → 분류 대기. 바로 입력 버튼과 미니 캡처 창(capture-bridge)이 공용 */
 export function captureMemo(t){
@@ -199,6 +200,26 @@ function addContactRow(c){
     else rows[rows.indexOf(row)+1].querySelector('.'+inp.classList[0]).focus();
   }));
   $('fm-contacts').appendChild(row);
+}
+
+/* 전화번호부 @ 자동완성(at-complete.js)이 고른 항목을 관련인에 반영 (v2.7.0).
+   row 가 주어지면 그 행(관련인 칸에서 직접 검색한 경우)을, 아니면 첫 빈 행을
+   채우고 빈 행이 없으면 새 행을 추가한다. at-complete → form 일방향 import.
+   메모 @태그 경로(row 없음)는 같은 사람이 이미 행에 있으면 아무것도 하지 않는다 —
+   @김철수 를 여러 번 골라도 관련인이 여러 번 쌓이면 안 된다(소유자 지정). */
+export function fillContactFromEntry(entry, row){
+  entry=entry||{};
+  const rows=[...$('fm-contacts').querySelectorAll('.contact-row')];
+  if(!row){
+    const key=entryKey(entry);
+    if(rows.some(r=>entryKey({who:r.querySelector('.c-who').value, org:r.querySelector('.c-org').value, phone:r.querySelector('.c-phone').value})===key)) return;
+    row=rows.find(r=>
+      !r.querySelector('.c-who').value.trim() && !r.querySelector('.c-org').value.trim() && !r.querySelector('.c-phone').value.trim());
+  }
+  if(!row){ addContactRow({who:entry.who||'', org:entry.org||'', phone:entry.phone||''}); return; }
+  row.querySelector('.c-who').value=entry.who||'';
+  row.querySelector('.c-org').value=entry.org||'';
+  row.querySelector('.c-phone').value=entry.phone||'';
 }
 
 /* 식별번호 행 */

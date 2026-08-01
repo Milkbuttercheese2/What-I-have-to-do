@@ -6,7 +6,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, S
 
 use crate::config::{self, AppConfig};
 use crate::db;
-use crate::db::model::{AppState, BackupPayload, FieldDef, Item, Preset, Settings};
+use crate::db::model::{AppState, BackupPayload, FieldDef, Item, PhonebookEntry, Preset, Settings};
 use crate::AppDb;
 
 /// How many rotated .sqlite backups to keep (see db::rotate_backup).
@@ -94,6 +94,28 @@ pub fn save_id_kinds(state: State<AppDb>, id_kinds: Vec<String>) -> Result<(), S
     ensure_integrity(&state)?;
     let mut conn = state.conn.lock().map_err(to_err)?;
     db::id_kinds::save_id_kinds(&mut conn, &id_kinds).map_err(to_err)
+}
+
+/* ===== v2.7.0 전화번호부 ===== */
+
+#[tauri::command]
+pub fn save_phonebook(state: State<AppDb>, phonebook: Vec<PhonebookEntry>) -> Result<(), String> {
+    ensure_integrity(&state)?;
+    let mut conn = state.conn.lock().map_err(to_err)?;
+    db::phonebook::save_phonebook(&mut conn, &phonebook).map_err(to_err)
+}
+
+/// 미니 캡처 창의 @ 자동완성 — quick_search 와 같은 이유(캡처 웹뷰는 메인
+/// 모듈의 S.phonebook 에 접근할 수 없다)로 존재하는 읽기 전용 검색.
+/// 무결성 게이트에 걸려도 빈 목록만 돌려준다.
+#[tauri::command]
+pub fn phonebook_search(state: State<AppDb>, query: String) -> Result<Vec<PhonebookEntry>, String> {
+    let q = query.trim();
+    if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
+        return Ok(vec![]);
+    }
+    let conn = state.conn.lock().map_err(to_err)?;
+    db::phonebook::search_phonebook(&conn, q, 8).map_err(to_err)
 }
 
 #[tauri::command]

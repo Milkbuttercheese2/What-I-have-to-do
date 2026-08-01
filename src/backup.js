@@ -8,6 +8,7 @@ import {placeOf, PLACE_NAME} from './placement.js';
 import {renderPresets} from './presets.js';
 import {renderAlarmToggle} from './alarms.js';
 import {persist} from './render.js';
+import {adoptPhonebook, renderPhonebook} from './phonebook.js';
 
 /* [JSON파일 백업] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
    한 번 지정하면 그 파일 핸들을 기억해 이후엔 같은 파일에 조용히 저장. */
@@ -16,7 +17,7 @@ import {persist} from './render.js';
    백업 시점의 옛 초안이 되살아나 '저장된 내용이 아닌 것'이 보이면 안 된다.
    초안이 유령 항목으로 등록돼(main.js 초안 회수), 백업 안 원본 항목과 중복될 수 있다. */
 function backupPayload(){ const settings=stripTemp(S.settings);
-  return JSON.stringify({v:5,exported:new Date().toISOString(),fields:S.fields,presets:S.presets,idKinds:S.idKinds,settings,recurDefs:S.recurDefs,items:S.items},null,1); }
+  return JSON.stringify({v:5,exported:new Date().toISOString(),fields:S.fields,presets:S.presets,idKinds:S.idKinds,settings,recurDefs:S.recurDefs,phonebook:S.phonebook,items:S.items},null,1); }
 /* 백업 왕복에서 제외하는 임시 상태 — 내보내기(backupPayload)·불러오기 양쪽에서 쓴다 */
 function stripTemp(settings){ return {...settings, captureDraft:'', formDrafts:{}}; }
 function backupName(){ const n=new Date(); return `뭐하려했더라_백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.json`; }
@@ -37,6 +38,8 @@ export function reconcileImported(){
   /* 구 정기함(v2.3) 정의 — 기능은 제거됐지만 데이터는 백업 왕복을 위해 보존만 한다
      (초기 로드는 DB에 이미 있고, JSON 복원은 backup_import 트랜잭션이 이미 저장함) */
   if(imp.recurDefs){ S.recurDefs=imp.recurDefs; imp.recurDefs=null; }
+  /* v2.7.0 전화번호부 — 정규화·id 보정(adoptPhonebook) 후 재저장 (다른 사이드카와 동일 패턴) */
+  if(imp.phonebook){ adoptPhonebook(imp.phonebook); imp.phonebook=null; STORE.savePhonebook(S.phonebook); renderPhonebook(); }
   if(imp.fields){ let f=imp.fields; imp.fields=null;
     const custom=f.filter(x=>!CORE_FIELDS.some(cf=>cf.key===x.key)&&!['who','org','phone','mid','notice','sr'].includes(x.key));
     S.fields=CORE_FIELDS.map(cf=>{const ex=f.find(x=>x.key===cf.key);return ex?Object.assign({},cf,{on:true,builtin:true}):JSON.parse(JSON.stringify(cf));}).concat(custom);
@@ -126,7 +129,7 @@ export function initBackup(){
       if(!confirm(`백업 파일에 업무 ${d.items.length}건이 들어 있습니다.\n현재 데이터를 덮어쓰고 복원할까요?`))return;
       // 구버전 백업 호환은 프론트 책임: 아이템 마이그레이션 + 빠진 섹션은
       // 현재 값으로 채워서 완전한 payload를 만든 뒤, Rust의 backup_import로
-      // 5개 테이블을 "한 트랜잭션"에 복원한다. (예전 방식은 items는 save_all,
+      // 모든 테이블을 "한 트랜잭션"에 복원한다. (예전 방식은 items는 save_all,
       // 나머지는 각각 따로 fire-and-forget으로 흩어 저장해서, 중간에 앱이
       // 종료되면 반쪽짜리 상태가 남을 수 있었다.)
       const migrated=d.items.map(migrateItem);
@@ -140,6 +143,8 @@ export function initBackup(){
            복원 직후 "저장한 적 없는 내용"이 되살아나지 않게 여기서 한 번 더 턴다. */
         settings:stripTemp((d.settings&&typeof d.settings==='object')?d.settings:S.settings),
         recurDefs:Array.isArray(d.recurDefs)?d.recurDefs:S.recurDefs,
+        /* pre-v2.7 백업엔 phonebook 키가 없다 — 현재 값으로 채워 복원이 전화번호부를 비우지 않게 */
+        phonebook:Array.isArray(d.phonebook)?d.phonebook:S.phonebook,
         items:migrated
       };
       try{ await invoke('backup_import',{payload}); }
@@ -151,6 +156,7 @@ export function initBackup(){
       S.imported.idKinds=payload.idKinds;
       S.imported.settings=payload.settings;
       S.imported.recurDefs=payload.recurDefs;
+      S.imported.phonebook=payload.phonebook;
       reconcileImported(); persist();
       showToast(`백업 ${migrated.length}건을 복원했습니다`);
       return;

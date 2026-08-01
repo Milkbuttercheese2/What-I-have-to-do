@@ -8,6 +8,7 @@ import {fmtDue, fmtT} from './datetime.js';
 import {placeOf, placeMode} from './placement.js';
 import {textMatch} from './filters.js';
 import {recurLabel} from './recur.js';
+import {linkifyAt} from './phonebook-core.js';
 import {openForm} from './form.js';
 import {renderCal} from './calendar.js';
 
@@ -58,7 +59,9 @@ export function cardHtml(it,place){
   /* v2.5.12: 카드에는 메모 본문의 '첫 줄'만 가져온다(줄바꿈 이후는 버림). 그 첫 줄이 길면
      .card-memo 가 최대 2줄까지 감싸 보여준다(2줄 클램프). */
   const memo=(it.memo||'').split(/\r?\n/)[0].trim();
-  const memoHtml = memo ? esc(memo) : '<span style="color:var(--ink-soft)">(메모 없음)</span>';
+  /* v2.7.0: @태그(전화번호부)는 클릭 가능하게 감싼다 — 클릭 처리는 phonebook.js 의
+     캡처 단계 위임(카드 열기 data-open 보다 먼저 먹는다) */
+  const memoHtml = memo ? linkifyAt(esc(memo)) : '<span style="color:var(--ink-soft)">(메모 없음)</span>';
   /* v2.5.2 완료 카드: 메모 1줄 + 완료 시각 1줄만 — 세부·마감·주기·긴급도 없음 */
   if(place==='done'||it.done){
     const dv=it.doneAt!=null?new Date(it.doneAt):null;

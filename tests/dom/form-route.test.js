@@ -26,7 +26,9 @@ test('마감을 오늘로 적으면 → 오늘 처리 (분류 대기 아님)', a
   env.fireEvent('wmhh://open-blank-form', {});           // 단축키 경로와 동일
   await env.flush();
   $('fm-memo').value = '오늘까지 회신할 건'; input($('fm-memo'));
-  const due = new Date(Date.now() + 3*3600e3); due.setSeconds(0,0);
+  /* v2.7.0 수정: now+3h 는 21시 이후 실행 시 내일로 넘어가 매일 저녁마다 실패하던
+     시간 의존 결함 — '오늘 23:59'로 고정하면 언제 돌려도 오늘이다(지났어도 today). */
+  const due = new Date(); due.setHours(23,59,0,0);
   setDt($('fm-grid').querySelector('[data-fkey="due"]'), due);
   $('fm-save').click(); await env.flush();
   assert.equal(S.items.length, 1);
