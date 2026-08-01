@@ -265,7 +265,7 @@ test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 �
   assert.equal(first.textContent, '업무 2');
 });
 
-test('바로 입력 본문 하이라이트: 실존 태그만 표시, 태그 클릭 → 관련 업무 (v3.1.0)', async () => {
+test('바로 입력 본문 하이라이트: 실존 태그만 표시, 태그 클릭 → 관련 업무 (v3.0.1)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1'}]);
   S.items=[{id:1, memo:'통화 @김철수', contacts:[], done:false}];

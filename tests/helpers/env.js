@@ -65,7 +65,7 @@ export function setupEnv({html} = {}){
   globalThis.MouseEvent = window.MouseEvent;
   globalThis.localStorage = window.localStorage;   // theme.js 부팅 캐시(v2.6.2)가 bare 식별자로 참조
   globalThis.getComputedStyle = window.getComputedStyle.bind(window);   // autoGrowInp(v2.5.4)가 bare 참조
-  globalThis.requestAnimationFrame = window.requestAnimationFrame       // wireTagHover(v3.1.0) — jsdom 기본엔 없음
+  globalThis.requestAnimationFrame = window.requestAnimationFrame       // wireTagHover(v3.0.1) — jsdom 기본엔 없음
     ? window.requestAnimationFrame.bind(window) : (cb)=>setTimeout(cb,0);
 
   return {

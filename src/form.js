@@ -37,7 +37,7 @@ export function toInbox(){
   const t=$('inp').value.trim(); if(!t){$('inp').focus();return;}
   captureMemo(t);
   $('inp').value=''; $('inp').style.height=''; $('inp').focus();   // 등록 후 높이 초기화(min-height로 복귀)
-  renderInpHl();                                                   // v3.1.0: 하이라이트도 비움
+  renderInpHl();                                                   // v3.0.1: 하이라이트도 비움
 }
 /* v2.5.4: 바로 입력창 자동 세로 확장 — 내용에 맞춰 늘어난다(최소 CSS min-height, 최대 60vh 뒤 스크롤).
    WebView2에서 드래그 리사이즈가 잘 안 잡히던 문제를 근본 해결(타이핑만으로 늘어남). resize 핸들은 그대로 둠. */
@@ -163,13 +163,13 @@ function renderMemoHl(){
   hl.innerHTML=linkifyAt(esc($('fm-memo').value), S.phonebook)+'\n';
   hl.scrollTop=$('fm-memo').scrollTop;
 }
-/* 바로 입력(#inp)도 같은 본문 하이라이트 (v3.1.0 소유자 지정 — 빠른메모에도 태그) */
+/* 바로 입력(#inp)도 같은 본문 하이라이트 (v3.0.1 소유자 지정 — 빠른메모에도 태그) */
 function renderInpHl(){
   const hl=$('inp-hl'); if(!hl) return;
   hl.innerHTML=linkifyAt(esc($('inp').value), S.phonebook)+'\n';
   hl.scrollTop=$('inp').scrollTop;
 }
-/* 태그 hover 반응 (v3.1.0) — 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로
+/* 태그 hover 반응 (v3.0.1) — 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로
    판정한다(textarea 가 위라 CSS :hover 불가). 맞으면 .hover + 포인터 커서. */
 function wireTagHover(ta, hlId){
   let raf=0;
@@ -392,8 +392,8 @@ export function initForm(){
   document.body.appendChild($('formPanel'));
   $('toInbox').addEventListener('click', toInbox);
   $('inp').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();toInbox();} });
-  $('inp').addEventListener('input', ()=>{ autoGrowInp(); renderInpHl(); });   // v2.5.4 자동 확장 + v3.1.0 태그 하이라이트
-  /* v3.1.0: 바로 입력도 본문 태그 클릭 → 관련 업무, hover 반응, 스크롤 동기 */
+  $('inp').addEventListener('input', ()=>{ autoGrowInp(); renderInpHl(); });   // v2.5.4 자동 확장 + v3.0.1 태그 하이라이트
+  /* v3.0.1: 바로 입력도 본문 태그 클릭 → 관련 업무, hover 반응, 스크롤 동기 */
   $('inp').addEventListener('click',()=>{
     const t=$('inp');
     if(t.selectionStart!==t.selectionEnd) return;
@@ -414,7 +414,7 @@ export function initForm(){
   /* v2.5.18 파일 링크도 드래그 정렬 — collectForm 이 .ffile-path 를 DOM 순서대로 읽으므로
      onDrop 콜백 없이 순서가 그대로 저장된다(fm-subs 와 동일 패턴). */
   enableDragReorder($('fm-files'), '.ffile-row', '.drag-handle');
-  /* 파일·폴더 링크 (v3.1.0 메뉴 버튼 패턴) — 상위 버튼 하나를 누르면 아래로 하위
+  /* 파일·폴더 링크 (v3.0.1 메뉴 버튼 패턴) — 상위 버튼 하나를 누르면 아래로 하위
      메뉴(파일/폴더)가 열린다. 항목 선택이라는 메소드는 동일하고 층위만 나뉜다.
      네이티브 선택창이 파일용·폴더용으로 분리돼 있어 대화상자 자체는 못 합친다.
      행 구조·열기는 종류와 무관하게 동일(open_file_path — 폴더면 탐색기). */
