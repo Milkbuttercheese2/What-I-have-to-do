@@ -91,8 +91,9 @@
  body.mouse .cap-hit:hover,.cap-hit.sel{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
  .cap-hit.done{color:var(--cap-muted)}
  .cap-empty{font-size:13px;color:var(--cap-muted);padding:12px}
- /* v2.5.21: 항상 보이는 안내줄 — 입력칸 placeholder 를 대신한다(모드별 문구는 capture-win.js). */
- #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:2px 18px 10px}
+ /* v2.5.21 안내줄 → v3.0.2 맨 아래 푸터로 이동(모드별 문구는 capture-win.js).
+    입력칸과 결과 사이에 끼어 3단으로 보이던 원인이라 바닥으로 내렸다. */
+ #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:8px 18px 10px;border-top:1px solid var(--cap-sep)}
  /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어.
     v2.9.0 body.pb: 목록이 펴진 동안 입력칸 flex:1 을 꺼서 늘어난 창 높이를 목록이 갖는다
     (안 끄면 입력·힌트·목록이 벌어진 3분할로 찢어져 보이던 버그). */
@@ -131,13 +132,14 @@
     </div>
     <input id="cap-search" autocomplete="off">
   </div>
-  <!-- 힌트줄은 입력칸 바로 아래 (검색 모드에서 목록 위) — placeholder 자리를 대신하므로 -->
-  <div id="cap-hint">내 업무 검색 · Alt 를 누르면 빠른 메모</div>
   <!-- v2.7.0 빠른 메모 @ 자동완성 (전화번호부) — @토큰을 칠 때만 capture-win.js 가 편다 -->
   <div id="cap-pb" style="display:none"></div>
   <div id="cap-results" style="display:flex">
     <div class="cap-col"><div class="cap-col-h">내 업무</div><div class="cap-list" id="cap-items"></div></div>
   </div>
+  <!-- v3.0.2 힌트줄을 맨 아래 푸터로(소유자 지정 — 입력칸과 결과 사이에 끼어
+       화면을 3단으로 쪼개던 원인). 이제 검색 = 입력칸/결과 2단 + 바닥 안내. -->
+  <div id="cap-hint">내 업무 검색 · Alt 를 누르면 빠른 메모</div>
   <div id="cap-flash">등록됨</div>
 </div>
 <script type="module" src="capture-boot.js"></script>

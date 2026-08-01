@@ -3,7 +3,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 
-const {phoneDigits, normEntry, entryKey, isComplete, tagAtCaret, gatherFromItems, matchEntries, entryLabel, tagText, linkifyAt, relatedItems, atToken, applyInsert, mapSheetRows, extractTags, entriesForTag, absorbContacts}
+const {phoneDigits, normEntry, entryKey, isComplete, gatherFromItems, matchEntries, entryLabel, tagText, linkifyAt, relatedItems, atToken, applyInsert, mapSheetRows, extractTags, entriesForTag, absorbContacts}
   = await import('../../src/phonebook-core.js');
 
 test('entryKey: 전화 표기 차이(하이픈·공백)는 같은 사람으로 판정', () => {
@@ -95,16 +95,6 @@ test('linkifyAt(book): 전화번호부 실존 관련인 태그만 감싼다 — 
   assert.ok(linkifyAt('회신 @우성 건').includes('at-tag'));
 });
 
-test('tagAtCaret: 캐럿이 태그 구간 위에 있을 때만 이름 반환, 실존성 검사 포함 (v2.11.0)', () => {
-  const book=[{id:1, who:'김철수', org:'행정과', phone:'010-1'}];
-  const text='통화 @김철수 건';
-  assert.equal(tagAtCaret(text, 3, book), '김철수');            // '@' 위
-  assert.equal(tagAtCaret(text, 7, book), '김철수');            // 태그 끝
-  assert.equal(tagAtCaret(text, 1, book), null);                // 태그 밖
-  assert.equal(tagAtCaret(text, 8, book), null);                // 태그 뒤 공백
-  assert.equal(tagAtCaret('통화 @박영수 건', 3, book), null);   // 실존 관련인 아님
-});
-
 test('linkifyAt: @태그를 span 으로, 괄호 정보·꼬리 문장부호는 태그 밖으로', () => {
   assert.equal(linkifyAt('민원 @김철수 회신'),
     '민원 <span class="at-tag" data-at="김철수">@김철수</span> 회신');
@@ -120,20 +110,24 @@ test('linkifyAt: @태그를 span 으로, 괄호 정보·꼬리 문장부호는 �
   assert.equal(linkifyAt('@김&quot;철'), '<span class="at-tag" data-at="김">@김</span>&quot;철');
 });
 
-test('relatedItems: 이름 OR 연락처(숫자만) 일치 — 미완료 먼저·최신순, 주기 부모 제외', () => {
+test('relatedItems(strict, v3.0.2): 관련인 3칸 완전 일치 OR 메모의 정확한 @태그만', () => {
+  const entry={id:1, who:'김철수', org:'행정과', phone:'010-1234-5678'};
   const items=[
-    {id:1, memo:'', contacts:[{who:'김철수', org:'', phone:''}], done:false},          // 이름
-    {id:2, memo:'', contacts:[{who:'', org:'', phone:'010 1234 5678'}], done:true},    // 번호(표기 다름)
-    {id:3, memo:'통화 @김철수 건', contacts:[], done:false},                            // 메모 태그
-    {id:4, memo:'', contacts:[{who:'박영수', org:'', phone:'02-000'}], done:false},    // 무관
-    {id:5, memo:'@김철수 주기', contacts:[], done:false, recur:{type:'dow'}},           // 주기 부모 — 제외
-    {id:6, memo:'', contacts:[{who:'', org:'김철수기념사업회', phone:''}], done:false}, // 소속 부분일치
+    {id:1, memo:'', contacts:[{who:'김철수', org:'행정과', phone:'010 1234 5678'}], done:false}, // 3칸 일치(번호 표기만 다름) ✓
+    {id:2, memo:'', contacts:[{who:'김철수', org:'', phone:''}], done:false},                    // 이름만 — 제외 (소유자 지정)
+    {id:3, memo:'통화 @김철수 건', contacts:[], done:true},                                       // 정확한 태그 ✓
+    {id:4, memo:'김철수 언급만(태그 아님)', contacts:[], done:false},                             // 평문 언급 — 제외
+    {id:5, memo:'@김철 부분 태그', contacts:[], done:false},                                      // 다른 태그 — 제외
+    {id:6, memo:'', contacts:[{who:'김철수', org:'세무과', phone:'010-1234-5678'}], done:false}, // 소속 다름 — 제외
+    {id:7, memo:'@김철수 주기', contacts:[], done:false, recur:{type:'dow'}},                     // 주기 부모 — 제외
   ];
-  const hits=relatedItems(items, {name:'김철수', phones:['010-1234-5678']}).map(it=>it.id);
-  assert.deepEqual(hits, [6,3,1,2]);            // 미완료(최신순) → 완료
-  // 이름 없이 연락처만으로도 검색된다 (관련인 이름만/연락처만 적었을 가능성 — OR 조건)
-  assert.deepEqual(relatedItems(items, {phones:['01012345678']}).map(it=>it.id), [2]);
-  assert.deepEqual(relatedItems(items, {name:'박영수'}).map(it=>it.id), [4]);
+  const hits=relatedItems(items, {name:'김철수', entries:[entry]}).map(it=>it.id);
+  assert.deepEqual(hits, [1,3]);                 // 미완료 먼저(1) → 완료(3)
+  // 구버전 번호만 항목: 세 칸('','',digits)이 그대로 일치하는 관련인만 걸린다
+  const phoneOnly={id:9, who:'', org:'', phone:'010-9999-8888'};
+  const items2=[{id:10, memo:'', contacts:[{who:'', org:'', phone:'01099998888'}], done:false},
+                {id:11, memo:'', contacts:[{who:'박', org:'', phone:'010-9999-8888'}], done:false}];
+  assert.deepEqual(relatedItems(items2, {name:'010-9999-8888', entries:[phoneOnly]}).map(i=>i.id), [10]);
 });
 
 test('isComplete: 소속·이름·연락처(숫자 있는) 3칸 완비 판정 (v2.9.0 무결성 규칙)', () => {

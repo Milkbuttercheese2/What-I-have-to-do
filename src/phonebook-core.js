@@ -103,21 +103,23 @@ export function linkifyAt(escaped, book){
   });
 }
 
-/* @태그 클릭 → 관련 업무 검색 (소유자 지정: 이름 OR 연락처 — 아이템에 이름만
-   적었거나 연락처만 적었을 수 있어서). 이름은 관련인·관련소속·메모 본문에서,
-   연락처는 관련인 연락처(숫자만 비교)에서 찾는다. 미완료 먼저, 최신순. */
-export function relatedItems(items, {name, phones}={}){
+/* @태그 클릭 → 관련 업무 검색 (v3.0.2 strict — 소유자 지정: 매칭이 헐거워
+   엉뚱한 사람이 걸리던 문제). 관련인은 **소속·이름·연락처(숫자 비교) 3칸이 그
+   전화번호부 항목과 모두 동일**할 때만, 메모는 **정확히 그 @태그**가 있을 때만
+   엮인 것으로 본다. 부분일치·이름만·번호만 매칭은 폐지. 미완료 먼저, 최신순. */
+export function relatedItems(items, {name, entries}={}){
   name=String(name||'').trim();
-  phones=(phones||[]).map(phoneDigits).filter(Boolean);
+  const es=(entries||[]).map(normEntry);
+  const tripleEq=c=>es.some(e=>
+    String(c.who||'').trim()===e.who &&
+    String(c.org||'').trim()===e.org &&
+    phoneDigits(c.phone)===phoneDigits(e.phone));
   const out=[];
   for(const it of (items||[])){
     if(it.recur) continue;                       // 주기 부모는 보드 밖 — 목록에서 제외
-    const cs=it.contacts||[];
-    const byName = !!name && (
-      cs.some(c=>String(c.who||'').includes(name)||String(c.org||'').includes(name))
-      || String(it.memo||'').includes(name));
-    const byPhone = !!phones.length && cs.some(c=>phones.includes(phoneDigits(c.phone)));
-    if(byName||byPhone) out.push(it);
+    const byTag = !!name && extractTags(it.memo||'').includes(name);
+    const byContact = !!es.length && (it.contacts||[]).some(tripleEq);
+    if(byTag||byContact) out.push(it);
   }
   return out.sort((a,b)=>(a.done?1:0)-(b.done?1:0) || b.id-a.id);
 }
@@ -167,22 +169,6 @@ export function absorbContacts(book, contacts){
     added.push({who:c.who, org:c.org, phone:c.phone});
   }
   return {added, updates};
-}
-
-/* 캐럿이 올라가 있는 @태그 이름 (없으면 null) — 양식 메모 본문에서 태그 클릭 판정용.
-   linkifyAt 과 같은 문법·같은 실존성 검사(book 주면 전화번호부 실존 관련인만). */
-export function tagAtCaret(text, caret, book){
-  text=String(text||''); caret=Number(caret)||0;
-  const re=/(^|\s)@([^\s@&<>"'(]{1,30})/g; let m;
-  while((m=re.exec(text))){
-    const name=m[2].replace(/[.,;:!?·)\]]+$/,'');
-    if(!name) continue;
-    const start=m.index+m[1].length, end=start+1+name.length;   // '@' 포함 구간
-    if(caret>=start && caret<=end){
-      return (book===undefined || entriesForTag(book, name).length) ? name : null;
-    }
-  }
-  return null;
 }
 
 /* 커서 앞의 @토큰 — {start, query} 또는 null.

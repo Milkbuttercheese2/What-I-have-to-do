@@ -8,7 +8,7 @@
 import {S, newId} from './state.js';
 import {STORE} from './store.js';
 import {$, esc, escAttr, showToast} from './dom-utils.js';
-import {normEntry, entryKey, isComplete, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
+import {normEntry, entryKey, isComplete, entriesForTag, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
 
 let q='';                 // 탭 안 검색어 (모듈 로컬 — render.js 의 q/dq 와 같은 패턴)
 let editingPbId=null;     // 수정 중인 항목 id (null = 새로 추가 모드)
@@ -22,9 +22,10 @@ export function adoptPhonebook(list){
     .map(e=>{ if(e.id==null||e.id===''){ e.id=newId(); } else { e.id=Number(e.id); if(e.id>S.lastId) S.lastId=e.id; } return e; });
 }
 
-/* 관련 업무 수 — 이 사람이 엮인(이름 OR 연락처) 업무 개수. 태그 클릭 팝업과 같은 기준 */
+/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 태그 클릭 팝업과 같은 strict 기준
+   (v3.0.2: 관련인 3칸 완전 일치 OR 메모의 정확한 @태그) */
 function relCount(e){
-  return relatedItems(S.items, {name:e.who||e.org||e.phone, phones:[e.phone]}).length;
+  return relatedItems(S.items, {name:e.who||e.org||e.phone, entries:[e]}).length;
 }
 /* 표시 정렬(v2.11.0 소유자 지정) — ① 관련 업무 수 많은 순 ② 소속 ③ 이름 (ko locale).
    원본 배열은 건드리지 않는다(배열 순서 = 저장 순서). */
@@ -167,21 +168,14 @@ export function absorbIntoPhonebook(contacts){
 
 /* ── 관련 업무 팝업 (v2.7.0 소유자 지정) ─────────────────────────────────
    카드의 @태그(또는 전화번호부 행)를 클릭하면, 그 관련인과 엮인 업무를 모아
-   보여준다. 검색은 이름 OR 연락처(숫자만 비교) — 아이템에 이름만 적었거나
-   연락처만 적었을 수 있기 때문. 행 클릭은 render.js 의 data-open 위임이 받아
+   보여준다. v3.0.2 strict: 관련인 3칸 완전 일치 OR 메모의 정확한 @태그만. 행 클릭은 render.js 의 data-open 위임이 받아
    양식을 연다(여기서는 팝업만 닫는다). */
-export function openRelated(name, extraPhones){
+export function openRelated(name, extraEntries){
   name=String(name||'').trim(); if(!name) return;
-  /* 태그 이름으로 전화번호부를 찾아 연락처를 얹는다 — 이름이 같은 사람이 여럿이면 전부.
-     번호만 저장된 항목의 태그(@010-…)는 이름·소속이 비어 있으므로 번호(숫자만)로 대조. */
-  const tagDigits=phoneDigits(name);
-  const phones=S.phonebook
-    .filter(e=>e.who===name||e.org===name||(tagDigits.length>=7&&phoneDigits(e.phone)===tagDigits))
-    .map(e=>e.phone)
-    .concat(extraPhones||[]);
-  /* 번호꼴 태그는 그 자체가 연락처 조건 — 전화번호부에 없어도 아이템 연락처와 대조된다 */
-  if(tagDigits.length>=7) phones.push(name);
-  const matched=relatedItems(S.items, {name, phones});
+  /* v3.0.2 strict: 태그 이름에 해당하는 전화번호부 항목(entriesForTag)만 기준으로,
+     관련인 3칸 완전 일치 OR 메모의 정확한 @태그만 엮는다 (부분일치 폐지 — 소유자 지정) */
+  const entries=entriesForTag(S.phonebook, name).concat(extraEntries||[]);
+  const matched=relatedItems(S.items, {name, entries});
   $('rel-title').textContent=`@${name} 관련 업무`;
   $('rel-sub').textContent=`관련인·메모에 "${name}"이(가) 있거나 연락처가 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;
   $('rel-list').innerHTML=matched.length?matched.map(it=>{
@@ -227,7 +221,7 @@ export function initPhonebook(){
       /* 행의 빈 곳 클릭 = 이 사람과 엮인 업무 보기 (카드 @태그 클릭과 같은 팝업) */
       const rowEl=e.target.closest('.pb-item');
       if(rowEl){ const en=S.phonebook.find(x=>x.id===Number(rowEl.dataset.pbid));
-        if(en) openRelated(en.who||en.org||en.phone, [en.phone]); }
+        if(en) openRelated(en.who||en.org||en.phone, [en]); }
       return;
     }
     const id=Number(del.dataset.pbdel), entry=S.phonebook.find(x=>x.id===id);
