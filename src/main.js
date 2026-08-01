@@ -8,7 +8,7 @@ import {S, reconcileCore, migrateItem} from './state.js';
 import {STORE} from './store.js';
 import {$, initToast} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
-import {initForm, closeForm, toInbox, contactsFromTags} from './form.js';
+import {initForm, closeForm, toInbox, contactsFromTags, refreshTagHl} from './form.js';
 import {initPresets, renderPresets} from './presets.js';
 import {initRender, render, renderDone} from './render.js';
 import {initCalendar, renderCal} from './calendar.js';
@@ -149,6 +149,8 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     try{ applyUiScale(S.settings.uiScale); }catch(e){ console.warn('화면 크기 복원 실패',e); }
     try{ applyTheme(S.settings); syncSettings(); }catch(e){ console.warn('테마 복원 실패',e); }
     try{ sendCaptureConfig(); }catch(e){ console.warn('미니 창 구성 전달 실패',e); }
+    /* v3.0.3: 로드 전 타이핑분의 @태그 하이라이트를 전화번호부 도착 후 다시 그린다 */
+    try{ refreshTagHl(); }catch(e){ console.warn('태그 하이라이트 갱신 실패',e); }
     /* 캡처 초안 회수(v3.1.0): 지난 세션이 미등록 초안을 남긴 채 꺼졌다면
        (전원 차단 포함) 분류 대기로 자동 등록하고 초안을 비운다. */
     const draft=(S.settings.captureDraft||'').trim();

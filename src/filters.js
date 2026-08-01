@@ -12,7 +12,9 @@ function idText(it){ return (it.ids||[]).map(x=>`${x.kind||''} ${x.val||''}`).jo
 function fileText(it){ return (it.files||[]).map(p=>String(p).split(/[\\/]/).filter(Boolean).pop()||'').join(' '); }
 
 /* 카드 전 텍스트를 소문자 한 덩어리로 — includes 검색용.
-   v2.5.0: 담당자(아이템·세부 owner) 포함 — 이름 검색으로 맡긴 업무를 찾는다 */
+   v2.5.0: 담당자(아이템·세부 owner) 포함 — 이름 검색으로 맡긴 업무를 찾는다.
+   (v3.0.3 결정: 검색은 @태그와 무관 — 아이템 자신의 관계인 정보(아무 필드)로만.
+    태그는 3정보 완비 strict, 검색은 헐거운 부분일치 — 두 정책은 분리다.) */
 export function haystack(it){
   return ((it.memo||'')+' '+(it.owner||'')+' '+contactText(it)+' '+idText(it)+' '+(it.subs||[]).map(s=>`${s.title||''} ${s.owner||''}`).join(' ')+' '+fileText(it)).toLowerCase();
 }

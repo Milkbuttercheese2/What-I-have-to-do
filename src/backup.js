@@ -9,6 +9,7 @@ import {renderPresets} from './presets.js';
 import {renderAlarmToggle} from './alarms.js';
 import {persist} from './render.js';
 import {adoptPhonebook, renderPhonebook} from './phonebook.js';
+import {refreshTagHl} from './form.js';
 
 /* [JSON파일 백업] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
    한 번 지정하면 그 파일 핸들을 기억해 이후엔 같은 파일에 조용히 저장. */
@@ -39,7 +40,7 @@ export function reconcileImported(){
      (초기 로드는 DB에 이미 있고, JSON 복원은 backup_import 트랜잭션이 이미 저장함) */
   if(imp.recurDefs){ S.recurDefs=imp.recurDefs; imp.recurDefs=null; }
   /* v2.7.0 전화번호부 — 정규화·id 보정(adoptPhonebook) 후 재저장 (다른 사이드카와 동일 패턴) */
-  if(imp.phonebook){ adoptPhonebook(imp.phonebook); imp.phonebook=null; STORE.savePhonebook(S.phonebook); renderPhonebook(); }
+  if(imp.phonebook){ adoptPhonebook(imp.phonebook); imp.phonebook=null; STORE.savePhonebook(S.phonebook); renderPhonebook(); refreshTagHl(); }
   if(imp.fields){ let f=imp.fields; imp.fields=null;
     const custom=f.filter(x=>!CORE_FIELDS.some(cf=>cf.key===x.key)&&!['who','org','phone','mid','notice','sr'].includes(x.key));
     S.fields=CORE_FIELDS.map(cf=>{const ex=f.find(x=>x.key===cf.key);return ex?Object.assign({},cf,{on:true,builtin:true}):JSON.parse(JSON.stringify(cf));}).concat(custom);

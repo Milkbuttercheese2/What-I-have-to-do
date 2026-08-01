@@ -93,7 +93,8 @@
  .cap-empty{font-size:13px;color:var(--cap-muted);padding:12px}
  /* v2.5.21 안내줄 → v3.0.2 맨 아래 푸터로 이동(모드별 문구는 capture-win.js).
     입력칸과 결과 사이에 끼어 3단으로 보이던 원인이라 바닥으로 내렸다. */
- #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:8px 18px 10px;border-top:1px solid var(--cap-sep)}
+ #cap-hint{flex:none;font-size:11px;color:var(--cap-hint);padding:8px 18px 10px}
+ body.search #cap-hint{border-top:1px solid var(--cap-sep)}   /* 구분선은 목록이 있는 검색 모드만 — 메모 모드에선 띠를 만든다(v3.0.3) */
  /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어.
     v2.9.0 body.pb: 목록이 펴진 동안 입력칸 flex:1 을 꺼서 늘어난 창 높이를 목록이 갖는다
     (안 끄면 입력·힌트·목록이 벌어진 3분할로 찢어져 보이던 버그). */
