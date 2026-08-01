@@ -146,6 +146,24 @@ test('@태그 클릭 → 관련 업무 팝업 (이름 OR 연락처 일치), 행 
   tag.remove();
 });
 
+test('번호만 저장된 항목의 @태그(@010-…) 클릭도 연락처(숫자만 비교)로 검색된다', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'', org:'', phone:'010-1234-5678'}]);   // 번호만 있는 관련인
+  S.items=[
+    {id:1, memo:'표기 다른 번호', contacts:[{who:'', org:'', phone:'01012345678'}], done:false},
+    {id:2, memo:'무관', contacts:[{who:'', org:'', phone:'02-000'}], done:false},
+  ];
+  const tag=env.document.createElement('span');
+  tag.className='at-tag'; tag.dataset.at='010-1234-5678';
+  env.document.body.appendChild(tag);
+  tag.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  const modal=env.document.getElementById('relModal');
+  assert.ok(modal.classList.contains('on'));
+  const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
+  assert.deepEqual(hits, [1]);
+  modal.classList.remove('on'); tag.remove();
+});
+
 test('백업 왕복: adoptPhonebook 이 id 없는 항목에 id 를 채우고 lastId 를 시드한다 (F12)', async () => {
   await env.resetS();
   adoptPhonebook([{who:'김철수', org:'행정과', phone:'010-1'}, {id:99999, who:'이영희', org:'', phone:'010-2'}, {who:'', org:'', phone:''}]);
