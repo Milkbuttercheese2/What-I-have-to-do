@@ -198,7 +198,7 @@ export function initPhonebook(){
     if(e.target.closest('[data-open]')) closeRelated();             // 업무를 열었으니 팝업은 닫는다 (열기는 render.js 위임)
   });
   /* @태그 클릭 → 관련 업무 팝업의 진입점은 v2.11.0부터 **양식 메모 본문**(form.js 가
-     tagAtCaret 로 직접 판정)과 전화번호부 행뿐이다 — v2.9.0의 별도 칩(#fm-tags)은
+     hover 기하 판정으로 직접 처리)과 전화번호부 행뿐이다 — v2.9.0의 별도 칩(#fm-tags)은
      '본문에 하이라이트'라는 소유자 지정으로 제거됐다. 카드 위 태그는 색 표시만(불변). */
   $('pb-save').addEventListener('click',submitPbForm);
   $('pb-cancel').addEventListener('click',()=>{ clearPbForm(); });

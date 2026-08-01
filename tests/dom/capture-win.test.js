@@ -340,3 +340,31 @@ test('목록 밖에서 휠을 굴려도 결과 목록이 스크롤된다 (v2.6.8
   searchInp.dispatchEvent(ev);                       // 검색칸(목록 밖) 위에서 휠
   assert.equal(list.scrollTop, 120, '목록으로 넘어가 스크롤된다');
 });
+
+test('빠른 메모 태그: 하이라이트 렌더 + hover 클릭 → 검색 화면 점프 (v3.0.2 통일 정책)', async () => {
+  reset();
+  env.onInvoke('phonebook_list', ()=>[{id:1, who:'김철수', org:'행정과', phone:'010-1'}]);
+  env.onInvoke('quick_search', ()=>[]);
+  /* loadBook 은 init 때 1회 + '창이 새로 뜰 때'(capture-shown) 마다 — 핸들러 등록 후
+     capture-shown 을 쏴서 전화번호부를 실제로 받게 한다 */
+  env.fireEvent('wmhh://capture-shown');
+  await env.flush();
+  // Alt 로 메모 모드 진입 (capture-shown 의 openFresh 가 검색 모드로 초기화하므로 그 뒤에)
+  if(body.classList.contains('search'))
+    env.document.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Alt', bubbles:true}));
+  await env.flush();
+  inp.value='통화 @김철수 건';
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  await env.flush();
+  const hl=env.document.getElementById('cap-hl');
+  assert.equal(hl.querySelectorAll('.at-tag').length, 1);        // 실존 관련인만 하이라이트
+  // hover 없이 클릭 → 아무 일도 없음 (기하 판정)
+  inp.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  assert.ok(body.classList.contains('search')===false);
+  // hover 상태에서 클릭 → 검색 화면 점프 + 그 이름이 검색어로
+  hl.querySelector('.at-tag').classList.add('hover');
+  inp.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  assert.ok(body.classList.contains('search'));
+  assert.equal(env.document.getElementById('cap-search').value, '김철수');
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='quick_search'&&c.args.query==='김철수'));
+});
