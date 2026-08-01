@@ -90,6 +90,7 @@
         <div class="t-head">파일 링크</div><!-- (관련 문서 연결 — 체크 켜면 이름 클릭으로 열기, 끄면 경로 수정·찾기) — 명칭 간결화 v2.5.13 -->
         <div id="fm-files"></div>
         <button class="btn fsub-add" id="fm-fileadd">＋ 파일 찾아보기</button>
+        <button class="btn fsub-add" id="fm-folderadd">＋ 폴더 찾아보기</button>
       </div>
 
       <div class="fm-actions">
@@ -369,6 +370,8 @@
     </div>
 
     <div class="t-head">데이터</div>
+    <!-- v2.10.0: 현재 저장 위치 상시 표기 (openSettings 때 get_data_dir 로 채움) -->
+    <div class="set-note num" id="dataDirPath" style="word-break:break-all"></div>
     <div class="set-list">
       <button class="menu-item" id="dataDirBtn" title="데이터 저장 위치 확인·변경">저장 위치 확인·변경</button>
       <button class="menu-item" id="bkExp">JSON파일 백업</button>

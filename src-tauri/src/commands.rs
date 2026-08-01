@@ -567,6 +567,16 @@ pub async fn pick_file_path(app: AppHandle) -> Result<Option<String>, String> {
     Ok(Some(picked.into_path().map_err(to_err)?.to_string_lossy().into_owned()))
 }
 
+/// 폴더 링크용 네이티브 폴더 선택창 (v2.10.0) — pick_file_path 의 폴더판.
+/// 열기는 open_file_path 를 그대로 쓴다(opener 는 폴더를 탐색기로 연다).
+#[tauri::command]
+pub async fn pick_folder_path(app: AppHandle) -> Result<Option<String>, String> {
+    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    Ok(Some(picked.into_path().map_err(to_err)?.to_string_lossy().into_owned()))
+}
+
 /// 카드의 파일 링크 클릭 → 기본 연결 프로그램으로 파일 열기.
 #[tauri::command]
 pub fn open_file_path(app: AppHandle, path: String) -> Result<(), String> {

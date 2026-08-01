@@ -381,6 +381,13 @@ export function initForm(){
     catch(e){ alert('파일 선택 실패: '+e); return; }
     if(p) addFormFileRow(p);
   });
+  /* 폴더 링크 (v2.10.0) — 행 구조·열기(open_file_path: 폴더면 탐색기)는 파일과 동일 */
+  $('fm-folderadd').addEventListener('click', async ()=>{
+    let p=null;
+    try{ p=await invoke('pick_folder_path'); }
+    catch(e){ alert('폴더 선택 실패: '+e); return; }
+    if(p) addFormFileRow(p);
+  });
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
   /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
      새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */

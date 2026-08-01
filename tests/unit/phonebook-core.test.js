@@ -157,6 +157,18 @@ test('absorbContacts: 3칸 완비만 흡수, 완전 중복 건너뜀, 빈 번호
   assert.deepEqual(added, [{who:'김철수', org:'행정과', phone:'010-3'}]);
 });
 
+test('queryReady: 이름 2글자·번호 3자리 문턱값, 010 은 열지 않음 (v2.10.0)', async () => {
+  const {queryReady} = await import('../../src/phonebook-core.js');
+  assert.equal(queryReady('김'), false);          // 이름 1글자 — 닫힘
+  assert.equal(queryReady('김철'), true);         // 2글자부터
+  assert.equal(queryReady('01'), false);
+  assert.equal(queryReady('010'), false);         // 모든 휴대전화 공통 접두 — 소음 방지
+  assert.equal(queryReady('010-'), false);        // 하이픈 붙어도 숫자는 010
+  assert.equal(queryReady('0102'), true);
+  assert.equal(queryReady('295'), true);          // 국번 등 3자리부터
+  assert.equal(queryReady(''), false);
+});
+
 test('normEntry/phoneDigits: 문자열 강제·trim·숫자 추출', () => {
   assert.deepEqual(normEntry({who:' 김철수 ', org:null, phone:1234}), {id:undefined, who:'김철수', org:'', phone:'1234'});
   assert.equal(phoneDigits('010-12 34'), '0101234');
