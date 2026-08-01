@@ -124,9 +124,15 @@ function importFromXlsx(file){
    양식을 연다(여기서는 팝업만 닫는다). */
 export function openRelated(name, extraPhones){
   name=String(name||'').trim(); if(!name) return;
-  /* 태그 이름으로 전화번호부를 찾아 연락처를 얹는다 — 이름이 같은 사람이 여럿이면 전부 */
-  const phones=S.phonebook.filter(e=>e.who===name||e.org===name).map(e=>e.phone)
+  /* 태그 이름으로 전화번호부를 찾아 연락처를 얹는다 — 이름이 같은 사람이 여럿이면 전부.
+     번호만 저장된 항목의 태그(@010-…)는 이름·소속이 비어 있으므로 번호(숫자만)로 대조. */
+  const tagDigits=phoneDigits(name);
+  const phones=S.phonebook
+    .filter(e=>e.who===name||e.org===name||(tagDigits.length>=7&&phoneDigits(e.phone)===tagDigits))
+    .map(e=>e.phone)
     .concat(extraPhones||[]);
+  /* 번호꼴 태그는 그 자체가 연락처 조건 — 전화번호부에 없어도 아이템 연락처와 대조된다 */
+  if(tagDigits.length>=7) phones.push(name);
   const matched=relatedItems(S.items, {name, phones});
   $('rel-title').textContent=`@${name} 관련 업무`;
   $('rel-sub').textContent=`관련인·메모에 "${name}"이(가) 있거나 연락처가 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;

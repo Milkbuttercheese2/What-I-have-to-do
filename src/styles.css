@@ -370,6 +370,10 @@
   .pb-item .ps-edit:hover{background:var(--slate-bg);color:var(--slate)}
   .pb-item .ps-del:hover{background:var(--red-bg);color:var(--red)}
 
+  /* 메모 합치기 드래그 (v2.8.0) — 끌리는 카드는 반투명, 받는 카드는 청록 강조 */
+  .card.dragging{opacity:.45}
+  .card.merge-over{border-color:var(--focus);background:var(--slate-bg)}
+
   /* 카드 메모 속 @태그 — 클릭하면 관련 업무 팝업(phonebook.js openRelated) */
   .at-tag{color:var(--focus);font-weight:600;cursor:pointer}
   .at-tag:hover{text-decoration:underline}

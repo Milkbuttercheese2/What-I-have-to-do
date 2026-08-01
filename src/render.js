@@ -9,6 +9,7 @@ import {placeOf, placeMode} from './placement.js';
 import {textMatch} from './filters.js';
 import {recurLabel} from './recur.js';
 import {linkifyAt} from './phonebook-core.js';
+import {mergeItems} from './merge.js';
 import {openForm} from './form.js';
 import {renderCal} from './calendar.js';
 
@@ -157,6 +158,68 @@ export function renderDone(){
 }
 export async function persist(){ window.items=S.items; await STORE.saveAll(S.items); render(); askNotify(); }
 
+/* ── 메모 합치기 (v2.8.0) ────────────────────────────────────────────────
+   보드 카드를 끌어 다른 카드에 놓으면 그 카드(받는 쪽)로 병합한다.
+   규칙은 merge.js — 여기서는 드래그 배선·교체·실행 취소만.
+   끌던 카드 id 는 dataTransfer 가 아니라 모듈 상태로 넘긴다(jsdom 테스트 가능 +
+   webview dataTransfer 편차 회피). */
+let dragMergeId=null;
+
+function mergeCards(targetId, sourceId){
+  const t=S.items.find(x=>x.id===targetId), s=S.items.find(x=>x.id===sourceId);
+  if(!t||!s||t===s||t.done||s.done) return;
+  const beforeT=JSON.parse(JSON.stringify(t));            // 실행 취소용 원본 보관
+  const beforeS=JSON.parse(JSON.stringify(s));
+  const srcIdx=S.items.indexOf(s);
+  S.items[S.items.indexOf(t)]=mergeItems(t,s);
+  S.items.splice(S.items.indexOf(s),1);
+  persist();
+  showToast('메모를 합쳤습니다',()=>{
+    const i=S.items.findIndex(x=>x.id===targetId);
+    if(i>=0) S.items[i]=beforeT; else S.items.push(beforeT);
+    if(!S.items.some(x=>x.id===sourceId)) S.items.splice(Math.min(srcIdx,S.items.length),0,beforeS);
+    persist();
+  });
+}
+
+/* 보드 두 뷰의 카드만 드래그 병합 대상 (완료 탭·캘린더 상세는 제외) */
+const boardCard=el=>el.closest&&el.closest('#view-board .card,#view-board5 .card');
+
+function initMergeDrag(){
+  /* 핸들 없이 카드 전체를 드래그 — 체크·삭제·@태그 위에서 시작한 드래그는 제외
+     (enableDragReorder 처럼 mousedown 때만 draggable 을 켠다: 캘린더 상세 등
+     다른 곳의 카드에 유령 드래그가 생기지 않는다) */
+  document.body.addEventListener('mousedown',e=>{
+    const card=boardCard(e.target);
+    if(card&&!e.target.closest('.chk,.del,.at-tag')) card.setAttribute('draggable','true');
+  });
+  document.body.addEventListener('dragstart',e=>{
+    const card=boardCard(e.target);
+    if(!card||card.getAttribute('draggable')!=='true'||!card.dataset.open){ return; }
+    dragMergeId=Number(card.dataset.open);
+    card.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',''); }catch{}
+  });
+  document.body.addEventListener('dragover',e=>{
+    if(dragMergeId==null) return;
+    const card=boardCard(e.target);
+    document.querySelectorAll('.card.merge-over').forEach(el=>{ if(el!==card) el.classList.remove('merge-over'); });
+    if(card&&Number(card.dataset.open)!==dragMergeId){ e.preventDefault(); card.classList.add('merge-over'); }
+  });
+  document.body.addEventListener('drop',e=>{
+    const card=boardCard(e.target);
+    const src=dragMergeId; dragMergeId=null;
+    if(src==null||!card) return;
+    e.preventDefault();
+    const tid=Number(card.dataset.open);
+    if(tid!==src) mergeCards(tid, src);
+  });
+  document.body.addEventListener('dragend',()=>{
+    dragMergeId=null;
+    document.querySelectorAll('.card.dragging,.card.merge-over').forEach(el=>{ el.classList.remove('dragging','merge-over'); el.removeAttribute('draggable'); });
+  });
+}
+
 export function initRender(){
   /* 카드 상호작용 */
   document.body.addEventListener('click',e=>{
@@ -178,8 +241,10 @@ export function initRender(){
     const open=e.target.closest('[data-open]');
     if(open){ const it=S.items.find(x=>x.id==open.dataset.open); if(it)openForm(it); return; }
   });
-  /* 주기 재렌더 — 편집 중 보호 */
+  initMergeDrag();
+  /* 주기 재렌더 — 편집 중·드래그 중 보호 (재렌더는 DOM 을 갈아엎어 드래그를 끊는다) */
   setInterval(()=>{ const a=document.activeElement;
+    if(document.querySelector('.card.dragging'))return;
     if(a&&(a.matches('#search,#done-search,#inp,.dt-date,.dt-time')||a.closest('#formPanel,#presetModal')))return;
     render(); },60000);
   /* 검색 */
