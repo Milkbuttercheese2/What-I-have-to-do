@@ -203,16 +203,9 @@ export function initPhonebook(){
     if(e.target.id==='relModal'){ closeRelated(); return; }          // 배경 클릭 닫기
     if(e.target.closest('[data-open]')) closeRelated();             // 업무를 열었으니 팝업은 닫는다 (열기는 render.js 위임)
   });
-  /* @태그 클릭 → 관련 업무 팝업. v2.9.0: 클릭 대상은 **양식 메모 아래 태그 칩(#fm-tags)**
-     으로 한정한다(소유자 피드백) — 카드 위 태그까지 클릭을 받으면 카드를 열려던 클릭이
-     태그에 맞아 팝업이 뜨는 오동작이 됐다. 카드의 @태그는 이제 색 표시일 뿐이다.
-     캡처 단계인 이유: 양식 패널 안 클릭이 다른 위임과 겹치지 않게 먼저 끊는다. */
-  document.addEventListener('click',e=>{
-    const t=e.target.closest&&e.target.closest('#fm-tags .at-tag');
-    if(!t) return;
-    e.preventDefault(); e.stopPropagation();
-    openRelated(t.dataset.at);
-  }, true);
+  /* @태그 클릭 → 관련 업무 팝업의 진입점은 v2.11.0부터 **양식 메모 본문**(form.js 가
+     tagAtCaret 로 직접 판정)과 전화번호부 행뿐이다 — v2.9.0의 별도 칩(#fm-tags)은
+     '본문에 하이라이트'라는 소유자 지정으로 제거됐다. 카드 위 태그는 색 표시만(불변). */
   $('pb-save').addEventListener('click',submitPbForm);
   $('pb-cancel').addEventListener('click',()=>{ clearPbForm(); });
   [$('pb-org'),$('pb-who'),$('pb-phone')].forEach(inp=>inp.addEventListener('keydown',e=>{

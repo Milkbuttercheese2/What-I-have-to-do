@@ -3,7 +3,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 
-const {phoneDigits, normEntry, entryKey, isComplete, gatherFromItems, matchEntries, entryLabel, tagText, linkifyAt, relatedItems, atToken, applyInsert, mapSheetRows, extractTags, entriesForTag, absorbContacts}
+const {phoneDigits, normEntry, entryKey, isComplete, tagAtCaret, gatherFromItems, matchEntries, entryLabel, tagText, linkifyAt, relatedItems, atToken, applyInsert, mapSheetRows, extractTags, entriesForTag, absorbContacts}
   = await import('../../src/phonebook-core.js');
 
 test('entryKey: 전화 표기 차이(하이픈·공백)는 같은 사람으로 판정', () => {
@@ -93,6 +93,16 @@ test('linkifyAt(book): 전화번호부 실존 관련인 태그만 감싼다 — 
   assert.equal(linkifyAt('회신 @우성 건', book), '회신 @우성 건');
   // book 을 안 주면(구 시그니처) 전부 감싼다 — 하위 호환
   assert.ok(linkifyAt('회신 @우성 건').includes('at-tag'));
+});
+
+test('tagAtCaret: 캐럿이 태그 구간 위에 있을 때만 이름 반환, 실존성 검사 포함 (v2.11.0)', () => {
+  const book=[{id:1, who:'김철수', org:'행정과', phone:'010-1'}];
+  const text='통화 @김철수 건';
+  assert.equal(tagAtCaret(text, 3, book), '김철수');            // '@' 위
+  assert.equal(tagAtCaret(text, 7, book), '김철수');            // 태그 끝
+  assert.equal(tagAtCaret(text, 1, book), null);                // 태그 밖
+  assert.equal(tagAtCaret(text, 8, book), null);                // 태그 뒤 공백
+  assert.equal(tagAtCaret('통화 @박영수 건', 3, book), null);   // 실존 관련인 아님
 });
 
 test('linkifyAt: @태그를 span 으로, 괄호 정보·꼬리 문장부호는 태그 밖으로', () => {

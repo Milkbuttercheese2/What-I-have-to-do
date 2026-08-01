@@ -59,9 +59,13 @@
 
       <div class="fm-memo-wrap">
         <label class="fm-label">메모</label>
-        <textarea id="fm-memo" class="fm-memo" maxlength="50000" placeholder="업무 내용을 자유롭게 적으세요"></textarea>
-        <!-- v2.9.0 @태그 칩 — 메모 속 @태그를 클릭 가능한 칩으로 (클릭=관련 업무 팝업) -->
-        <div id="fm-tags" style="display:none"></div>
+        <!-- v2.11.0 본문 @태그 하이라이트(소유자 지정 — 별도 칩 영역이 아니라 본문 안에):
+             textarea 는 부분 스타일이 불가하므로, 같은 글꼴 메트릭의 백드롭 층(#fm-memo-hl)이
+             뒤에서 태그 자리에만 하이라이트를 깐다. 태그 클릭도 본문에서 직접(form.js). -->
+        <div class="fm-memo-stack">
+          <div id="fm-memo-hl" aria-hidden="true"></div>
+          <textarea id="fm-memo" class="fm-memo" maxlength="50000" placeholder="업무 내용을 자유롭게 적으세요"></textarea>
+        </div>
       </div>
 
       <!-- v2.5.3 양식 순서: 메모 → 세부 할 일 → 접수·마감 → 식별번호 → 관련소속·관련인·연락처 → 파일 링크 -->

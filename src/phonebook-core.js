@@ -169,6 +169,22 @@ export function absorbContacts(book, contacts){
   return {added, updates};
 }
 
+/* 캐럿이 올라가 있는 @태그 이름 (없으면 null) — 양식 메모 본문에서 태그 클릭 판정용.
+   linkifyAt 과 같은 문법·같은 실존성 검사(book 주면 전화번호부 실존 관련인만). */
+export function tagAtCaret(text, caret, book){
+  text=String(text||''); caret=Number(caret)||0;
+  const re=/(^|\s)@([^\s@&<>"'(]{1,30})/g; let m;
+  while((m=re.exec(text))){
+    const name=m[2].replace(/[.,;:!?·)\]]+$/,'');
+    if(!name) continue;
+    const start=m.index+m[1].length, end=start+1+name.length;   // '@' 포함 구간
+    if(caret>=start && caret<=end){
+      return (book===undefined || entriesForTag(book, name).length) ? name : null;
+    }
+  }
+  return null;
+}
+
 /* 커서 앞의 @토큰 — {start, query} 또는 null.
    @ 는 줄 시작이나 공백 뒤에서만 트리거(이메일 주소 한가운데 @ 는 무시),
    토큰은 공백·@ 없는 1~30자. 커서가 토큰 끝에 있을 때만 활성. */

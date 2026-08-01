@@ -393,9 +393,21 @@
      카드 위 태그가 클릭을 받으면 카드를 열려던 클릭이 팝업을 띄우는 오동작이 됐다) */
   .at-tag{color:var(--focus);font-weight:600}
   /* 양식 메모 아래 @태그 칩 — 여기서만 클릭 가능(관련 업무 팝업) */
-  #fm-tags{flex-wrap:wrap;gap:6px;margin-top:6px}
-  #fm-tags .at-tag{font-size:11px;background:var(--slate-bg);padding:2.5px 10px;border-radius:999px;cursor:pointer}
-  #fm-tags .at-tag:hover{text-decoration:underline}
+  /* 양식 메모 본문 @태그 하이라이트 (v2.11.0) — 백드롭 층 기법.
+     ⚠️ 메트릭 일치가 생명: 백드롭은 textarea 와 글꼴·크기·행간·패딩·줄바꿈 규칙이
+     한 값이라도 다르면 하이라이트가 글자와 어긋난다. 스크롤바 폭 차이는
+     textarea 쪽 scrollbar-gutter:stable + 백드롭 padding-right 보정으로 맞춘다. */
+  .fm-memo-stack{position:relative}
+  .fm-memo-stack .fm-memo{position:relative;z-index:1;background:transparent;scrollbar-gutter:stable}
+  #fm-memo-hl{position:absolute;inset:1px;border-radius:8px;background:var(--surface);
+    padding:10px calc(12px + 9px) 10px 12px;   /* textarea 패딩 + 스크롤바 거터 9px */
+    font-family:inherit;font-size:14px;line-height:1.55;
+    white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;
+    overflow:hidden;pointer-events:none;color:transparent}
+  /* 백드롭 태그: 배경 하이라이트만 — 글자는 textarea 것이 위에 그려진다.
+     font-weight·padding 을 바꾸면 글자 폭이 어긋나므로 절대 주지 말 것. */
+  #fm-memo-hl .at-tag{color:transparent;font-weight:inherit;background:var(--slate-bg);
+    border-radius:4px;box-shadow:0 0 0 1px var(--slate-bg);padding:0}
   /* 관련 업무 팝업은 양식(z 60) 위에서도 떠야 한다 — 칩 클릭 경로 */
   #relModal{z-index:70}
   /* 새로고침·엑셀 확인 팝업의 후보 행 — 전화번호부 목록 행과 같은 3열 */

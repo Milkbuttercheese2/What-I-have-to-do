@@ -150,7 +150,7 @@ test('양식 메모 @자동완성: @태그는 완성형으로 남고 관련인 �
   assert.equal(filled.length, 1);
 });
 
-test('양식 메모의 @태그 칩 클릭 → 관련 업무 팝업 (이름 OR 연락처), 카드 태그는 클릭 안 됨', async () => {
+test('양식 메모 본문 @태그: 하이라이트 + 태그 위 클릭 → 관련 업무 팝업, 카드 태그는 클릭 안 됨', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   S.items=[
@@ -159,12 +159,15 @@ test('양식 메모의 @태그 칩 클릭 → 관련 업무 팝업 (이름 OR �
     {id:3, memo:'메모에 @김철수 태그만', contacts:[], done:false},
     {id:4, memo:'무관한 업무', contacts:[{who:'박영수', org:'', phone:'010-9'}], done:false},
   ];
-  // 양식을 열면 메모 속 태그가 아래 칩으로 뜬다
+  // 양식을 열면 백드롭 층에 본문 태그 하이라이트가 깔린다 (v2.11.0 — 별도 칩 없음)
   openForm({memo:'통화 @김철수 건'});
-  const chip=$('fm-tags').querySelector('.at-tag');
-  assert.ok(chip);
-  assert.equal(chip.dataset.at, '김철수');
-  chip.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  const hl=env.document.getElementById('fm-memo-hl');
+  assert.equal(hl.querySelectorAll('.at-tag').length, 1);
+  // 본문에서 캐럿을 태그 위에 놓고 클릭 → 팝업
+  const memo=$('fm-memo');
+  const at=memo.value.indexOf('@')+1;
+  memo.setSelectionRange(at, at);
+  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
@@ -172,7 +175,11 @@ test('양식 메모의 @태그 칩 클릭 → 관련 업무 팝업 (이름 OR �
   // 행 클릭 → 팝업 닫힘 (양식 열기 자체는 render.js data-open 위임 몫)
   modal.querySelector('[data-open="1"]').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));
   assert.ok(!modal.classList.contains('on'));
-  // v2.9.0: 칩 밖(카드 위 등)의 .at-tag 는 클릭해도 팝업이 뜨지 않는다
+  // 태그 밖(일반 본문)을 클릭하면 그냥 편집 — 팝업 없음
+  memo.setSelectionRange(0, 0);
+  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  assert.ok(!modal.classList.contains('on'));
+  // 카드 위 .at-tag 는 클릭해도 팝업이 뜨지 않는다 (색 표시만)
   const cardTag=env.document.createElement('span');
   cardTag.className='at-tag'; cardTag.dataset.at='김철수';
   env.document.body.appendChild(cardTag);
@@ -203,17 +210,19 @@ test('양식 저장 시 관련인 → 전화번호부 자동 흡수 (3칸 완비
   assert.ok(env.invokeCalls.some(c=>c.cmd==='save_phonebook'));
 });
 
-test('번호꼴 @태그(@010-…) 칩 클릭도 연락처(숫자만 비교)로 검색된다 — 구버전 번호만 항목 호환', async () => {
+test('번호꼴 @태그(@010-…) 본문 클릭도 연락처(숫자만 비교)로 검색된다 — 구버전 번호만 항목 호환', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'', org:'', phone:'010-1234-5678'}]);   // 구버전 데이터 pass-through (신규 입력은 3칸 필수)
   S.items=[
     {id:1, memo:'표기 다른 번호', contacts:[{who:'', org:'', phone:'01012345678'}], done:false},
     {id:2, memo:'무관', contacts:[{who:'', org:'', phone:'02-000'}], done:false},
   ];
-  openForm({memo:'회신 @010-1234-5678'});                             // 칩으로 렌더 → 클릭
-  const chip=$('fm-tags').querySelector('.at-tag');
-  assert.equal(chip.dataset.at, '010-1234-5678');
-  chip.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  openForm({memo:'회신 @010-1234-5678'});
+  assert.equal(env.document.getElementById('fm-memo-hl').querySelectorAll('.at-tag').length, 1);
+  const memo=$('fm-memo');
+  const at=memo.value.indexOf('@')+3;
+  memo.setSelectionRange(at, at);
+  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   const modal=env.document.getElementById('relModal');
   assert.ok(modal.classList.contains('on'));
   const hits=[...modal.querySelectorAll('.rel-hit')].map(el=>Number(el.dataset.open));
@@ -221,16 +230,21 @@ test('번호꼴 @태그(@010-…) 칩 클릭도 연락처(숫자만 비교)로 �
   modal.classList.remove('on');
 });
 
-test('양식 태그 칩: 전화번호부 실존 관련인만 — 한 글자만 지워도 칩이 사라진다 (v2.11.0)', async () => {
+test('본문 하이라이트: 전화번호부 실존 관련인만 — 한 글자만 지워도 태그 해제 (v2.11.0)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'우성균', org:'행정과', phone:'010-1'}]);
   openForm({memo:'회신 @우성균 건'});
-  assert.equal($('fm-tags').querySelectorAll('.at-tag').length, 1);
+  const hl=env.document.getElementById('fm-memo-hl');
+  assert.equal(hl.querySelectorAll('.at-tag').length, 1);
   const memo=$('fm-memo');
   memo.value='회신 @우성 건';                                   // '균' 삭제
   memo.dispatchEvent(new env.window.Event('input', {bubbles:true}));
-  assert.equal($('fm-tags').querySelectorAll('.at-tag').length, 0);   // 칩 해제
-  assert.equal($('fm-tags').style.display, 'none');
+  assert.equal(hl.querySelectorAll('.at-tag').length, 0);       // 하이라이트 해제 — 평문
+  assert.ok(hl.textContent.includes('@우성'));                  // 본문 자체는 그대로 비친다
+  // 해제된 태그 위 클릭은 그냥 편집 — 팝업 없음
+  memo.setSelectionRange(memo.value.indexOf('@')+1, memo.value.indexOf('@')+1);
+  memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
+  assert.ok(!env.document.getElementById('relModal').classList.contains('on'));
 });
 
 test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 업무 수 배지 (v2.11.0)', async () => {
