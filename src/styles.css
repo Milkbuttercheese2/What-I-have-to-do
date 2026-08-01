@@ -42,7 +42,7 @@
     --dash-bg:#fcfcfb;              /* 점선 박스(새 프리셋) 안쪽 */
     --toast-bg:#1f2a33; --toast-fg:#ffffff; --toast-btn-border:#55606d; --toast-btn-hover:#2a333d;
     --overlay:rgba(20,27,36,.45);   /* 팝업 뒤 어둠막 */
-    --focus-ring:rgba(26,95,110,.14);
+    --focus-ring:rgba(42,124,110,.16);
     --scroll-thumb:rgba(31,42,51,.16); --scroll-thumb-hover:rgba(31,42,51,.30);
 
     /* 내부망 배포 대상: 외부 웹폰트 금지 — Pretendard는 아래 @font-face로 로컬 번들(v2.4.6).
@@ -89,7 +89,7 @@
     --dash-bg:#1a2130;
     --toast-bg:#1e2537; --toast-fg:#e8ecf4; --toast-btn-border:#3a465e; --toast-btn-hover:#2b3346;
     --overlay:rgba(6,9,16,.62);
-    --focus-ring:rgba(91,179,166,.22);
+    --focus-ring:rgba(86,189,171,.22);
     --scroll-thumb:rgba(255,255,255,.18); --scroll-thumb-hover:rgba(255,255,255,.32);
   }
 
@@ -175,7 +175,9 @@
   .hint b{color:var(--amber);font-weight:600}
 
   /* ---- 양식 패널 ---- */
-  .form-panel{display:none;position:fixed;inset:0;z-index:60;background:var(--overlay);padding:40px 20px;overflow-y:auto}
+  /* v2.11.0: 팝업(양식·모달·알람)은 타이틀바(34px) 아래부터 덮는다 — 전체를 덮으면
+     커스텀 타이틀바가 가려져 팝업이 열린 동안 창 이동·최소화·닫기가 안 됐다(소유자 피드백). */
+  .form-panel{display:none;position:fixed;inset:34px 0 0;z-index:60;background:var(--overlay);padding:40px 20px;overflow-y:auto}
   .form-panel.on{display:block}
   .form-panel .fm-inner{max-width:720px;margin:0 auto;background:var(--surface);border-radius:18px;padding:20px 22px;box-shadow:0 24px 70px rgba(20,27,36,.22)}
   .form-panel h3{font-size:13px;font-weight:700;color:var(--focus);margin-bottom:10px}
@@ -261,7 +263,10 @@
   .fsub-row input[type=datetime-local]{font-family:inherit;font-size:11px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink-soft)}
   .fsub-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .12s,background .12s}
   .fsub-add{font-size:11px;padding:4px 12px;background:var(--chip-bg);color:var(--ink-soft);margin-top:4px}
-  .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+  /* v2.11.0: 링크 버튼 줄과 저장 액션 줄이 붙어 답답하다는 소유자 피드백 —
+     액션 줄을 옅은 선으로 구분하고 위아래 숨 쉴 여백을 준다. */
+  .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;
+    margin-top:18px;padding-top:14px;border-top:1px solid var(--line-soft)}
   .fm-place{font-size:11px;color:var(--ink-soft);margin-right:auto}
   .fm-place b{color:var(--focus)}
   /* v2.5.22 임시저장 표시 — 저장 버튼 왼쪽의 조용한 상태 문구 */
@@ -359,8 +364,15 @@
   .pb-new input:focus{outline:none;border-color:var(--focus)}
   .pb-new .btn{flex:none}
   .pb-list{display:flex;flex-direction:column;gap:6px}
+  /* v2.11.0 행 hover 반응(소유자 지정) — 카드 hover 와 같은 시각 언어(소프트 리프트 + 청록 경계).
+     행 클릭 = 관련 업무 팝업이므로 커서도 포인터. */
   .pb-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
-    border-radius:9px;background:var(--card);font-size:13px}
+    border-radius:9px;background:var(--card);font-size:13px;cursor:pointer;
+    transition:box-shadow .14s ease,transform .14s ease,border-color .14s ease}
+  .pb-item:hover{border-color:var(--focus);box-shadow:0 2px 6px rgba(20,27,36,.06),0 10px 24px rgba(20,27,36,.09);transform:translateY(-1px)}
+  /* 엮인 업무 수 배지 — 정렬(1차 기준)의 근거를 행에서 바로 보여준다 */
+  .pb-cnt{flex:none;font-size:10.5px;font-weight:700;padding:2.5px 9px;border-radius:999px;
+    background:var(--slate-bg);color:var(--slate);letter-spacing:.02em}
   .pb-item .pb-org,.pbs-row .pb-org{flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
   .pb-item .pb-who,.pbs-row .pb-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
   .pb-item .pb-phone,.pbs-row .pb-phone{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -374,13 +386,28 @@
   .card.dragging{opacity:.45}
   .card.merge-over{border-color:var(--focus);background:var(--slate-bg)}
 
+  /* 파일·폴더 찾아보기 선택지 (v2.11.0) — 문 하나(＋버튼) 뒤에 갈림길 두 개 */
+  #fm-linkchoice{gap:6px;align-items:center}
+
   /* 카드 메모 속 @태그 — 색 표시만(클릭은 양식 메모 아래 칩에서, v2.9.0 소유자 피드백:
      카드 위 태그가 클릭을 받으면 카드를 열려던 클릭이 팝업을 띄우는 오동작이 됐다) */
   .at-tag{color:var(--focus);font-weight:600}
   /* 양식 메모 아래 @태그 칩 — 여기서만 클릭 가능(관련 업무 팝업) */
-  #fm-tags{flex-wrap:wrap;gap:6px;margin-top:6px}
-  #fm-tags .at-tag{font-size:11px;background:var(--slate-bg);padding:2.5px 10px;border-radius:999px;cursor:pointer}
-  #fm-tags .at-tag:hover{text-decoration:underline}
+  /* 양식 메모 본문 @태그 하이라이트 (v2.11.0) — 백드롭 층 기법.
+     ⚠️ 메트릭 일치가 생명: 백드롭은 textarea 와 글꼴·크기·행간·패딩·줄바꿈 규칙이
+     한 값이라도 다르면 하이라이트가 글자와 어긋난다. 스크롤바 폭 차이는
+     textarea 쪽 scrollbar-gutter:stable + 백드롭 padding-right 보정으로 맞춘다. */
+  .fm-memo-stack{position:relative}
+  .fm-memo-stack .fm-memo{position:relative;z-index:1;background:transparent;scrollbar-gutter:stable}
+  #fm-memo-hl{position:absolute;inset:1px;border-radius:8px;background:var(--surface);
+    padding:10px calc(12px + 9px) 10px 12px;   /* textarea 패딩 + 스크롤바 거터 9px */
+    font-family:inherit;font-size:14px;line-height:1.55;
+    white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;
+    overflow:hidden;pointer-events:none;color:transparent}
+  /* 백드롭 태그: 배경 하이라이트만 — 글자는 textarea 것이 위에 그려진다.
+     font-weight·padding 을 바꾸면 글자 폭이 어긋나므로 절대 주지 말 것. */
+  #fm-memo-hl .at-tag{color:transparent;font-weight:inherit;background:var(--slate-bg);
+    border-radius:4px;box-shadow:0 0 0 1px var(--slate-bg);padding:0}
   /* 관련 업무 팝업은 양식(z 60) 위에서도 떠야 한다 — 칩 클릭 경로 */
   #relModal{z-index:70}
   /* 새로고침·엑셀 확인 팝업의 후보 행 — 전화번호부 목록 행과 같은 3열 */
@@ -439,7 +466,7 @@
   .cal-detail .cards{gap:8px}
 
   /* ---- 모달 (필드/알람) ---- */
-  .modal-bg{display:none;position:fixed;inset:0;background:var(--overlay);z-index:50;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto}
+  .modal-bg{display:none;position:fixed;inset:34px 0 0;background:var(--overlay);z-index:50;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto}
   .modal-bg.on{display:flex}
   .modal{background:var(--card);border-radius:16px;width:100%;max-width:560px;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.28);
          max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain}
@@ -504,7 +531,7 @@
   .ps-new-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:8px 10px;margin-bottom:10px}
   .ps-subs-head{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.04em}
 
-  .alarm-bg{position:fixed;inset:0;z-index:120;background:var(--overlay);display:none;align-items:center;justify-content:center;padding:20px}
+  .alarm-bg{position:fixed;inset:34px 0 0;z-index:120;background:var(--overlay);display:none;align-items:center;justify-content:center;padding:20px}
   .alarm-bg.on{display:flex}
   /* v2.5.4: 알림창 왼쪽면을 메인 카드와 동일한 '짧은 색 세그먼트'로 통일(단계색=빨강 유지).
      기존 상단 빨간 바·항목 풀-높이 좌측선 → 카드처럼 좌측 상단 짧은 세그먼트(::before). */

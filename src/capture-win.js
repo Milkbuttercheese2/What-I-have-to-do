@@ -145,6 +145,12 @@ function applyPb(i){
   closePb(); inp.focus();
 }
 
+/* v2.11.0 검색 모드 동적 높이 — '입력칸·힌트·거대한 빈 목록'이 3단으로 쪼개져 보이던
+   근본 원인은 결과가 없어도 창을 406px 로 늘려 두던 것. 이제 결과가 없으면 컴팩트하게,
+   결과 수만큼만 늘리고 최대 406 에서 스크롤한다(@ 자동완성과 같은 원리). */
+const SEARCH_MIN_H=150, SEARCH_MAX_H=406, SEARCH_ROW_H=33;
+function searchHeight(rows){ return rows?Math.min(SEARCH_MIN_H+rows*SEARCH_ROW_H, SEARCH_MAX_H):SEARCH_MIN_H; }
+
 function setMode(m){
   closePb(true);                               // 모드 전환 시 자동완성 접기 (아래에서 높이를 새로 정한다)
   mode=m;
@@ -154,7 +160,7 @@ function setMode(m){
   $id('cap-search').style.display=search?'':'none';
   $id('cap-results').style.display=search?'flex':'none';
   $id('cap-hint').textContent=hintFor(m);
-  invoke('resize_capture',{height:search?406:126}).catch(()=>{});   // 메모 모드 = 낮은 바, 검색 모드 = 목록 높이
+  invoke('resize_capture',{height:search?searchHeight(hits().length):126}).catch(()=>{});   // 메모=낮은 바, 검색=결과에 맞춤
   const t=search?$id('cap-search'):$id('cap-inp');
   t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   if(search) runSearch($id('cap-search').value.trim());
@@ -169,12 +175,15 @@ async function runSearch(q){
      같은 업무가 새 목록에도 있으면 그 자리를 그대로 이어간다. */
   const keepId=selectedId();
   selIdx=-1;
-  if(!q){ iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>'; return; }
+  if(!q){ iw.innerHTML='<div class="cap-empty">검색어를 입력하세요</div>';
+    if(mode==='search') invoke('resize_capture',{height:searchHeight(0)}).catch(()=>{});   // v2.11.0 빈 결과 = 컴팩트
+    return; }
   const items=await invoke('quick_search',{query:q}).catch(()=>[]);
   if(seq!==searchSeq) return;               // 그 사이 새 검색어 입력됨
   iw.innerHTML=items.length?items.map(h=>
     `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(h.memo||'(메모 없음)')}</span></div>`
   ).join(''):'<div class="cap-empty">일치하는 업무 없음</div>';
+  if(mode==='search') invoke('resize_capture',{height:searchHeight(items.length)}).catch(()=>{});   // v2.11.0 결과에 맞춤
   if(!items.length) return;
   /* v2.6.7: 검색만 했을 때는 아무 줄도 고르지 않는다(하이라이트 없음).
      예전엔 첫 줄을 자동으로 골라둬, 손대지도 않은 줄이 계속 켜져 있는 것처럼 보였다.

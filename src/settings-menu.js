@@ -29,7 +29,7 @@ export function openSettings(){
   syncSettings();
   /* v2.10.0 저장 위치 상시 표기 — 열 때마다 갱신(위치 변경 예약 후에도 최신을 보여주도록) */
   const p=$('dataDirPath');
-  if(p){ p.textContent='저장 위치 확인 중…'; invoke('get_data_dir').then(d=>{ p.textContent='저장 위치: '+d; }).catch(()=>{ p.textContent=''; }); }
+  if(p){ p.textContent='저장 위치 확인 중…'; invoke('get_data_dir').then(d=>{ p.textContent=d?('저장 위치: '+d):''; }).catch(()=>{ p.textContent=''; }); }
   $('settingsModal').classList.add('on');
 }
 export function closeSettings(){ $('settingsModal').classList.remove('on'); }

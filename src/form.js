@@ -7,12 +7,13 @@ import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
-import {entryKey, extractTags, entriesForTag} from './phonebook-core.js';
-import {absorbIntoPhonebook} from './phonebook.js';
+import {entryKey, extractTags, entriesForTag, linkifyAt, tagAtCaret} from './phonebook-core.js';
+import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
-   업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부. */
-function contactsFromTags(text){
+   업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
+   (v2.11.0 export: main.js 의 미니 창 초안 회수 경로도 같은 규칙을 타야 한다) */
+export function contactsFromTags(text){
   const out=[], seen=new Set();
   for(const name of extractTags(text)){
     for(const e of entriesForTag(S.phonebook, name)){
@@ -152,20 +153,21 @@ export function openForm(pre){
 }
 
 /* 양식 칸 채우기 — openForm(신규/기존/임시저장 복원) 공용 */
-/* 메모 속 @태그를 칩으로 (v2.9.0) — 칩 클릭이 관련 업무 팝업(phonebook.js 위임).
-   textarea 안 글자는 클릭할 수 없으므로 태그는 메모 바로 아래 칩 줄로 보여준다. */
-function renderFmTags(){
-  const w=$('fm-tags'); if(!w) return;
-  const tags=extractTags($('fm-memo').value);
-  w.innerHTML=tags.map(n=>`<span class="at-tag" data-at="${escAttr(n)}" title="이 관련인과 엮인 업무 보기">@${esc(n)}</span>`).join('');
-  w.style.display=tags.length?'flex':'none';
+/* 메모 본문 @태그 하이라이트 (v2.11.0 소유자 지정 — 별도 칩이 아니라 본문 안에).
+   textarea 는 부분 스타일이 불가 → 같은 메트릭의 백드롭 층에 linkifyAt 결과를 깔아
+   태그 자리에만 배경 하이라이트가 비친다. 실존 관련인만(카드와 같은 규칙 — @우성균 에서
+   '균'만 지워도 즉시 해제). 마지막 개행 보정('\n')은 스크롤 높이 일치용. */
+function renderMemoHl(){
+  const hl=$('fm-memo-hl'); if(!hl) return;
+  hl.innerHTML=linkifyAt(esc($('fm-memo').value), S.phonebook)+'\n';
+  hl.scrollTop=$('fm-memo').scrollTop;
 }
 
 function fillForm(pre){
   pre=pre||{};
   $('fm-title').textContent=editingId?'양식 채우기 — 저장하면 규칙에 따라 자동 배치됩니다':'양식 입력';
   $('fm-memo').value = pre.memo || '';
-  renderFmTags();
+  renderMemoHl();
 
   // 상위 시각 필드 (접수·마감)
   const g=$('fm-grid'); g.innerHTML='';
@@ -375,19 +377,22 @@ export function initForm(){
   /* v2.5.18 파일 링크도 드래그 정렬 — collectForm 이 .ffile-path 를 DOM 순서대로 읽으므로
      onDrop 콜백 없이 순서가 그대로 저장된다(fm-subs 와 동일 패턴). */
   enableDragReorder($('fm-files'), '.ffile-row', '.drag-handle');
-  $('fm-fileadd').addEventListener('click', async ()=>{
+  /* 파일·폴더 링크 (v2.11.0 통합) — 버튼 하나를 누르면 파일/폴더 선택지가 펼쳐진다.
+     네이티브 선택창이 파일용·폴더용으로 분리돼 있어 대화상자 자체는 못 합치므로,
+     들어가는 문 하나 + 갈림길 두 개로 만든다. 행 구조·열기는 종류와 무관하게 동일
+     (open_file_path — opener 가 폴더면 탐색기로 연다). */
+  const linkChoice=on=>{ $('fm-linkadd').style.display=on?'none':''; $('fm-linkchoice').style.display=on?'inline-flex':'none'; };
+  $('fm-linkadd').addEventListener('click',()=>linkChoice(true));
+  $('fm-pickcancel').addEventListener('click',()=>linkChoice(false));
+  const pickLink=async cmd=>{
+    linkChoice(false);
     let p=null;
-    try{ p=await invoke('pick_file_path'); }
-    catch(e){ alert('파일 선택 실패: '+e); return; }
+    try{ p=await invoke(cmd); }
+    catch(e){ alert('선택 실패: '+e); return; }
     if(p) addFormFileRow(p);
-  });
-  /* 폴더 링크 (v2.10.0) — 행 구조·열기(open_file_path: 폴더면 탐색기)는 파일과 동일 */
-  $('fm-folderadd').addEventListener('click', async ()=>{
-    let p=null;
-    try{ p=await invoke('pick_folder_path'); }
-    catch(e){ alert('폴더 선택 실패: '+e); return; }
-    if(p) addFormFileRow(p);
-  });
+  };
+  $('fm-pickfile').addEventListener('click',()=>pickLink('pick_file_path'));
+  $('fm-pickfolder').addEventListener('click',()=>pickLink('pick_folder_path'));
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
   /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
      새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */
@@ -398,8 +403,18 @@ export function initForm(){
     dropDraft(draftKey);
     openForm(cur || {});                                   // 저장본(또는 빈 양식)으로 다시 그림
   });
+  /* 본문 @태그 클릭 → 관련 업무 팝업 (v2.11.0). 클릭으로 캐럿이 태그 위에 놓이면 연다 —
+     실존 관련인 태그만이므로 한 글자라도 어긋난 태그는 그냥 편집 클릭이다. */
+  $('fm-memo').addEventListener('click',()=>{
+    const m=$('fm-memo');
+    if(m.selectionStart!==m.selectionEnd) return;               // 드래그 선택은 편집 행위
+    const name=tagAtCaret(m.value, m.selectionStart, S.phonebook);
+    if(name) openRelated(name);
+  });
+  /* 백드롭 하이라이트 스크롤 동기 — 안 맞으면 하이라이트가 글자와 어긋난다 */
+  $('fm-memo').addEventListener('scroll',()=>{ const hl=$('fm-memo-hl'); if(hl) hl.scrollTop=$('fm-memo').scrollTop; });
   /* 임시저장 트리거 — 입력·선택·행 추가/삭제 모두 (change 는 select·날짜 위젯용) */
-  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); if(e.target.id==='fm-memo') renderFmTags(); scheduleDraft(); });
+  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); if(e.target.id==='fm-memo') renderMemoHl(); scheduleDraft(); });
   $('formPanel').addEventListener('change',scheduleDraft);
   $('formPanel').addEventListener('click',e=>{ if(e.target.closest('.rm,.fsub-chk,.fsub-add')) scheduleDraft(); });
   $('fm-save').addEventListener('click',()=>{
