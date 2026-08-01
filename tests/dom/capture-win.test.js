@@ -368,3 +368,41 @@ test('빠른 메모 태그: 하이라이트 렌더 + hover 클릭 → 검색 화
   assert.equal(env.document.getElementById('cap-search').value, '김철수');
   assert.ok(env.invokeCalls.some(c=>c.cmd==='quick_search'&&c.args.query==='김철수'));
 });
+
+/* v3.0.4: 검색 화면에 빈 띠가 하나 더 생기던 버그 — @ 자동완성 목록(#cap-pb)의
+   표시 여부를 JS 인라인 style 로 다루던 탓에, 그 인라인이 'block' 인 채 남으면
+   검색 화면이 [입력칸 | 빈 띠 | 결과] 3단으로 쪼개졌다. 이제 body.pb 클래스 하나가
+   유일한 스위치이고(capture.html 에서 검색·플래시 중엔 규칙상 자리조차 못 갖는다),
+   closePb 는 pbOpen 과 무관하게 항상 화면을 정리한다. */
+test('@ 자동완성 목록은 검색 화면으로 넘어가면 반드시 접힌다 (v3.0.4 빈 띠 버그)', async () => {
+  reset();
+  env.onInvoke('phonebook_search', ()=>[{id:1, who:'김철수', org:'행정과', phone:'010-1'}]);
+  env.onInvoke('quick_search', ()=>[]);
+  const pb = env.document.getElementById('cap-pb');
+  if(body.classList.contains('search')) alt();          // 빠른 메모 화면으로
+  inp.value='통화 @김철';
+  inp.selectionStart = inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150);                                 // 디바운스
+  await env.flush();
+  assert.ok(body.classList.contains('pb'));              // 목록이 펴졌다
+  assert.equal(pb.style.display, '');                    // 인라인 style 로는 아무것도 안 한다
+  alt();                                                 // 검색 화면으로
+  assert.ok(body.classList.contains('search'));
+  assert.equal(body.classList.contains('pb'), false);    // 클래스가 사라져 자리도 없어진다
+  assert.equal(pb.innerHTML, '');
+});
+
+test('닫힌 뒤 뒤늦게 도착한 자동완성 응답은 목록을 되살리지 않는다 (v3.0.4)', async () => {
+  reset();
+  env.onInvoke('phonebook_search', ()=>[{id:1, who:'김철수', org:'행정과', phone:'010-1'}]);
+  if(body.classList.contains('search')) alt();
+  inp.value='통화 @김철';
+  inp.selectionStart = inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  alt();                                                 // 응답 전에 검색 화면으로 이동
+  mock.timers.tick(150);
+  await env.flush();
+  assert.ok(body.classList.contains('search'));
+  assert.equal(body.classList.contains('pb'), false);
+});

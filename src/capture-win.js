@@ -135,10 +135,15 @@ function sendDraft(text){
 const PB_BASE_H=126;                        // 메모 모드 기본 창 높이 (setMode 와 동일 값)
 function closePb(skipResize){
   clearTimeout(pbTimer); pbSeq++;
-  if(!pbOpen) return;
+  /* v3.0.4: 화면 정리는 pbOpen 과 무관하게 **항상** 한다. 예전엔 여기서 먼저
+     빠져나가는 바람에(pbOpen=false) 화면에 펴진 목록이 그대로 남을 수 있었다 —
+     검색 화면에 빈 띠가 하나 더 생기던 버그. 표시 자체는 CSS 가 갈라 주지만
+     (body.pb) 내용·상태는 여기서 확실히 비운다. */
+  const wasOpen=pbOpen;
   pbOpen=false; pbItems=[]; pbToken=null;
   document.body.classList.remove('pb');
-  const w=$id('cap-pb'); if(w){ w.style.display='none'; w.innerHTML=''; }
+  const w=$id('cap-pb'); if(w) w.innerHTML='';
+  if(!wasOpen) return;
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
   if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
 }
@@ -157,9 +162,10 @@ async function runPb(){
   if(seq!==pbSeq || mode!=='memo') return;    // 그 사이 입력이 바뀌었거나 모드 이탈
   if(!found.length){ closePb(); return; }
   pbItems=found; pbSel=0; pbToken={start:t.start, caret:inp.selectionStart};
-  const w=$id('cap-pb'); if(w) w.style.display='block';
   /* v2.9.0: 목록이 펴질 땐 입력칸의 flex:1 을 끈다(body.pb) — 안 끄면 늘어난 창
-     높이를 입력칸이 흡수해 입력·힌트·목록이 벌어진 3분할로 찢어져 보인다. */
+     높이를 입력칸이 흡수해 입력·힌트·목록이 벌어진 3분할로 찢어져 보인다.
+     v3.0.4: 펴고 접는 유일한 스위치가 이 클래스다(인라인 style.display 금지 —
+     capture.html 주석 참조). */
   document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }

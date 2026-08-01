@@ -97,17 +97,21 @@
  body.search #cap-hint{border-top:1px solid var(--cap-sep)}   /* 구분선은 목록이 있는 검색 모드만 — 메모 모드에선 띠를 만든다(v3.0.3) */
  /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부 목록. 검색 결과(.cap-hit)와 같은 시각 언어.
     v2.9.0 body.pb: 목록이 펴진 동안 입력칸 flex:1 을 꺼서 늘어난 창 높이를 목록이 갖는다
-    (안 끄면 입력·힌트·목록이 벌어진 3분할로 찢어져 보이던 버그). */
+    (안 끄면 입력·힌트·목록이 벌어진 3분할로 찢어져 보이던 버그).
+    v3.0.4: 표시 여부의 주인은 **CSS 한 곳**이다(예전엔 JS 가 인라인 style.display 로
+    폈다 접었다 했고, 그 인라인이 한 번이라도 'block' 인 채 남으면 검색 화면에
+    빈 띠가 하나 더 생겼다 — 실사용 버그). 빠른 메모 화면일 때만 펴진다:
+    검색(body.search)·등록 플래시(body.flash)에서는 규칙상 아예 자리를 못 갖는다. */
  body.pb #cap-bar{flex:none}
- #cap-pb{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ #cap-pb{display:none;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
    border-top:1px solid var(--cap-sep);padding:6px 8px}
+ body.pb:not(.search):not(.flash) #cap-pb{display:block}
  .cap-pb-it{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.45;color:var(--cap-ink);
    padding:7px 11px;margin:1px 0;border-radius:8px;cursor:pointer}
  .cap-pb-it.sel,body.mouse .cap-pb-it:hover{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
  .cap-pb-who{flex:none;font-weight:600;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .cap-pb-org{flex:1;min-width:0;color:var(--cap-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .cap-pb-phone{flex:none;color:var(--cap-muted);font-variant-numeric:tabular-nums}
- body.flash #cap-pb{display:none}
  #cap-flash{display:none;align-items:center;justify-content:center;flex:1;gap:7px;
    color:var(--cap-flash);font-weight:600;font-size:15px}
  body.flash #cap-bar,body.flash #cap-results,body.flash #cap-hint{display:none}
@@ -133,8 +137,9 @@
     </div>
     <input id="cap-search" autocomplete="off">
   </div>
-  <!-- v2.7.0 빠른 메모 @ 자동완성 (전화번호부) — @토큰을 칠 때만 capture-win.js 가 편다 -->
-  <div id="cap-pb" style="display:none"></div>
+  <!-- v2.7.0 빠른 메모 @ 자동완성 (전화번호부) — @토큰을 칠 때만 capture-win.js 가 편다.
+       v3.0.4: 인라인 style 금지 — 표시는 body.pb 클래스로만 갈린다(위 CSS 주석) -->
+  <div id="cap-pb"></div>
   <div id="cap-results" style="display:flex">
     <div class="cap-col"><div class="cap-col-h">내 업무</div><div class="cap-list" id="cap-items"></div></div>
   </div>
