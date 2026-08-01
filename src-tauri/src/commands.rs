@@ -118,6 +118,18 @@ pub fn phonebook_search(state: State<AppDb>, query: String) -> Result<Vec<Phoneb
     db::phonebook::search_phonebook(&conn, q, 8).map_err(to_err)
 }
 
+/// 미니 창 본문 @태그 하이라이트용 전체 목록 (v3.1.0) — 읽기 전용.
+/// 캡처 웹뷰는 메인 모듈의 S.phonebook 에 접근할 수 없어(quick_search 와 같은
+/// 사유) 실존 관련인 판정에 쓸 목록을 이 커맨드로 받는다.
+#[tauri::command]
+pub fn phonebook_list(state: State<AppDb>) -> Result<Vec<PhonebookEntry>, String> {
+    if !state.integrity_ok.load(Ordering::Relaxed) {
+        return Ok(vec![]);
+    }
+    let conn = state.conn.lock().map_err(to_err)?;
+    db::phonebook::load_phonebook(&conn).map_err(to_err)
+}
+
 #[tauri::command]
 pub fn save_settings(state: State<AppDb>, settings: Settings) -> Result<(), String> {
     ensure_integrity(&state)?;

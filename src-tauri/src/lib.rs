@@ -371,6 +371,7 @@ pub fn run() {
             commands::save_settings,
             commands::save_phonebook,
             commands::phonebook_search,
+            commands::phonebook_list,
             commands::backup_export,
             commands::backup_import,
             commands::get_data_dir,
