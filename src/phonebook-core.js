@@ -103,23 +103,26 @@ export function linkifyAt(escaped, book){
   });
 }
 
-/* @태그 클릭 → 관련 업무 검색 (v3.0.2 strict — 소유자 지정: 매칭이 헐거워
-   엉뚱한 사람이 걸리던 문제). 관련인은 **소속·이름·연락처(숫자 비교) 3칸이 그
-   전화번호부 항목과 모두 동일**할 때만, 메모는 **정확히 그 @태그**가 있을 때만
-   엮인 것으로 본다. 부분일치·이름만·번호만 매칭은 폐지. 미완료 먼저, 최신순. */
-export function relatedItems(items, {name, entries}={}){
-  name=String(name||'').trim();
+/* 전화번호부 항목과 엮인 업무 (v3.1.1 소유자 지정 — 기준은 **하나뿐**이다).
+   업무의 관련인 중 **관련소속·관련인·연락처 세 칸이 그 전화번호부 항목과 모두 같은**
+   사람이 있을 때만 엮인 것으로 본다(연락처는 숫자만 비교 — 하이픈·공백 무관).
+   - v3.0.2 까지 있던 '메모의 @태그가 같으면 엮음' 경로는 폐지했다: 이름만 같은
+     동명이인이 걸리고, 화면 설명("관련인·메모에 …이 있거나")도 실제 규칙과 어긋났다.
+     @태그로 등록한 업무는 등록 시 관련인 3칸이 자동 첨부되므로(form.js contactsFromTags)
+     이 기준만으로도 그대로 걸린다.
+   - `name` 은 이제 매칭에 쓰지 않는다(팝업 제목 표시용으로만 넘어온다).
+   정렬은 미완료 먼저, 최신순. */
+export function relatedItems(items, {entries}={}){
   const es=(entries||[]).map(normEntry);
   const tripleEq=c=>es.some(e=>
     String(c.who||'').trim()===e.who &&
     String(c.org||'').trim()===e.org &&
     phoneDigits(c.phone)===phoneDigits(e.phone));
+  if(!es.length) return [];
   const out=[];
   for(const it of (items||[])){
     if(it.recur) continue;                       // 주기 부모는 보드 밖 — 목록에서 제외
-    const byTag = !!name && extractTags(it.memo||'').includes(name);
-    const byContact = !!es.length && (it.contacts||[]).some(tripleEq);
-    if(byTag||byContact) out.push(it);
+    if((it.contacts||[]).some(tripleEq)) out.push(it);
   }
   return out.sort((a,b)=>(a.done?1:0)-(b.done?1:0) || b.id-a.id);
 }

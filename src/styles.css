@@ -363,25 +363,39 @@
   #view-phone{display:none;max-width:1000px;margin:0 auto;padding:22px 28px 40px}
   #view-phone.on{display:block}
   #view-phone .done-tools{flex-wrap:wrap}
-  /* 직접 입력 줄 — 양식 관련인 행과 같은 3칸 배치 (§5 정렬 규칙) */
-  .pb-new{display:flex;gap:8px;margin-bottom:14px}
-  .pb-new input{flex:1;min-width:0;font-family:inherit;font-size:13px;padding:7px 11px;
+  /* 입력줄과 목록 행은 **같은 격자**를 쓴다(v3.1.1 소유자 지정) — 관련소속·관련인·연락처의
+     시작선이 위아래로 정확히 맞아야 한다. 어긋나지 않게 하는 세 가지:
+       ① 열 정의(3등분 + 꼬리 칸)가 두 줄에서 동일, ② 두 줄의 격자 폭이 같도록 입력줄에도
+       1px 투명 테두리, ③ 목록 셀의 글자 들여쓰기(12px) = 입력칸의 테두리1 + 패딩11.
+     꼬리 칸에는 [추가]/[업무 N·수정·삭제]가 들어간다. */
+  #view-phone{--pb-tail:9.5rem}
+  .pb-new{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) var(--pb-tail);gap:8px;
+    align-items:center;border:1px solid transparent;margin-bottom:14px}
+  .pb-new input{min-width:0;font-family:inherit;font-size:13px;padding:7px 11px;
     border:1px solid var(--line);border-radius:9px;background:var(--surface)}
   .pb-new input:focus{outline:none;border-color:var(--focus)}
-  .pb-new .btn{flex:none}
+  .pb-acts{display:flex;gap:8px;justify-content:flex-end;min-width:0}
+  .pb-acts .btn{flex:none}
   .pb-list{display:flex;flex-direction:column;gap:6px}
   /* v2.11.0 행 hover 반응(소유자 지정) — 카드 hover 와 같은 시각 언어(소프트 리프트 + 청록 경계).
      행 클릭 = 관련 업무 팝업이므로 커서도 포인터. */
-  .pb-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);
+  .pb-item{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) var(--pb-tail);gap:8px;
+    align-items:center;padding:8px 0;border:1px solid var(--line);
     border-radius:9px;background:var(--card);font-size:13px;cursor:pointer;
     transition:box-shadow .14s ease,transform .14s ease,border-color .14s ease}
   .pb-item:hover{border-color:var(--focus);box-shadow:0 2px 6px rgba(20,27,36,.06),0 10px 24px rgba(20,27,36,.09);transform:translateY(-1px)}
   /* 엮인 업무 수 배지 — 정렬(1차 기준)의 근거를 행에서 바로 보여준다 */
   .pb-cnt{flex:none;font-size:10.5px;font-weight:700;padding:2.5px 9px;border-radius:999px;
     background:var(--slate-bg);color:var(--slate);letter-spacing:.02em}
-  .pb-item .pb-org,.pbs-row .pb-org{flex:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
-  .pb-item .pb-who,.pbs-row .pb-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
-  .pb-item .pb-phone,.pbs-row .pb-phone{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pb-item .pb-org,.pbs-row .pb-org{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
+  .pb-item .pb-who,.pbs-row .pb-who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .pb-item .pb-phone,.pbs-row .pb-phone{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 확인 팝업의 후보 행은 격자가 아니라 한 줄(flex) — 폭이 좁아 3등분이 어색하다 */
+  .pbs-row .pb-org{flex:1.2}
+  .pbs-row .pb-who,.pbs-row .pb-phone{flex:1}
+  /* 목록 셀 들여쓰기 = 입력칸의 테두리1 + 패딩11 (위 격자 주석 ③) */
+  .pb-item .pb-org,.pb-item .pb-who,.pb-item .pb-phone{padding-left:12px}
+  .pb-tail{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0;padding-right:12px}
   /* 행 액션 — 프리셋 목록의 텍스트형 버튼 규칙 재사용 */
   .pb-item .ps-edit,.pb-item .ps-del{font-family:inherit;font-size:11px;font-weight:600;background:none;border:none;
     border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--ink-soft);flex:none;transition:background .12s,color .12s}
@@ -680,11 +694,9 @@
     .done-tools{margin-left:0;width:100%}
     .done-tools .s-search{width:100%;min-width:0}
     /* 전화번호부(v3.1.0 소유자 지정): 좁은 폭에서도 **관련소속·관련인은 한 줄**로 둔다
-       (한 사람을 적는 짝이라 갈라놓으면 눈이 두 번 움직인다). 연락처·버튼은 다음 줄로
-       흘러내린다 — 세로 3단 스택은 폐지. */
-    .pb-new{flex-wrap:wrap}
-    .pb-new input{flex:1 1 calc(50% - 4px)}     /* 소속·이름이 각각 반 칸 → 한 줄 */
-    .pb-new .btn{flex:1 1 auto}
+       (한 사람을 적는 짝이라 갈라놓으면 눈이 두 번 움직인다). 연락처·버튼은 다음 줄로.
+       v3.1.1: 입력줄·목록 행이 같은 2열 격자라 좁은 폭에서도 시작선이 서로 맞는다. */
+    .pb-new,.pb-item{grid-template-columns:repeat(2,minmax(0,1fr))}
     /* 헤더 컴팩트: 시계는 오른쪽 끝, 부제 숨김, 브랜드 줄바꿈 허용 */
     .head-right{margin-left:auto}
     .brand{flex-wrap:wrap;min-width:0}
