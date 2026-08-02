@@ -445,3 +445,43 @@ test('@ 목록: 뒤늦게 도착한 응답이 ↓ 로 고른 줄을 첫 줄로 �
   mock.timers.tick(150); await env.flush();
   assert.ok(selText().startsWith('김철호'), '후보가 바뀌면 첫 줄로 돌아간다');
 });
+
+/* v3.4.3: "직전 검색을 아래끝으로 내려놨으면 첫 행이 통째로 안 보인다"(사용자 신고).
+   innerHTML 을 갈아끼워도 브라우저는 스크롤 위치를 유지하기 때문에, 아래로 내려둔
+   목록에 새 후보를 그리면 그 스크롤이 그대로 남아 첫 행부터 가려졌다. 새 후보
+   목록은 무조건 맨 위에서 시작한다 — 직전에 얼마나 내려갔든 무관하게. */
+test('@ 목록: 직전에 아래끝까지 내려놨어도 새 후보는 첫 행부터 보인다 (v3.4.3)', async () => {
+  reset();
+  const book = Array.from({length: 14}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-0-'+i}));
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();
+  const pb = env.document.getElementById('cap-pb');
+
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.equal(pb.querySelectorAll('.cap-pb-it').length, 14);
+
+  pb.scrollTop = 400;                                   // 사용자가 목록을 아래끝까지 내렸다
+  inp.value='통화 @사람1'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.equal(pb.scrollTop, 0, '새 후보 목록은 맨 위에서 시작해야 한다');
+});
+
+/* 위 규칙의 예외는 ↑↓ 조작 하나뿐 — 10행 아래로 내려간 선택을 따라가야 하므로
+   그때는 스크롤을 건드리지 않는다(스크롤을 0 으로 되돌리면 고른 줄이 사라진다). */
+test('@ 목록: ↑↓ 로 고르는 중에는 스크롤을 되돌리지 않는다 (v3.4.3)', async () => {
+  reset();
+  const book = Array.from({length: 14}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-0-'+i}));
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();
+  const pb = env.document.getElementById('cap-pb');
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+
+  pb.scrollTop = 120;
+  key({key:'ArrowDown'});
+  assert.equal(pb.scrollTop, 120, '방향키는 스크롤을 유지한다');
+});

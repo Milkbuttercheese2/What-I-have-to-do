@@ -115,7 +115,10 @@
     빈 띠가 하나 더 생겼다 — 실사용 버그). 빠른 메모 화면일 때만 펴진다:
     검색(body.search)·등록 플래시(body.flash)에서는 규칙상 아예 자리를 못 갖는다. */
  body.pb #cap-bar{flex:none}
- #cap-pb{display:none;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ /* box-sizing:border-box — capture-win.js 의 pbNeedH() 가 재는 값이 '패딩·테두리까지
+    포함한 바깥 높이'다. content-box 로 두면 그 값을 max-height 로 걸었을 때 패딩만큼
+    더 커져 11번째 행이 빼꼼 보이고, 그 몇 px 때문에 목록에 스크롤이 생긴다(v3.4.3). */
+ #cap-pb{display:none;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;
    border-top:1px solid var(--cap-sep);padding:6px 8px}
  body.pb:not(.search):not(.flash) #cap-pb{display:block}
  .cap-pb-it{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.45;color:var(--cap-ink);
