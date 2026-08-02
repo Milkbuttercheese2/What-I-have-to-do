@@ -193,6 +193,18 @@ const PB_FIT_TRIES=4;
    (행 배치 전 실측 0, 리사이즈 지연 등)에서는 목록이 서너 줄로 갇힌 창이 그대로
    굳었다 — 사용자가 본 증상이 이것이다. 이제 목표(min(N,10)행)에 모자란 픽셀을
    재서 그만큼 키우기를 반복하므로, 배율·폰트·플랫폼과 무관하게 수렴한다. */
+/* 첫 행을 **원인과 무관하게** 되돌려 놓는다 (v3.4.4).
+   목록을 밀 수 있는 손은 여럿이다 — scrollIntoView, 스크롤 앵커링, 포커스 스크롤.
+   그 중 하나라도 '창이 아직 작던 순간'(목록은 창이 126px 일 때 그려지고, 그때
+   #cap-pb 는 40px 남짓이다)에 끼어들면 그 scrollTop 이 그대로 남는다. 후보가 10행
+   이하일 땐 창이 커지며 브라우저가 0 으로 되돌려 주지만(내용이 다 들어가므로),
+   10행을 넘으면 목록이 계속 스크롤 가능이라 **되돌려 주지 않는다** — 첫 행이 반쯤
+   잘린 채 굳는 경로가 이것이다. 고른 줄이 첫 10행 안이면 맨 위가 곧 제자리이므로
+   되돌려도 잃는 게 없다. */
+function pbPinTop(){
+  const pb=$id('cap-pb');
+  if(pb && pbSel<PB_MAX_ROWS && pb.scrollTop!==0) pb.scrollTop=0;
+}
 async function fitPbWindow(){
   const seq=pbSeq;
   invoke('resize_capture',{height:pbWinHeight()}).catch(()=>{});
@@ -200,6 +212,7 @@ async function fitPbWindow(){
     await new Promise(r=>setTimeout(r,80));          // 네이티브 창 리사이즈 반영 대기
     if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
     const pb=$id('cap-pb'); if(!pb) return;
+    pbPinTop();                                      // 창이 바뀔 때마다 첫 행을 제자리로
     const short=pbNeedH()-pb.getBoundingClientRect().height;   // 목표 행수에 모자란 px
     if(short<=1) return;                             // 다 보인다 — 끝
     invoke('resize_capture',{height:Math.ceil(window.innerHeight+short+2)}).catch(()=>{});
@@ -214,14 +227,16 @@ function renderPb(keepScroll){
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
     <span class="cap-pb-who">${esc(e.who||'—')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
   </div>`).join('');
-  if(!keepScroll) w.scrollTop=0;
+  if(!keepScroll) w.scrollTop=0;                       // 새 후보 목록은 언제나 맨 위부터
   /* 10행 상한은 **목록 자체**에 건다(실측). 창 여유(PB_SLACK)와 무관하게 정확히
      10행에서 멈추고 그 아래는 스크롤 — 창 크기로 행수를 통제하려던 방식은
      여유 픽셀이 생길 때마다 11·12행이 삐져나왔다. */
   w.style.maxHeight = w.querySelectorAll('.cap-pb-it').length>PB_MAX_ROWS ? pbNeedH()+'px' : '';
-  /* 선택 추적은 10행 넘어 스크롤할 때만 필요하다. 첫 줄이면 위(맨 위)가 곧 제자리라
-     아무것도 하지 않는다 — scrollIntoView 가 첫 행을 살짝 밀어 올리던 일도 없앤다. */
-  const sel=pbSel>0 ? w.querySelector('.cap-pb-it.sel') : null;
+  /* 선택 추적(scrollIntoView)은 ↑↓ 로 조작할 때만 한다 (v3.4.4).
+     새 후보 목록에서까지 부르면, 그 시점의 목록은 아직 창이 작아 40px 남짓이라
+     scrollIntoView 가 목록을 밀어 버리고 첫 행이 잘린다. 새 목록의 선택은
+     runPb 가 첫 10행 안으로만 잇기 때문에 맨 위에서도 항상 보인다. */
+  const sel=keepScroll && pbSel>0 ? w.querySelector('.cap-pb-it.sel') : null;
   if(sel&&sel.scrollIntoView) sel.scrollIntoView({block:'nearest'});
 }
 async function runPb(){
@@ -238,10 +253,13 @@ async function runPb(){
      빨리 ↓ 를 누른다. 그래서 "↓ 로 2번째 줄에 갔다가 곧바로 1번째 줄로 되돌아가는"
      현상이 생겼다(검색 결과 목록이 v2.6.5 에서 keepId 로 고친 것과 같은 버그가
      이쪽 자동완성 목록에는 남아 있었다). 고른 사람이 새 목록에도 있으면 그
-     자리를 잇고, 없으면(검색어가 좁혀져 사라짐) 그때만 첫 줄로 돌아간다. */
+     자리를 잇고, 없으면(검색어가 좁혀져 사라짐) 그때만 첫 줄로 돌아간다.
+     v3.4.4: 단, 이어가는 자리가 **보이는 10행 밖**이면 잇지 않는다 — 그러면 목록을
+     스크롤해야 보이고, 그 스크롤이 곧 '첫 행이 잘려 보이는' 화면이다. 손으로 ↓ 를
+     눌러 내려간 게 아니라 검색어가 좁아지며 순번이 밀린 경우이므로 첫 줄이 맞다. */
   const keep=pbOpen ? pbItems[pbSel] : null;
   const back=keep ? found.findIndex(e=>entryKey(e)===entryKey(keep)) : -1;
-  pbItems=found; pbSel=back>=0?back:0; pbToken={start:t.start, caret:inp.selectionStart};
+  pbItems=found; pbSel=(back>=0&&back<PB_MAX_ROWS)?back:0; pbToken={start:t.start, caret:inp.selectionStart};
   /* v2.9.0: 목록이 펴질 땐 입력칸의 flex:1 을 끈다(body.pb) — 안 끄면 늘어난 창
      높이를 입력칸이 흡수해 입력·힌트·목록이 벌어진 3분할로 찢어져 보인다.
      v3.0.4: 펴고 접는 유일한 스위치가 이 클래스다(인라인 style.display 금지 —
