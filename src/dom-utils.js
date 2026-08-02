@@ -109,15 +109,21 @@ function openDialog(msg, withCancel, title){
   setTimeout(()=>{ const b=el.querySelector('#dlg-ok'); if(b&&b.focus) b.focus(); },0);
   return new Promise(res=>{ dlgResolve=res; });
 }
-/* jsdom 테스트 하니스는 window.confirm/alert 를 제어용으로 스텁한다 —
-   그 환경에서는 스텁을 그대로 태워 기존 테스트 계약(answerConfirm/alerts)을 지킨다. */
-const isStubbed=fn=>{ try{ return typeof window[fn]==='function' && !/\[native code\]/.test(Function.prototype.toString.call(window[fn])); }catch{ return false; } };
+/* jsdom 테스트 하니스는 window.confirm/alert 를 제어용으로 스텁하고, 그 환경에서는
+   스텁을 그대로 태워 기존 테스트 계약(answerConfirm/alerts)을 지킨다.
+   ⚠️ v3.5.1: 그 판별을 **테스트 하니스가 세우는 깃발 하나로** 한다(tests/helpers/env.js).
+   예전에는 `Function.prototype.toString` 에 `[native code]` 가 없으면 스텁으로 봤는데,
+   **Tauri 가 WebView2 에서 window.alert/confirm 을 자기 JS 래퍼로 갈아끼운다** —
+   그래서 실제 앱에서만 '스텁'으로 오판해 앱 표준 모달 대신 네이티브 경고창이 떴다
+   (브라우저·jsdom 에서는 재현되지 않아 오래 남아 있었다).
+   환경을 냄새로 맞히지 말 것 — 알아야 하는 쪽이 말하게 한다. */
+const testDialogs=()=>{ try{ return window.__WMHH_TEST_DIALOGS__===true; }catch{ return false; } };
 export function appAlert(msg, title){
-  if(isStubbed('alert')){ window.alert(msg); return Promise.resolve(); }
+  if(testDialogs()){ window.alert(msg); return Promise.resolve(); }
   return openDialog(msg, false, title).then(()=>{});
 }
 export function appConfirm(msg, title){
-  if(isStubbed('confirm')) return Promise.resolve(!!window.confirm(msg));
+  if(testDialogs()) return Promise.resolve(!!window.confirm(msg));
   return openDialog(msg, true, title);
 }
 

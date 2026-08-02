@@ -57,7 +57,7 @@ export function renderPhonebook(){
     <span class="pb-org">${esc(e.org||'—')}</span>
     <span class="pb-who">${esc(e.who||'—')}</span>
     <span class="pb-phone num">${esc(e.phone||'—')}</span>
-    <span class="pb-email">${esc(e.email||'—')}</span>
+    <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
     <span class="pb-tail">
       <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
       <button class="ps-edit" data-pbedit="${e.id}">수정</button>
@@ -201,8 +201,23 @@ async function saveXlsxTemplate(){
    양식을 저장할 때(form.js) 그 관련인들을 전화번호부에 자동 반영한다.
    규칙·꼬임 방지는 phonebook-core.absorbContacts — 여기서는 적용·저장만.
    [아이템에서 가져오기] 버튼은 기존 데이터 일괄 흡수용으로 그대로 남는다. */
+/* 이미 알린 이메일 충돌(항목 id + 무시된 주소) — 같은 업무를 여러 번 저장할 때마다
+   같은 토스트가 반복되지 않게. 세션 안에서만 기억한다(다시 켜면 한 번 더 알린다). */
+const emailNoticed=new Set();
+
 export function absorbIntoPhonebook(contacts){
-  const {added, updates}=absorbContacts(S.phonebook, contacts);
+  const {added, updates, kept}=absorbContacts(S.phonebook, contacts);
+  /* v3.5.1(소유자 지정): 이미 다른 주소가 있어 반영하지 않은 이메일은 **조용히 넘기지 않는다.**
+     전화번호부는 한 사람당 대표 주소 하나뿐이라 두 번째 주소는 갈 곳이 없는데, 아무 말이
+     없으면 사용자는 자기가 적은 주소가 어디로 갔는지 모른다(업무 관련인에는 그대로 남는다). */
+  const fresh=(kept||[]).filter(k=>!emailNoticed.has(`${k.id}|${k.ignored}`));
+  if(fresh.length){
+    fresh.forEach(k=>emailNoticed.add(`${k.id}|${k.ignored}`));
+    const who=fresh[0].who||fresh[0].org||'관련인';
+    showToast(fresh.length===1
+      ? `${who}은(는) 전화번호부에 이미 다른 이메일이 있어 그대로 두었습니다 — 바꾸려면 [수정]`
+      : `관련인 ${fresh.length}명은 전화번호부에 이미 다른 이메일이 있어 그대로 두었습니다 — 바꾸려면 [수정]`);
+  }
   if(!added.length && !updates.length) return;
   /* updates 는 '바뀔 칸만 담은 패치'(v3.5.0: phone·email) — 들어 있는 키만 덮는다.
      없는 키까지 대입하면 undefined 로 지워 버린다. */

@@ -212,6 +212,29 @@ test('absorbContacts: 이미 있는 사람의 빈 이메일은 보강, 이미 �
   assert.deepEqual(byId[3], {id:3, phone:'010-3', email:'new@z.go.kr'});// 한 항목에 패치는 한 건으로 합친다
 });
 
+test('absorbContacts: 반영하지 않은 이메일은 kept 로 보고한다 (조용히 버리지 않는다)', () => {
+  /* v3.5.1: 전화번호부는 한 사람당 대표 주소 하나뿐이라 두 번째 주소는 갈 곳이 없다.
+     그렇다고 말없이 넘기면 사용자는 자기가 적은 주소가 어디로 갔는지 모른다. */
+  const book=[
+    {id:1, who:'김철수', org:'행정과', phone:'010-1', email:'old@x.go.kr'},
+    {id:2, who:'이영희', org:'세무과', phone:'010-2', email:''},
+  ];
+  const {kept}=absorbContacts(book, [
+    {who:'김철수', org:'행정과', phone:'010-1', email:'new@x.go.kr'},   // 다른 주소 → 보고
+    {who:'김철수', org:'행정과', phone:'010-1', email:'new@x.go.kr'},   // 같은 건 두 번째 → 한 번만
+    {who:'김철수', org:'행정과', phone:'010-1', email:'old@x.go.kr'},   // 같은 주소 → 보고 없음
+    {who:'이영희', org:'세무과', phone:'010-2', email:'lee@y.go.kr'},   // 빈 칸 보강 → 보고 없음
+  ]);
+  assert.equal(kept.length, 1);
+  assert.deepEqual(kept[0], {id:1, who:'김철수', org:'행정과', kept:'old@x.go.kr', ignored:'new@x.go.kr'});
+});
+
+test('absorbContacts: 새로 들어오는 사람은 kept 가 비어 있다 (알릴 것이 없다)', () => {
+  const {added, kept}=absorbContacts([], [{who:'박민수', org:'감사과', phone:'010-9', email:'park@x.go.kr'}]);
+  assert.equal(added.length, 1);
+  assert.deepEqual(kept, []);
+});
+
 test('absorbContacts: 새 사람은 이메일까지 함께 들어오고, 같은 배치 중복은 이메일을 잃지 않는다', () => {
   const {added}=absorbContacts([], [
     {who:'최수진', org:'기획과', phone:'010-9', email:''},               // 먼저 만난 쪽이 빈 칸
