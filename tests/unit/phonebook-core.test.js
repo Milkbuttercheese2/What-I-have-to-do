@@ -205,6 +205,9 @@ test('formatPhone: 접두·자리수 규칙으로 표준 하이픈 표기 (v3.2.
   assert.equal(formatPhone('(02) 1234-5678'), '02-1234-5678');
   assert.equal(formatPhone('0311234567'), '031-123-4567');
   assert.equal(formatPhone('07012345678'), '070-1234-5678');
+  assert.equal(formatPhone('070-4056-1234'), '070-4056-1234');   // 하이픈 입력 070 (소유자 지정 예시)
+  assert.equal(formatPhone('070 4056 1234'), '070-4056-1234');
+  assert.equal(formatPhone('070-4056-XXXX'), '070-4056-XXXX');   // 마스킹(X) 표기 — 원문 보존
   assert.equal(formatPhone('050412345678'), '0504-1234-5678');
   assert.equal(formatPhone('15881234'), '1588-1234');
   assert.equal(formatPhone('18331234'), '1833-1234');
