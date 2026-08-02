@@ -640,15 +640,15 @@
   .fm-memo{width:100%;min-height:300px;resize:vertical;font-family:inherit;font-size:14px;line-height:1.55;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}
   .fm-memo:focus{outline:none;border-color:var(--focus)}
   .fm-contacts{margin-bottom:12px}
-  /* v3.5.0: 이메일(선택)은 **자기 줄 전폭**에 둔다. 고정폭에 가까운 입력 4개를 한 줄에
-     나열하면 좁은 폭에서 반드시 깨진다 — 실측(Edge)으로 폭 420px에서 소속·이름이 21px까지
-     짓눌리는 것을 확인했다. 넓은 폭에서도 양식 패널은 676px 남짓이라 4등분(137px)은
-     이메일을 읽을 수 없다. `order:1`이 ⠿·소속·이름·연락처·× 뒤로 밀어 둘째 줄을 만든다. */
-  .contact-row{display:flex;flex-wrap:wrap;gap:7px;row-gap:5px;align-items:center;padding:3px 0}
+  .contact-row{display:flex;gap:7px;align-items:center;padding:3px 0}
   .contact-row input{font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
   .contact-row .c-org,.contact-row .c-who,.contact-row .c-phone{flex:1 1 0;min-width:0;width:0}
-  /* 들여쓰기 19px = ⠿ 핸들 실측 폭 12 + gap 7 → 첫 줄 소속칸의 시작선과 정확히 맞는다 */
-  .contact-row .c-email{order:1;flex:1 1 100%;min-width:0;margin-left:19px}
+  /* v3.5.0(소유자 지정): 큰 화면에서는 이메일까지 **한 줄**에 담는다.
+     넷 다 `flex:… 1 0` + `width:0` 이라 폭이 줄면 함께 줄어 넘치지 않는다(min-width:0 필수 —
+     이게 없으면 min-content 밑으로 못 줄어 shrink 가 통째로 무력해진다).
+     이메일만 몫을 1.5배 준다: 주소가 이름·부서보다 확실히 길어 같은 폭이면 혼자만 잘려 보인다.
+     좁은 폭(≤1080px)에서는 아래 미디어쿼리가 자기 줄로 내린다. */
+  .contact-row .c-email{flex:1.5 1 0;min-width:0;width:0}
   .contact-row input:focus{outline:none;border-color:var(--focus)}
   .contact-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
   /* 분리 날짜/시간 입력 */
@@ -758,6 +758,10 @@
        (한 사람을 적는 짝이라 갈라놓으면 눈이 두 번 움직인다). 연락처·버튼은 다음 줄로.
        v3.1.1: 입력줄·목록 행이 같은 2열 격자라 좁은 폭에서도 시작선이 서로 맞는다. */
     .pb-new,.pb-item{grid-template-columns:repeat(2,minmax(0,1fr))}
+    /* v3.5.0(소유자 지정): 꼬리 칸([추가] · [업무 N·수정·삭제])은 **오른쪽 끝**으로.
+       2열로 접히면 꼬리가 첫 칸(=절반 폭) 안에 갇혀, flex-end 로 붙여도 화면 한가운데
+       떠 보였다. 두 칸을 다 쓰게 해야 그 flex-end 가 비로소 진짜 오른쪽 끝이 된다. */
+    .pb-new .pb-acts,.pb-item .pb-tail{grid-column:1 / -1}
     /* 헤더 컴팩트: 시계는 오른쪽 끝, 부제 숨김, 브랜드 줄바꿈 허용 */
     .head-right{margin-left:auto}
     .brand{flex-wrap:wrap;min-width:0}
@@ -797,7 +801,11 @@
     .contact-row{flex-wrap:wrap;row-gap:5px}
     .contact-row .c-org,.contact-row .c-who{flex:1 1 0;min-width:0}           /* 1줄: 소속·이름 */
     .contact-row .c-phone{order:1;flex:1 1 100%;min-width:0;margin-left:43px}  /* 2줄: 연락처 (x=85 정렬) */
-    .contact-row .c-email{order:2;margin-left:43px}                            /* 3줄: 이메일 (같은 x=85 정렬) */
+    .contact-row .c-email{order:2;flex:1 1 100%;min-width:0;margin-left:43px}  /* 3줄: 이메일 (같은 x=85 정렬) */
+    /* 좁은 폭에서는 한 사람이 세 줄을 차지하므로 **사람 사이**를 줄 사이보다 확실히 벌린다 —
+       안 그러면 어디까지가 한 사람인지 안 보인다(세부할일 `.fsub-row + .fsub-row` 와 같은 이유).
+       행 안 간격 5px vs 사람 사이 14px(=3+8+3). 큰 화면은 한 줄이라 이 규칙이 필요 없다. */
+    .contact-row + .contact-row{margin-top:8px}
     /* 좌측 정렬 통일 (v2.5.9): 모든 입력행의 필드 시작선을 세부할일 기준 x≈85(행+43)로 맞춘다.
        ⠿ 핸들만 있는 행(식별·관련인)은 핸들 뒤 여백을 줘 필드를 같은 선에서 시작시키고,
        접수·마감(핸들 없음)은 dt-inp 자체를 43 들여쓴다. */

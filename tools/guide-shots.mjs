@@ -48,7 +48,7 @@ const INIT = `(()=>{
   const items=[
     mk({id:1,memo:'행정과 전화 — 회의실 예약 대장 정비 요청. 부서별 사용현황 취합 후 회신',staged:true}),
     mk({id:2,memo:'예산 집행 잔액 정리해서 재무팀에 회신하기',f:{received:iso,due:at(0,17,0)},
-      contacts:[{who:'김주무관',org:'재무팀',phone:'02-1234-5678'}],
+      contacts:[{who:'김주무관',org:'재무팀',phone:'02-1234-5678',email:'kim.jm@example.go.kr'}],
       ids:[{kind:'SR번호',val:'SR-2026-0718-0091'}],
       files:['C:\\\\업무\\\\2026\\\\예산_집행내역_정리.xlsx'],
       subs:[{id:21,title:'집행내역 대사 후 잔액 확정',mid:at(0,16,0),done:false,al:null,owner:''}]}),
@@ -61,9 +61,11 @@ const INIT = `(()=>{
     mk({id:6,memo:'완료된 주간 실적 보고 제출',done:true,f:{received:iso,due:at(-1,10,0)}}),
     mk({id:7,memo:'매주 월요일 주간회의 자료 준비',recur:{type:'dow',dow:[1],time:'09:00',next:at(3,9,0),paused:false}}),
   ];
-  const phonebook=[{id:901,who:'김주무관',org:'재무팀',phone:'02-1234-5678'},
-                   {id:902,who:'박주무관',org:'감사담당관실',phone:'02-9876-5432'},
-                   {id:903,who:'최주무관',org:'총무과',phone:'010-2222-3333'}];
+  /* v3.5.0: 이메일은 선택 항목이라 **있는 사람과 없는 사람을 섞어** 둔다 —
+     설명서 그림이 '비워도 된다'를 그림만으로 말해 주게. */
+  const phonebook=[{id:901,who:'김주무관',org:'재무팀',phone:'02-1234-5678',email:'kim.jm@example.go.kr'},
+                   {id:902,who:'박주무관',org:'감사담당관실',phone:'02-9876-5432',email:''},
+                   {id:903,who:'최주무관',org:'총무과',phone:'010-2222-3333',email:'choi.jm@example.go.kr'}];
   let store={items,phonebook,fields:null,
     presets:[{label:'계약 변경 통보 접수건 처리',memo:'○○ 사업 계약변경 통보 접수 및 검토',subs:[]},
              {label:'감사 자료 제출',memo:'○○ 감사 대비 증빙자료 정리',subs:[]}],
@@ -80,7 +82,7 @@ const INIT = `(()=>{
       if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
       if(c==='pick_file_path')return 'C:\\\\업무\\\\2026\\\\회의실_예약대장.hwp';
       return null;}},
-    app:{getVersion:async()=>'3.1.1'},
+    app:{getVersion:async()=>'3.5.0'},   /* 설명서 그림의 헤더 버전 — 스크린샷을 다시 뽑을 때 함께 올린다 */
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,maximize:noop,minimize:noop,toggleMaximize:noop,close:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};
