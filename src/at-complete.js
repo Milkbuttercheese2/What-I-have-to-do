@@ -24,6 +24,10 @@ const isMemo=el=>el && (el.id==='inp'||el.id==='fm-memo');
 /* v2.10.0: 관련소속(.c-org)은 자동완성 제외(소유자 지정) — 소속은 같은 값이 수십 명에
    걸려 목록이 소음이 된다. 이름·연락처 칸만 검색한다. */
 const isContact=el=>el && el.matches && el.matches('#fm-contacts .contact-row .c-who, #fm-contacts .contact-row .c-phone');
+/* v3.4.0 소유자 지정: 세부 할 일의 **담당** 칸도 같은 자동완성 정책을 쓴다
+   (두 글자 이상 → 드롭다운). 고르면 담당칸에 이름이 들어가고, 그 사람의
+   관련인 정보(소속·이름·연락처)가 관련인 칸에도 채워진다(중복이면 그대로). */
+const isOwner=el=>el && el.matches && el.matches('#fm-subs .fsub-row .sub-owner');
 
 function close(){ if(drop) drop.style.display='none'; anchor=null; items=[]; token=null; }
 
@@ -76,7 +80,12 @@ function apply(i){
   if(!entry||!el){ close(); return; }
   applying=true;
   try{
-    if(isContact(el)){
+    if(isOwner(el)){
+      /* 담당칸: 이름만 넣고(담당은 이름 한 칸), 관련인 정보는 관련인 칸에 채운다 */
+      el.value=entry.who||entry.org||entry.phone||'';
+      fillContactFromEntry(entry);
+      el.dispatchEvent(new Event('input',{bubbles:true}));           // 양식 임시저장 트리거
+    }else if(isContact(el)){
       fillContactFromEntry(entry, el.closest('.contact-row'));
       el.dispatchEvent(new Event('input',{bubbles:true}));           // 양식 임시저장 트리거
     }else if(el.id==='fm-memo'){
@@ -109,7 +118,7 @@ function onInput(e){
     if(!list.length){ if(anchor===el) close(); return; }
     token={start:t.start, caret:el.selectionStart};
     openAt(el, list, caretRect(el));
-  }else if(isContact(el)){
+  }else if(isContact(el)||isOwner(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
     const q=el.value.trim();
     const list=queryReady(q)?matchEntries(S.phonebook, q, 50):[];                    // v2.10.0 문턱값

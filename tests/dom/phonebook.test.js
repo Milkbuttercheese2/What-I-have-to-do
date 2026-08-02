@@ -282,3 +282,29 @@ test('백업 왕복: adoptPhonebook 이 id 없는 항목에 id 를 채우고 las
   assert.ok(S.phonebook[0].id > 0);
   assert.ok(S.lastId >= 99999);                                 // 기존 id 가 lastId 를 밀어올림
 });
+
+test('세부 할 일 담당칸 자동완성: 2글자부터 후보, 선택하면 담당+관련인이 함께 채워진다 (v3.4.0)', async () => {
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
+  openForm({});
+  const own=$('fm-subs').querySelector('.sub-owner');
+  assert.ok(own, '담당 칸이 있어야 한다');
+  const drop=env.document.getElementById('atDrop');
+  // 한 글자는 문턱값 미달 — 열리지 않는다 (관련인 칸과 같은 정책)
+  own.value='김'; own.focus();
+  own.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  assert.equal(drop.style.display, 'none');
+  // 두 글자부터 후보
+  own.value='김철';
+  own.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  assert.equal(drop.style.display, 'block');
+  assert.ok(drop.textContent.includes('김철수'));
+  // 선택 → 담당칸엔 이름, 관련인 칸엔 3칸
+  drop.querySelector('[data-ati="0"]').dispatchEvent(new env.window.MouseEvent('mousedown', {bubbles:true, cancelable:true}));
+  assert.equal(own.value, '김철수');
+  const row=$('fm-contacts').querySelector('.contact-row');
+  assert.equal(row.querySelector('.c-who').value, '김철수');
+  assert.equal(row.querySelector('.c-org').value, '행정과');
+  assert.equal(row.querySelector('.c-phone').value, '010-1234-5678');
+  assert.equal(drop.style.display, 'none');
+});
