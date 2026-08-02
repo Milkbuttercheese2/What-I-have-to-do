@@ -111,7 +111,7 @@ test('migrateItem: 기존 memo·contacts·sub id/al은 건드리지 않음', () 
     subs:[{id:77, title:'s', al:{mid:true}}],
   });
   assert.equal(it.memo, '이미 있는 메모');
-  assert.deepEqual(it.contacts, [{who:'갑'}]);
+  assert.deepEqual(it.contacts, [{who:'갑', org:'', phone:''}]);   // v3.2.0: 모양 보강(값 불변)
   assert.equal(it.subs[0].id, 77);
   assert.deepEqual(it.subs[0].al, {mid:true});
 });

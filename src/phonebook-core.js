@@ -9,10 +9,45 @@
 /* 전화번호 숫자만 — 010-1234-5678 저장분이 01012345678 검색에 걸리게 (filters.js 규칙과 동일) */
 export function phoneDigits(p){ return String(p||'').replace(/[^0-9]/g,''); }
 
-/* 한 건 정규화 — 문자열 강제 + trim (id 는 호출부가 채운다: newId 는 상태 모듈 소관) */
+/* 한국 전화번호 표준 하이픈 표기 (v3.2.0 소유자 지정 — 하나의 전화번호 체계).
+   원칙: **확실히 인식되는 번호만 바꾸고, 나머지는 원문 그대로**(보수적 파서 —
+   내선·교환 표기, 국제번호, 접두/자리수 규칙 밖은 손대지 않아 유실이 없다).
+   숫자와 흔한 구분자(하이픈·공백·점·괄호)만으로 이뤄진 입력을 숫자로 접고,
+   접두·자리수 규칙으로 분류해 표준형으로 편다:
+   - 휴대폰 01X: 11자리 3-4-4 / 10자리 3-3-4 (구형)
+   - 서울 02: 10자리 2-4-4 / 9자리 2-3-4
+   - 지역 0XX(031~064)·070: 11자리 3-4-4 / 10자리 3-3-4
+   - 안심 050X: 12자리 4-4-4 / 11자리 4-3-4
+   - 전국대표·공통 15XX/16XX/18XX: 8자리 4-4 */
+export function formatPhone(raw){
+  const s=String(raw||'').trim();
+  if(!s) return '';
+  if(!/^[\d\-\s().·]+$/.test(s)) return s;   // 내선·문자(+국제 포함) 등 — 원문 유지
+  const d=s.replace(/[^0-9]/g,'');
+  const cut=(a,b)=>`${d.slice(0,a)}-${d.slice(a,a+b)}-${d.slice(a+b)}`;
+  if(/^01[016789]/.test(d)){
+    if(d.length===11) return cut(3,4);
+    if(d.length===10) return cut(3,3);
+  }else if(/^02/.test(d)){
+    if(d.length===10) return cut(2,4);
+    if(d.length===9)  return cut(2,3);
+  }else if(/^0(3[123]|4[1234]|5[12345]|6[1234]|70)/.test(d)){
+    if(d.length===11) return cut(3,4);
+    if(d.length===10) return cut(3,3);
+  }else if(/^050\d/.test(d)){
+    if(d.length===12) return cut(4,4);
+    if(d.length===11) return cut(4,3);
+  }else if(/^1[568]\d\d$/.test(d.slice(0,4)) && d.length===8){
+    return `${d.slice(0,4)}-${d.slice(4)}`;
+  }
+  return s;                                     // 규칙 밖 자리수 — 원문 유지
+}
+
+/* 한 건 정규화 — 문자열 강제 + trim (id 는 호출부가 채운다: newId 는 상태 모듈 소관).
+   v3.2.0: 연락처는 표준 하이픈 표기로 정규화(formatPhone — 인식 못 하면 원문). */
 export function normEntry(e){
   e=e||{};
-  return {id:e.id, who:String(e.who||'').trim(), org:String(e.org||'').trim(), phone:String(e.phone||'').trim()};
+  return {id:e.id, who:String(e.who||'').trim(), org:String(e.org||'').trim(), phone:formatPhone(e.phone)};
 }
 
 /* 중복 판정 키 — 이름·소속은 trim 그대로, 전화는 숫자만 비교(표기 차이 무시) */

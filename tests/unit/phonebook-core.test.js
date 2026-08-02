@@ -191,3 +191,35 @@ test('normEntry/phoneDigits: 문자열 강제·trim·숫자 추출', () => {
   assert.equal(phoneDigits('010-12 34'), '0101234');
   assert.equal(phoneDigits(null), '');
 });
+
+test('formatPhone: 접두·자리수 규칙으로 표준 하이픈 표기 (v3.2.0 하나의 전화번호 체계)', async () => {
+  const {formatPhone} = await import('../../src/phonebook-core.js');
+  // 휴대폰 — 어떤 표기든 표준형으로
+  assert.equal(formatPhone('01012345678'), '010-1234-5678');
+  assert.equal(formatPhone('010 1234 5678'), '010-1234-5678');
+  assert.equal(formatPhone('010.1234.5678'), '010-1234-5678');
+  assert.equal(formatPhone('0111234567'), '011-123-4567');       // 구형 10자리
+  // 서울 / 지역 / 인터넷 / 안심 / 전국대표
+  assert.equal(formatPhone('021234567'), '02-123-4567');
+  assert.equal(formatPhone('0212345678'), '02-1234-5678');
+  assert.equal(formatPhone('(02) 1234-5678'), '02-1234-5678');
+  assert.equal(formatPhone('0311234567'), '031-123-4567');
+  assert.equal(formatPhone('07012345678'), '070-1234-5678');
+  assert.equal(formatPhone('050412345678'), '0504-1234-5678');
+  assert.equal(formatPhone('15881234'), '1588-1234');
+  assert.equal(formatPhone('18331234'), '1833-1234');
+  // '변수' — 확실치 않으면 원문 유지 (유실 없음)
+  assert.equal(formatPhone('02-123-4567 내선302'), '02-123-4567 내선302');
+  assert.equal(formatPhone('+82-10-1234-5678'), '+82-10-1234-5678');
+  assert.equal(formatPhone('123-4567'), '123-4567');             // 지역번호 없는 국번
+  assert.equal(formatPhone('010-1'), '010-1');                   // 자리수 미달
+  assert.equal(formatPhone(''), '');
+});
+
+test('normEntry/migrate 경로: 기존 저장분 01012345678 도 표준형으로 (v3.2.0)', async () => {
+  assert.equal(normEntry({who:'김', org:'과', phone:'01012345678'}).phone, '010-1234-5678');
+  const {migrateItem} = await import('../../src/state.js');
+  const it=migrateItem({id:1, memo:'m', contacts:[{who:'김철수', org:'행정과', phone:'01029506098'}, {who:'이', org:'', phone:'02-123-4567 내선3'}]});
+  assert.equal(it.contacts[0].phone, '010-2950-6098');           // 기존 데이터 회복
+  assert.equal(it.contacts[1].phone, '02-123-4567 내선3');       // 애매한 표기는 원문
+});

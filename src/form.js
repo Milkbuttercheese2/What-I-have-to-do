@@ -7,7 +7,7 @@ import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
-import {entryKey, extractTags, entriesForTag, linkifyAt} from './phonebook-core.js';
+import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
@@ -236,7 +236,9 @@ export function closeForm(){
   $('formPanel').classList.remove('on'); editingId=null; draftKey=null; baseline=null; markDraft(0);
 }
 
-/* 관련인 행 — 연락처는 입력한 그대로 저장(자동 하이픈 없음: 지역번호·내선 등 파싱이 애매).
+/* 관련인 행 — v3.2.0(소유자 지정)부터 연락처는 저장 시 표준 하이픈 표기로 정규화한다
+   (formatPhone — 접두·자리수 규칙에 맞는 번호만; 내선 등 애매한 표기는 원문 유지.
+   v2.5.1의 '입력 그대로 저장' 결정을 개정).
    대신 검색은 filters.js가 숫자만 버전도 haystack에 넣어 010-1234-5678 저장분이
    01012345678 검색으로도 걸린다(v2.5.1) */
 function addContactRow(c){
@@ -369,7 +371,7 @@ function collectForm(){
   const f={};
   $('fm-grid').querySelectorAll('[data-fkey]').forEach(sp=>{ const v=readDtInput(sp); f[sp.dataset.fkey] = (v===null?'':v); });
   const contacts=[...$('fm-contacts').querySelectorAll('.contact-row')].map(r=>({
-    who:r.querySelector('.c-who').value.trim(), org:r.querySelector('.c-org').value.trim(), phone:r.querySelector('.c-phone').value.trim()
+    who:r.querySelector('.c-who').value.trim(), org:r.querySelector('.c-org').value.trim(), phone:formatPhone(r.querySelector('.c-phone').value)   /* v3.2.0 표준 표기 */
   })).filter(c=>c.who||c.org||c.phone);
   const ids=[...$('fm-ids').querySelectorAll('.fid-row')].map(r=>{
     const sel=r.querySelector('.fid-kind').value, etc=r.querySelector('.fid-etc').value.trim(), val=r.querySelector('.fid-val').value.trim();

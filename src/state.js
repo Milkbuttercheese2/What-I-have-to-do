@@ -1,7 +1,9 @@
 /* =========================================================================
    공유 상태 — 모듈 간 가변 상태는 전부 이 S 객체 하나로 공유한다.
    import 바인딩은 재대입이 불가하므로 반드시 프로퍼티 변경(S.items = ...)만 할 것.
-   ========================================================================= */
+   (phonebook-core 는 부작용 없는 순수 모듈이라 여기서 import 해도 안전) */
+import {formatPhone} from './phonebook-core.js';
+
 export const CORE_FIELDS = [
   {key:'received', label:'접수시각', type:'datetime', on:true, builtin:true},
   {key:'due',      label:'마감시각', type:'datetime', on:true, builtin:true},
@@ -77,7 +79,9 @@ export function reconcileCore(){
 export function migrateItem(o){
   const it=Object.assign({}, o);
   it.f=Object.assign({}, o.f||{});
-  it.contacts=Array.isArray(o.contacts)?o.contacts:[];
+  /* v3.2.0: 기존 저장분(01012345678 등)도 로드 시 표준 표기로 — 다음 저장 때 영속된다.
+     formatPhone 은 인식 못 하는 표기를 원문 유지하므로 유실이 없다. */
+  it.contacts=(Array.isArray(o.contacts)?o.contacts:[]).map(c=>({who:(c&&c.who)||'', org:(c&&c.org)||'', phone:formatPhone(c&&c.phone)}));
   it.ids=Array.isArray(o.ids)?o.ids.slice():[];
   it.subs=Array.isArray(o.subs)?o.subs:[];
   it.files=Array.isArray(o.files)?o.files.slice():[];   // v3.0.0 파일 링크 (구버전 데이터엔 없음)

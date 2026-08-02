@@ -169,7 +169,7 @@ test('세부 제목에서 Enter → 마지막 행이면 새 행 추가', async (
   closeForm();
 });
 
-test('연락처는 입력 그대로 저장 — 자동 하이픈 변환 없음 (v2.5.1)', async () => {
+test('연락처는 저장 시 표준 하이픈 표기로 — 인식 못 하는 표기는 원문 (v3.2.0, v2.5.1 개정)', async () => {
   await env.resetS(); S.loaded = true;
   openForm({});
   $('fm-memo').value = '전화 입력 건';
@@ -177,7 +177,14 @@ test('연락처는 입력 그대로 저장 — 자동 하이픈 변환 없음 (v
   ph.value = '01099998888';
   $('fm-save').click();
   await env.flush();
-  assert.equal(S.items[0].contacts[0].phone, '01099998888');   // 억지 변환하지 않는다
+  assert.equal(S.items[0].contacts[0].phone, '010-9999-8888');   // 표준형으로
+  // 내선 등 애매한 표기는 여전히 원문 유지 (보수적 파서 — 유실 없음)
+  openForm({});
+  $('fm-memo').value = '내선 건';
+  $('fm-contacts').querySelector('.c-phone').value = '02-123-4567 내선302';
+  $('fm-save').click();
+  await env.flush();
+  assert.equal(S.items[1].contacts[0].phone, '02-123-4567 내선302');
 });
 
 test('관련인 행에 드래그 핸들 존재 — DOM 순서가 저장 순서 (v2.5.3)', async () => {
