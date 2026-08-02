@@ -121,8 +121,12 @@
  #cap-pb{display:none;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;
    border-top:1px solid var(--cap-sep);padding:6px 8px}
  body.pb:not(.search):not(.flash) #cap-pb{display:block}
+ /* ⚠️ height/margin 은 capture-win.js 의 PB_ROW_H(33)·PB_ROW_GAP(2)와 한 쌍이다.
+    행 높이를 **고정**해야 창 높이를 산술로 정할 수 있다(재고-바꾸고-다시 재는
+    왕복이 v3.2~v3.4.5 의 빈 띠·잘림·펴졌다접힘을 차례로 만들었다 — pbNeedH 주석).
+    폰트 폴백이 달라져도 이 높이는 변하지 않는다. 바꾸려면 JS 상수도 같이 고칠 것. */
  .cap-pb-it{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.45;color:var(--cap-ink);
-   padding:7px 11px;margin:1px 0;border-radius:8px;cursor:pointer}
+   height:33px;box-sizing:border-box;padding:7px 11px;margin:1px 0;border-radius:8px;cursor:pointer}
  .cap-pb-it.sel,body.mouse .cap-pb-it:hover{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
  .cap-pb-who{flex:none;font-weight:600;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .cap-pb-org{flex:1;min-width:0;color:var(--cap-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

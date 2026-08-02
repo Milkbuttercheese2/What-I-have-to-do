@@ -147,88 +147,54 @@ function closePb(skipResize){
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
   if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
 }
-/* ── 목록 높이 (v3.4.3 재정비) ────────────────────────────────────────────
-   규칙은 하나다: **후보가 몇이든 min(후보수, 10)행은 언제나 통째로 보인다.**
-   그 한 값(pbNeedH)이 목록의 상한(max-height)과 창 높이 계산에 **함께** 쓰인다 —
-   예전엔 둘을 따로 계산해(상한은 listH+padding, 창은 별도 공식) 서로 어긋났고,
-   그 틈으로 11번째 행이 삐져나오거나 10행이 안 들어가는 창이 만들어졌다. */
+/* ── 목록 높이 (v3.4.6 — 재지 말고 정한다) ────────────────────────────────
+   규칙: 후보가 몇이든 min(후보수, 10)행은 언제나 통째로 보인다.
+
+   ⚠️ **'실측 → 창 크기 변경 → 다시 실측 → 보정' 왕복을 다시 만들지 말 것.**
+   v3.2.1~v3.4.5 가 그 왕복을 고쳐 쓰며 빈 띠 → 마지막 행 잘림 → 첫 행 잘림 →
+   창이 펴졌다 접힘을 차례로 만들어 냈다. 원인은 매번 같다: 창 크기는 네이티브가
+   **나중에** 바꿔 주는데, 그 결과를 다시 재서 다음 판단을 내리면 그 사이의
+   타이밍(리사이즈 지연·레이아웃 시점)에 결과가 좌우된다. 지연이 80ms 를 넘는
+   기기에서만 깨지니 개발 기계에서는 멀쩡해 보인다.
+
+   그래서 지금은: 행 높이를 CSS 에서 **고정**하고(.cap-pb-it height — 폰트가 바뀌어도
+   변하지 않는다), 필요한 높이를 산술로 구해 **한 번만** 요청한다. 재는 값은 창
+   크기와 무관한 것(입력줄·힌트줄 — 폭 700 고정이라 내용만으로 정해진다)뿐이다. */
 const PB_MAX_ROWS=10;
-const PB_ROW_FALLBACK=34;   // 배치 전이라 행 높이가 0으로 재질 때의 근사값(px)
-/* 첫 행 top → k번째 행 bottom (스크롤 위치와 무관 — 두 rect 가 같이 밀린다).
-   행 높이를 곱하지 않는 이유: 행 마진(.cap-pb-it margin:1px 0)이 빠져 몇 px 모자라고
-   그 몇 px 때문에 마지막 행이 잘려 보였다(v3.2.2). */
-function pbRowsSpan(k){
-  const pb=$id('cap-pb'); if(!pb) return 0;
-  const rows=[...pb.querySelectorAll('.cap-pb-it')];
-  const n=Math.min(k, rows.length); if(!n) return 0;
-  const span=rows[n-1].getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top;
-  return span>1 ? span : n*PB_ROW_FALLBACK;   // 0 을 그대로 믿으면 창을 터무니없이 작게 잡는다
+const PB_ROW_H=33;                    // capture.html .cap-pb-it 의 height 와 한 쌍
+const PB_ROW_MARGIN=1;                //            .cap-pb-it margin:1px 0
+const PB_PAD_T=6, PB_PAD_B=6;         //            #cap-pb padding
+const PB_LIST_BORDER=1;               //            #cap-pb border-top
+const PB_SLACK=16;                    // 창에만 주는 여유 — 남는 부분은 투명이라 안 보인다
+/* 후보 n명일 때 목록(#cap-pb)의 바깥 높이. box-sizing:border-box 라 이 값이 그대로
+   max-height 이고 창 높이 계산에도 같은 값을 쓴다(둘이 어긋날 여지 없음).
+   두 가지가 픽셀 단위로 걸린다 — 둘 다 실측으로 확인했다:
+   1) 행 사이는 2px 이 아니라 **1px**이다. 목록이 일반 블록이라 이웃한 행의 위아래
+      마진이 상쇄된다(margin collapsing). 2px 로 잡으면 10행에서 10px 이 남는다.
+   2) 아래 padding 은 **마지막 행 뒤**에만 있다. 10행에서 잘리는(=뒤에 내용이 더
+      있는) 경우엔 그 자리가 아니므로 더하면 안 된다 — 더하면 11번째 행이 6px 만큼
+      빼꼼 보인다. */
+function pbBoxH(n){
+  const k=Math.min(n, PB_MAX_ROWS);
+  if(!k) return 0;
+  const rows=PB_ROW_MARGIN+k*PB_ROW_H+(k-1)*PB_ROW_MARGIN;      // 첫 행 위 마진 + 행 + 사이 간격
+  const tail=n>PB_MAX_ROWS ? 0 : PB_ROW_MARGIN+PB_PAD_B;        // 잘릴 땐 아래 여백이 없다
+  return PB_LIST_BORDER+PB_PAD_T+rows+tail;
 }
-/* 목록(#cap-pb)이 min(후보수,10)행을 온전히 담는 데 필요한 **바깥 높이**
-   (padding·테두리 포함 — capture.html 에서 box-sizing:border-box). */
-function pbNeedH(){
-  const pb=$id('cap-pb'); if(!pb) return 0;
-  const shown=Math.min(pb.querySelectorAll('.cap-pb-it').length, PB_MAX_ROWS);
-  if(!shown) return 0;
-  const cs=getComputedStyle(pb);
-  const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
-  const bd=(parseFloat(cs.borderTopWidth)||0)+(parseFloat(cs.borderBottomWidth)||0);
-  return Math.ceil(pad+bd+2+pbRowsSpan(shown));   // +2 = 첫 행 위·마지막 행 아래 마진
-}
-/* 지금 목록을 다 보여주려면 창이 얼마나 커야 하나 — 입력줄 + 힌트줄 + 목록 + 패널 테두리.
-   ⚠️ 반드시 body.pb 적용 + renderPb() 이후에 호출할 것 (그 전엔 목록이 없다). */
-function pbWinHeight(){
+/* 후보 n명을 보여주려면 창이 얼마나 커야 하나 — 입력줄 + 힌트줄 + 목록 + 패널 테두리 */
+function pbWinHeight(n){
   const bar=$id('cap-bar'), hint=$id('cap-hint');
   if(!bar||!hint) return 126;
   const h=el=>el.getBoundingClientRect().height;
-  return Math.ceil(h(bar)+h(hint)+pbNeedH()+2+PB_SLACK);
+  return Math.ceil(h(bar)+h(hint)+pbBoxH(n)+2+PB_SLACK);
 }
-/* v3.2.5: 창은 **넉넉히** 잡고(SLACK), 남는 부분은 투명이라 보이지 않는다
-   (capture.html 의 '패널은 내용 높이' 규칙과 한 쌍). */
-const PB_SLACK=48;
-/* 리사이즈가 느린 환경에서는 회차 대부분이 '아직 반영 전'으로 지나가므로
-   넉넉히 둔다(만족하면 즉시 빠져나온다 — 실제로는 보통 1~2회). */
-const PB_FIT_TRIES=8;
-/* 창 크기를 맞추고 **모자란 만큼 다시 키운다** (v3.4.3 — 수렴할 때까지).
-   v3.2.4~v3.4.2 의 자가 보정은 딱 한 번이었고, 게다가 후보가 10행을 넘으면
-   "스크롤이 정상"이라며 보정을 아예 건너뛰었다. 그래서 첫 계산이 모자란 환경
-   (행 배치 전 실측 0, 리사이즈 지연 등)에서는 목록이 서너 줄로 갇힌 창이 그대로
-   굳었다 — 사용자가 본 증상이 이것이다. 이제 목표(min(N,10)행)에 모자란 픽셀을
-   재서 그만큼 키우기를 반복하므로, 배율·폰트·플랫폼과 무관하게 수렴한다. */
-/* 첫 행을 **원인과 무관하게** 되돌려 놓는다 (v3.4.4).
-   목록을 밀 수 있는 손은 여럿이다 — scrollIntoView, 스크롤 앵커링, 포커스 스크롤.
-   그 중 하나라도 '창이 아직 작던 순간'(목록은 창이 126px 일 때 그려지고, 그때
-   #cap-pb 는 40px 남짓이다)에 끼어들면 그 scrollTop 이 그대로 남는다. 후보가 10행
-   이하일 땐 창이 커지며 브라우저가 0 으로 되돌려 주지만(내용이 다 들어가므로),
-   10행을 넘으면 목록이 계속 스크롤 가능이라 **되돌려 주지 않는다** — 첫 행이 반쯤
-   잘린 채 굳는 경로가 이것이다. 고른 줄이 첫 10행 안이면 맨 위가 곧 제자리이므로
-   되돌려도 잃는 게 없다. */
+/* 첫 행을 제자리로 (v3.4.4). 목록을 밀 수 있는 손은 여럿이다 — 스크롤 앵커링,
+   포커스 스크롤. 후보가 10행 이하면 창이 커지며 브라우저가 0 으로 되돌려 주지만,
+   10행을 넘으면 목록이 계속 스크롤 가능이라 되돌려 주지 않는다(첫 행이 반쯤 잘린
+   채 굳던 경로). 재지도 요청하지도 않는 한 줄이라 위 왕복 금지와 무관하다. */
 function pbPinTop(){
   const pb=$id('cap-pb');
   if(pb && pbSel<PB_MAX_ROWS && pb.scrollTop!==0) pb.scrollTop=0;
-}
-/* 한 번의 자동완성에서 창은 **한 방향으로만** 움직인다 (v3.4.5).
-   v3.4.3~v3.4.4 의 보정은 다음 요청을 `window.innerHeight` 기준으로 계산했는데,
-   그 값은 앞서 보낸 리사이즈가 **아직 반영되기 전이면 옛 크기**다. 그래서 이미
-   가는 중인 490 보다 작은 444 를 뒤이어 요청했고, 두 요청이 차례로 적용되며
-   창이 커졌다가 도로 접히는 것처럼 보였다(네이티브 리사이즈가 80ms 보다 느린
-   환경에서 반복). 이제 누적 기준은 '내가 요청한 값'(want)이라 절대 줄지 않고,
-   요청한 크기가 아직 반영되지 않았으면 그 회차는 판단을 미룬다. */
-async function fitPbWindow(){
-  const seq=pbSeq;
-  let want=pbWinHeight();                            // 이 한 번의 목표 크기 (여기서만 줄어들 수 있다)
-  invoke('resize_capture',{height:want}).catch(()=>{});
-  for(let i=0;i<PB_FIT_TRIES;i++){
-    await new Promise(r=>setTimeout(r,80));          // 네이티브 창 리사이즈 반영 대기
-    if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
-    const pb=$id('cap-pb'); if(!pb) return;
-    pbPinTop();                                      // 창이 바뀔 때마다 첫 행을 제자리로
-    if(Math.abs(window.innerHeight-want)>1) continue; // 요청이 아직 반영 전 — 재보지 않는다
-    const short=pbNeedH()-pb.getBoundingClientRect().height;   // 목표 행수에 모자란 px
-    if(short<=1) return;                             // 다 보인다 — 끝
-    want=Math.ceil(want+short+2);                    // 항상 키우기만 (요청 기준 누적)
-    invoke('resize_capture',{height:want}).catch(()=>{});
-  }
 }
 /* keepScroll=true 는 ↑↓ 로 목록을 조작할 때만 — 그 밖(새 후보 목록)에서는 언제나
    맨 위로 되돌린다. v3.4.3: innerHTML 을 갈아끼워도 브라우저는 스크롤 위치를
@@ -243,7 +209,8 @@ function renderPb(keepScroll){
   /* 10행 상한은 **목록 자체**에 건다(실측). 창 여유(PB_SLACK)와 무관하게 정확히
      10행에서 멈추고 그 아래는 스크롤 — 창 크기로 행수를 통제하려던 방식은
      여유 픽셀이 생길 때마다 11·12행이 삐져나왔다. */
-  w.style.maxHeight = w.querySelectorAll('.cap-pb-it').length>PB_MAX_ROWS ? pbNeedH()+'px' : '';
+  const n=w.querySelectorAll('.cap-pb-it').length;
+  w.style.maxHeight = n>PB_MAX_ROWS ? pbBoxH(n)+'px' : '';
   /* 선택 추적(scrollIntoView)은 ↑↓ 로 조작할 때만 한다 (v3.4.4).
      새 후보 목록에서까지 부르면, 그 시점의 목록은 아직 창이 작아 40px 남짓이라
      scrollIntoView 가 목록을 밀어 버리고 첫 행이 잘린다. 새 목록의 선택은
@@ -279,11 +246,11 @@ async function runPb(){
   document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }
-  /* v3.2.3 근본 수정: 창 높이를 **실측**한다(상수 공식 폐지).
-     행 높이·입력칸 확장·힌트 줄수·화면 배율·폰트 폴백은 환경마다 달라서, 어떤
-     상수도 언젠가 어긋난다(v2.9~v3.2.2에서 빈 띠 ↔ 잘림을 반복한 진짜 이유).
-     지금 화면의 실제 픽셀을 재서 넘기면 그 변수들이 저절로 반영된다. */
-  fitPbWindow();
+  /* 창 크기 요청은 **한 번**이다 (v3.4.6). 결과를 다시 재서 보정하지 않는다 —
+     위 pbNeedH 주석의 '왕복 금지'가 여기 걸린다. 뒤이어 하는 일은 첫 행을
+     제자리로 되돌리는 것뿐(측정·재요청 없음). */
+  invoke('resize_capture',{height:pbWinHeight(found.length)}).catch(()=>{});
+  setTimeout(pbPinTop,80); setTimeout(pbPinTop,240);
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
