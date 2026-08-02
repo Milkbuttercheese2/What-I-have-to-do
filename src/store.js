@@ -4,7 +4,7 @@
    IndexedDB)는 더 이상 쓰지 않는다.
    ========================================================================= */
 import {S, backupObj} from './state.js';
-import {showSaveError, clearSaveError} from './dom-utils.js';
+import {showSaveError, clearSaveError, appAlert} from './dom-utils.js';
 
 export const { invoke } = window.__TAURI__.core;
 
@@ -37,6 +37,35 @@ async function emergencyDump(){
   }catch(e){ console.warn('비상 덤프 실패',e); dumped=false; }   // 다음 실패 때 다시 시도
 }
 
+/* 낡은 화면의 저장이 거절됐을 때 (v3.3.7).
+   여기서 중요한 건 **아무것도 잃지 않는 것**이다: 지금 화면 내용을 먼저 파일로
+   떨구고(비상 덤프와 같은 형식이라 [불러오기]로 되살릴 수 있다), 그다음 최신
+   데이터로 화면을 새로 연다. 화면을 그냥 두면 사용자는 계속 낡은 내용을 고치게 되고
+   저장은 매번 거절된다 — 그게 더 나쁘다.
+   ⚠️ 자동으로 병합하지 않는다. 어느 쪽이 옳은지는 사람만 안다. */
+let staleHandled=false;
+async function onStale(res){
+  if(staleHandled) return;            // 한 번만 — 여러 저장이 동시에 거절될 수 있다
+  staleHandled=true;
+  let saved='';
+  try{ saved = await invoke('emergency_dump',{json:JSON.stringify(backupObj(),null,1)}); }
+  catch(e){ console.warn('거절 시 화면 내용 보관 실패',e); }
+  console.warn('낡은 화면의 저장이 거절됨', res);
+  /* 안내창이 실패해도 최신을 다시 읽는 것까지는 반드시 한다 — 화면을 낡은 채로
+     두면 사용자가 계속 그 위에서 고치고, 저장은 매번 거절된다. */
+  try{ await showStaleNotice(saved); }catch(e){ console.warn('거절 안내 실패',e); }
+  try{ location.reload(); }catch(e){ console.warn('다시 읽기 실패',e); }
+}
+
+async function showStaleNotice(saved){
+  await appAlert(
+    '다른 창(또는 예전에 켜둔 앱)이 데이터를 바꿔서, 이 화면의 내용은 낡은 상태입니다.\n'+
+    '덮어쓰면 그쪽 작업이 사라지므로 저장하지 않았습니다.\n\n'+
+    (saved ? '이 화면의 내용은 파일로 남겨두었습니다:\n'+saved+'\n\n' : '')+
+    '확인을 누르면 최신 데이터를 다시 불러옵니다.',
+    '저장하지 않았습니다');
+}
+
 export const STORE = {
   _saving:null, _pending:null,
 
@@ -46,6 +75,8 @@ export const STORE = {
      STORE.load() 완료 후 진짜 값으로 교체). */
   async load(){
     const state = await invoke('load_all');
+    /* v3.3.7 번호표를 함께 받는다 — 이 시점의 데이터를 보고 있다는 표식 */
+    S.dataVersion = Number(state.dataVersion) || 0;
     if(Array.isArray(state.fields)) S.imported.fields=state.fields;
     if(Array.isArray(state.presets)) S.imported.presets=state.presets;
     if(Array.isArray(state.idKinds)) S.imported.idKinds=state.idKinds;
@@ -72,14 +103,22 @@ export const STORE = {
       try{
         while(this._pending){
           const data=this._pending; this._pending=null;
+          let res;
           try{
-            await invoke('save_all', {items:data});
+            res = await invoke('save_all', {items:data, baseVersion:S.dataVersion});
           }catch(e){
             /* 핵심: 실패한 배치를 버리지 않는다. 그 사이 더 새 배치가 들어왔다면
                그쪽이 이 내용을 이미 포함하므로(전체 교체 저장) 덮어쓰지 않는다. */
             if(!this._pending) this._pending=data;
             throw e;
           }
+          /* v3.3.7: 거절(Stale)은 **오류가 아니다** — 낡은 화면이 최신 데이터를
+             덮으려 했고 막힌 것이다. 재시도하면 같은 낡은 내용을 계속 밀어 넣는
+             꼴이 되므로, 대기열을 비우고 화면 내용을 파일로 남긴 뒤 최신을 다시 읽는다.
+             ⚠️ 이 처리는 위 catch **밖**이어야 한다. 안에 두면 안내창이 실패했을 때
+             그 catch 가 낡은 배치를 대기열에 되돌려 영원히 재시도하게 된다. */
+          if(res && res.kind==='Stale'){ this._pending=null; await onStale(res); return; }
+          if(res && typeof res.version==='number') S.dataVersion = res.version;
         }
         failStreak=0; dumped=false;
         clearTimeout(retryTimer); retryTimer=null;

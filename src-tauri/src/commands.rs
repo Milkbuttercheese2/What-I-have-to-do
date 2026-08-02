@@ -55,8 +55,25 @@ pub fn load_all(state: State<AppDb>) -> Result<AppState, String> {
 /// rotation window collapses into a few minutes of one editing session.
 const BACKUP_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
+/// `save_all` 의 결과. **거절(Stale)은 오류가 아니라 정상 응답**이라 Err 가 아니다 —
+/// 프런트가 "저장 실패"로 보고 같은 낡은 내용을 재시도하면 안 되기 때문이다.
+#[derive(serde::Serialize)]
+#[serde(tag = "kind")]
+pub enum SaveResult {
+    Saved { version: i64 },
+    /// 내가 본 번호와 DB 의 번호가 다르다 = 그 사이 누군가(다른 창·낡은 프로세스)가
+    /// 저장했다. 프런트는 이 화면 내용을 파일로 남기고 최신 데이터를 다시 읽어야 한다.
+    Stale { expected: i64, current: i64 },
+}
+
+/// `base_version` 은 이 화면이 데이터를 읽어갈 때 받은 번호표(load_all 의 dataVersion).
+/// 없으면(구버전 프런트) 확인 없이 예전처럼 저장한다 — 새 방어가 기존 동작을 깨지 않게.
 #[tauri::command]
-pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
+pub fn save_all(
+    state: State<AppDb>,
+    items: Vec<Item>,
+    base_version: Option<i64>,
+) -> Result<SaveResult, String> {
     ensure_integrity(&state)?;
     let mut conn = state.conn();
     /* v3.3.6: 건수가 바뀌는 저장은 로그에 남긴다. "18건이던 게 어느 순간 8건"처럼
@@ -78,10 +95,31 @@ pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
     // A/B: 대량 축소(대량 삭제·통째 절단)를 감지하면 덮어쓰기 전에 강제 스냅샷을
     // 남긴다 — 30분 스로틀에 걸려 최근 백업이 없더라도 축소 직전 복원점이 남도록.
     // v3.3.4: 일시적 잠금/백신 I/O 는 한 번 실패로 끝내지 않고 짧게 재시도한다.
-    db::with_write_retry(|| {
-        db::save_items_guarded(&mut conn, &state.db_path, &state.backups_dir, &items, BACKUP_KEEP)
+    let outcome = db::with_write_retry(|| {
+        db::save_items_guarded(
+            &mut conn,
+            &state.db_path,
+            &state.backups_dir,
+            &items,
+            BACKUP_KEEP,
+            base_version,
+        )
     })
     .map_err(to_err)?;
+
+    // 거절이면 아무것도 쓰지 않았다 — 백업 회전도 하지 않고 그대로 돌려보낸다.
+    if let db::SaveOutcome::Stale { expected, current } = outcome {
+        db::log_line(
+            &state.base_dir,
+            &format!(
+                "STALE save rejected: 화면 번호 {expected} vs DB 번호 {current} · {}건 · {}",
+                items.len(),
+                db::exe_desc()
+            ),
+        );
+        return Ok(SaveResult::Stale { expected, current });
+    }
+    let db::SaveOutcome::Saved { version, .. } = outcome else { unreachable!() };
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
     // Best-effort: a failed backup rotation must not fail the save itself
     // (the save already committed by this point). The copy must run while
@@ -98,7 +136,7 @@ pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
         eprintln!("backup rotation failed: {e}");
     }
     drop(conn);
-    Ok(())
+    Ok(SaveResult::Saved { version })
 }
 
 #[tauri::command]

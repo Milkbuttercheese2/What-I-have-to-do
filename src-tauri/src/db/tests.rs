@@ -5,6 +5,11 @@ use rusqlite::Connection;
 use super::model::*;
 use super::{backup, fields, id_kinds, items, phonebook, presets, recur_defs, settings};
 
+/// SaveOutcome 에서 '스냅샷을 남겼는가'만 꺼내는 테스트 헬퍼 (v3.3.7 전 단언 유지용)
+fn snapshotted(o: super::SaveOutcome) -> bool {
+    matches!(o, super::SaveOutcome::Saved { snapshotted: true, .. })
+}
+
 fn test_conn() -> Connection {
     let mut conn = Connection::open_in_memory().unwrap();
     conn.pragma_update(None, "foreign_keys", true).unwrap();
@@ -732,19 +737,19 @@ fn save_items_guarded_snapshots_only_on_drastic_shrink() {
             it
         })
         .collect();
-    assert!(!super::save_items_guarded(&mut conn, &db_path, &backups_dir, &ten, 20).unwrap());
+    assert!(!snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &ten, 20, None).unwrap()));
 
     // 사소한 축소 10→9: 스냅샷 없음.
     let nine = ten[..9].to_vec();
     assert!(
-        !super::save_items_guarded(&mut conn, &db_path, &backups_dir, &nine, 20).unwrap(),
+        !snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &nine, 20, None).unwrap()),
         "작은 축소(10→9)는 스냅샷하지 않아야 함"
     );
 
     // 급격한 축소 9→2: 덮어쓰기 전 스냅샷.
     let two = nine[..2].to_vec();
     assert!(
-        super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20).unwrap(),
+        snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20, None).unwrap()),
         "대량 축소(9→2)는 덮어쓰기 전에 스냅샷해야 함"
     );
 
@@ -871,11 +876,11 @@ fn save_items_guarded_snapshots_when_the_count_cannot_be_read() {
 
     let mut conn = super::open(&db_path).unwrap();
     let two = sample_items();
-    super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20).unwrap();
+    super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20, None).unwrap();
 
     // items 를 못 읽는 상태를 만든다(count 쿼리 실패) — 테이블을 임시로 치운다.
     conn.execute_batch("ALTER TABLE items RENAME TO items_hidden").unwrap();
-    let snapshotted = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20);
+    let snapshotted = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20, None);
     // 저장 자체는 실패하지만(테이블 없음), 그 전에 스냅샷은 남아 있어야 한다.
     assert!(snapshotted.is_err(), "테이블이 없으면 저장은 실패한다");
     let presave = std::fs::read_dir(&backups_dir)
@@ -946,4 +951,106 @@ fn log_line_appends_and_never_panics() {
     assert!(text.contains("items 18 -> 8"));
     assert!(text.contains("pid="), "언제·어느 프로세스인지가 핵심이다");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/* ===== v3.3.7 번호표(낡은 화면의 덮어쓰기 차단) ===== */
+
+// 실제로 일어난 사고의 재현: 7월 21일 상태를 들고 있던 화면이 오늘 저장을 하면
+// 그 뒤에 쌓인 업무가 통째로 사라졌다. 이제는 그 저장이 **거절**돼야 한다.
+#[test]
+fn a_stale_screen_cannot_overwrite_newer_data() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_stale_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut conn = super::open(&db_path).unwrap();
+
+    // 화면 A 가 데이터를 읽어간다(이때 번호표를 받는다).
+    let a_version = super::meta::read_version(&conn).unwrap();
+    let old: Vec<Item> = sample_items();               // A 가 들고 있는 낡은 내용(2건)
+
+    // 그 사이 화면 B 가 업무를 늘려 저장했다 → 번호가 올라간다.
+    let mut newer = sample_items();
+    for i in 0..6 {
+        let mut it = sample_items()[1].clone();
+        it.id = 9000 + i;
+        newer.push(it);
+    }
+    let saved = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &newer, 20, Some(a_version)).unwrap();
+    let b_version = match saved {
+        super::SaveOutcome::Saved { version, .. } => version,
+        other => panic!("B 의 저장은 통과해야 한다: {other:?}"),
+    };
+    assert!(b_version > a_version, "저장하면 번호가 올라가야 한다");
+    assert_eq!(items::load_items(&conn).unwrap().len(), 8);
+
+    // 이제 화면 A 가 낡은 번호표로 저장하려 한다 → 거절.
+    let outcome =
+        super::save_items_guarded(&mut conn, &db_path, &backups_dir, &old, 20, Some(a_version)).unwrap();
+    assert_eq!(
+        outcome,
+        super::SaveOutcome::Stale { expected: a_version, current: b_version },
+        "낡은 화면의 저장은 거절돼야 한다"
+    );
+    // 그리고 **데이터는 손대지 않았어야 한다** — 이게 이 장치의 존재 이유다.
+    assert_eq!(
+        items::load_items(&conn).unwrap().len(),
+        8,
+        "거절된 저장은 데이터를 1건도 바꾸면 안 된다"
+    );
+    assert_eq!(super::meta::read_version(&conn).unwrap(), b_version, "거절은 번호도 올리지 않는다");
+
+    // 최신을 다시 읽은 화면(=올바른 번호표)은 정상 저장된다.
+    let ok = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &old, 20, Some(b_version)).unwrap();
+    assert!(matches!(ok, super::SaveOutcome::Saved { .. }), "번호가 맞으면 저장된다");
+    assert_eq!(items::load_items(&conn).unwrap().len(), 2);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 번호표를 보내지 않으면(구버전 프런트) 예전처럼 저장된다 — 새 방어가 기존 동작을 깨지 않게.
+#[test]
+fn saving_without_a_version_still_works() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_nover_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut conn = super::open(&db_path).unwrap();
+    let out = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &sample_items(), 20, None).unwrap();
+    assert!(matches!(out, super::SaveOutcome::Saved { .. }));
+    assert_eq!(items::load_items(&conn).unwrap().len(), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 백업 복원도 '데이터가 바뀐 사건'이라 번호를 올려야 한다 — 안 올리면 복원 직전
+// 상태를 들고 있던 화면의 저장이 복원한 내용을 곧바로 덮어쓴다.
+#[test]
+fn restoring_a_backup_bumps_the_version() {
+    let mut conn = test_conn();
+    let before = super::meta::read_version(&conn).unwrap();
+    let payload = BackupPayload {
+        v: backup::BACKUP_VERSION,
+        exported: "2026-08-02T00:00:00.000Z".into(),
+        fields: vec![],
+        presets: vec![],
+        id_kinds: vec![],
+        settings: Settings::new(),
+        items: sample_items(),
+        recur_defs: vec![],
+        phonebook: vec![],
+    };
+    backup::import_payload(&mut conn, payload).unwrap();
+    assert!(super::meta::read_version(&conn).unwrap() > before);
+}
+
+// load_all(=화면이 데이터를 읽는 경로)이 지금 번호를 함께 내려줘야 한다.
+#[test]
+fn load_app_state_carries_the_current_version() {
+    let mut conn = test_conn();
+    let v0 = backup::load_app_state(&conn).unwrap().data_version;
+    items::save_items(&mut conn, &sample_items()).unwrap();
+    let tx = conn.transaction().unwrap();
+    super::meta::bump_version_tx(&tx).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(backup::load_app_state(&conn).unwrap().data_version, v0 + 1);
 }
