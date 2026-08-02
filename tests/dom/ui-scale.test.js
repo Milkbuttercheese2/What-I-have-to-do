@@ -40,10 +40,10 @@ test('stepScale: 한 칸씩 오르내리고 끝에서 멈춘다', () => {
 
 test('applyUiScale: 정규화한 값으로 웹뷰 배율을 건다', async () => {
   await env.resetS();
-  applyUiScale(130);
+  applyUiScale(110);                                   // 범위 안 값은 그대로
   applyUiScale(999);                                   // 상한으로 잘려야 한다
   const calls = env.invokeCalls.filter(c=>c.cmd==='set_ui_scale');
-  assert.deepEqual(calls.map(c=>c.args.scale), [130, MAX_SCALE]);
+  assert.deepEqual(calls.map(c=>c.args.scale), [110, MAX_SCALE]);
 });
 
 test('배율 적용은 F1 로드 게이트에 막히지 않는다 (저장이 아니라 표시)', async () => {

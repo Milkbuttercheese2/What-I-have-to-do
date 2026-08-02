@@ -19,7 +19,10 @@ import { S } from './state.js';
 import { STORE } from './store.js';
 import { showToast } from './dom-utils.js';
 
-export const MIN_SCALE = 80, MAX_SCALE = 150, SCALE_STEP = 10;
+/* v3.3.3 소유자 지정: 배율 범위를 90~120% 로 좁힌다 — 80%/150% 는 레이아웃이
+   깨지거나(탭 줄바꿈) 쓸모가 적어 실사용 구간만 남겼다. 범위 밖 저장값은
+   normScale 이 잘라 주므로 예전에 150% 로 두었던 설정도 자동으로 120% 가 된다. */
+export const MIN_SCALE = 90, MAX_SCALE = 120, SCALE_STEP = 10;
 
 let saveTimer = null;
 
