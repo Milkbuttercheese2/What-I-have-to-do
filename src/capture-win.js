@@ -147,6 +147,25 @@ function closePb(skipResize){
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
   if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
 }
+/* 자동완성이 펴진 지금, 창이 필요로 하는 논리 높이(CSS px)를 실측한다 (v3.2.3).
+   입력줄(#cap-bar) + 힌트줄 + 목록(행 높이 × 표시 행수 + 목록 패딩) + 패널 테두리.
+   PB_MAX_ROWS 를 넘는 후보는 목록 스크롤로 본다(창은 더 커지지 않는다).
+   ⚠️ 반드시 body.pb 적용 + renderPb() 이후에 호출할 것 — 그 전엔 목록이 없다. */
+const PB_MAX_ROWS=10;
+function pbNeededHeight(){
+  const bar=$id('cap-bar'), hint=$id('cap-hint'), pb=$id('cap-pb');
+  if(!bar||!hint||!pb) return 126;
+  const h=el=>el.getBoundingClientRect().height;
+  const rows=[...pb.querySelectorAll('.cap-pb-it')];
+  const shown=Math.min(rows.length, PB_MAX_ROWS);
+  /* 첫 행 top → 표시할 마지막 행 bottom = 행 사이 간격까지 포함한 실제 목록 높이.
+     행 높이만 곱하면 행 마진(.cap-pb-it margin:1px 0)이 빠져 2~4px 모자라고,
+     그 몇 px 때문에 목록에 스크롤이 생겨 마지막 행이 잘려 보였다(v3.2.2 증상). */
+  const listH=(shown&&rows[0])?(rows[shown-1].getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top):0;
+  const cs=getComputedStyle(pb);
+  const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0)+(parseFloat(cs.borderTopWidth)||0);
+  return Math.ceil(h(bar)+h(hint)+listH+pad+6);   // +6 = 행 상하 마진 2 + 패널 테두리 2 + 반올림 여유 2
+}
 function renderPb(){
   const w=$id('cap-pb'); if(!w) return;
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
@@ -171,10 +190,11 @@ async function runPb(){
   document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }
-  /* v3.2.2 높이 공식 교정: PB_BASE_H(126) 가산은 메모 모드의 여유 슬랙까지 끌고 와
-     목록 아래 죽은 띠(~35px)를 만들었다(실렌더 rect 로 확정). 실제 소비량으로 계산:
-     bar 56 + 힌트 ~32 + 목록 패딩 12 = 100, 행당 33. 10행 넘으면 목록 스크롤. */
-  invoke('resize_capture',{height:100+Math.min(pbItems.length,10)*33}).catch(()=>{});
+  /* v3.2.3 근본 수정: 창 높이를 **실측**한다(상수 공식 폐지).
+     행 높이·입력칸 확장·힌트 줄수·화면 배율·폰트 폴백은 환경마다 달라서, 어떤
+     상수도 언젠가 어긋난다(v2.9~v3.2.2에서 빈 띠 ↔ 잘림을 반복한 진짜 이유).
+     지금 화면의 실제 픽셀을 재서 넘기면 그 변수들이 저절로 반영된다. */
+  invoke('resize_capture',{height:pbNeededHeight()}).catch(()=>{});
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
