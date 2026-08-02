@@ -139,7 +139,12 @@ pub fn save_all(
         BACKUP_KEEP,
         BACKUP_MIN_INTERVAL,
     ) {
+        /* v3.4.2: 백업 회전 실패를 로그에도 남긴다. 백업은 최후의 방어선인데
+           예전엔 stderr 만 찍고 넘어가, 디스크 부족·권한 문제로 몇 주간 백업이
+           하나도 안 쌓여도 아무도 몰랐다. 저장 자체는 이미 커밋됐으므로
+           실패시키지는 않는다(부수 작업). */
         eprintln!("backup rotation failed: {e}");
+        db::log_line(&state.base_dir, &format!("BACKUP rotation failed: {e}"));
     }
     drop(conn);
     Ok(SaveResult::Saved { version })
