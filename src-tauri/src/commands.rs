@@ -726,11 +726,54 @@ static CAPTURE_H: AtomicU32 = AtomicU32::new(126);
 /// 크기 조정 뒤 560 으로 끌려가며 폭이 흔들렸다. v3.2.7: 소유자 지정으로 **700 고정**.
 const CAPTURE_W: f64 = 700.0;
 
+/// 웹뷰의 실제 배율(CSS px → 논리 px), 1/1000 단위. 0 = 아직 못 쟀음.
+///
+/// **왜 UI_SCALE 을 그대로 쓰면 안 되는가 (v3.4.8 — 실기기에서 확인):**
+/// 웹뷰가 그리는 배율은 앱이 건 zoom(UI_SCALE)만이 아니다. Windows 접근성의
+/// **'텍스트 크기 조정'**(설정 → 접근성 → 텍스트 크기, 100~225%)이 Chromium/WebView2
+/// 에서는 페이지 전체 확대로 함께 곱해진다. 이 기계는 그 값이 135% 여서 실제 배율이
+/// 1.2 × 1.35 = 1.62 인데 앱은 1.2 로 알고 창을 만들었다 → 창이 필요한 것보다 25%
+/// 작아 목록 아래가 잘렸다(사용자가 여러 번 신고한 "행이 다 안 보인다"의 진짜 원인).
+/// DPI 배율까지 더해지는 조합도 마찬가지다.
+///
+/// 그래서 배율을 **추정하지 않고 잰다**: 프런트가 자기 CSS 뷰포트 폭(innerWidth)을
+/// 같이 보내면, 지금 창의 논리 폭과 나눠 실제 배율을 얻는다. 원인이 무엇이든
+/// (텍스트 배율·DPI·zoom) 결과가 곧 답이라 틀릴 수가 없다.
+static CAPTURE_RATIO: AtomicU32 = AtomicU32::new(0);
+
+fn capture_ratio(app: &AppHandle) -> f64 {
+    let r = CAPTURE_RATIO.load(Ordering::Relaxed);
+    if r > 0 {
+        return r as f64 / 1000.0;
+    }
+    let _ = app;
+    UI_SCALE.load(Ordering::Relaxed) as f64 / 100.0 // 아직 못 쟀으면 종전대로
+}
+
 fn apply_capture_size(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("capture") {
-        let s = UI_SCALE.load(Ordering::Relaxed) as f64 / 100.0;
-        let h = CAPTURE_H.load(Ordering::Relaxed) as f64 * s;
-        let _ = win.set_size(tauri::LogicalSize::new(CAPTURE_W * s, h));
+        let r = capture_ratio(app);
+        let h = CAPTURE_H.load(Ordering::Relaxed) as f64 * r;
+        let _ = win.set_size(tauri::LogicalSize::new(CAPTURE_W * r, h));
+    }
+}
+
+/// 프런트가 보내온 CSS 뷰포트 폭으로 실제 배율을 갱신한다.
+fn note_capture_ratio(app: &AppHandle, viewport_width: Option<f64>) {
+    let (Some(vw), Some(win)) = (viewport_width, app.get_webview_window("capture")) else {
+        return;
+    };
+    if vw < 1.0 {
+        return;
+    }
+    let (Ok(sz), Ok(sf)) = (win.inner_size(), win.scale_factor()) else {
+        return;
+    };
+    let logical_w = sz.width as f64 / sf;
+    let r = logical_w / vw;
+    // 말도 안 되는 값(창이 아직 안 잡혔거나 뷰포트가 0에 가까울 때)은 버린다
+    if r.is_finite() && (0.5..=5.0).contains(&r) {
+        CAPTURE_RATIO.store((r * 1000.0).round() as u32, Ordering::Relaxed);
     }
 }
 
@@ -761,7 +804,8 @@ pub fn set_ui_scale(app: AppHandle, scale: u32) -> Result<(), String> {
 /// 캡처 창 크기 전환 (메모 모드 ↔ 검색 모드). 웹뷰 쪽에 창 크기 권한을
 /// 열어주는 대신 커맨드 하나로 좁게 노출한다. 배율은 위에서 기억한 값을 쓴다.
 #[tauri::command]
-pub fn resize_capture(app: AppHandle, height: u32) -> Result<(), String> {
+pub fn resize_capture(app: AppHandle, height: u32, viewport_width: Option<f64>) -> Result<(), String> {
+    note_capture_ratio(&app, viewport_width); // 실제 배율부터 갱신하고 그 값으로 크기를 정한다
     CAPTURE_H.store(height.clamp(64, 640), Ordering::Relaxed);
     apply_capture_size(&app);
     Ok(())
