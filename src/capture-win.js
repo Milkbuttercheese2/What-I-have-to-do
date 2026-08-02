@@ -171,7 +171,10 @@ async function runPb(){
   document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }
-  invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,10)*33+12}).catch(()=>{});
+  /* v3.2.2 높이 공식 교정: PB_BASE_H(126) 가산은 메모 모드의 여유 슬랙까지 끌고 와
+     목록 아래 죽은 띠(~35px)를 만들었다(실렌더 rect 로 확정). 실제 소비량으로 계산:
+     bar 56 + 힌트 ~32 + 목록 패딩 12 = 100, 행당 33. 10행 넘으면 목록 스크롤. */
+  invoke('resize_capture',{height:100+Math.min(pbItems.length,10)*33}).catch(()=>{});
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
