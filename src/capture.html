@@ -44,7 +44,11 @@
     조금만 어긋나도 목록이 잘리거나 빈 띠가 생겼고, 그 픽셀을 맞추려 계산을
     반복 수정해야 했다. 이제 창을 넉넉히 잡아도 남는 부분은 보이지 않으므로
     "잘림"이 구조적으로 불가능하다. 검색 모드는 목록 스크롤이 필요해 꽉 채운다. */
- body{align-items:flex-start}
+ /* ⚠️ 세로만 '내용 높이'다 — 가로는 창을 꽉 채워야 한다. body 를 세로 flex 로 두면
+    주축(세로)에서 flex:0 0 auto 가 내용 높이가 되고, 교차축(가로)은 stretch 로 꽉 찬다.
+    v3.2.5 에서 가로 flex 인 채로 flex:0 0 auto 를 줘 패널이 내용 폭만 차지하고
+    왼쪽에 치우쳐 있었다(좌 0 / 우 359px — 실측으로 확인, v3.2.7 수정). */
+ body{flex-direction:column}
  body.search #cap-shell{height:100%}
  #cap-shell{flex:0 0 auto;max-height:100%;box-sizing:border-box;display:flex;flex-direction:column;min-height:0;
    background:var(--cap-panel);border:1px solid var(--cap-border);border-radius:18px;overflow:hidden}
