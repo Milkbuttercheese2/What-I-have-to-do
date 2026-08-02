@@ -296,6 +296,23 @@ pub fn run() {
                     .blocking_show();
             }
 
+            /* v3.3.6 진단 로그 — 기동 흔적을 남긴다. 실행 파일 경로가 핵심이다:
+               옛 버전 exe 가 트레이에 살아 있다가 옛 메모리 상태를 통째로 저장하면
+               데이터가 그 시점으로 되돌아가는데(전체 교체 저장), 지금까지는 그걸
+               가릴 방법이 전혀 없었다. 복구·가져오기·이동이 일어났다면 그것도 남긴다. */
+            {
+                let n: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0))
+                    .unwrap_or(-1);
+                db::log_line(
+                    &base_dir,
+                    &format!("start items={n} · {} · {}", db::exe_desc(), db_path.display()),
+                );
+                if let Some(msg) = &note {
+                    db::log_line(&base_dir, &format!("start NOTE: {}", msg.replace('\n', " / ")));
+                }
+            }
+
             let integrity_ok = match db::integrity_check(&conn) {
                 Ok(Ok(())) => true,
                 Ok(Err(report)) => {

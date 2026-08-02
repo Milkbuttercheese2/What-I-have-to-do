@@ -68,6 +68,50 @@ fn is_transient(err: &rusqlite::Error) -> bool {
     }
 }
 
+/* ===== v3.3.6 진단 로그 =====
+   "데이터가 어느 날 갑자기 옛날 상태로 돌아가 있다"는 사고가 07-23, 08-02 두 차례
+   반복됐는데, 앱이 아무 기록도 남기지 않아 **무엇이 덮었는지 알 수 없었다**.
+   `eprintln!` 은 콘솔로만 나가고 exe 로 실행하면 그대로 사라진다.
+
+   그래서 데이터 폴더 옆에 사람이 읽는 로그를 남긴다. 목적은 딱 하나 —
+   다음에 또 되돌아가면 **언제·어떤 실행 파일이·몇 건을 썼는지** 바로 짚는 것.
+   특히 실행 파일 경로를 남기는 게 핵심이다(옛 버전 exe 가 트레이에 살아 있다가
+   옛 메모리 상태를 통째로 저장하는 것이 가장 유력한 경로다).
+
+   원칙: 로그는 **거들 뿐** 절대 앱을 방해하지 않는다 — 실패해도 무시하고,
+   업무 내용(메모·이름·번호)은 남기지 않는다(건수와 사건만). */
+const LOG_MAX_BYTES: u64 = 1_000_000;
+
+/// `<base_dir>/wmhh.log` 에 한 줄 덧붙인다. 실패는 조용히 무시한다.
+pub fn log_line(base_dir: &Path, msg: &str) {
+    let path = base_dir.join("wmhh.log");
+    // 너무 커지면 한 번 갈아 끼운다(직전 것 하나만 보관).
+    if fs::metadata(&path).map(|m| m.len() > LOG_MAX_BYTES).unwrap_or(false) {
+        let _ = fs::rename(&path, base_dir.join("wmhh.log.1"));
+    }
+    let _ = fs::create_dir_all(base_dir);
+    use std::io::Write;
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "[{}] pid={} {}", fs_stamp(), std::process::id(), msg);
+    }
+}
+
+/// 지금 실행 중인 실행 파일 경로 — 옛 버전 exe 가 섞여 도는지 가리는 열쇠.
+pub fn exe_desc() -> String {
+    std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "(알 수 없음)".into())
+}
+
+/// `DbError` 판. 호출부(lib.rs 기동 경로)가 "지금 안 되는 것"과 "망가진 것"을
+/// 갈라 볼 때 쓴다 — 이 구분이 데이터를 지킨다(아래 open_with_recovery 참조).
+pub fn is_transient_err(e: &error::DbError) -> bool {
+    match e {
+        error::DbError::Sqlite(se) => is_transient(se),
+        _ => false,
+    }
+}
+
 /// 일시적 실패(잠금·백신 I/O)면 잠깐 쉬었다 다시 해 본다.
 ///
 /// 저장이 한 번 실패하면 그 변경분은 사용자 화면에만 남고 디스크엔 없다. 그래서
@@ -147,6 +191,30 @@ pub fn open_with_recovery(
         db_path.display()
     );
 
+    /* v3.3.6: 복구에 들어가기 전에 **원본을 반드시 옆에 남긴다.**
+       지금까지 복구는 `fs::copy(backup, db_path)` 로 원본을 그 자리에서 덮어썼다.
+       그 뒤에 팝업으로 알려 주지만, 그때는 이미 되돌릴 수 없다 — 만약 원본이 사실
+       멀쩡했고(일시적 잠금 등) 백업이 옛것이었다면 그 순간 최신 데이터가 사라진다.
+       복사 한 번이면 그 위험이 통째로 없어진다: 무슨 일이 있어도 원본은 남는다.
+       (파일이 없거나 복사에 실패해도 복구 자체는 계속한다 — 앱은 켜져야 한다.) */
+    let mut kept: Option<PathBuf> = None;
+    if db_path.exists() {
+        let aside = db_path.with_file_name(format!("wmhh.before-recovery-{}.sqlite", fs_stamp()));
+        match fs::copy(db_path, &aside) {
+            Ok(_) => kept = Some(aside),
+            Err(e) => eprintln!("복구 전 원본 보관 실패(복구는 계속): {e}"),
+        }
+    }
+    let kept_note = kept
+        .as_ref()
+        .map(|p| {
+            format!(
+                "\n\n복구 전 원본은 지우지 않고 옆에 보관했습니다: {}\n(원본이 사실 멀쩡했다면 이 파일을 [설정] → [JSON·DB파일 불러오기]로 되살릴 수 있습니다.)",
+                p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+            )
+        })
+        .unwrap_or_default();
+
     // Try backups newest-first, but ONLY adopt one that passes its OWN
     // integrity check. A subtly corrupt newest backup must not be restored
     // over an older good one — the manual `.sqlite` import path already
@@ -165,7 +233,7 @@ pub fn open_with_recovery(
         {
             Ok(conn) => {
                 let note = format!(
-                    "원본 데이터베이스 파일을 열 수 없어({primary_err}) 가장 최근의 정상 자동 백업({})으로 복구했습니다.",
+                    "원본 데이터베이스 파일을 열 수 없어({primary_err}) 가장 최근의 정상 자동 백업({})으로 복구했습니다.{kept_note}",
                     backup.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
                 );
                 return Ok((conn, Some(note)));
@@ -184,7 +252,7 @@ pub fn open_with_recovery(
     let conn = open(db_path)?;
     let note = format!(
         "데이터베이스를 열 수 없었고 사용 가능한 자동 백업도 없어 새로 시작합니다.\n\
-         (문제가 있던 파일은 삭제하지 않고 옆에 보관해두었습니다.)\n원래 오류: {primary_err}"
+         (문제가 있던 파일은 삭제하지 않고 옆에 보관해두었습니다.)\n원래 오류: {primary_err}{kept_note}"
     );
     Ok((conn, Some(note)))
 }
