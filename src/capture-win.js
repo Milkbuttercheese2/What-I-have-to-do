@@ -152,6 +152,8 @@ function renderPb(){
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
     <span class="cap-pb-who">${esc(e.who||'—')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
   </div>`).join('');
+  const sel=w.querySelector('.cap-pb-it.sel');
+  if(sel&&sel.scrollIntoView) sel.scrollIntoView({block:'nearest'});   // 10행 넘어 스크롤 시 선택 추적 (v3.2.1)
 }
 async function runPb(){
   const inp=$id('cap-inp');
@@ -169,7 +171,7 @@ async function runPb(){
   document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }
-  invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,5)*33+12}).catch(()=>{});
+  invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,10)*33+12}).catch(()=>{});
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){

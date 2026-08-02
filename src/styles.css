@@ -454,7 +454,8 @@
 
   /* @ 자동완성 드롭다운 — 카드 규칙(흰 면·1px 경계·둥근 모서리)을 따르는 떠 있는 목록 */
   #atDrop{position:fixed;z-index:200;min-width:240px;max-width:380px;background:var(--card);
-    border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 26px var(--overlay);padding:4px;overflow:hidden}
+    border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 26px var(--overlay);padding:4px;
+    max-height:330px;overflow-y:auto}   /* 10행까지 한눈에, 넘치면 스크롤 (v3.2.1) */
   #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px}
   #atDrop .at-item.sel,#atDrop .at-item:hover{background:var(--slate-bg)}
   #atDrop .at-who{flex:none;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

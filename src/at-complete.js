@@ -65,7 +65,10 @@ function openAt(el, list, rect){
 function setSel(i){
   if(!items.length) return;
   sel=Math.max(0, Math.min(i, items.length-1));
-  [...drop.querySelectorAll('.at-item')].forEach((el,n)=>el.classList.toggle('sel', n===sel));
+  [...drop.querySelectorAll('.at-item')].forEach((el,n)=>{
+    el.classList.toggle('sel', n===sel);
+    if(n===sel && el.scrollIntoView) el.scrollIntoView({block:'nearest'});   // 스크롤 목록 대응 (v3.2.1)
+  });
 }
 
 function apply(i){
@@ -102,14 +105,14 @@ function onInput(e){
   if(isMemo(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
     const t=atToken(el.value, el.selectionStart);
-    const list=(t&&queryReady(t.query))?matchEntries(S.phonebook, t.query, 5):[];   // v2.10.0 문턱값
+    const list=(t&&queryReady(t.query))?matchEntries(S.phonebook, t.query, 50):[];   // v2.10.0 문턱값
     if(!list.length){ if(anchor===el) close(); return; }
     token={start:t.start, caret:el.selectionStart};
     openAt(el, list, caretRect(el));
   }else if(isContact(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
     const q=el.value.trim();
-    const list=queryReady(q)?matchEntries(S.phonebook, q, 5):[];                    // v2.10.0 문턱값
+    const list=queryReady(q)?matchEntries(S.phonebook, q, 50):[];                    // v2.10.0 문턱값
     if(!list.length){ if(anchor===el) close(); return; }
     token=null;
     const r=el.getBoundingClientRect();
