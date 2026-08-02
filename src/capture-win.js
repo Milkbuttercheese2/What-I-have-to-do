@@ -171,23 +171,38 @@ function pbNeededHeight(){
    남는다. 실제로 창이 바뀐 뒤 목록이 넘치는지(잘림) 남는지(빈 띠)를 재서 그
    차이만큼 한 번 더 조정하면, 배율·폰트·플랫폼 차이와 무관하게 수렴한다.
    10행 초과는 스크롤이 정상이므로 보정 대상이 아니다. */
+/* v3.2.5: 창은 **넉넉히** 잡고(SLACK), 남는 부분은 투명이라 보이지 않는다
+   (capture.html 의 '패널은 내용 높이' 규칙과 한 쌍 — 이 둘이 같이 있어야
+   창 높이가 몇 px 어긋나도 잘림이 생기지 않는다). 그래도 계산이 크게 모자란
+   환경을 대비해, 적용 후 목록이 넘치면(잘림) 그만큼 한 번 더 키운다. */
+const PB_SLACK=48;
 async function fitPbWindow(){
   const seq=pbSeq;
-  invoke('resize_capture',{height:pbNeededHeight()}).catch(()=>{});
+  invoke('resize_capture',{height:pbNeededHeight()+PB_SLACK}).catch(()=>{});
   await new Promise(r=>setTimeout(r,80));            // 네이티브 창 리사이즈 반영 대기
   if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
   const pb=$id('cap-pb'); if(!pb) return;
-  const rows=pb.querySelectorAll('.cap-pb-it').length;
-  if(rows>PB_MAX_ROWS) return;                       // 스크롤이 정상인 경우
-  const diff=pb.scrollHeight-pb.clientHeight;        // >0 잘림, <0 빈 공간
-  if(Math.abs(diff)<=1) return;
-  invoke('resize_capture',{height:Math.ceil(window.innerHeight+diff)}).catch(()=>{});
+  if(pb.querySelectorAll('.cap-pb-it').length>PB_MAX_ROWS) return;   // 스크롤이 정상인 경우
+  const over=pb.scrollHeight-pb.clientHeight;        // >0 이면 여전히 잘린 상태
+  if(over>1) invoke('resize_capture',{height:Math.ceil(window.innerHeight+over+PB_SLACK)}).catch(()=>{});
 }
 function renderPb(){
   const w=$id('cap-pb'); if(!w) return;
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
     <span class="cap-pb-who">${esc(e.who||'—')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
   </div>`).join('');
+  /* v3.2.5: 10행 상한을 **목록 자체**에 건다(실측). 창 여유(PB_SLACK)와 무관하게
+     정확히 10행에서 멈추고 그 아래는 스크롤 — 창 크기로 행수를 통제하려던 방식은
+     여유 픽셀이 생길 때마다 11·12행이 삐져나왔다. */
+  const rows=[...w.querySelectorAll('.cap-pb-it')];
+  if(rows.length>PB_MAX_ROWS){
+    const cs=getComputedStyle(w);
+    const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+    const listH=rows[PB_MAX_ROWS-1].getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top;
+    w.style.maxHeight=Math.ceil(listH+pad+2)+'px';
+  }else{
+    w.style.maxHeight='';
+  }
   const sel=w.querySelector('.cap-pb-it.sel');
   if(sel&&sel.scrollIntoView) sel.scrollIntoView({block:'nearest'});   // 10행 넘어 스크롤 시 선택 추적 (v3.2.1)
 }
