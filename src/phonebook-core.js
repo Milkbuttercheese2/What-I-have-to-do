@@ -128,7 +128,7 @@ export function tagText(e){
    입력이 esc() 를 거친 뒤라 &·<·>·" 는 엔티티(&…;)로 존재한다 — 문자 집합에서 &를
    제외하므로 엔티티를 관통해 태그가 이어지지 않고, data-at 속성 주입도 불가능하다.
    v2.11.0(소유자 지정): book 을 주면 **전화번호부에 실존하는 관련인의 태그만** 감싼다 —
-   @우성균 에서 '균'만 지워 @우성 이 되면 더는 태그가 아니다(색·칩 모두 해제). */
+   @홍길동 에서 '균'만 지워 @홍길 이 되면 더는 태그가 아니다(색·칩 모두 해제). */
 export function linkifyAt(escaped, book){
   return String(escaped||'').replace(/(^|\s)@([^\s@&<>"'(]{1,30})/g,(m,pre,raw)=>{
     const name=raw.replace(/[.,;:!?·)\]]+$/,'');
