@@ -102,14 +102,14 @@ function onInput(e){
   if(isMemo(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
     const t=atToken(el.value, el.selectionStart);
-    const list=(t&&queryReady(t.query))?matchEntries(S.phonebook, t.query, 8):[];   // v2.10.0 문턱값
+    const list=(t&&queryReady(t.query))?matchEntries(S.phonebook, t.query, 5):[];   // v2.10.0 문턱값
     if(!list.length){ if(anchor===el) close(); return; }
     token={start:t.start, caret:el.selectionStart};
     openAt(el, list, caretRect(el));
   }else if(isContact(el)){
     if(!S.phonebook.length){ if(anchor===el) close(); return; }
     const q=el.value.trim();
-    const list=queryReady(q)?matchEntries(S.phonebook, q, 8):[];                    // v2.10.0 문턱값
+    const list=queryReady(q)?matchEntries(S.phonebook, q, 5):[];                    // v2.10.0 문턱값
     if(!list.length){ if(anchor===el) close(); return; }
     token=null;
     const r=el.getBoundingClientRect();

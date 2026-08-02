@@ -169,7 +169,7 @@ async function runPb(){
   document.body.classList.add('pb');
   renderPb();
   if(!pbOpen){ pbOpen=true; }
-  invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,6)*33+12}).catch(()=>{});
+  invoke('resize_capture',{height:PB_BASE_H+Math.min(pbItems.length,5)*33+12}).catch(()=>{});
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
