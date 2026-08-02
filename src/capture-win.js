@@ -166,6 +166,23 @@ function pbNeededHeight(){
   const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0)+(parseFloat(cs.borderTopWidth)||0);
   return Math.ceil(h(bar)+h(hint)+listH+pad+6);   // +6 = 행 상하 마진 2 + 패널 테두리 2 + 반올림 여유 2
 }
+/* 창 크기를 맞추고 **결과를 확인해 스스로 보정**한다 (v3.2.4 — 자가 보정).
+   계산만 하고 끝내면(v3.2.1~v3.2.3) 그 계산이 틀린 환경에서 빈 띠/잘림이 그대로
+   남는다. 실제로 창이 바뀐 뒤 목록이 넘치는지(잘림) 남는지(빈 띠)를 재서 그
+   차이만큼 한 번 더 조정하면, 배율·폰트·플랫폼 차이와 무관하게 수렴한다.
+   10행 초과는 스크롤이 정상이므로 보정 대상이 아니다. */
+async function fitPbWindow(){
+  const seq=pbSeq;
+  invoke('resize_capture',{height:pbNeededHeight()}).catch(()=>{});
+  await new Promise(r=>setTimeout(r,80));            // 네이티브 창 리사이즈 반영 대기
+  if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
+  const pb=$id('cap-pb'); if(!pb) return;
+  const rows=pb.querySelectorAll('.cap-pb-it').length;
+  if(rows>PB_MAX_ROWS) return;                       // 스크롤이 정상인 경우
+  const diff=pb.scrollHeight-pb.clientHeight;        // >0 잘림, <0 빈 공간
+  if(Math.abs(diff)<=1) return;
+  invoke('resize_capture',{height:Math.ceil(window.innerHeight+diff)}).catch(()=>{});
+}
 function renderPb(){
   const w=$id('cap-pb'); if(!w) return;
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
@@ -194,7 +211,7 @@ async function runPb(){
      행 높이·입력칸 확장·힌트 줄수·화면 배율·폰트 폴백은 환경마다 달라서, 어떤
      상수도 언젠가 어긋난다(v2.9~v3.2.2에서 빈 띠 ↔ 잘림을 반복한 진짜 이유).
      지금 화면의 실제 픽셀을 재서 넘기면 그 변수들이 저절로 반영된다. */
-  invoke('resize_capture',{height:pbNeededHeight()}).catch(()=>{});
+  fitPbWindow();
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
 function applyPb(i){
