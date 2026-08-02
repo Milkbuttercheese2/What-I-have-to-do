@@ -537,6 +537,12 @@ pub fn show_capture_window(app: &AppHandle) {
         let y = m.position().y + (m.size().height as f64 * 0.2) as i32;
         let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
     }
+    /* v3.4.11: 창을 띄울 때마다 배율을 **다시** 건다.
+       미니 창은 시작할 때 숨어 있어서, 시작 직후 `set_ui_scale` 이 건 zoom 이
+       (웹뷰가 아직 준비 전이면) 먹지 않는 경우가 있다. 그러면 앱 배율 120% 인데
+       미니 창만 100% 로 그려져 글자가 작아지고, 창 크기 계산의 기준(실제 배율)도
+       달라진다. 보이기 직전에 한 번 더 걸면 그 경합이 사라진다. */
+    let _ = win.set_zoom(UI_SCALE.load(Ordering::Relaxed) as f64 / 100.0);
     let _ = win.show();
     let _ = win.set_focus();
     // v2.6.5: '새로 떴다'를 알려 프런트가 화면을 초기화하게 한다(검색어 비우고 첫 화면으로).

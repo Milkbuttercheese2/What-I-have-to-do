@@ -17,7 +17,7 @@ Branch-protection rules on `main` (require PR, block direct push) have **not** b
 
 ## Versioning convention (user-defined)
 
-Current release = **v3.4.10** (직전 정식 v3.0.0 (2026-08-02 — v2.7.0~v2.10.0 의 대규모 기능 개편(전화번호부·@태그·
+Current release = **v3.4.11** (직전 정식 v3.0.0 (2026-08-02 — v2.7.0~v2.10.0 의 대규모 기능 개편(전화번호부·@태그·
 메모 합치기·통합 디자인)을 마무리해 묶은 정식 배포. 소유자 결정으로 아래 경고의 '3.x 금지'를
 해제하고 번호를 재사용했다 — CHANGELOG 의 2026-07-14 자 구 v3.0.0·v3.1.0 항목은 여전히
 미배포 내부 이력이며 이 판과 무관, '(구·미배포)' 표기로 구분).
