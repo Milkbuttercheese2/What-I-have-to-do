@@ -485,3 +485,48 @@ test('@ 목록: ↑↓ 로 고르는 중에는 스크롤을 되돌리지 않는�
   key({key:'ArrowDown'});
   assert.equal(pb.scrollTop, 120, '방향키는 스크롤을 유지한다');
 });
+
+/* v3.4.4: 첫 행이 반쯤 잘린 채 굳던 진짜 경로.
+   목록은 '창이 아직 126px 인 순간'에 그려지고 그때 #cap-pb 는 40px 남짓이다.
+   그 사이 무엇이든(scrollIntoView·스크롤 앵커링·포커스) 목록을 밀면 그 scrollTop 이
+   남는데, 후보가 10행을 넘으면 목록이 계속 스크롤 가능이라 창이 커져도 브라우저가
+   0 으로 되돌려 주지 않는다. 창이 자리를 잡을 때마다 첫 행을 제자리로 되돌린다. */
+test('@ 목록: 창이 자리잡는 사이 목록이 밀려도 첫 행은 되돌아온다 (v3.4.4)', async () => {
+  reset();
+  const book = Array.from({length: 14}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-2-'+i}));
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();
+  const pb = env.document.getElementById('cap-pb');
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.equal(pb.querySelectorAll('.cap-pb-it').length, 14);
+
+  pb.scrollTop = 60;                       // 창이 커지기 전에 누군가 목록을 밀었다
+  mock.timers.tick(80); await env.flush();  // 창 크기 반영 대기 후 보정
+  assert.equal(pb.scrollTop, 0, '첫 행이 잘린 채로 굳으면 안 된다');
+});
+
+/* 검색어가 좁혀지며 '고르고 있던 사람'의 순번이 보이는 10행 밖으로 밀리는 경우.
+   그 자리를 이으면 목록을 스크롤해야 보이고, 그 스크롤이 곧 첫 행이 잘린 화면이다.
+   손으로 ↓ 를 눌러 내려간 게 아니므로 첫 줄로 돌아가는 것이 맞다. */
+test('@ 목록: 이어갈 자리가 10행 밖이면 잇지 않고 첫 줄로 (v3.4.4)', async () => {
+  reset();
+  const far = {id:99, who:'멀리있는사람', org:'조달청', phone:'010-9-9'};
+  const many = Array.from({length: 12}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-3-'+i}));
+  env.onInvoke('phonebook_search', ()=>[far, ...many]);       // 처음엔 맨 앞
+  if(body.classList.contains('search')) alt();
+  const pb = env.document.getElementById('cap-pb');
+  const selIdx = () => [...pb.querySelectorAll('.cap-pb-it')].findIndex(el=>el.classList.contains('sel'));
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.equal(selIdx(), 0);
+
+  env.onInvoke('phonebook_search', ()=>[...many, far]);       // 좁혀지며 13번째로 밀렸다
+  inp.value='통화 @사람1'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.equal(selIdx(), 0, '10행 밖 자리는 잇지 않는다');
+  assert.equal(pb.scrollTop, 0);
+});
