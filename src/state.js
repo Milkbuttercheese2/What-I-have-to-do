@@ -105,7 +105,8 @@ export function migrateItem(o){
   it.f=Object.assign({}, o.f||{});
   /* v3.2.0: 기존 저장분(01012345678 등)도 로드 시 표준 표기로 — 다음 저장 때 영속된다.
      formatPhone 은 인식 못 하는 표기를 원문 유지하므로 유실이 없다. */
-  it.contacts=(Array.isArray(o.contacts)?o.contacts:[]).map(c=>({who:(c&&c.who)||'', org:(c&&c.org)||'', phone:formatPhone(c&&c.phone)}));
+  /* v3.5.0 이메일(선택): 구 데이터엔 없으므로 자연히 '' 가 된다 */
+  it.contacts=(Array.isArray(o.contacts)?o.contacts:[]).map(c=>({who:(c&&c.who)||'', org:(c&&c.org)||'', phone:formatPhone(c&&c.phone), email:(c&&c.email)||''}));
   it.ids=Array.isArray(o.ids)?o.ids.slice():[];
   it.subs=Array.isArray(o.subs)?o.subs:[];
   it.files=Array.isArray(o.files)?o.files.slice():[];   // v3.0.0 파일 링크 (구버전 데이터엔 없음)

@@ -68,6 +68,7 @@ export function initBackup(){
         '관련인':(it.contacts||[]).map(c=>c.who).filter(Boolean).join(', '),
         '관련소속':(it.contacts||[]).map(c=>c.org).filter(Boolean).join(', '),
         '연락처':(it.contacts||[]).map(c=>c.phone).filter(Boolean).join(', '),
+        '이메일':(it.contacts||[]).map(c=>c.email).filter(Boolean).join(', '),   /* v3.5.0 선택 항목 — 없으면 빈 칸 */
         '접수시각':fx((it.f||{}).received),
         '마감시각':fx((it.f||{}).due),
         '식별정보':(it.ids||[]).map(x=>`${x.kind}: ${x.val}`).join(' · '),

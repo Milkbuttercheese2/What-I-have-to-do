@@ -23,7 +23,7 @@ function fullItem(){
   return {
     id: newId(), memo:'전화 문의 건', done:false, staged:false,
     f:{received: iso(-10), due},
-    contacts:[{who:'김담당', org:'모부서', phone:'010-1111-2222'}],
+    contacts:[{who:'김담당', org:'모부서', phone:'010-1111-2222', email:'kim@example.go.kr'}],   /* v3.5.0 이메일(선택)도 왕복 대상 */
     ids:[{kind:'SR번호', val:'SR-1'}, {kind:'자체번호', val:'X-9'}],   // 자체번호 = 기타(커스텀)
     subs:[{id:newId(), title:'회신', mid, done:false, al:{mid:true}}],
     al:{due:true},

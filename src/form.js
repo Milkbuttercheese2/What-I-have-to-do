@@ -19,7 +19,7 @@ export function contactsFromTags(text){
     for(const e of entriesForTag(S.phonebook, name)){
       const k=entryKey(e);
       if(seen.has(k)) continue;
-      seen.add(k); out.push({who:e.who, org:e.org, phone:e.phone});
+      seen.add(k); out.push({who:e.who, org:e.org, phone:e.phone, email:e.email||''});
     }
   }
   return out;
@@ -115,7 +115,7 @@ export function saveDraftNow(){
 function hasContent(pre){
   pre=pre||{};
   return !!(String(pre.memo||'').trim() || (pre.subs||[]).length || (pre.ids||[]).length
-    || (pre.files||[]).length || (pre.contacts||[]).some(c=>c&&(c.who||c.org||c.phone)));
+    || (pre.files||[]).length || (pre.contacts||[]).some(c=>c&&(c.who||c.org||c.phone||c.email)));
 }
 function scheduleDraft(){ clearTimeout(draftTimer); draftTimer=setTimeout(saveDraftNow,700); }
 /* 임시저장분 폐기 — 최종 저장·되돌리기 공용 */
@@ -212,7 +212,7 @@ function fillForm(pre){
 
   // 관련인 세트
   const cw=$('fm-contacts'); cw.innerHTML='';
-  const contacts = pre.contacts && pre.contacts.length ? pre.contacts : [{who:'',org:'',phone:''}];
+  const contacts = pre.contacts && pre.contacts.length ? pre.contacts : [{who:'',org:'',phone:'',email:''}];
   contacts.forEach(c=>addContactRow(c));
 
   // 식별번호
@@ -242,12 +242,15 @@ export function closeForm(){
    대신 검색은 filters.js가 숫자만 버전도 haystack에 넣어 010-1234-5678 저장분이
    01012345678 검색으로도 걸린다(v2.5.1) */
 function addContactRow(c){
-  c=c||{who:'',org:'',phone:''};
+  c=c||{who:'',org:'',phone:'',email:''};
   const row=document.createElement('div'); row.className='contact-row';
+  /* v3.5.0 이메일은 **선택**이라 placeholder에 그렇게 적는다 — 소속·이름·연락처 셋만
+     전화번호부 등록 자격(phonebook-core.isComplete)이고 이메일은 부가 정보다. */
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
     <input type="text" class="c-org" maxlength="100" placeholder="관련소속" value="${escAttr(c.org||'')}">
     <input type="text" class="c-who" maxlength="100" placeholder="관련인" value="${escAttr(c.who||'')}">
     <input type="text" class="c-phone" maxlength="40" placeholder="연락처" value="${escAttr(c.phone||'')}">
+    <input type="text" class="c-email" maxlength="100" placeholder="이메일(선택)" value="${escAttr(c.email||'')}">
     <button class="rm" title="삭제">×</button>`;
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
   /* Enter → 다음 행 이동/추가 (세부 할 일과 동일 UX, v2.5.3) — 같은 칸(열)으로 포커스.
@@ -273,15 +276,18 @@ export function fillContactFromEntry(entry, row){
   entry=entry||{};
   const rows=[...$('fm-contacts').querySelectorAll('.contact-row')];
   if(!row){
+    /* 중복 판정은 3칸 그대로 — 이메일은 키가 아니다(phonebook-core.entryKey) */
     const key=entryKey(entry);
     if(rows.some(r=>entryKey({who:r.querySelector('.c-who').value, org:r.querySelector('.c-org').value, phone:r.querySelector('.c-phone').value})===key)) return;
     row=rows.find(r=>
-      !r.querySelector('.c-who').value.trim() && !r.querySelector('.c-org').value.trim() && !r.querySelector('.c-phone').value.trim());
+      !r.querySelector('.c-who').value.trim() && !r.querySelector('.c-org').value.trim() && !r.querySelector('.c-phone').value.trim()
+      && !r.querySelector('.c-email').value.trim());
   }
-  if(!row){ addContactRow({who:entry.who||'', org:entry.org||'', phone:entry.phone||''}); return; }
+  if(!row){ addContactRow({who:entry.who||'', org:entry.org||'', phone:entry.phone||'', email:entry.email||''}); return; }
   row.querySelector('.c-who').value=entry.who||'';
   row.querySelector('.c-org').value=entry.org||'';
   row.querySelector('.c-phone').value=entry.phone||'';
+  row.querySelector('.c-email').value=entry.email||'';
 }
 
 /* 식별번호 행 */
@@ -371,7 +377,8 @@ function collectForm(){
   const f={};
   $('fm-grid').querySelectorAll('[data-fkey]').forEach(sp=>{ const v=readDtInput(sp); f[sp.dataset.fkey] = (v===null?'':v); });
   const contacts=[...$('fm-contacts').querySelectorAll('.contact-row')].map(r=>({
-    who:r.querySelector('.c-who').value.trim(), org:r.querySelector('.c-org').value.trim(), phone:formatPhone(r.querySelector('.c-phone').value)   /* v3.2.0 표준 표기 */
+    who:r.querySelector('.c-who').value.trim(), org:r.querySelector('.c-org').value.trim(), phone:formatPhone(r.querySelector('.c-phone').value),   /* v3.2.0 표준 표기 */
+    email:r.querySelector('.c-email').value.trim()                                                                                                 /* v3.5.0 이메일은 trim 만 */
   })).filter(c=>c.who||c.org||c.phone);
   const ids=[...$('fm-ids').querySelectorAll('.fid-row')].map(r=>{
     const sel=r.querySelector('.fid-kind').value, etc=r.querySelector('.fid-etc').value.trim(), val=r.querySelector('.fid-val').value.trim();

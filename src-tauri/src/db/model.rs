@@ -23,6 +23,10 @@ pub struct Contact {
     pub org: String,
     #[serde(default)]
     pub phone: String,
+    /// v3.5.0 이메일 (선택). 고유 식별은 who/org/phone 3칸이고 이 값은 부가 정보다 —
+    /// `serde(default)` 라 이 필드가 없는 구 백업도 그대로 복원된다.
+    #[serde(default)]
+    pub email: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -165,6 +169,9 @@ pub struct PhonebookEntry {
     pub org: String,
     #[serde(default)]
     pub phone: String,
+    /// v3.5.0 이메일 (선택) — Contact 와 같은 이유로 부가 정보이자 `serde(default)`.
+    #[serde(default)]
+    pub email: String,
 }
 
 /// Free-form settings bag (currently just {alarmOn:bool}), kept generic so

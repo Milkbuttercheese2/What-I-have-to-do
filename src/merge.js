@@ -10,7 +10,7 @@
    - 세부할일 = 합쳐서 점검시각 오름차순, 시각 없는 것은 뒤 (안정 정렬)
    상태·DOM 접근 없음 — 새 객체를 돌려주고 원본은 건드리지 않는다.
    ========================================================================= */
-import {entryKey} from './phonebook-core.js';
+import {entryKey, fillEmail} from './phonebook-core.js';
 
 /* ISO → epoch-ms, 손상/빈 값은 null (F7 계열 가드) */
 function T(iso){ const t=new Date(iso||'').getTime(); return isNaN(t)?null:t; }
@@ -39,14 +39,20 @@ export function mergeItems(target, source){
   // F2: 마감이 (끌려온 쪽이 더 일러서) 바뀌었으면 알람 재무장
   if((t.f.due||'')!==(tf.due||'')) delete (t.al||{}).due;
 
-  // 관련인: 이어붙임 + 같은 사람(이름·소속·전화 숫자 비교) 제거
-  const cseen=new Set();
-  t.contacts=[...(target.contacts||[]), ...(source.contacts||[])].filter(c=>{
-    if(!c||!((c.who||'')||(c.org||'')||(c.phone||''))) return false;
-    const k=entryKey(c);
-    if(cseen.has(k)) return false;
-    cseen.add(k); return true;
-  });
+  /* 관련인: 이어붙임 + 같은 사람(이름·소속·전화 숫자 비교) 제거.
+     v3.5.0: 접을 때 이메일은 **빈 칸이면 채운다** — 이메일은 키가 아니라서 '같은 사람'
+     으로 접히는데, 그냥 버리면 한쪽에만 적어 둔 이메일이 병합 한 번에 사라진다.
+     원본 불변 계약은 유지한다(원본 객체가 아니라 사본에만 쓴다). */
+  const cseen=new Map();
+  t.contacts=[...(target.contacts||[]), ...(source.contacts||[])]
+    .map(c=>c?{...c}:c)                           // ⚠️ 사본을 **먼저** 뜬다 — 아래 이메일 보강이 원본을 건드리지 않게
+    .filter(c=>{
+      if(!c||!((c.who||'')||(c.org||'')||(c.phone||'')||(c.email||''))) return false;
+      const k=entryKey(c);
+      const prev=cseen.get(k);
+      if(prev){ prev.email=fillEmail(prev.email, c.email); return false; }
+      cseen.set(k,c); return true;
+    });
   // 식별정보: 명칭+번호가 같으면 제거
   const iseen=new Set();
   t.ids=[...(target.ids||[]), ...(source.ids||[])].filter(x=>{

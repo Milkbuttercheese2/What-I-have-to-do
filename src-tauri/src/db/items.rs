@@ -26,7 +26,7 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
     let mut contacts_by_item: HashMap<i64, Vec<Contact>> = HashMap::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT item_id, who, org, phone FROM contacts ORDER BY item_id, sort_order, id",
+            "SELECT item_id, who, org, phone, email FROM contacts ORDER BY item_id, sort_order, id",
         )?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
@@ -35,6 +35,7 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
                 who: row.get(1)?,
                 org: row.get(2)?,
                 phone: row.get(3)?,
+                email: row.get(4)?,
             });
         }
     }
@@ -144,7 +145,7 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
         let mut ins_field =
             tx.prepare("INSERT INTO item_fields (item_id, field_key, value) VALUES (?1, ?2, ?3)")?;
         let mut ins_contact = tx.prepare(
-            "INSERT INTO contacts (item_id, who, org, phone, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO contacts (item_id, who, org, phone, email, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
         let mut ins_ident = tx.prepare(
             "INSERT INTO identifiers (item_id, kind, val, sort_order) VALUES (?1, ?2, ?3, ?4)",
@@ -182,7 +183,7 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
                 ins_field.execute(params![it.id, k, v])?;
             }
             for (i, c) in it.contacts.iter().enumerate() {
-                ins_contact.execute(params![it.id, c.who, c.org, c.phone, i as i64])?;
+                ins_contact.execute(params![it.id, c.who, c.org, c.phone, c.email, i as i64])?;
             }
             for (i, x) in it.ids.iter().enumerate() {
                 ins_ident.execute(params![it.id, x.kind, x.val, i as i64])?;
@@ -231,6 +232,7 @@ pub fn quick_search(conn: &Connection, query: &str, limit: i64) -> DbResult<Vec<
             OR EXISTS (SELECT 1 FROM subtasks s WHERE s.item_id = i.id AND s.title LIKE ?1 ESCAPE '\\')
             OR EXISTS (SELECT 1 FROM contacts c WHERE c.item_id = i.id
                          AND (c.who LIKE ?1 ESCAPE '\\' OR c.org LIKE ?1 ESCAPE '\\' OR c.phone LIKE ?1 ESCAPE '\\'
+                              OR c.email LIKE ?1 ESCAPE '\\'
                               OR replace(replace(c.phone, '-', ''), ' ', '') LIKE ?1 ESCAPE '\\'))
             OR EXISTS (SELECT 1 FROM identifiers x WHERE x.item_id = i.id
                          AND (x.kind LIKE ?1 ESCAPE '\\' OR x.val LIKE ?1 ESCAPE '\\'))

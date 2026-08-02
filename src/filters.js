@@ -6,7 +6,10 @@
 /* 연락처는 저장값(하이픈 포함)과 숫자만 버전을 함께 넣는다 —
    010-1234-5678로 저장돼도 01012345678 검색이 걸리게(v2.5.1).
    필드 누락 시 'undefined' 문자열이 haystack에 새지 않게 전부 ||'' 가드. */
-function contactText(it){ return (it.contacts||[]).map(c=>`${c.who||''} ${c.org||''} ${c.phone||''} ${String(c.phone||'').replace(/[^0-9]/g,'')}`).join(' '); }
+/* v3.5.0: 이메일도 haystack 에 넣는다 — 양식을 열면 보이는 값이므로 "보이는 곳에서만
+   검색된다"는 규칙에 맞는다(Rust quick_search 도 같은 이유로 c.email 을 본다;
+   반면 이메일을 표시하지 않는 @ 자동완성 드롭다운은 검색하지 않는다). */
+function contactText(it){ return (it.contacts||[]).map(c=>`${c.who||''} ${c.org||''} ${c.phone||''} ${String(c.phone||'').replace(/[^0-9]/g,'')} ${c.email||''}`).join(' '); }
 function idText(it){ return (it.ids||[]).map(x=>`${x.kind||''} ${x.val||''}`).join(' '); }
 /* 링크된 파일은 파일명(경로 마지막 조각)으로 검색 — 폴더 경로까지 걸리면 잡음 */
 function fileText(it){ return (it.files||[]).map(p=>String(p).split(/[\\/]/).filter(Boolean).pop()||'').join(' '); }
