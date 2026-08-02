@@ -86,13 +86,13 @@ test('tagText: 이름 → 소속 → 번호 순으로 @태그 텍스트', () => 
 });
 
 test('linkifyAt(book): 전화번호부 실존 관련인 태그만 감싼다 — 부분 삭제 시 태그 해제 (v2.11.0)', () => {
-  const book=[{id:1, who:'우성균', org:'행정과', phone:'010-1'}];
-  assert.equal(linkifyAt('회신 @우성균 건', book),
-    '회신 <span class="at-tag" data-at="우성균">@우성균</span> 건');
+  const book=[{id:1, who:'홍길동', org:'행정과', phone:'010-1'}];
+  assert.equal(linkifyAt('회신 @홍길동 건', book),
+    '회신 <span class="at-tag" data-at="홍길동">@홍길동</span> 건');
   // '균' 한 글자만 지워도 실존 관련인이 아니므로 평문 — 태그 삭제 (소유자 지정)
-  assert.equal(linkifyAt('회신 @우성 건', book), '회신 @우성 건');
+  assert.equal(linkifyAt('회신 @홍길 건', book), '회신 @홍길 건');
   // book 을 안 주면(구 시그니처) 전부 감싼다 — 하위 호환
-  assert.ok(linkifyAt('회신 @우성 건').includes('at-tag'));
+  assert.ok(linkifyAt('회신 @홍길 건').includes('at-tag'));
 });
 
 test('linkifyAt: @태그를 span 으로, 괄호 정보·꼬리 문장부호는 태그 밖으로', () => {
@@ -222,7 +222,7 @@ test('formatPhone: 접두·자리수 규칙으로 표준 하이픈 표기 (v3.2.
 test('normEntry/migrate 경로: 기존 저장분 01012345678 도 표준형으로 (v3.2.0)', async () => {
   assert.equal(normEntry({who:'김', org:'과', phone:'01012345678'}).phone, '010-1234-5678');
   const {migrateItem} = await import('../../src/state.js');
-  const it=migrateItem({id:1, memo:'m', contacts:[{who:'김철수', org:'행정과', phone:'01029506098'}, {who:'이', org:'', phone:'02-123-4567 내선3'}]});
-  assert.equal(it.contacts[0].phone, '010-2950-6098');           // 기존 데이터 회복
+  const it=migrateItem({id:1, memo:'m', contacts:[{who:'김철수', org:'행정과', phone:'01012345678'}, {who:'이', org:'', phone:'02-123-4567 내선3'}]});
+  assert.equal(it.contacts[0].phone, '010-1234-5678');           // 기존 데이터 회복
   assert.equal(it.contacts[1].phone, '02-123-4567 내선3');       // 애매한 표기는 원문
 });

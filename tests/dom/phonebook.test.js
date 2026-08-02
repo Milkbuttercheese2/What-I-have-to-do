@@ -225,15 +225,15 @@ test('번호꼴 @태그(@010-…): 구버전 번호만 항목 — 3칸(빈 이�
 
 test('본문 하이라이트: 전화번호부 실존 관련인만 — 한 글자만 지워도 태그 해제 (v2.11.0)', async () => {
   await env.resetS(); S.loaded = true;
-  adoptPhonebook([{id:11, who:'우성균', org:'행정과', phone:'010-1'}]);
-  openForm({memo:'회신 @우성균 건'});
+  adoptPhonebook([{id:11, who:'홍길동', org:'행정과', phone:'010-1'}]);
+  openForm({memo:'회신 @홍길동 건'});
   const hl=env.document.getElementById('fm-memo-hl');
   assert.equal(hl.querySelectorAll('.at-tag').length, 1);
   const memo=$('fm-memo');
-  memo.value='회신 @우성 건';                                   // '균' 삭제
+  memo.value='회신 @홍길 건';                                   // '균' 삭제
   memo.dispatchEvent(new env.window.Event('input', {bubbles:true}));
   assert.equal(hl.querySelectorAll('.at-tag').length, 0);       // 하이라이트 해제 — 평문
-  assert.ok(hl.textContent.includes('@우성'));                  // 본문 자체는 그대로 비친다
+  assert.ok(hl.textContent.includes('@홍길'));                  // 본문 자체는 그대로 비친다
   // 해제된 태그는 hover 대상 자체가 없다 — 클릭해도 팝업 없음
   memo.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));
   assert.ok(!env.document.getElementById('relModal').classList.contains('on'));
