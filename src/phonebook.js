@@ -152,11 +152,25 @@ async function importFromXlsx(file){
     }
     const complete=mapped.entries.filter(isComplete);
     const fresh=complete.filter(e=>!S.phonebook.some(x=>entryKey(x)===entryKey(e))).map(normEntry);
-    if(!fresh.length){ showToast('추가할 새 관련인이 없습니다'); return; }
+    /* v3.5.0: 엑셀은 예전처럼 **추가만** 한다 — 이미 있는 사람은 건드리지 않는다.
+       그래서 이미 있는 사람 줄에 이메일을 적어 와도 반영되지 않는데, 그 사실을 알린다
+       (조용히 넘기면 "엑셀에 적었는데 왜 안 들어오지"가 된다). 고치는 길은 [수정] 하나. */
+    const ignoredEmail=complete.filter(e=>{
+      const ex=S.phonebook.find(x=>entryKey(x)===entryKey(e));
+      const v=String(e.email||'').trim();
+      return ex && v && v!==String(ex.email||'').trim();
+    }).length;
+    const mailNote=ignoredEmail?` 이미 있는 ${ignoredEmail}명의 이메일은 반영되지 않습니다 — 바꾸려면 그 줄의 [수정]을 쓰세요.`:'';
+    if(!fresh.length){
+      showToast(ignoredEmail
+        ? `추가할 새 관련인이 없습니다 — 이미 있는 ${ignoredEmail}명의 이메일도 바뀌지 않습니다([수정]으로 변경)`
+        : '추가할 새 관련인이 없습니다');
+      return;
+    }
     const dupes=complete.length-fresh.length, partial=mapped.entries.length-complete.length;
     const notes=[dupes?`이미 있는 ${dupes}명`:'', partial?`정보가 빠진 ${partial}명`:''].filter(Boolean).join(' · ');
     openPbSync('엑셀에서 가져오기',
-      `관련인 ${fresh.length}명을 찾았습니다.${notes?` (${notes} 제외)`:''}`,
+      `관련인 ${fresh.length}명을 찾았습니다.${notes?` (${notes} 제외)`:''}${mailNote}`,
       fresh);
   };
   reader.readAsArrayBuffer(file);
