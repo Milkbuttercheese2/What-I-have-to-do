@@ -95,7 +95,10 @@
  ::-webkit-scrollbar-thumb{background:transparent;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
  :hover::-webkit-scrollbar-thumb,:focus-within::-webkit-scrollbar-thumb{background:var(--cap-thumb);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
  ::-webkit-scrollbar-thumb:hover{background:var(--cap-thumb-hover);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+ /* height 고정(v3.4.7): 행 높이가 36.2px 같은 소수면 ↓ 로 한 칸 내려갈 때 스크롤이
+    37·38px 로 번갈아 움직여 이동이 고르지 않다. 고정하면 정확히 한 칸씩 움직인다. */
  .cap-hit{font-size:13px;line-height:1.45;color:var(--cap-ink);padding:8px 11px;margin:1px 0;
+   height:36px;box-sizing:border-box;
    border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  /* v2.6.7: hover 는 body.mouse 일 때만 — 창이 커서 밑에 뜨면 그 자리의 줄이 곧바로 :hover 가 되고,
     마우스를 안 움직이니 엉뚱한 줄이 계속 켜져 있는 것처럼 보였다. 마우스를 실제로 움직이면

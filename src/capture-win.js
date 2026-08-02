@@ -196,6 +196,39 @@ function pbPinTop(){
   const pb=$id('cap-pb');
   if(pb && pbSel<PB_MAX_ROWS && pb.scrollTop!==0) pb.scrollTop=0;
 }
+/* ── 키보드 이동 (v3.4.7) ────────────────────────────────────────────────
+   두 목록(검색 결과·@자동완성) 공용. 예전엔 `scrollIntoView({block:'nearest'})`
+   를 썼는데 두 가지가 거칠었다:
+   1) scrollIntoView 는 **조상까지 거슬러 올라가며** 스크롤한다. #cap-shell 은
+      overflow:hidden 이라 사용자가 못 굴릴 뿐 프로그램으로는 스크롤되는 상자다
+      — 그래서 패널 전체가 밀려 입력줄이 어긋나는 순간이 생겼다.
+   2) 브라우저가 정하는 양(가운데 맞춤·여백)이 목록마다 달라 한 칸씩 내려가는
+      느낌이 아니었다.
+   지금은 **그 목록 하나만**, **벗어난 만큼만** 움직인다. 화면 좌표 차이로 재므로
+   현재 스크롤 위치·행 높이와 무관하게 맞는다. */
+function keepRowVisible(box, el){
+  if(!box||!el) return;
+  const b=box.getBoundingClientRect(), r=el.getBoundingClientRect();
+  const above=b.top-r.top, below=r.bottom-b.bottom;
+  /* 벗어난 만큼만 — 여기에 여백을 더하면 첫 칸만 더 크게 움직여
+     '한 칸씩 내려가는' 느낌이 깨진다(실측: 첫 스텝 40px, 이후 34px). */
+  if(above>0) box.scrollTop-=above;
+  else if(below>0) box.scrollTop+=below;
+}
+/* @자동완성 ↑↓ — 목록을 다시 그리지 않고 표시(.sel)만 옮긴다.
+   예전엔 방향키마다 renderPb() 로 innerHTML 을 통째로 갈아끼워, 누르고 있으면
+   목록 전체가 매번 다시 그려졌다(깜빡임·hover 상태 유실). */
+function movePbSel(d){
+  const w=$id('cap-pb'); if(!w) return;
+  const rows=[...w.querySelectorAll('.cap-pb-it')];
+  if(!rows.length) return;
+  const next=Math.max(0, Math.min(pbSel+d, rows.length-1));
+  if(next===pbSel) return;                       // 끝에서는 멈춘다 (순환 없음)
+  if(rows[pbSel]) rows[pbSel].classList.remove('sel');
+  pbSel=next;
+  rows[pbSel].classList.add('sel');
+  keepRowVisible(w, rows[pbSel]);
+}
 /* keepScroll=true 는 ↑↓ 로 목록을 조작할 때만 — 그 밖(새 후보 목록)에서는 언제나
    맨 위로 되돌린다. v3.4.3: innerHTML 을 갈아끼워도 브라우저는 스크롤 위치를
    유지하기 때문에, 직전 검색에서 아래끝까지 내려둔 목록을 다시 열면 첫 행이
@@ -215,8 +248,7 @@ function renderPb(keepScroll){
      새 후보 목록에서까지 부르면, 그 시점의 목록은 아직 창이 작아 40px 남짓이라
      scrollIntoView 가 목록을 밀어 버리고 첫 행이 잘린다. 새 목록의 선택은
      runPb 가 첫 10행 안으로만 잇기 때문에 맨 위에서도 항상 보인다. */
-  const sel=keepScroll && pbSel>0 ? w.querySelector('.cap-pb-it.sel') : null;
-  if(sel&&sel.scrollIntoView) sel.scrollIntoView({block:'nearest'});
+  if(keepScroll && pbSel>0) keepRowVisible(w, w.querySelector('.cap-pb-it.sel'));
 }
 async function runPb(){
   const inp=$id('cap-inp');
@@ -318,8 +350,7 @@ function setSel(i){
   const list=hits(); if(!list.length){ selIdx=-1; return; }
   selIdx=Math.max(0, Math.min(i, list.length-1));
   list.forEach((el,n)=>el.classList.toggle('sel', n===selIdx));
-  const el=list[selIdx];
-  if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'});
+  keepRowVisible($id('cap-items'), list[selIdx]);
 }
 /* ↑↓ 이동 — 끝에서는 멈춘다(순환 없음). 아직 아무것도 안 골랐으면 ↓=첫 줄 / ↑=마지막 줄. */
 function moveSel(d){
@@ -382,8 +413,8 @@ export function initCaptureWin(){
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
     /* v2.7.0: 자동완성이 펴져 있으면 그 목록부터 조작한다 (Ctrl 조합은 통과 — 등록/저장) */
     if(pbOpen && !e.ctrlKey && !e.metaKey){
-      if(e.key==='ArrowDown'){ e.preventDefault(); pbSel=Math.min(pbSel+1,pbItems.length-1); renderPb(true); return; }
-      if(e.key==='ArrowUp'){ e.preventDefault(); pbSel=Math.max(pbSel-1,0); renderPb(true); return; }
+      if(e.key==='ArrowDown'){ e.preventDefault(); movePbSel(1); return; }
+      if(e.key==='ArrowUp'){ e.preventDefault(); movePbSel(-1); return; }
       if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); applyPb(); return; }
       if(e.key==='Escape'){ e.preventDefault(); closePb(); return; }   // 드롭다운만 접는다 (창 유지)
     }
