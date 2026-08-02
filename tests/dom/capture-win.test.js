@@ -553,3 +553,43 @@ test('@ 목록: 창 크기가 반영되기 전에는 다시 요청하지 않는�
   assert.equal(hs.length, 1, `창이 요청대로 안 커지는 동안에는 한 번만 요청해야 한다 (실제: ${hs.join(',')})`);
   for(let i=1;i<hs.length;i++) assert.ok(hs[i]>=hs[i-1], '요청 높이는 한 검색 안에서 줄어들 수 없다');
 });
+
+/* v3.4.9: 빠른 메모의 태그 하이라이트는 **입력칸과 같은 만큼 스크롤**돼야 한다.
+   입력칸은 110px 에서 자라기를 멈추고 그 뒤로는 안에서 스크롤되는데, 백드롭이
+   맨 위에 남으면 하이라이트가 실제 글자보다 아래에 그려진다(사용자 신고:
+   "하이라이트가 아래로 밀리고 @태그가 첫 줄로 안 올라간다"). 양식 메모(form.js)에는
+   처음부터 있던 동기화가 미니 창에만 빠져 있었다. */
+test('빠른 메모: 하이라이트 백드롭이 입력칸 스크롤을 따라간다 (v3.4.9)', async () => {
+  reset();
+  if(body.classList.contains('search')) alt();
+  const hl = env.document.getElementById('cap-hl');
+  inp.value = Array.from({length:12},(_,i)=>'메모 줄 '+(i+1)).join('\n');
+  inp.scrollTop = 120;                                  // 긴 메모라 입력칸이 안에서 스크롤된 상태
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  assert.equal(hl.scrollTop, 120, '백드롭이 같은 위치로 따라와야 한다');
+
+  inp.scrollTop = 60;                                   // 사용자가 입력칸을 직접 굴린 경우
+  inp.dispatchEvent(new env.window.Event('scroll', {bubbles:true}));
+  assert.equal(hl.scrollTop, 60);
+});
+
+/* 창(body·#cap-shell)은 overflow:hidden 이지만 프로그램·포커스 스크롤은 먹는다.
+   패널이 창보다 잠깐 커진 순간 캐럿을 보이려고 브라우저가 body 를 밀면 입력줄이
+   위로 잘린 채 굳는다 — 창이 자리를 잡을 때마다 0 으로 되돌린다. */
+test('미니 창 자체는 스크롤된 채로 굳지 않는다 (v3.4.9)', async () => {
+  reset();
+  const book = Array.from({length: 12}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-5-'+i}));
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();
+  const shell = env.document.getElementById('cap-shell');
+  const root = env.document.scrollingElement || env.document.documentElement;
+
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+
+  root.scrollTop = 30; shell.scrollTop = 18;             // 포커스 스크롤 등으로 밀린 상황
+  mock.timers.tick(80); await env.flush();               // 창이 자리를 잡는 시점
+  assert.equal(root.scrollTop, 0, '창이 밀린 채로 굳으면 입력줄이 잘린다');
+  assert.equal(shell.scrollTop, 0);
+});

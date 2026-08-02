@@ -89,7 +89,28 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 
 /* 메모 입력칸 세로 자동 확장 (rows=1 시작 → 내용 따라 늘어남, 상한 110px).
    기본 textarea가 2줄이라 한 줄 메모가 위로 떠 보이던 문제를 없앤다. */
-function autoGrow(el){ if(!el)return; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
+const MEMO_MAX_H=110;                       // 입력칸이 자라는 한도(CSS px)
+function autoGrow(el){
+  /* 숨어 있을 때(검색 화면) 재면 전부 0 이라 엉뚱한 높이가 굳는다 — 보일 때만 잰다.
+     그래서 setMode 가 빠른 메모로 들어올 때 다시 부른다(v3.4.9). */
+  if(!el || !el.offsetParent) return;
+  el.style.height='auto';
+  const cs=getComputedStyle(el);
+  const lh=parseFloat(cs.lineHeight)||21;
+  const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+  const need=el.scrollHeight;
+  let h=Math.min(need, MEMO_MAX_H);
+  /* v3.4.9: 한도에 걸려 잘릴 때는 **줄 단위**로 맞춘다. 안 그러면 마지막 줄이
+     반쯤 걸쳐 보인다(창 크기 문제와 같은 종류의 흠). */
+  if(h<need) h=pad+Math.max(1, Math.floor((h-pad)/lh))*lh;
+  el.style.height=h+'px';
+  /* 그리고 자투리를 흡수한다. 브라우저는 textarea 내용 높이에 캐럿 자리 몇 px(이 폰트에서 3px)를
+     더 두는데, 그만큼 남으면 스크롤 위치가 줄 경계에서 어긋나 **맨 윗줄이 반쯤 걸쳐 보인다**
+     (실측: 스크롤 위치가 늘 21의 배수 + 3). 그 자투리만큼 칸을 키워 두면 어느 위치로
+     스크롤해도 줄 경계에 딱 맞는다. */
+  const rest=(el.scrollHeight-el.clientHeight)%lh;
+  if(rest>0.5) el.style.height=(h+rest)+'px';
+}
 
 /* ── v3.0.1 빠른 메모 본문 @태그 하이라이트 + hover 반응 ────────────────
    양식 메모(form.js renderMemoHl)와 같은 백드롭 층 기법 — 실존 관련인 태그만.
@@ -100,7 +121,23 @@ function loadBook(){
 }
 function renderCapHl(){
   const hl=$id('cap-hl'); if(!hl) return;
-  hl.innerHTML=linkifyAt(esc($id('cap-inp').value), pbBook)+'\n';
+  const inp=$id('cap-inp');
+  hl.innerHTML=linkifyAt(esc(inp.value), pbBook)+'\n';
+  /* v3.4.9: 백드롭도 입력칸과 **같은 만큼 스크롤**해야 한다. 입력칸은 110px 에서
+     자라기를 멈추고(autoGrow) 그 뒤로는 안에서 스크롤되는데, 예전엔 백드롭이 맨 위에
+     남아 태그 하이라이트가 실제 글자보다 아래에 그려졌다(신고: "하이라이트가 아래로
+     밀리고 @태그가 첫 줄로 안 올라간다"). 양식 메모(form.js)에는 처음부터 있던
+     동기화가 미니 창에만 빠져 있었다. */
+  hl.scrollTop=inp.scrollTop;
+}
+/* 창 자체는 절대 스크롤되지 않는다 (v3.4.9).
+   body·#cap-shell 은 overflow:hidden 이지만 **프로그램·포커스 스크롤은 먹는다** —
+   패널이 창보다 잠깐 커진 순간 브라우저가 캐럿을 보이려고 body 를 밀면 입력줄이
+   위로 잘린 채 굳는다. 재지도 요청하지도 않는 한 줄이라 부작용이 없다. */
+function pinWindowScroll(){
+  const el=document.scrollingElement||document.documentElement, sh=$id('cap-shell');
+  if(el && el.scrollTop) el.scrollTop=0;
+  if(sh && sh.scrollTop) sh.scrollTop=0;
 }
 function wireTagHover(ta, hl){
   let raf=0;
@@ -132,7 +169,24 @@ function sendDraft(text){
 /* ── 빠른 메모 @ 자동완성 (v2.7.0) ───────────────────────────────────────
    @김철 처럼 치면 전화번호부를 검색해 목록을 펴고(창 높이도 잠깐 늘린다),
    고르면 "김철수(소속 전화)" 텍스트가 커서 자리에 들어간다. 메모 모드 전용. */
-const PB_BASE_H=126;                        // 메모 모드 기본 창 높이 (setMode 와 동일 값)
+const PB_BASE_H=126;                        // 메모 모드 최소 창 높이 (빈 입력칸 기준)
+/* 빠른 메모 창 높이 = 입력줄 + 힌트줄 (+ 투명 여유). 입력칸은 내용에 따라 110px 까지
+   자라므로(autoGrow) 창도 같이 자라야 한다 — 고정 126 이던 시절에는 메모가 길어지면
+   패널이 창에 눌리고, 입력칸이 세로 가운데 정렬이라 **첫 줄과 마지막 줄이 위아래로
+   똑같이 잘렸다**(사용자 신고). #cap-bar 가 flex:none 이라 이 측정은 창 크기와
+   무관하다(창 크기로 정해지는 값을 다시 재면 순환한다 — pbBoxH 주석의 '왕복 금지'). */
+function memoWinHeight(){
+  const bar=$id('cap-bar'), hint=$id('cap-hint');
+  if(!bar||!hint) return PB_BASE_H;
+  const h=el=>el.getBoundingClientRect().height;
+  return Math.max(PB_BASE_H, Math.ceil(h(bar)+h(hint)+2+PB_SLACK));
+}
+let lastMemoH=0;                            // 같은 높이를 거듭 요청하지 않는다
+function sizeMemoWin(){
+  if(mode!=='memo' || pbOpen) return;
+  const h=memoWinHeight();
+  if(h!==lastMemoH){ lastMemoH=h; sizeWin(h); }
+}
 /* 창 크기 요청은 반드시 이 함수로 (v3.4.8).
    높이는 **CSS px** 로 보내고, 지금 웹뷰가 보고 있는 CSS 뷰포트 폭을 같이 보낸다 —
    Rust 가 '창의 논리 폭 ÷ 이 값' 으로 **실제 배율을 재서** 창을 만든다.
@@ -155,7 +209,7 @@ function closePb(skipResize){
   const w=$id('cap-pb'); if(w) w.innerHTML='';
   if(!wasOpen) return;
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
-  if(!skipResize && mode==='memo') sizeWin(PB_BASE_H);
+  if(!skipResize && mode==='memo'){ lastMemoH=0; sizeMemoWin(); }
 }
 /* ── 목록 높이 (v3.4.6 — 재지 말고 정한다) ────────────────────────────────
    규칙: 후보가 몇이든 min(후보수, 10)행은 언제나 통째로 보인다.
@@ -205,6 +259,7 @@ function pbWinHeight(n){
 function pbPinTop(){
   const pb=$id('cap-pb');
   if(pb && pbSel<PB_MAX_ROWS && pb.scrollTop!==0) pb.scrollTop=0;
+  pinWindowScroll();
 }
 /* ── 키보드 이동 (v3.4.7) ────────────────────────────────────────────────
    두 목록(검색 결과·@자동완성) 공용. 예전엔 `scrollIntoView({block:'nearest'})`
@@ -222,8 +277,19 @@ function keepRowVisible(box, el){
   const above=b.top-r.top, below=r.bottom-b.bottom;
   /* 벗어난 만큼만 — 여기에 여백을 더하면 첫 칸만 더 크게 움직여
      '한 칸씩 내려가는' 느낌이 깨진다(실측: 첫 스텝 40px, 이후 34px). */
-  if(above>0) box.scrollTop-=above;
-  else if(below>0) box.scrollTop+=below;
+  let t=box.scrollTop;
+  if(above>0) t-=above;
+  else if(below>0) t+=below;
+  else return;
+  /* v3.4.9 양 끝 스냅: 목록 위아래 padding(6px) 안쪽으로 들어오면 끝까지 붙인다.
+     안 그러면 ↑ 로 첫 줄까지 올라와도 scrollTop 이 7 로 남아 **11번째 행이 7px
+     빼꼼 보인다**(검증 도구가 잡은 실제 증상). 아래쪽도 같은 이유로 대칭 처리. */
+  const cs=getComputedStyle(box);
+  const padT=parseFloat(cs.paddingTop)||0, padB=parseFloat(cs.paddingBottom)||0;
+  const max=Math.max(0, box.scrollHeight-box.clientHeight);
+  if(t<=padT+2) t=0;
+  else if(t>=max-padB-2) t=max;
+  box.scrollTop=t;
 }
 /* @자동완성 ↑↓ — 목록을 다시 그리지 않고 표시(.sel)만 옮긴다.
    예전엔 방향키마다 renderPb() 로 innerHTML 을 통째로 갈아끼워, 누르고 있으면
@@ -301,7 +367,7 @@ function applyPb(i){
   /* 완성형 @태그만 삽입 (메인 창 바로 입력과 동일 — 관련인 정보는 등록 시 자동 첨부) */
   const r=applyInsert(inp.value, pbToken.caret, pbToken.start, tagText(e));
   inp.value=r.text; try{inp.setSelectionRange(r.caret,r.caret);}catch{}
-  autoGrow(inp); renderCapHl();
+  autoGrow(inp); sizeMemoWin(); renderCapHl();
   clearTimeout(draftTimer); sendDraft(inp.value);   // 삽입분도 초안에 즉시 반영
   closePb(); inp.focus();
 }
@@ -320,7 +386,10 @@ function setMode(m){
   $id('cap-search').style.display=search?'':'none';
   $id('cap-results').style.display=search?'flex':'none';
   $id('cap-hint').textContent=hintFor(m);
-  sizeWin(search?406:126);   // 메모 모드 = 낮은 바, 검색 모드 = 고정 한 판
+  lastMemoH=0;
+  if(search){ sizeWin(406); }        // 검색 모드 = 고정 한 판
+  else { autoGrow($id('cap-inp')); sizeMemoWin(); }   // 빠른 메모 = 입력칸을 다시 재고 그 높이에 맞춰
+  pinWindowScroll();
   const t=search?$id('cap-search'):$id('cap-inp');
   t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   if(search) runSearch($id('cap-search').value.trim());
@@ -388,7 +457,7 @@ function submitMemo(){
   const inp=$id('cap-inp');
   const t=inp.value.trim(); if(!t){ hideWin(); return; }
   window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
-  inp.value=''; autoGrow(inp); renderCapHl(); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
+  inp.value=''; autoGrow(inp); sizeMemoWin(); renderCapHl(); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
   submitting=true; document.body.classList.add('flash');
   setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
 }
@@ -404,11 +473,13 @@ export function initCaptureWin(){
   const inp=$id('cap-inp');
   inp.addEventListener('input',()=>{
     autoGrow(inp);
+    sizeMemoWin();                              // v3.4.9: 입력칸이 자라면 창도 같이
     renderCapHl();                              // v3.0.1: 본문 태그 하이라이트 갱신
     clearTimeout(draftTimer);
     draftTimer=setTimeout(()=>sendDraft(inp.value),400);
     schedulePb();                               // v2.7.0: @토큰이면 전화번호부 자동완성
   });
+  inp.addEventListener('scroll',()=>{ const hl=$id('cap-hl'); if(hl) hl.scrollTop=inp.scrollTop; });
   wireTagHover(inp, $id('cap-hl'));             // v3.0.1: 태그 hover 반응
   /* v3.0.2 통일 정책: 빠른 메모의 태그도 클릭 = 관련 업무 검색. 이 창엔 팝업이
      없으므로 검색 화면으로 점프해 그 이름을 검색한다(hover 기하 판정 — 태그 위

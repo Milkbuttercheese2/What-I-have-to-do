@@ -15,7 +15,7 @@
 ![tech](https://img.shields.io/badge/Tauri-Rust%20%2B%20JS-2a7c6e?style=for-the-badge&logo=tauri&logoColor=white)
 ![offline](https://img.shields.io/badge/%EC%A0%80%EC%9E%A5-100%25%20%EB%A1%9C%EC%BB%AC%20%C2%B7%20%EC%98%A4%ED%94%84%EB%9D%BC%EC%9D%B8-2ea043?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-AGPL%20v3-A31F34?style=for-the-badge)
-![version](https://img.shields.io/badge/version-v3.3.9-2a7c6e?style=for-the-badge)
+![version](https://img.shields.io/badge/version-v3.4.8-2a7c6e?style=for-the-badge)
 
 </div>
 
@@ -194,6 +194,11 @@ exe 파일 하나로 돌아갑니다. 설치도, 계정도, 인터넷도 필요 
   드러났습니다("종료 2초 뒤 재실행").
 - **화면 꾸미기가 데이터 로드를 무너뜨린 적이 있습니다.** 테마 적용 한 줄이 실패했는데
   "데이터를 불러오지 못했습니다"가 뜨고 저장까지 막혔습니다. 지금은 둘을 분리했습니다.
+- **내 화면에서만 멀쩡한 버그가 제일 지독했습니다.** 미니 창 목록의 아랫줄이 잘린다는 신고를
+  여섯 번 고쳤는데 매번 되돌아왔습니다. 원인은 코드가 아니라 **Windows 접근성의 '텍스트 크기
+  조정'(135%)** 이었습니다 — 그 값이 웹뷰에서 화면 전체 확대로 곱해져, 앱이 계산한 창이 실제
+  필요한 것보다 25% 작았던 것입니다. 브라우저로 아무리 재도 그 설정이 없으니 늘 정상으로
+  나왔습니다. 지금은 배율을 추정하지 않고 **웹뷰가 자기 화면 크기를 알려주면 그걸로 계산**합니다.
 - **만들었다가 걷어낸 것도 있습니다.** 시각 태그를 급한 정도에 따라 5색으로 나눴다가 어지럽다는
   피드백으로 임박 하나만 남겼고, 파일 검색 연동은 붙여 보니 검색이 느려져 통째로 뺐습니다.
 
@@ -204,7 +209,7 @@ exe 파일 하나로 돌아갑니다. 설치도, 계정도, 인터넷도 필요 
 | 작업 | 명령 |
 |---|---|
 | 개발 실행 (핫리로드) | `npm run tauri dev` |
-| 프론트 테스트 (node:test + jsdom, 237개) | `npm test` |
+| 프론트 테스트 (node:test + jsdom, 258개) | `npm test` |
 | 백엔드 테스트 (DB 라운드트립) | `cd src-tauri && cargo test --lib` |
 | 릴리즈 빌드 | `npm run tauri build` → `src-tauri/target/release/wmhh-desktop.exe` |
 
