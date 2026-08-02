@@ -723,8 +723,8 @@ static CAPTURE_H: AtomicU32 = AtomicU32::new(126);
 
 /// 미니 캡처 창의 논리 폭. **tauri.conf.json 의 capture 창 `width` 와 반드시 같아야
 /// 한다** — v3.1.0 에서 conf 만 620 으로 바뀌어(코드는 560 유지) 창이 뜰 때 620,
-/// 크기 조정 뒤 560 으로 끌려가며 폭이 흔들렸다. v3.2.7: 소유자 지정으로 **700 고정**.
-const CAPTURE_W: f64 = 700.0;
+/// 크기 조정 뒤 560 으로 끌려가며 폭이 흔들렸다. v3.2.7 에서 700 고정 → **v3.4.9 에서 600**(소유자 지정).
+const CAPTURE_W: f64 = 600.0;
 
 /// 웹뷰의 실제 배율(CSS px → 논리 px), 1/1000 단위. 0 = 아직 못 쟀음.
 ///
@@ -751,10 +751,40 @@ fn capture_ratio(app: &AppHandle) -> f64 {
 }
 
 fn apply_capture_size(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window("capture") {
-        let r = capture_ratio(app);
-        let h = CAPTURE_H.load(Ordering::Relaxed) as f64 * r;
-        let _ = win.set_size(tauri::LogicalSize::new(CAPTURE_W * r, h));
+    let Some(win) = app.get_webview_window("capture") else { return };
+    let r = capture_ratio(app);
+    let mut h = CAPTURE_H.load(Ordering::Relaxed) as f64 * r;
+    let w = CAPTURE_W * r;
+
+    // 화면 밖으로 자라지 않게 (v3.4.9). 미니 창은 화면 위 20% 지점에서 **아래로** 자라는데,
+    // 배율이 큰 환경(텍스트 크기 조정 225% 등)에서는 목록이 길어지면 창 아래가 화면을
+    // 넘어간다. 그러면 웹뷰 안에서는 멀쩡한데 사용자에게는 행이 잘려 보인다 —
+    // 웹뷰가 알 수 없는 종류의 '안 보임'이라 여기서 막는다.
+    let screen = win.current_monitor().ok().flatten().map(|m| {
+        let sf = m.scale_factor();
+        (
+            m.position().y as f64 / sf,
+            m.size().height as f64 / sf,
+        )
+    });
+    if let Some((_, screen_h)) = screen {
+        let max_h = (screen_h - 96.0).max(120.0); // 작업표시줄 + 여유
+        if h > max_h {
+            h = max_h;
+        }
+    }
+    let _ = win.set_size(tauri::LogicalSize::new(w, h));
+
+    // 그래도 아래가 넘치면 창을 위로 끌어올린다 (자리는 유지, 잘리지만 않게)
+    if let (Some((screen_top, screen_h)), Ok(pos), Ok(sf)) =
+        (screen, win.outer_position(), win.scale_factor())
+    {
+        let top = pos.y as f64 / sf;
+        let limit = screen_top + screen_h - 48.0;
+        if top + h > limit {
+            let new_top = (limit - h).max(screen_top + 8.0);
+            let _ = win.set_position(tauri::LogicalPosition::new(pos.x as f64 / sf, new_top));
+        }
     }
 }
 

@@ -52,7 +52,11 @@
  body.search #cap-shell{height:100%}
  #cap-shell{flex:0 0 auto;max-height:100%;box-sizing:border-box;display:flex;flex-direction:column;min-height:0;
    background:var(--cap-panel);border:1px solid var(--cap-border);border-radius:18px;overflow:hidden}
- #cap-bar{display:flex;align-items:center;flex:1;min-height:56px;position:relative}
+ /* v3.4.9: 입력줄은 언제나 **내용 높이**다(flex:none). 예전엔 flex:1 이라 창이 모자라면
+    입력칸이 눌렸고, align-items:center 때문에 긴 메모의 첫 줄과 마지막 줄이 위아래로
+    똑같이 잘렸다(사용자 신고 화면). 창 높이는 capture-win.js memoWinHeight() 가
+    입력칸 실제 높이에 맞춰 정한다 — 그래야 눌릴 일이 없다. */
+ #cap-bar{display:flex;align-items:center;flex:none;min-height:56px;position:relative}
  /* v3.0.1 빠른 메모 본문 @태그 하이라이트 — 양식 메모와 같은 백드롭 층.
     ⚠️ textarea(#cap-inp)와 글꼴·크기·행간·패딩이 한 값이라도 다르면 어긋난다.
     스택(#cap-inp-stack)이 textarea 를 감싸 위치를 정확히 공유한다. 검색 모드 숨김. */
@@ -65,7 +69,6 @@
  #cap-hl .at-tag.hover{box-shadow:0 0 0 1.5px var(--cap-hit-fg)}
  #cap-inp{position:relative;z-index:1;width:100%}
  body.search #cap-bar,body.search #cap-hint{flex:none}   /* 검색칸·힌트는 상단 고정, 목록만 스크롤 */
- body.search #cap-bar{flex:none}
  /* v2.5.1: font 축약형에 inherit(전역 키워드)를 섞으면 선언 전체가 무효 처리돼
     입력창이 브라우저 기본 폼 폰트로 렌더되던 버그 — 롱핸드로 분리(파일 전체 동일). */
  #cap-inp,#cap-search{flex:1;border:0;outline:0;background:transparent;color:var(--cap-ink);
@@ -97,7 +100,7 @@
  ::-webkit-scrollbar-thumb:hover{background:var(--cap-thumb-hover);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
  /* height 고정(v3.4.7): 행 높이가 36.2px 같은 소수면 ↓ 로 한 칸 내려갈 때 스크롤이
     37·38px 로 번갈아 움직여 이동이 고르지 않다. 고정하면 정확히 한 칸씩 움직인다. */
- .cap-hit{font-size:13px;line-height:1.45;color:var(--cap-ink);padding:8px 11px;margin:1px 0;
+ .cap-hit{font-size:13px;line-height:1.45;color:var(--cap-ink);padding:8px 10px;margin:1px 0;
    height:36px;box-sizing:border-box;
    border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  /* v2.6.7: hover 는 body.mouse 일 때만 — 창이 커서 밑에 뜨면 그 자리의 줄이 곧바로 :hover 가 되고,
@@ -117,10 +120,10 @@
     폈다 접었다 했고, 그 인라인이 한 번이라도 'block' 인 채 남으면 검색 화면에
     빈 띠가 하나 더 생겼다 — 실사용 버그). 빠른 메모 화면일 때만 펴진다:
     검색(body.search)·등록 플래시(body.flash)에서는 규칙상 아예 자리를 못 갖는다. */
- body.pb #cap-bar{flex:none}
  /* box-sizing:border-box — capture-win.js 의 pbNeedH() 가 재는 값이 '패딩·테두리까지
     포함한 바깥 높이'다. content-box 로 두면 그 값을 max-height 로 걸었을 때 패딩만큼
     더 커져 11번째 행이 빼꼼 보이고, 그 몇 px 때문에 목록에 스크롤이 생긴다(v3.4.3). */
+ /* 좌우 대칭(v3.4.9): 목록 여백 8 + 행 여백 10 = 18 = 입력칸 좌우 패딩 18. 셋을 함께 고칠 것. */
  #cap-pb{display:none;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;
    border-top:1px solid var(--cap-sep);padding:6px 8px}
  body.pb:not(.search):not(.flash) #cap-pb{display:block}
@@ -129,7 +132,7 @@
     왕복이 v3.2~v3.4.5 의 빈 띠·잘림·펴졌다접힘을 차례로 만들었다 — pbNeedH 주석).
     폰트 폴백이 달라져도 이 높이는 변하지 않는다. 바꾸려면 JS 상수도 같이 고칠 것. */
  .cap-pb-it{display:flex;align-items:center;gap:9px;font-size:13px;line-height:1.45;color:var(--cap-ink);
-   height:33px;box-sizing:border-box;padding:7px 11px;margin:1px 0;border-radius:8px;cursor:pointer}
+   height:33px;box-sizing:border-box;padding:7px 10px;margin:1px 0;border-radius:8px;cursor:pointer}
  .cap-pb-it.sel,body.mouse .cap-pb-it:hover{background:var(--cap-hit-bg);color:var(--cap-hit-fg)}
  .cap-pb-who{flex:none;font-weight:600;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .cap-pb-org{flex:1;min-width:0;color:var(--cap-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
