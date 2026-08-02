@@ -59,6 +59,22 @@ const BACKUP_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(
 pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
     ensure_integrity(&state)?;
     let mut conn = state.conn();
+    /* v3.3.6: 건수가 바뀌는 저장은 로그에 남긴다. "18건이던 게 어느 순간 8건"처럼
+       통째로 되돌아간 사고를 나중에 짚으려면 **언제 몇 건이 몇 건이 됐는지**가
+       있어야 한다. 매 저장마다 쓰면 로그가 의미 없이 불어나므로 변할 때만 쓴다. */
+    let before: Option<i64> = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).ok();
+    let after = items.len() as i64;
+    if before != Some(after) {
+        db::log_line(
+            &state.base_dir,
+            &format!(
+                "save items {} -> {} · {}",
+                before.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
+                after,
+                db::exe_desc()
+            ),
+        );
+    }
     // A/B: 대량 축소(대량 삭제·통째 절단)를 감지하면 덮어쓰기 전에 강제 스냅샷을
     // 남긴다 — 30분 스로틀에 걸려 최근 백업이 없더라도 축소 직전 복원점이 남도록.
     // v3.3.4: 일시적 잠금/백신 I/O 는 한 번 실패로 끝내지 않고 짧게 재시도한다.
@@ -259,20 +275,87 @@ pub fn request_quit(app: &AppHandle) -> bool {
     if QUITTING.swap(true, Ordering::SeqCst) {
         return false; // 이미 진행 중 — 감시 타이머가 곧 종료시킨다
     }
+    if let Some(db) = app.try_state::<AppDb>() {
+        db::log_line(&db.base_dir, "quit requested");
+    }
     let _ = app.emit_to("main", "wmhh://request-quit", ());
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(QUIT_FLUSH_GRACE_MS));
-        handle.exit(0);
+        exit_when_db_idle(&handle, 0);
     });
     true
 }
 
 /// 프런트가 "플러시 끝났다"고 알려 오는 종점. 감시 타이머보다 먼저 오면
 /// 기다림 없이 바로 닫힌다(정상 경로).
+/// ⚠️ 반드시 별도 스레드로 넘긴다. `exit_when_db_idle` 은 쓰기가 끝나기를 기다리며
+/// **블로킹**하는데, 커맨드가 도는 스레드를 붙잡으면 이벤트 루프가 `app.exit` 요청을
+/// 처리하지 못해 서로 기다리는 교착이 된다. 여기서는 요청만 띄우고 즉시 돌아온다.
 #[tauri::command]
 pub fn quit_now(app: AppHandle) {
-    app.exit(0);
+    let handle = app.clone();
+    std::thread::spawn(move || exit_when_db_idle(&handle, 0));
+}
+
+/// 쓰기가 끝나기를 기다렸다가 종료할 최대 시간. 감시 타이머(2.5초)와 **별개**다:
+/// 저쪽은 "프런트가 응답하나", 이쪽은 "지금 끊어도 파일이 안전한가"를 본다.
+const QUIT_DB_IDLE_WAIT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// **트랜잭션 도중에는 절대 프로세스를 끊지 않는다.**
+///
+/// v3.3.4 회귀: 종료 경로가 `app.exit(0)` 를 곧바로 불렀는데, 이건 프로세스를
+/// 그냥 끝내는 것이라 SQLite 가 커밋을 마치거나 되돌릴 틈이 없다. 쓰기 도중에
+/// 끊기면 DB 옆에 **핫 저널(-journal)** 이 남고, 다음 실행은 그걸 먼저 되돌려야
+/// 파일을 열 수 있다. 그 되돌리기가 조금이라도 막히면(백신이 -journal 을 잠깐
+/// 쥐는 등) SQLite 는 그대로 **"database is locked"** 를 올린다 — 사용자에게는
+/// "업데이트 뒤로 자꾸 DB 잠김 오류가 난다"로 보인다.
+///
+/// v3.3.4 가 이걸 **더 자주** 만들었다: 종료 직전 `quit.js` 가 `STORE.flush()` 로
+/// 저장을 새로 **시작**하는데, 감시 타이머는 2.5초 뒤 그 한복판에서 프로세스를
+/// 끊을 수 있었다. 종료 때 저장을 지키려던 장치가 되레 끊길 확률을 높인 셈이다.
+///
+/// 모든 쓰기는 `AppDb.conn` 뮤텍스를 트랜잭션 내내 쥐고 있으므로, **그 잠금을
+/// 잡을 수 있다 = 진행 중인 쓰기가 없다**. 잡은 채로 종료하면 그 사이 새 쓰기가
+/// 끼어들 수도 없다. 못 잡으면 정해진 시간까지만 기다리고 종료한다 — 어떤 경우에도
+/// 앱이 안 꺼지는 상태는 만들지 않는다는 원칙이 우선이다.
+fn exit_when_db_idle(app: &AppHandle, code: i32) {
+    if let Some(db) = app.try_state::<AppDb>() {
+        let deadline = std::time::Instant::now() + QUIT_DB_IDLE_WAIT;
+        loop {
+            match db.conn.try_lock() {
+                Ok(guard) => {
+                    // ⚠️ 잠금을 **쥔 채로** 종료한다. 여기서 놓아 버리면 그 틈에 새 저장이
+                    // 시작돼(알람 확인·자동 저장 등) 다시 트랜잭션 도중에 끊길 수 있다.
+                    let _held = guard;
+                    finish_exit(app, code);
+                    return;
+                }
+                // 중독 = 이전에 패닉으로 풀린 것이지 지금 쓰는 중은 아니다 → 끊어도 안전
+                Err(std::sync::TryLockError::Poisoned(_)) => break,
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    if std::time::Instant::now() >= deadline {
+                        eprintln!(
+                            "종료: {}초를 기다렸는데도 DB 쓰기가 끝나지 않아 그대로 종료합니다.",
+                            QUIT_DB_IDLE_WAIT.as_secs()
+                        );
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+            }
+        }
+    }
+    finish_exit(app, code);
+}
+
+/// `app.exit` 은 이벤트 루프에 종료를 **요청**하고 곧바로 돌아온다. 그대로 리턴하면
+/// 프로세스가 실제로 죽기 전에 호출한 스레드가 끝나 버려(=위에서 쥔 DB 잠금이 풀려)
+/// 마지막 순간에 새 쓰기가 끼어들 수 있다. 그래서 잠깐 붙잡아 둔다 — 프로세스가
+/// 죽으면 이 스레드도 함께 사라지므로 앱을 붙잡고 늘어지지 않는다.
+fn finish_exit(app: &AppHandle, code: i32) {
+    app.exit(code);
+    std::thread::sleep(std::time::Duration::from_secs(5));
 }
 
 /// 저장이 거듭 실패할 때 쓰는 **비상 덤프** — DB 를 전혀 건드리지 않고

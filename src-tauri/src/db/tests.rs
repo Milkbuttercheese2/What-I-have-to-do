@@ -889,3 +889,61 @@ fn save_items_guarded_snapshots_when_the_count_cannot_be_read() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// v3.3.6: 자동 복구는 되돌릴 수 없다 — 백업으로 덮기 **전에** 원본을 반드시
+// 옆에 남겨야 한다. 원본이 사실 멀쩡했는데(일시적 잠금 등) 옛 백업으로 복구되면
+// 그 순간 최신 데이터가 사라지는데, 사본 하나면 그 위험이 통째로 없어진다.
+#[test]
+fn recovery_keeps_a_copy_of_the_original_before_overwriting_it() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_keeporig_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // 정상 백업 하나를 만들어 둔다.
+    {
+        let mut conn = super::open(&db_path).unwrap();
+        items::save_items(&mut conn, &sample_items()).unwrap();
+        super::rotate_backup(&db_path, &backups_dir, "20260101_000000", 20).unwrap();
+    }
+    // 원본을 못 여는 상태로 만든다(손상).
+    std::fs::write(&db_path, b"this is definitely not a sqlite database").unwrap();
+    let broken = std::fs::read(&db_path).unwrap();
+
+    let (_conn, note) = super::open_with_recovery(&db_path, &backups_dir).unwrap();
+    assert!(note.is_some(), "복구했으면 사용자에게 알려야 한다");
+    assert!(
+        note.as_ref().unwrap().contains("옆에 보관"),
+        "안내에 원본 보관 사실이 있어야 한다: {:?}",
+        note
+    );
+
+    // 복구 전 원본이 그대로 남아 있어야 한다.
+    let kept: Vec<_> = std::fs::read_dir(db_path.parent().unwrap())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains("before-recovery"))
+        .collect();
+    assert_eq!(kept.len(), 1, "복구 전 원본 사본이 정확히 하나 있어야 함");
+    assert_eq!(
+        std::fs::read(kept[0].path()).unwrap(),
+        broken,
+        "사본은 손대기 전의 원본과 바이트가 같아야 한다"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 로그는 거들 뿐 — 남되, 업무 내용은 담지 않는다.
+#[test]
+fn log_line_appends_and_never_panics() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_log_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    super::log_line(&dir, "start items=18");
+    super::log_line(&dir, "save items 18 -> 8");
+    let text = std::fs::read_to_string(dir.join("wmhh.log")).unwrap();
+    assert_eq!(text.lines().count(), 2);
+    assert!(text.contains("items 18 -> 8"));
+    assert!(text.contains("pid="), "언제·어느 프로세스인지가 핵심이다");
+    let _ = std::fs::remove_dir_all(&dir);
+}
