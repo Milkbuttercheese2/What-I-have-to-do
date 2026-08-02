@@ -68,6 +68,13 @@ const CHECKS = `(() => {
   // 4) 힌트줄은 언제나 보인다 (조작 안내가 잘리면 안 된다)
   const hint = document.getElementById('cap-hint');
   add(R(hint).bottom <= innerHeight + 1 && R(hint).top >= -1, '힌트줄 보임', Math.round(R(hint).top) + '~' + Math.round(R(hint).bottom));
+  {  // 힌트줄은 한 줄이어야 한다 (접히면 창 폭이 문구를 못 담는다는 뜻)
+    const cs = getComputedStyle(hint);
+    const lh = parseFloat(cs.lineHeight) || 16;
+    const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const lines = Math.round((R(hint).height - pad) / lh);
+    add(lines <= 1, '힌트줄 한 줄', lines + '줄');
+  }
 
   // 5) 목록: 보이는 행은 전부 온전해야 하고, 상한은 min(N,10) 이다
   const listOf = (box, sel) => {
@@ -215,6 +222,21 @@ const toMemo = async page => { await page.keyboard.press('Alt'); await page.wait
 const typeMemo = async (page, text) => { await page.focus('#cap-inp'); await page.keyboard.type(text); await page.waitForTimeout(700); };
 
 /* ── 케이스 ──────────────────────────────────────────────────────────── */
+/* 첫 화면이 '빠른 메모'인 설정(capStart=memo)으로 뜨는 경로 — 입력칸이 처음부터 보인다.
+   숨어 있을 때 잰 0 이 높이로 굳으면 이 케이스에서 드러난다. */
+await run('첫 화면이 빠른 메모(설정)', 5, 5, async p => {
+  await p.evaluate(() => { localStorage.setItem('wmhhCapStart', 'memo'); localStorage.setItem('wmhhCapSecond', 'search'); });
+  await p.reload(); await p.waitForTimeout(600);
+  await p.focus('#cap-inp'); await p.keyboard.type('첫 화면 메모');
+  await p.waitForTimeout(600);
+});
+await run('첫 화면이 빠른 메모 + 긴 메모', 5, 5, async p => {
+  await p.evaluate(() => { localStorage.setItem('wmhhCapStart', 'memo'); localStorage.setItem('wmhhCapSecond', 'search'); });
+  await p.reload(); await p.waitForTimeout(600);
+  await p.focus('#cap-inp');
+  await p.keyboard.type(Array.from({length: 9}, (_, i) => '줄 ' + (i + 1)).join('\n'));
+  await p.waitForTimeout(700);
+});
 await run('검색: 결과 없음', 5, 0, async p => { await p.focus('#cap-search'); await p.keyboard.type('없는말'); await p.waitForTimeout(600); });
 await run('검색: 3건', 5, 3, async p => { await p.focus('#cap-search'); await p.keyboard.type('업무'); await p.waitForTimeout(600); });
 await run('검색: 30건', 5, 30, async p => { await p.focus('#cap-search'); await p.keyboard.type('업무'); await p.waitForTimeout(600); });
