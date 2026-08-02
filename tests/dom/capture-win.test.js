@@ -593,3 +593,23 @@ test('미니 창 자체는 스크롤된 채로 굳지 않는다 (v3.4.9)', async
   assert.equal(root.scrollTop, 0, '창이 밀린 채로 굳으면 입력줄이 잘린다');
   assert.equal(shell.scrollTop, 0);
 });
+
+/* v3.4.9: @자동완성 목록도 목록 밖에서 굴린 휠을 받는다. 예전엔 검색 화면에서만
+   동작해, 후보가 10행을 넘어 스크롤이 생겨도 입력칸·힌트줄 위에서 굴리면 아무 일도
+   없었다(v2.6.8 이 검색 목록에만 적용됐던 규칙을 자동완성에도 넓힌 것). */
+test('@ 자동완성: 목록 밖에서 굴린 휠도 그 목록을 스크롤한다 (v3.4.9)', async () => {
+  reset();
+  const book = Array.from({length: 14}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-6-'+i}));
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();
+  const pb = env.document.getElementById('cap-pb');
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.ok(body.classList.contains('pb'));
+
+  const hint = env.document.getElementById('cap-hint');       // 목록 밖(힌트줄) 위에서 굴린다
+  const ev = new env.window.WheelEvent('wheel', {deltaY: 90, bubbles: true, cancelable: true});
+  hint.dispatchEvent(ev);
+  assert.equal(pb.scrollTop, 90, '자동완성 목록으로 넘어가 스크롤돼야 한다');
+});

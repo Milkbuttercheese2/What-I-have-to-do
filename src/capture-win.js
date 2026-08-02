@@ -534,9 +534,13 @@ export function initCaptureWin(){
   /* v2.6.8: 창 어디에 커서가 있어도 휠로 결과 목록을 오르내린다.
      목록 밖(검색칸·힌트줄) 위에서 굴리면 스크롤이 먹지 않던 것을 목록으로 넘겨준다. */
   document.addEventListener('wheel',e=>{
-    const list=$id('cap-items');
-    if(!list || mode!=='search') return;
-    if(e.target.closest && e.target.closest('.cap-list')) return;   // 목록 위면 브라우저 기본 스크롤
+    /* v3.4.10: @자동완성 목록도 같은 규칙을 받는다. 예전엔 검색 화면에서만 동작해,
+       후보가 10행을 넘어 스크롤이 생겨도 목록 밖(입력칸·힌트줄) 위에서 굴리면
+       아무 일도 없었다. 목록 위에서는 브라우저 기본 스크롤에 맡긴다. */
+    const pbOn=document.body.classList.contains('pb');
+    const list = pbOn ? $id('cap-pb') : (mode==='search' ? $id('cap-items') : null);
+    if(!list) return;
+    if(e.target.closest && e.target.closest(pbOn?'#cap-pb':'.cap-list')) return;
     list.scrollTop += e.deltaY;
     e.preventDefault();
   }, {passive:false});
