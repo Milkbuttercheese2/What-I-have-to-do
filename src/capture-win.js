@@ -147,64 +147,82 @@ function closePb(skipResize){
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
   if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
 }
-/* 자동완성이 펴진 지금, 창이 필요로 하는 논리 높이(CSS px)를 실측한다 (v3.2.3).
-   입력줄(#cap-bar) + 힌트줄 + 목록(행 높이 × 표시 행수 + 목록 패딩) + 패널 테두리.
-   PB_MAX_ROWS 를 넘는 후보는 목록 스크롤로 본다(창은 더 커지지 않는다).
-   ⚠️ 반드시 body.pb 적용 + renderPb() 이후에 호출할 것 — 그 전엔 목록이 없다. */
+/* ── 목록 높이 (v3.4.3 재정비) ────────────────────────────────────────────
+   규칙은 하나다: **후보가 몇이든 min(후보수, 10)행은 언제나 통째로 보인다.**
+   그 한 값(pbNeedH)이 목록의 상한(max-height)과 창 높이 계산에 **함께** 쓰인다 —
+   예전엔 둘을 따로 계산해(상한은 listH+padding, 창은 별도 공식) 서로 어긋났고,
+   그 틈으로 11번째 행이 삐져나오거나 10행이 안 들어가는 창이 만들어졌다. */
 const PB_MAX_ROWS=10;
-function pbNeededHeight(){
-  const bar=$id('cap-bar'), hint=$id('cap-hint'), pb=$id('cap-pb');
-  if(!bar||!hint||!pb) return 126;
-  const h=el=>el.getBoundingClientRect().height;
+const PB_ROW_FALLBACK=34;   // 배치 전이라 행 높이가 0으로 재질 때의 근사값(px)
+/* 첫 행 top → k번째 행 bottom (스크롤 위치와 무관 — 두 rect 가 같이 밀린다).
+   행 높이를 곱하지 않는 이유: 행 마진(.cap-pb-it margin:1px 0)이 빠져 몇 px 모자라고
+   그 몇 px 때문에 마지막 행이 잘려 보였다(v3.2.2). */
+function pbRowsSpan(k){
+  const pb=$id('cap-pb'); if(!pb) return 0;
   const rows=[...pb.querySelectorAll('.cap-pb-it')];
-  const shown=Math.min(rows.length, PB_MAX_ROWS);
-  /* 첫 행 top → 표시할 마지막 행 bottom = 행 사이 간격까지 포함한 실제 목록 높이.
-     행 높이만 곱하면 행 마진(.cap-pb-it margin:1px 0)이 빠져 2~4px 모자라고,
-     그 몇 px 때문에 목록에 스크롤이 생겨 마지막 행이 잘려 보였다(v3.2.2 증상). */
-  const listH=(shown&&rows[0])?(rows[shown-1].getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top):0;
-  const cs=getComputedStyle(pb);
-  const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0)+(parseFloat(cs.borderTopWidth)||0);
-  return Math.ceil(h(bar)+h(hint)+listH+pad+6);   // +6 = 행 상하 마진 2 + 패널 테두리 2 + 반올림 여유 2
+  const n=Math.min(k, rows.length); if(!n) return 0;
+  const span=rows[n-1].getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top;
+  return span>1 ? span : n*PB_ROW_FALLBACK;   // 0 을 그대로 믿으면 창을 터무니없이 작게 잡는다
 }
-/* 창 크기를 맞추고 **결과를 확인해 스스로 보정**한다 (v3.2.4 — 자가 보정).
-   계산만 하고 끝내면(v3.2.1~v3.2.3) 그 계산이 틀린 환경에서 빈 띠/잘림이 그대로
-   남는다. 실제로 창이 바뀐 뒤 목록이 넘치는지(잘림) 남는지(빈 띠)를 재서 그
-   차이만큼 한 번 더 조정하면, 배율·폰트·플랫폼 차이와 무관하게 수렴한다.
-   10행 초과는 스크롤이 정상이므로 보정 대상이 아니다. */
+/* 목록(#cap-pb)이 min(후보수,10)행을 온전히 담는 데 필요한 **바깥 높이**
+   (padding·테두리 포함 — capture.html 에서 box-sizing:border-box). */
+function pbNeedH(){
+  const pb=$id('cap-pb'); if(!pb) return 0;
+  const shown=Math.min(pb.querySelectorAll('.cap-pb-it').length, PB_MAX_ROWS);
+  if(!shown) return 0;
+  const cs=getComputedStyle(pb);
+  const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+  const bd=(parseFloat(cs.borderTopWidth)||0)+(parseFloat(cs.borderBottomWidth)||0);
+  return Math.ceil(pad+bd+2+pbRowsSpan(shown));   // +2 = 첫 행 위·마지막 행 아래 마진
+}
+/* 지금 목록을 다 보여주려면 창이 얼마나 커야 하나 — 입력줄 + 힌트줄 + 목록 + 패널 테두리.
+   ⚠️ 반드시 body.pb 적용 + renderPb() 이후에 호출할 것 (그 전엔 목록이 없다). */
+function pbWinHeight(){
+  const bar=$id('cap-bar'), hint=$id('cap-hint');
+  if(!bar||!hint) return 126;
+  const h=el=>el.getBoundingClientRect().height;
+  return Math.ceil(h(bar)+h(hint)+pbNeedH()+2+PB_SLACK);
+}
 /* v3.2.5: 창은 **넉넉히** 잡고(SLACK), 남는 부분은 투명이라 보이지 않는다
-   (capture.html 의 '패널은 내용 높이' 규칙과 한 쌍 — 이 둘이 같이 있어야
-   창 높이가 몇 px 어긋나도 잘림이 생기지 않는다). 그래도 계산이 크게 모자란
-   환경을 대비해, 적용 후 목록이 넘치면(잘림) 그만큼 한 번 더 키운다. */
+   (capture.html 의 '패널은 내용 높이' 규칙과 한 쌍). */
 const PB_SLACK=48;
+const PB_FIT_TRIES=4;
+/* 창 크기를 맞추고 **모자란 만큼 다시 키운다** (v3.4.3 — 수렴할 때까지).
+   v3.2.4~v3.4.2 의 자가 보정은 딱 한 번이었고, 게다가 후보가 10행을 넘으면
+   "스크롤이 정상"이라며 보정을 아예 건너뛰었다. 그래서 첫 계산이 모자란 환경
+   (행 배치 전 실측 0, 리사이즈 지연 등)에서는 목록이 서너 줄로 갇힌 창이 그대로
+   굳었다 — 사용자가 본 증상이 이것이다. 이제 목표(min(N,10)행)에 모자란 픽셀을
+   재서 그만큼 키우기를 반복하므로, 배율·폰트·플랫폼과 무관하게 수렴한다. */
 async function fitPbWindow(){
   const seq=pbSeq;
-  invoke('resize_capture',{height:pbNeededHeight()+PB_SLACK}).catch(()=>{});
-  await new Promise(r=>setTimeout(r,80));            // 네이티브 창 리사이즈 반영 대기
-  if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
-  const pb=$id('cap-pb'); if(!pb) return;
-  if(pb.querySelectorAll('.cap-pb-it').length>PB_MAX_ROWS) return;   // 스크롤이 정상인 경우
-  const over=pb.scrollHeight-pb.clientHeight;        // >0 이면 여전히 잘린 상태
-  if(over>1) invoke('resize_capture',{height:Math.ceil(window.innerHeight+over+PB_SLACK)}).catch(()=>{});
+  invoke('resize_capture',{height:pbWinHeight()}).catch(()=>{});
+  for(let i=0;i<PB_FIT_TRIES;i++){
+    await new Promise(r=>setTimeout(r,80));          // 네이티브 창 리사이즈 반영 대기
+    if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
+    const pb=$id('cap-pb'); if(!pb) return;
+    const short=pbNeedH()-pb.getBoundingClientRect().height;   // 목표 행수에 모자란 px
+    if(short<=1) return;                             // 다 보인다 — 끝
+    invoke('resize_capture',{height:Math.ceil(window.innerHeight+short+2)}).catch(()=>{});
+  }
 }
-function renderPb(){
+/* keepScroll=true 는 ↑↓ 로 목록을 조작할 때만 — 그 밖(새 후보 목록)에서는 언제나
+   맨 위로 되돌린다. v3.4.3: innerHTML 을 갈아끼워도 브라우저는 스크롤 위치를
+   유지하기 때문에, 직전 검색에서 아래끝까지 내려둔 목록을 다시 열면 첫 행이
+   잘려 보였다(첫 행이 아예 안 보이기도 했다 — 사용자 신고). */
+function renderPb(keepScroll){
   const w=$id('cap-pb'); if(!w) return;
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
     <span class="cap-pb-who">${esc(e.who||'—')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
   </div>`).join('');
-  /* v3.2.5: 10행 상한을 **목록 자체**에 건다(실측). 창 여유(PB_SLACK)와 무관하게
-     정확히 10행에서 멈추고 그 아래는 스크롤 — 창 크기로 행수를 통제하려던 방식은
+  if(!keepScroll) w.scrollTop=0;
+  /* 10행 상한은 **목록 자체**에 건다(실측). 창 여유(PB_SLACK)와 무관하게 정확히
+     10행에서 멈추고 그 아래는 스크롤 — 창 크기로 행수를 통제하려던 방식은
      여유 픽셀이 생길 때마다 11·12행이 삐져나왔다. */
-  const rows=[...w.querySelectorAll('.cap-pb-it')];
-  if(rows.length>PB_MAX_ROWS){
-    const cs=getComputedStyle(w);
-    const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
-    const listH=rows[PB_MAX_ROWS-1].getBoundingClientRect().bottom-rows[0].getBoundingClientRect().top;
-    w.style.maxHeight=Math.ceil(listH+pad+2)+'px';
-  }else{
-    w.style.maxHeight='';
-  }
-  const sel=w.querySelector('.cap-pb-it.sel');
-  if(sel&&sel.scrollIntoView) sel.scrollIntoView({block:'nearest'});   // 10행 넘어 스크롤 시 선택 추적 (v3.2.1)
+  w.style.maxHeight = w.querySelectorAll('.cap-pb-it').length>PB_MAX_ROWS ? pbNeedH()+'px' : '';
+  /* 선택 추적은 10행 넘어 스크롤할 때만 필요하다. 첫 줄이면 위(맨 위)가 곧 제자리라
+     아무것도 하지 않는다 — scrollIntoView 가 첫 행을 살짝 밀어 올리던 일도 없앤다. */
+  const sel=pbSel>0 ? w.querySelector('.cap-pb-it.sel') : null;
+  if(sel&&sel.scrollIntoView) sel.scrollIntoView({block:'nearest'});
 }
 async function runPb(){
   const inp=$id('cap-inp');
@@ -367,8 +385,8 @@ export function initCaptureWin(){
     if(e.isComposing||e.keyCode===229) return;   // 한글 IME 조합 중 오등록 방지
     /* v2.7.0: 자동완성이 펴져 있으면 그 목록부터 조작한다 (Ctrl 조합은 통과 — 등록/저장) */
     if(pbOpen && !e.ctrlKey && !e.metaKey){
-      if(e.key==='ArrowDown'){ e.preventDefault(); pbSel=Math.min(pbSel+1,pbItems.length-1); renderPb(); return; }
-      if(e.key==='ArrowUp'){ e.preventDefault(); pbSel=Math.max(pbSel-1,0); renderPb(); return; }
+      if(e.key==='ArrowDown'){ e.preventDefault(); pbSel=Math.min(pbSel+1,pbItems.length-1); renderPb(true); return; }
+      if(e.key==='ArrowUp'){ e.preventDefault(); pbSel=Math.max(pbSel-1,0); renderPb(true); return; }
       if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); applyPb(); return; }
       if(e.key==='Escape'){ e.preventDefault(); closePb(); return; }   // 드롭다운만 접는다 (창 유지)
     }
