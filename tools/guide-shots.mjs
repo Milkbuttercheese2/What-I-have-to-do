@@ -82,7 +82,7 @@ const INIT = `(()=>{
       if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
       if(c==='pick_file_path')return 'C:\\\\업무\\\\2026\\\\회의실_예약대장.hwp';
       return null;}},
-    app:{getVersion:async()=>'3.5.0'},   /* 설명서 그림의 헤더 버전 — 스크린샷을 다시 뽑을 때 함께 올린다 */
+    app:{getVersion:async()=>'3.5.1'},   /* 설명서 그림의 헤더 버전 — 스크린샷을 다시 뽑을 때 함께 올린다 */
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,maximize:noop,minimize:noop,toggleMaximize:noop,close:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};

@@ -51,6 +51,10 @@ export function setupEnv({html} = {}){
   window.alert   = m => { alerts.push(String(m)); };
   window.confirm = () => confirmQueue.length ? confirmQueue.shift() : true;
   window.prompt  = () => null;
+  /* v3.5.1: dom-utils 의 appAlert/appConfirm 이 **이 깃발을 보고** 스텁을 탄다.
+     예전처럼 환경을 냄새로 맞히면(toString 에 [native code] 가 있나) Tauri 가
+     window.alert 을 갈아끼운 실제 앱이 테스트 환경으로 오판돼 네이티브 창이 떴다. */
+  window.__WMHH_TEST_DIALOGS__ = true;
 
   /* ---- bare 식별자 전역 (src 모듈이 window./ 없이 참조) ----
      의도적 부재: Notification(askNotify가 'Notification' in window 가드),

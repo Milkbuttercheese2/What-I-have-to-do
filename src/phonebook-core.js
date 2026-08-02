@@ -219,8 +219,13 @@ export function entriesForTag(list, name){
 }
 
 /* 아이템 관련인 → 전화번호부 자동 흡수(v2.9.0, 양식 저장 시) 계산 — 순수.
-   반환: {added:[{who,org,phone,email}], updates:[{id, phone?, email?}]} (적용은 호출부).
+   반환: {added:[{who,org,phone,email}], updates:[{id, phone?, email?}], kept:[…]} (적용은 호출부).
    updates 는 '바뀔 칸만 담은 패치'다 — 호출부는 들어 있는 키만 덮어쓴다.
+   kept 는 **이번에 일부러 반영하지 않은 이메일**이다(v3.5.1 소유자 지정):
+   `{id, who, org, kept, ignored}`. 같은 사람에게 이미 다른 주소가 있어 덮어쓰지 않은 경우다.
+   전화번호부는 한 사람당 대표 주소 하나만 갖고(3칸이 같으면 같은 사람이라 항목을 늘릴
+   수도 없다), 그렇다고 **조용히 버리면 사용자는 자기가 적은 주소가 어디로 갔는지 모른다**
+   — 호출부가 이걸로 알린다. (업무 관련인에는 적은 그대로 남으므로 유실은 아니다.)
    무결성 규칙(소유자 지정): **자동 경로는 이름·소속·연락처 3칸이 모두 있는
    관련인만 받는다** — 검토 없이 쌓이는 경로라 반쪽 데이터가 오염의 주범이다.
    (직접 입력·엑셀·[아이템에서 가져오기]는 의도적 행동이므로 부분 입력 허용 유지.)
@@ -234,7 +239,7 @@ export function entriesForTag(list, name){
    - 번호가 서로 다르면 새 항목(한 사람이 번호 둘인 것은 전화번호부에서 정상)
    삭제는 계산하지 않는다 — 아이템에서 지워도 전화번호부는 그대로. */
 export function absorbContacts(book, contacts){
-  const added=[], updates=[];
+  const added=[], updates=[], kept=[];
   const cur=(book||[]).map(e=>({...e}));           // 보강 중복 계산을 위한 작업 사본
   /* 같은 항목에 두 번 패치가 붙지 않도록 id 로 합친다(관련인 목록에 같은 사람이
      여러 번 있어도 updates 는 한 건) */
@@ -243,28 +248,33 @@ export function absorbContacts(book, contacts){
     const prev=updates.find(u=>u.id===target.id);
     if(prev) prev[key]=val; else updates.push({id:target.id, [key]:val});
   };
+  /* 이메일 반영(v3.5.1): 비었으면 채우고, 이미 **다른** 값이 있으면 건드리지 않고 기록만.
+     같은 항목·같은 주소는 한 번만 기록한다(관련인 목록에 같은 사람이 여러 번 있어도 한 건). */
+  const takeEmail=(target,next)=>{
+    next=String(next||'').trim(); if(!next) return;
+    const now=String(target.email||'').trim();
+    if(!now){ patch(target,'email',next); return; }
+    if(now===next) return;
+    if(kept.some(k=>k.id===target.id && k.ignored===next)) return;
+    kept.push({id:target.id, who:target.who, org:target.org, kept:now, ignored:next});
+  };
   for(const raw of (contacts||[])){
     const c=normEntry(raw);
     if(!isComplete(c)) continue;                 // 3칸 완비만 (전화번호부 입력 자격)
     const k=entryKey(c);
     const same=cur.find(e=>entryKey(e)===k);
-    if(same){                                    // 이미 있는 사람 — 항목은 늘리지 않고 이메일만 살핀다
-      const next=fillEmail(same.email, c.email);
-      if(next!==String(same.email||'').trim()) patch(same,'email',next);
-      continue;
-    }
+    if(same){ takeEmail(same, c.email); continue; }   // 이미 있는 사람 — 항목은 늘리지 않고 이메일만 살핀다
     const dup=added.find(e=>entryKey(e)===k);
     if(dup){ dup.email=fillEmail(dup.email, c.email); continue; }   // 이번 배치 안 중복
     const mate=cur.find(e=>e.who===c.who && e.org===c.org);
     if(mate && !phoneDigits(mate.phone)){
       patch(mate,'phone',c.phone);
-      const next=fillEmail(mate.email, c.email);
-      if(next!==String(mate.email||'').trim()) patch(mate,'email',next);
+      takeEmail(mate, c.email);
       continue;
     }
     added.push({who:c.who, org:c.org, phone:c.phone, email:c.email});
   }
-  return {added, updates};
+  return {added, updates, kept};
 }
 
 /* 커서 앞의 @토큰 — {start, query} 또는 null.
