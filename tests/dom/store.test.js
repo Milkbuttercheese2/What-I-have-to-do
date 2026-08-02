@@ -237,3 +237,38 @@ test('네 번 모두 실패하면 그때는 에러를 올린다 (진짜 문제�
   assert.match(String(err), /진짜 손상/);
   assert.equal(n, 4);
 });
+
+test('사이드카 저장도 실패하면 재시도한다 — 마지막 값만, 성공하면 대기 해제 (v3.4.2)', async () => {
+  await env.resetS(); S.loaded = true;
+  let n = 0;
+  env.onInvoke('save_phonebook', () => { n++; if (n < 3) throw new Error('database is locked'); return null; });
+  STORE.savePhonebook([{id:1, who:'김철수', org:'행정과', phone:'010-1'}]);
+  for(let i=0;i<8;i++){ await env.flush(1); mock.timers.tick(30000); }
+  assert.equal(n, 3, '일시적 실패는 다시 시도해야 한다');
+  assert.ok(env.document.getElementById('saveAlert').classList.contains('on'), '실패 동안 배너는 켜져 있다');
+});
+
+test('사이드카 재시도는 최신 값만 보낸다 (중간 값을 다시 밀지 않는다)', async () => {
+  await env.resetS(); S.loaded = true;
+  const sent = [];
+  let n = 0;
+  env.onInvoke('save_settings', a => { n++; sent.push(a.settings.mark); if (n === 1) throw new Error('locked'); return null; });
+  STORE.saveSettings({mark:'첫값'});
+  await env.flush(1);
+  STORE.saveSettings({mark:'나중값'});          // 재시도 대기 중 새 값이 들어옴
+  for(let i=0;i<6;i++){ await env.flush(1); mock.timers.tick(30000); }
+  assert.equal(sent[0], '첫값');
+  assert.ok(!sent.slice(1).includes('첫값'), '낡은 값을 다시 보내지 않는다');
+  assert.ok(sent.includes('나중값'));
+});
+
+test('flush(): 재시도를 기다리던 사이드카도 종료 전에 밀어 넣는다', async () => {
+  await env.resetS(); S.loaded = true;
+  let n = 0;
+  env.onInvoke('save_phonebook', () => { n++; if (n === 1) throw new Error('locked'); return null; });
+  env.onInvoke('save_all', () => ({kind:'Saved', version: 1}));
+  STORE.savePhonebook([{id:2, who:'이영희', org:'세무과', phone:'010-2'}]);
+  await env.flush(1);                          // 첫 시도 실패 → 재시도 대기 상태
+  await STORE.flush();                         // 종료 경로
+  assert.equal(n, 2, '종료 시 한 번 더 밀어 넣어야 한다');
+});

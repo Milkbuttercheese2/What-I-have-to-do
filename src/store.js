@@ -159,17 +159,56 @@ export const STORE = {
     clearTimeout(retryTimer); retryTimer=null;
     await this._run();
     if(this._pending) await this._run();     // 실패로 되돌아온 배치를 즉시 한 번 더
+    /* v3.4.2: 사이드카(설정·전화번호부 등)도 함께 밀어 넣는다 — 재시도를 기다리던
+       변경분이 종료로 사라지지 않게(아이템과 같은 이유). 실패해도 종료는 막지 않는다. */
+    const pendingSide=Object.keys(this._side).filter(k=>this._side[k] && this._side[k].args);
+    for(const k of pendingSide){
+      const cur=this._side[k];
+      if(cur.timer){ clearTimeout(cur.timer); cur.timer=null; }
+      try{ await invoke(cur.cmd, cur.args); cur.args=null; }
+      catch(e){ console.warn(`${cur.label} 최종 저장 실패`, e); }
+    }
     return !this._pending;                   // true = 남은 것 없음
   },
 
-  /* 사이드카 저장(필드·프리셋·식별정보 명칭·설정)도 실패하면 경고를 켠다. 단
-     성공해도 경고를 끄지는 않는다 — 설정 저장 성공이 아이템 저장 실패를 가리면
-     안 되므로, 해제는 아이템 저장(save_all) 성공만 담당한다. */
-  saveFields(f){ if(!S.loaded)return; invoke('save_fields', {fields:f}).catch(e=>{console.warn('필드 저장 실패',e);showSaveError();}); },
-  savePresets(p){ if(!S.loaded)return; invoke('save_presets', {presets:p}).catch(e=>{console.warn('프리셋 저장 실패',e);showSaveError();}); },
-  saveIdKinds(k){ if(!S.loaded)return; invoke('save_id_kinds', {idKinds:k}).catch(e=>{console.warn('식별번호 명칭 저장 실패',e);showSaveError();}); },
-  saveSettings(s){ if(!S.loaded)return; invoke('save_settings', {settings:s}).catch(e=>{console.warn('설정 저장 실패',e);showSaveError();}); },
-  savePhonebook(p){ if(!S.loaded)return; invoke('save_phonebook', {phonebook:p}).catch(e=>{console.warn('전화번호부 저장 실패',e);showSaveError();}); },
+  /* 사이드카 저장(필드·프리셋·식별정보 명칭·설정·전화번호부).
+     v3.4.2: **아이템 저장과 같은 태도로 재시도한다.** 예전엔 실패하면 경고 배너만
+     켜고 끝이라, 일시적 잠금(껐다 켠 직후·백신 스캔) 한 번에 전화번호부 추가나
+     설정 변경이 조용히 사라질 수 있었다(다음 저장이 덮어쓰기 전에 앱을 닫으면 유실).
+     종류별로 **마지막 값 하나만** 들고 재시도한다 — 이 저장들은 전체 교체라
+     중간 값을 다시 보낼 이유가 없고, 그래야 큐가 불어나지 않는다.
+     성공해도 경고 배너를 끄지는 않는다 — 설정 저장 성공이 아이템 저장 실패를
+     가리면 안 되므로, 해제는 아이템 저장(save_all) 성공만 담당한다. */
+  _side:{},                                  // kind -> {cmd, args, tries, timer}
+  _saveSide(kind, cmd, args, label){
+    if(!S.loaded) return;
+    const cur=this._side[kind] || (this._side[kind]={tries:0, timer:null});
+    cur.cmd=cmd; cur.args=args; cur.label=label;      // 항상 최신 값으로 갱신
+    if(cur.timer){ clearTimeout(cur.timer); cur.timer=null; }
+    this._runSide(kind);
+  },
+  _runSide(kind){
+    const cur=this._side[kind]; if(!cur||!cur.args) return;
+    const {cmd, args}=cur;
+    invoke(cmd, args).then(()=>{
+      /* 성공: 이 종류의 대기를 비운다. 그 사이 더 새 값이 들어왔다면 그 값이
+         args 에 들어와 있으므로, 보낸 것과 같을 때만 비운다. */
+      if(this._side[kind] && this._side[kind].args===args){
+        this._side[kind].args=null; this._side[kind].tries=0;
+      }
+    }).catch(e=>{
+      console.warn(`${cur.label} 저장 실패`, e);
+      showSaveError();
+      cur.tries++;
+      const wait=RETRY_DELAYS[Math.min(cur.tries-1, RETRY_DELAYS.length-1)];
+      cur.timer=setTimeout(()=>{ cur.timer=null; this._runSide(kind); }, wait);
+    });
+  },
+  saveFields(f){ this._saveSide('fields','save_fields',{fields:f},'필드'); },
+  savePresets(p){ this._saveSide('presets','save_presets',{presets:p},'프리셋'); },
+  saveIdKinds(k){ this._saveSide('idKinds','save_id_kinds',{idKinds:k},'식별정보 명칭'); },
+  saveSettings(s){ this._saveSide('settings','save_settings',{settings:s},'설정'); },
+  savePhonebook(p){ this._saveSide('phonebook','save_phonebook',{phonebook:p},'전화번호부'); },
 
   /* 화면 크기(v2.5.15) — 데이터 저장이 아니라 웹뷰 배율 적용이므로 F1 로드
      게이트를 걸지 않는다(로드 완료 전에도 저장된 크기를 그대로 보여줘야 한다). */
