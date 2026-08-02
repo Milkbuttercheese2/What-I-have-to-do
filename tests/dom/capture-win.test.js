@@ -406,3 +406,42 @@ test('닫힌 뒤 뒤늦게 도착한 자동완성 응답은 목록을 되살리�
   assert.ok(body.classList.contains('search'));
   assert.equal(body.classList.contains('pb'), false);
 });
+
+/* v3.3.4: "↓ 로 2번째 줄에 갔다가 곧바로 1번째 줄로 되돌아오는" 버그.
+   runPb 는 디바운스(150ms) + 검색 왕복이 끝난 뒤에야 도착하는데, 사람은 그보다
+   빨리 ↓ 를 누른다. 예전엔 그때 도착한 응답이 pbSel 을 무조건 0 으로 되돌렸다
+   (검색 결과 목록이 v2.6.5 에서 keepId 로 고친 것과 같은 버그가 남아 있었다). */
+test('@ 목록: 뒤늦게 도착한 응답이 ↓ 로 고른 줄을 첫 줄로 되돌리지 않는다', async () => {
+  reset();
+  const book=[{id:1, who:'김철수', org:'행정과', phone:'010-1'},
+              {id:2, who:'김철민', org:'재무과', phone:'010-2'},
+              {id:3, who:'김철호', org:'감사과', phone:'010-3'}];
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();            // 빠른 메모 화면으로
+  const pb = env.document.getElementById('cap-pb');
+  const selText = () => { const el=pb.querySelector('.cap-pb-it.sel'); return el?el.textContent.replace(/\s+/g,''):null; };
+
+  // 1) 목록을 편다
+  inp.value='통화 @김철'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.ok(body.classList.contains('pb'));
+  assert.ok(selText().startsWith('김철수'), '처음엔 첫 줄');
+
+  // 2) 한 글자 더 치자마자(=응답이 아직 안 옴) ↓ 로 둘째 줄을 고른다
+  inp.value='통화 @김철민'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  key({key:'ArrowDown'});
+  assert.ok(selText().startsWith('김철민'), '↓ 직후엔 둘째 줄');
+
+  // 3) 이제 응답이 도착한다 — 고른 사람이 새 목록에도 있으므로 그 자리를 잇는다
+  mock.timers.tick(150); await env.flush();
+  assert.ok(selText().startsWith('김철민'), '응답이 와도 첫 줄로 되돌아가면 안 된다');
+
+  // 4) 반대로 고른 사람이 새 목록에서 사라지면 그때는 첫 줄로 (정상 동작)
+  env.onInvoke('phonebook_search', ()=>[book[2]]);
+  inp.value='통화 @김철호'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  assert.ok(selText().startsWith('김철호'), '후보가 바뀌면 첫 줄로 돌아간다');
+});

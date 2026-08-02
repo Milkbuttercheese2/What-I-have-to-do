@@ -599,6 +599,9 @@
      저장 안 된 채 앱을 닫는 사고를 막는다. toast(z-index 200)보다 위에. */
   .save-alert{position:fixed;left:50%;top:12px;transform:translateX(-50%) translateY(-14px);z-index:300;max-width:min(720px,calc(100vw - 24px));display:none;align-items:center;gap:8px;background:var(--red);color:var(--on-accent);font-size:13px;font-weight:600;line-height:1.45;padding:11px 18px;border-radius:9px;box-shadow:0 10px 34px rgba(0,0,0,.32);word-break:keep-all;opacity:0;transition:opacity .2s,transform .2s}
   .save-alert.on{display:flex;opacity:1;transform:translateX(-50%) translateY(0)}
+  /* 비상 덤프 경로(v3.3.4) — 배너 둘째 줄. 경로는 길어서 반드시 줄바꿈 허용(가로 스크롤 금지 규칙). */
+  .save-alert{flex-wrap:wrap}
+  .save-alert-dump{flex-basis:100%;font-weight:500;font-size:12px;opacity:.94;word-break:break-all}
   footer .num{color:var(--focus)}
   footer a{color:var(--focus)}
   @media(max-width:720px){

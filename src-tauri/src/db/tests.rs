@@ -804,3 +804,88 @@ fn recovery_skips_corrupt_newest_backup_and_uses_older_good_one() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/* ===== v3.3.4 데이터 무결성 강화 ===== */
+
+fn sqlite_err(code: i32) -> super::error::DbError {
+    super::error::DbError::Sqlite(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(code),
+        None,
+    ))
+}
+
+// 일시적 실패(잠금·백신 I/O)는 다시 시도해야 한다. busy_timeout 은 SQLite 가
+// '잠금 대기'로 본 경우만 기다려 주므로, 그 밖의 일시적 오류는 여기서 흡수한다.
+#[test]
+fn write_retry_recovers_from_transient_errors() {
+    for code in [5 /* SQLITE_BUSY */, 6 /* SQLITE_LOCKED */, 10 /* SQLITE_IOERR */] {
+        let mut tries = 0;
+        let out: i32 = super::with_write_retry(|| {
+            tries += 1;
+            if tries < 3 {
+                Err(sqlite_err(code))
+            } else {
+                Ok(42)
+            }
+        })
+        .unwrap_or_else(|e| panic!("code {code} 는 재시도로 성공해야 함: {e}"));
+        assert_eq!(out, 42);
+        assert_eq!(tries, 3, "code {code}: 성공할 때까지 다시 시도해야 함");
+    }
+}
+
+// 반대로 재시도해도 결과가 같은 오류(제약 위반 등)는 즉시 올려 보낸다 —
+// 헛되이 붙잡고 있으면 사용자에게 알리는 것만 늦어진다.
+#[test]
+fn write_retry_gives_up_immediately_on_permanent_errors() {
+    let mut tries = 0;
+    let r: super::error::DbResult<()> = super::with_write_retry(|| {
+        tries += 1;
+        Err(sqlite_err(19)) // SQLITE_CONSTRAINT
+    });
+    assert!(r.is_err());
+    assert_eq!(tries, 1, "영구 오류는 재시도하지 않아야 함");
+}
+
+// 끝내 안 되는 일시적 오류는 정해진 횟수까지만 시도하고 실패로 올린다
+// (무한히 붙잡으면 저장 커맨드가 영영 돌아오지 않는다).
+#[test]
+fn write_retry_stops_after_a_bounded_number_of_attempts() {
+    let mut tries = 0;
+    let r: super::error::DbResult<()> = super::with_write_retry(|| {
+        tries += 1;
+        Err(sqlite_err(5))
+    });
+    assert!(r.is_err());
+    assert_eq!(tries, (super::WRITE_RETRIES + 1) as i32, "최초 1회 + 재시도 N회");
+}
+
+// 항목 수를 세지 못하면(잠금·I/O 오류 — DB 가 불안정해 스냅샷이 가장 필요한 때)
+// 보호를 끄는 게 아니라 **스냅샷을 남기는 쪽**으로 기울어야 한다.
+#[test]
+fn save_items_guarded_snapshots_when_the_count_cannot_be_read() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_guard_blind_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let mut conn = super::open(&db_path).unwrap();
+    let two = sample_items();
+    super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20).unwrap();
+
+    // items 를 못 읽는 상태를 만든다(count 쿼리 실패) — 테이블을 임시로 치운다.
+    conn.execute_batch("ALTER TABLE items RENAME TO items_hidden").unwrap();
+    let snapshotted = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20);
+    // 저장 자체는 실패하지만(테이블 없음), 그 전에 스냅샷은 남아 있어야 한다.
+    assert!(snapshotted.is_err(), "테이블이 없으면 저장은 실패한다");
+    let presave = std::fs::read_dir(&backups_dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter(|e| e.file_name().to_string_lossy().contains("presave_"))
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(presave, 1, "항목 수를 못 세면 보수적으로 스냅샷을 남겨야 함");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

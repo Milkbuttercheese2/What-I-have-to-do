@@ -3,10 +3,39 @@
    실제 값은 모두 SQLite가 단일 진실 공급원이며, 브라우저 저장소(localStorage/
    IndexedDB)는 더 이상 쓰지 않는다.
    ========================================================================= */
-import {S} from './state.js';
+import {S, backupObj} from './state.js';
 import {showSaveError, clearSaveError} from './dom-utils.js';
 
 export const { invoke } = window.__TAURI__.core;
+
+/* ── v3.3.4 저장 실패 복구 ────────────────────────────────────────────────
+   예전에는 저장이 실패하면 그 배치를 **버렸다**(_pending 을 비운 뒤 invoke 했고,
+   catch 는 경고만 켰다). 화면에는 변경이 남아 있으니 사용자는 저장된 줄 알고
+   계속 일하다가 앱을 닫고, 그 사이 작업분은 통째로 사라졌다.
+
+   저장 실패의 실제 원인 대부분(백신 실시간 검사·클라우드 동기화 폴더·탐색기
+   미리보기가 파일을 잠깐 쥠)은 **잠시 뒤면 풀리는** 것들이다. 그래서 실패한
+   배치는 되돌려 놓고 점점 늦춰가며 계속 다시 시도한다 — 포기하지 않는다.
+   Rust 쪽 짧은 재시도(db::with_write_retry, 초 단위 이내)와 한 쌍이며,
+   이쪽은 분 단위까지 버틴다. */
+const RETRY_DELAYS=[1000,2000,4000,8000,15000,30000];   // 이후 30초 간격 유지
+const DUMP_AFTER=3;                                     // 연속 실패 N회 → 비상 덤프
+let retryTimer=null, failStreak=0, dumped=false;
+
+/* 저장이 계속 안 될 때의 마지막 그물 — DB 를 건너뛰고 현재 데이터를 JSON
+   파일로 떨군다(데이터 폴더 안 emergency/). 평범한 백업과 같은 형태라
+   [설정]→[JSON·DB파일 불러오기]로 그대로 복원된다.
+   사람이 안내를 못 보고 앱을 닫아도 데이터는 디스크에 남는다는 것이 요점이라
+   사용자 확인을 받지 않는다. 한 실패 구간에 한 번만 쓴다. */
+async function emergencyDump(){
+  if(failStreak<DUMP_AFTER || dumped) return;
+  dumped=true;
+  try{
+    const path=await invoke('emergency_dump',{json:JSON.stringify(backupObj(),null,1)});
+    console.warn('비상 덤프 저장됨:',path);
+    showSaveError(path);
+  }catch(e){ console.warn('비상 덤프 실패',e); dumped=false; }   // 다음 실패 때 다시 시도
+}
 
 export const STORE = {
   _saving:null, _pending:null,
@@ -29,18 +58,57 @@ export const STORE = {
   async saveAll(items){
     if(!S.loaded) return;                     // F1: 초기 로드 완료 전 저장 차단 (기존 데이터 소실 방지)
     this._pending=items;
+    return this._run();
+  },
+
+  /* 대기 중인 배치가 있으면 비행을 시작한다(이미 비행 중이면 그 프로미스).
+     saveAll·재시도 타이머·flush 가 공유하는 단 하나의 진입점이라, 어느 경로로
+     들어와도 동시에 두 번 저장되지 않는다. 이 프로미스는 **거절되지 않는다** —
+     실패는 배너·재시도로 다루지, 호출한 화면 코드를 깨뜨리지 않는다. */
+  _run(){
     if(this._saving) return this._saving;     // 진행 중 배치의 프로미스를 돌려줘 await가 실제로 완료를 기다리게
+    if(!this._pending) return Promise.resolve();
     this._saving=(async()=>{
       try{
         while(this._pending){
           const data=this._pending; this._pending=null;
-          await invoke('save_all', {items:data});
+          try{
+            await invoke('save_all', {items:data});
+          }catch(e){
+            /* 핵심: 실패한 배치를 버리지 않는다. 그 사이 더 새 배치가 들어왔다면
+               그쪽이 이 내용을 이미 포함하므로(전체 교체 저장) 덮어쓰지 않는다. */
+            if(!this._pending) this._pending=data;
+            throw e;
+          }
         }
+        failStreak=0; dumped=false;
+        clearTimeout(retryTimer); retryTimer=null;
         clearSaveError();                       // 아이템 저장 성공 = 쓰기가 다시 됨 → 경고 해제(성공은 조용히)
-      }catch(e){ console.warn('저장 실패',e); showSaveError(); }  // 실패는 눈에 보이게
+      }catch(e){                                // 실패는 눈에 보이게 + 조용히 계속 재시도
+        console.warn('저장 실패',e); showSaveError();
+        failStreak++;
+        this._scheduleRetry();
+        emergencyDump();
+      }
       finally{ this._saving=null; }
     })();
     return this._saving;                       // await STORE.saveAll(...) 가 실제 저장 완료까지 대기
+  },
+
+  _scheduleRetry(){
+    if(retryTimer || !this._pending) return;
+    const wait=RETRY_DELAYS[Math.min(failStreak-1, RETRY_DELAYS.length-1)];
+    retryTimer=setTimeout(()=>{ retryTimer=null; this._run(); }, wait);
+  },
+
+  /* 지금 당장 디스크까지 밀어 넣는다 — 종료 직전(main.js 의 request-quit)용.
+     대기를 기다리지 않고 즉시 한 번 더 시도하며, 전부 기록됐는지를 돌려준다.
+     종료 경로에서 이걸 부르지 않으면, 재시도를 기다리던 변경분이 말없이 사라진다. */
+  async flush(){
+    clearTimeout(retryTimer); retryTimer=null;
+    await this._run();
+    if(this._pending) await this._run();     // 실패로 되돌아온 배치를 즉시 한 번 더
+    return !this._pending;                   // true = 남은 것 없음
   },
 
   /* 사이드카 저장(필드·프리셋·식별정보 명칭·설정)도 실패하면 경고를 켠다. 단

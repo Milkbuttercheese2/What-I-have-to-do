@@ -439,8 +439,10 @@
 
 <div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-undo">실행 취소</button></div>
 
-<!-- 저장 실패 경고 — 저장이 실패하면 성공할 때까지 계속 떠 있는다(저장 성공은 조용). -->
-<div class="save-alert" id="saveAlert" role="alert" aria-live="assertive">⚠ 저장 실패 — 변경 내용이 디스크에 기록되지 않았습니다. 앱을 닫기 전에 [설정 → JSON파일 백업]으로 따로 저장하거나 저장 공간·위치를 확인하세요.</div>
+<!-- 저장 실패 경고 — 저장이 실패하면 성공할 때까지 계속 떠 있는다(저장 성공은 조용).
+     v3.3.4: 이제 실패해도 배치를 버리지 않고 계속 다시 시도하므로 문구가 '다시 시도 중'이다.
+     연속 실패가 이어지면 store.js 가 비상 덤프 파일을 남기고 그 경로를 아랫줄에 적는다. -->
+<div class="save-alert" id="saveAlert" role="alert" aria-live="assertive">⚠ 저장이 지연되고 있습니다 — 변경 내용이 아직 디스크에 기록되지 않아 계속 다시 시도 중입니다. 이 표시가 사라지지 않으면 [설정 → JSON파일 백업]으로 따로 저장해두세요.<span id="saveAlertDump" class="save-alert-dump" style="display:none"></span></div>
 
 <script src="vendor/xlsx.full.min.js"></script>
 <script type="module" src="main.js"></script>
