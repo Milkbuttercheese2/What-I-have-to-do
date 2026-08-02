@@ -81,11 +81,12 @@
  .cap-col{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
  .cap-col-h{flex:none;font-weight:600;font-size:11px;color:var(--cap-muted);
    padding:10px 16px 6px;letter-spacing:.04em}
- /* v3.0.1: 목록을 세로 flex 로 — 빈 안내문(.cap-empty)을 넓은 영역 가운데에 띄워
-    '좁은 안내 슬리버' 대신 차분한 한 판으로 보이게 한다(결과 행 배치는 동일). */
- .cap-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 8px 10px;
-   display:flex;flex-direction:column}
- .cap-list .cap-empty{margin:auto;text-align:center}
+ /* ⚠️ 목록은 **일반 블록**이다(v3.3.2 복원). v3.0.1 에서 빈 안내문을 가운데 띄우려
+    세로 flex 로 바꿨는데, flex 컨테이너에서는 자식의 margin 이 상쇄되지 않아
+    행 사이 간격이 1px → 2px 로 벌어졌다(결과 행 간격이 달라진 원인). 안내문
+    가운데 정렬은 flex 없이 처리한다. */
+ .cap-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 8px 10px}
+ .cap-list .cap-empty{text-align:center;margin-top:22vh}
  /* v2.5.3 스크롤바 — 검정 패널에 맞춘 유리 썸(트랙 없음·둥근 캡슐), 안 쓸 때 숨김.
     메모 입력칸(textarea)·검색 목록 모두 동일 적용 (창 전역 규칙). */
  ::-webkit-scrollbar{width:9px;height:9px}
