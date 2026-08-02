@@ -24,7 +24,7 @@
    안전하다 — "메인 모듈 import 금지"의 이유(최상위 부작용·모듈 상태 이중 실행)가
    둘 다 없다. 전화번호부 데이터 자체는 DB 를 직접 읽지 않고 phonebook_search
    커맨드로 조회한다(quick_search 와 같은 경로). */
-import {atToken, applyInsert, tagText, queryReady, linkifyAt} from './phonebook-core.js';
+import {atToken, applyInsert, tagText, queryReady, linkifyAt, entryKey} from './phonebook-core.js';
 
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
@@ -214,7 +214,16 @@ async function runPb(){
   const found=(await invoke('phonebook_search',{query:t.query}).catch(()=>[]))||[];
   if(seq!==pbSeq || mode!=='memo') return;    // 그 사이 입력이 바뀌었거나 모드 이탈
   if(!found.length){ closePb(); return; }
-  pbItems=found; pbSel=0; pbToken={start:t.start, caret:inp.selectionStart};
+  /* v3.3.4: 목록을 다시 그려도 **고른 줄을 이어간다**.
+     예전엔 여기서 pbSel 을 무조건 0 으로 되돌렸다. 그런데 이 함수는 마지막
+     타자 뒤 150ms 디바운스 + 검색 왕복이 끝난 뒤에야 도착한다 — 사람은 그보다
+     빨리 ↓ 를 누른다. 그래서 "↓ 로 2번째 줄에 갔다가 곧바로 1번째 줄로 되돌아가는"
+     현상이 생겼다(검색 결과 목록이 v2.6.5 에서 keepId 로 고친 것과 같은 버그가
+     이쪽 자동완성 목록에는 남아 있었다). 고른 사람이 새 목록에도 있으면 그
+     자리를 잇고, 없으면(검색어가 좁혀져 사라짐) 그때만 첫 줄로 돌아간다. */
+  const keep=pbOpen ? pbItems[pbSel] : null;
+  const back=keep ? found.findIndex(e=>entryKey(e)===entryKey(keep)) : -1;
+  pbItems=found; pbSel=back>=0?back:0; pbToken={start:t.start, caret:inp.selectionStart};
   /* v2.9.0: 목록이 펴질 땐 입력칸의 flex:1 을 끈다(body.pb) — 안 끄면 늘어난 창
      높이를 입력칸이 흡수해 입력·힌트·목록이 벌어진 3분할로 찢어져 보인다.
      v3.0.4: 펴고 접는 유일한 스위치가 이 클래스다(인라인 style.display 금지 —

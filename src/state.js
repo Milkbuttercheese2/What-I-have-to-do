@@ -39,6 +39,23 @@ export const S = {
   imported: {fields:null, presets:null, idKinds:null, settings:null, recurDefs:null, phonebook:null},
 };
 
+/* 백업 왕복에서 제외하는 임시 상태 — 내보내기·불러오기·비상 덤프가 모두 쓴다.
+   복원한 항목을 열었을 때 백업 시점의 옛 초안이 되살아나면 안 되고(formDrafts),
+   미등록 초안(captureDraft)은 복원 다음 실행에 유령 항목으로 등록돼 원본과
+   중복된다. */
+export function stripTemp(settings){ return {...settings, captureDraft:'', formDrafts:{}}; }
+
+/* 지금 메모리에 있는 전체 데이터의 백업 페이로드(객체).
+   [JSON파일 백업](backup.js)과 **비상 덤프**(store.js — 저장이 거듭 실패할 때
+   DB 를 건너뛰고 파일로 떨구는 마지막 그물)가 같은 것을 쓴다. 형태가 하나여야
+   비상 덤프도 평범한 백업처럼 [불러오기]로 그대로 복원된다 — 이 둘이 갈라지면
+   정작 필요한 순간에 "열 수 없는 파일"이 된다. v 는 Rust BACKUP_VERSION 과 같다. */
+export function backupObj(){
+  return {v:5, exported:new Date().toISOString(), fields:S.fields, presets:S.presets,
+          idKinds:S.idKinds, settings:stripTemp(S.settings), recurDefs:S.recurDefs,
+          phonebook:S.phonebook, items:S.items};
+}
+
 /* F12: 단조 증가 ID — 같은 ms 내 충돌 방지 */
 export function newId(){
   const t = Date.now();

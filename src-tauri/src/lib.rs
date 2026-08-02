@@ -4,7 +4,7 @@ mod db;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -28,6 +28,26 @@ pub struct AppDb {
     /// partial/corrupt dataset — see the legacy app's `LOADED` gate, whose
     /// intent this preserves in the new architecture.
     pub integrity_ok: AtomicBool,
+}
+
+impl AppDb {
+    /* v3.3.4 — 잠긴 DB 를 만드는 마지막 경로 제거: **Mutex 중독(poisoning)**.
+       `lock()` 은 잠금을 쥔 스레드가 패닉하면 그 뒤로 **영원히** Err 를 돌려준다.
+       예전엔 그 Err 를 그대로 커맨드 실패로 올려서, 어딘가에서 한 번 패닉하면
+       그 세션의 모든 저장·읽기가 "저장 실패" 로 굳었다 — 사용자는 그대로 계속
+       작업하다 앱을 닫고, 그 사이 작업분이 통째로 사라진다.
+
+       중독은 '데이터가 망가졌다'는 뜻이 아니다. SQLite 는 패닉으로 스택이 풀릴 때
+       진행 중이던 트랜잭션을 자동 롤백하므로(Connection Drop / 다음 문장에서),
+       커넥션 자체는 멀쩡하고 DB 는 마지막 커밋 상태다. 그러니 중독은 무시하고
+       내부 값을 그대로 꺼내 쓰는 것이 옳다 — 잠긴 채로 굳는 것보다 낫다. */
+    pub fn conn(&self) -> MutexGuard<'_, rusqlite::Connection> {
+        self.conn.lock().unwrap_or_else(|poisoned| {
+            eprintln!("DB mutex was poisoned by an earlier panic — recovering (연결 자체는 유효)");
+            self.conn.clear_poison();
+            poisoned.into_inner()
+        })
+    }
 }
 
 /// 트레이 '열기'·아이콘 클릭 공용 — focus_main_window 커맨드와 같은 동작.
@@ -75,10 +95,7 @@ pub fn run() {
                 let app = window.app_handle();
                 let close_to_tray = app
                     .try_state::<AppDb>()
-                    .and_then(|db| {
-                        let conn = db.conn.lock().ok()?;
-                        db::settings::load_settings(&conn).ok()
-                    })
+                    .and_then(|db| db::settings::load_settings(&db.conn()).ok())
                     .and_then(|s| s.get("closeToTray").and_then(|v| v.as_bool()))
                     .unwrap_or(true);
                 if close_to_tray {
@@ -86,8 +103,12 @@ pub fn run() {
                     let _ = window.hide();
                     // 첫 회 안내 토스트용 — 프론트(capture-bridge.js)가 소비
                     let _ = app.emit_to("main", "wmhh://hidden-to-tray", ());
-                } else {
-                    app.exit(0);
+                } else if commands::request_quit(app) {
+                    // v3.3.4: 즉시 죽이지 않는다 — 프런트가 남은 저장을 밀어 넣을
+                    // 시간을 준다(감시 타이머가 있어 응답이 없어도 몇 초 뒤 종료).
+                    // 이미 종료 절차 중이면(false) 막지 않는다 — 막으면 창도 안 닫히고
+                    // 앱도 안 꺼지는 상태가 된다.
+                    api.prevent_close();
                 }
             }
         })
@@ -318,7 +339,8 @@ pub fn run() {
                 .tooltip("뭐하려 했더라")
                 .on_menu_event(|app, ev| match ev.id().as_ref() {
                     "open" => open_main_window(app),
-                    "quit" => app.exit(0),
+                    // v3.3.4: 저장 플러시를 기다렸다가 종료 (감시 타이머 있음 — 절대 안 멈춤)
+                    "quit" => { commands::request_quit(app); }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, ev| {
@@ -377,6 +399,8 @@ pub fn run() {
             commands::get_data_dir,
             commands::choose_data_dir,
             commands::restart_app,
+            commands::quit_now,
+            commands::emergency_dump,
             commands::focus_main_window,
             commands::alarm_attention,
             commands::save_text_file,

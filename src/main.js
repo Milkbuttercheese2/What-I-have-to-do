@@ -23,6 +23,7 @@ import {makeItem} from './state.js';
 import {setPlaceMode, placeMode} from './placement.js';
 import {initUiScale, applyUiScale} from './ui-scale.js';
 import {applyTheme} from './theme.js';
+import {initQuit} from './quit.js';
 
 reconcileCore();
 /* 콘솔 디버깅용 전역 미러 (읽기 전용 용도 — 코드는 항상 S를 본다) */
@@ -32,7 +33,7 @@ window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
 initSettingsMenu(); initRecurBox(); initUiScale();
-initPhonebook(); initAtComplete();
+initPhonebook(); initAtComplete(); initQuit();
 renderPresets();
 
 /* 탭 */

@@ -42,6 +42,60 @@ pub fn open(path: &Path) -> DbResult<Connection> {
     Ok(conn)
 }
 
+/// 쓰기 재시도 횟수/간격 (v3.3.4). 짧게, 그러나 백신 실시간검사가 파일을
+/// 붙잡는 전형적인 구간(수백 ms)은 넘기도록 잡았다.
+const WRITE_RETRIES: u32 = 4;
+const WRITE_RETRY_DELAY_MS: u64 = 150;
+
+/// 이 오류가 '지금은 안 되지만 잠시 뒤엔 될' 종류인가.
+///
+/// `busy_timeout` 은 SQLite 가 **잠금 대기**로 인식한 경우만 기다려 준다. 실무에서
+/// 저장을 깨뜨리는 나머지 절반은 그게 아니다 — 백신 실시간 검사·백업 도구·탐색기
+/// 미리보기가 파일 핸들을 잠깐 쥐면 SQLite 는 `SQLITE_IOERR`(디스크 I/O 오류)나
+/// `SQLITE_BUSY_SNAPSHOT` 계열을 그대로 올려 보내고, 그러면 저장은 **한 번 만에**
+/// 실패로 끝났다. 이런 실패는 재시도하면 대부분 통과한다.
+///
+/// 반대로 재시도하면 안 되는 것(제약 위반·문법 오류·스키마 불일치 등)은 몇 번을
+/// 해도 같은 결과이므로 즉시 올려 보낸다 — 여기서 걸러야 할 것은 '일시적인가'다.
+fn is_transient(err: &rusqlite::Error) -> bool {
+    use rusqlite::ffi::ErrorCode;
+    match err {
+        rusqlite::Error::SqliteFailure(e, _) => matches!(
+            e.code,
+            ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked | ErrorCode::SystemIoFailure
+        ),
+        _ => false,
+    }
+}
+
+/// 일시적 실패(잠금·백신 I/O)면 잠깐 쉬었다 다시 해 본다.
+///
+/// 저장이 한 번 실패하면 그 변경분은 사용자 화면에만 남고 디스크엔 없다. 그래서
+/// "실패했다고 알리는 것"보다 "되게 만드는 것"이 먼저다 — 프런트의 재시도 큐
+/// (store.js)와 한 쌍이며, 이쪽은 초 단위 이내의 짧은 방해를 흡수한다.
+pub fn with_write_retry<T>(mut op: impl FnMut() -> DbResult<T>) -> DbResult<T> {
+    let mut attempt = 0;
+    loop {
+        match op() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                let transient = match &e {
+                    error::DbError::Sqlite(se) => is_transient(se),
+                    _ => false,
+                };
+                if !transient || attempt >= WRITE_RETRIES {
+                    return Err(e);
+                }
+                eprintln!("write attempt {} hit a transient DB error: {e} — retrying", attempt + 1);
+                std::thread::sleep(std::time::Duration::from_millis(
+                    WRITE_RETRY_DELAY_MS * (attempt as u64 + 1),
+                ));
+                attempt += 1;
+            }
+        }
+    }
+}
+
 /// Runs `PRAGMA integrity_check`. Anything other than "ok" means the file
 /// is corrupt — callers must refuse to proceed with an empty/partial
 /// dataset in that case (this replaces the legacy app's `LOADED` gate,
@@ -236,7 +290,7 @@ fn backup_is_healthy(path: &Path) -> bool {
 /// filename shares one format — mixed formats (unix epoch vs YYYYMMDD)
 /// both read poorly next to each other and confuse `prune_backups`'s
 /// date extraction.
-fn fs_stamp() -> String {
+pub fn fs_stamp() -> String {
     Connection::open_in_memory()
         .and_then(|c| {
             c.query_row("SELECT strftime('%Y%m%d_%H%M%S','now','localtime')", [], |r| {
@@ -334,12 +388,22 @@ pub fn save_items_guarded(
     items: &[model::Item],
     keep: usize,
 ) -> DbResult<bool> {
-    let prev: i64 = conn
+    /* v3.3.4: 세어 보지 못했으면 **스냅샷을 찍는 쪽**으로 기운다. 예전엔
+       `unwrap_or(0)` 이라 count 가 실패하면 prev=0 → 조건 불성립 → 보호가 조용히
+       꺼졌다. 그런데 count 가 실패하는 상황(잠금·I/O 오류)이야말로 DB 가 불안정해
+       스냅샷이 가장 필요한 때다. 안전한 방향은 '못 세었으면 일단 남긴다'이다 —
+       잘못 찍힌 스냅샷의 대가는 백업 파일 하나뿐이고, 안 찍힌 대가는 데이터다. */
+    let prev: Option<i64> = conn
         .query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0))
-        .unwrap_or(0);
+        .map_err(|e| eprintln!("item count before save failed ({e}) — 보수적으로 스냅샷을 남긴다"))
+        .ok();
     let new = items.len() as i64;
     let mut snapshotted = false;
-    if prev >= SHRINK_SNAPSHOT_FLOOR && new <= prev / 2 {
+    let drastic_shrink = match prev {
+        Some(prev) => prev >= SHRINK_SNAPSHOT_FLOOR && new <= prev / 2,
+        None => true,
+    };
+    if drastic_shrink {
         match now_stamp(conn).and_then(|stamp| {
             rotate_backup(db_path, backups_dir, &format!("presave_{stamp}"), keep)
         }) {

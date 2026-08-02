@@ -88,3 +88,84 @@ test('save*: F1 게이트 공유 + 호출 형태', async () => {
     ['save_fields','save_presets','save_id_kinds','save_settings']);
   assert.deepEqual(env.invokeCalls[2].args, {idKinds:[3]});
 });
+
+/* ── v3.3.4 저장 실패 복구 ──────────────────────────────────────────────
+   예전엔 실패한 배치를 버렸다(_pending 을 비운 뒤 invoke, catch 는 경고만).
+   화면엔 변경이 남으니 사용자는 저장된 줄 알고 계속 일하다 앱을 닫았고,
+   그 사이 작업분이 통째로 사라졌다. */
+
+test('실패한 배치를 버리지 않고 대기열에 되돌린 뒤 재시도해서 결국 저장한다', async () => {
+  await env.resetS(); S.loaded = true;
+  let fail = true;
+  env.onInvoke('save_all', () => { if(fail) throw new Error('lock'); });
+  const items = [{id:1, memo:'잠긴 동안 친 내용'}];
+  await STORE.saveAll(items);
+  await env.flush();
+  assert.equal(STORE._pending, items, '실패한 배치가 대기열에 남아 있어야 함');
+  assert.ok(env.document.getElementById('saveAlert').classList.contains('on'), '실패는 눈에 보이게');
+
+  fail = false;
+  mock.timers.tick(1000);                       // 첫 재시도(1초)
+  await STORE._saving; await env.flush();
+  const calls = env.invokeCalls.filter(c=>c.cmd==='save_all');
+  assert.equal(calls.length, 2, '재시도로 두 번째 저장이 일어나야 함');
+  assert.deepEqual(calls[1].args, {items});
+  assert.equal(STORE._pending, null, '성공하면 대기열이 비어야 함');
+  assert.equal(env.document.getElementById('saveAlert').classList.contains('on'), false);
+});
+
+test('재시도 대기 중 더 새 배치가 오면 그쪽만 저장한다 (전체 교체 저장이므로)', async () => {
+  await env.resetS(); S.loaded = true;
+  let fail = true;
+  env.onInvoke('save_all', () => { if(fail) throw new Error('lock'); });
+  await STORE.saveAll([{id:1}]);
+  await env.flush();
+  fail = false;
+  const newer = [{id:1},{id:2}];
+  await STORE.saveAll(newer);                   // 실패분을 포함하는 최신 스냅샷
+  await STORE._saving; await env.flush();
+  const saved = env.invokeCalls.filter(c=>c.cmd==='save_all').map(c=>c.args.items);
+  assert.deepEqual(saved[saved.length-1], newer);
+  assert.equal(STORE._pending, null);
+  mock.timers.tick(60000);                      // 남은 재시도 타이머가 있어도 헛돌지 않아야
+  await env.flush();
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_all').length, saved.length);
+});
+
+test('flush(): 대기 중인 것을 즉시 밀어 넣고 전부 기록됐는지 알려준다 (종료 경로)', async () => {
+  await env.resetS(); S.loaded = true;
+  let fail = true;
+  env.onInvoke('save_all', () => { if(fail) throw new Error('lock'); });
+  await STORE.saveAll([{id:7}]);
+  await env.flush();
+  assert.equal(await STORE.flush(), false, '아직 못 썼으면 false');
+
+  fail = false;
+  assert.equal(await STORE.flush(), true, '기록에 성공하면 true');
+  assert.equal(STORE._pending, null);
+});
+
+test('연속 실패가 이어지면 DB 를 건너뛰고 비상 덤프를 남긴다', async () => {
+  await env.resetS(); S.loaded = true;
+  env.onInvoke('save_all', () => { throw new Error('lock'); });
+  env.onInvoke('emergency_dump', () => 'C:/데이터/emergency/wmhh_emergency_20260802_120000.json');
+  S.items = [{id:1, memo:'지켜야 할 내용'}];
+  await STORE.saveAll(S.items);
+  await env.flush();
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='emergency_dump').length, 0, '1회 실패로는 덤프하지 않는다');
+
+  mock.timers.tick(1000); await STORE._saving; await env.flush();   // 2회
+  mock.timers.tick(2000); await STORE._saving; await env.flush();   // 3회 → 덤프
+  const dumps = env.invokeCalls.filter(c=>c.cmd==='emergency_dump');
+  assert.equal(dumps.length, 1);
+  const payload = JSON.parse(dumps[0].args.json);
+  assert.equal(payload.v, 5, '평범한 JSON 백업과 같은 형태여야 [불러오기]로 복원된다');
+  assert.deepEqual(payload.items, S.items);
+  assert.equal(payload.settings.captureDraft, '', '임시 상태는 백업 왕복 계약대로 제외');
+  assert.match(env.document.getElementById('saveAlertDump').textContent, /emergency/);
+
+  // 뒷정리: 성공시켜 재시도 타이머·실패 카운터를 되돌린다
+  env.onInvoke('save_all', () => undefined);
+  await STORE.flush();
+  assert.equal(env.document.getElementById('saveAlert').classList.contains('on'), false);
+});

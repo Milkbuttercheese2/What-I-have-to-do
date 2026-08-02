@@ -52,8 +52,19 @@ export function initToast(){
 /* 저장 실패 표시 — 조용한 성공/시끄러운 실패. 저장 성공 시엔 아무 것도 띄우지 않고,
    실패하면 다음 저장이 성공할 때까지 계속 떠 있는 경고 배너를 켠다(store.js가 호출).
    요소가 없어도(테스트 하네스 등) 죽지 않게 널 가드. */
-export function showSaveError(){ const el=$('saveAlert'); if(el) el.classList.add('on'); }
-export function clearSaveError(){ const el=$('saveAlert'); if(el) el.classList.remove('on'); }
+/* v3.3.4: 저장을 계속 다시 시도하므로 문구도 '실패했다'가 아니라 '다시 시도 중'이다.
+   비상 덤프까지 갔으면 그 파일 경로를 함께 보여준다 — 사용자가 붙잡을 수 있는
+   구체적인 것 하나(어디에 남아 있는가)가 안내문 열 줄보다 낫다. */
+export function showSaveError(dumpPath){
+  const el=$('saveAlert'); if(!el) return;
+  el.classList.add('on');
+  const d=$('saveAlertDump');
+  if(d && dumpPath){ d.textContent='데이터를 파일로 따로 남겨두었습니다: '+dumpPath; d.style.display=''; }
+}
+export function clearSaveError(){
+  const el=$('saveAlert'); if(el) el.classList.remove('on');
+  const d=$('saveAlertDump'); if(d){ d.textContent=''; d.style.display='none'; }
+}
 
 /* ── 앱 표준 대화상자 (v3.3.0 소유자 지정) ────────────────────────────────
    네이티브 alert/confirm 은 창 제목이 'wmhh-desktop' 으로 뜨고 버튼·글꼴이 OS

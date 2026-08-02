@@ -47,8 +47,7 @@ pub fn load_all(state: State<AppDb>) -> Result<AppState, String> {
                 .into(),
         );
     }
-    let conn = state.conn.lock().map_err(to_err)?;
-    db::backup::load_app_state(&conn).map_err(to_err)
+    db::backup::load_app_state(&state.conn()).map_err(to_err)
 }
 
 /// Minimum age of the newest backup before an after-save rotation writes
@@ -59,11 +58,14 @@ const BACKUP_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(
 #[tauri::command]
 pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
     ensure_integrity(&state)?;
-    let mut conn = state.conn.lock().map_err(to_err)?;
+    let mut conn = state.conn();
     // A/B: 대량 축소(대량 삭제·통째 절단)를 감지하면 덮어쓰기 전에 강제 스냅샷을
     // 남긴다 — 30분 스로틀에 걸려 최근 백업이 없더라도 축소 직전 복원점이 남도록.
-    db::save_items_guarded(&mut conn, &state.db_path, &state.backups_dir, &items, BACKUP_KEEP)
-        .map_err(to_err)?;
+    // v3.3.4: 일시적 잠금/백신 I/O 는 한 번 실패로 끝내지 않고 짧게 재시도한다.
+    db::with_write_retry(|| {
+        db::save_items_guarded(&mut conn, &state.db_path, &state.backups_dir, &items, BACKUP_KEEP)
+    })
+    .map_err(to_err)?;
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
     // Best-effort: a failed backup rotation must not fail the save itself
     // (the save already committed by this point). The copy must run while
@@ -86,22 +88,22 @@ pub fn save_all(state: State<AppDb>, items: Vec<Item>) -> Result<(), String> {
 #[tauri::command]
 pub fn save_fields(state: State<AppDb>, fields: Vec<FieldDef>) -> Result<(), String> {
     ensure_integrity(&state)?;
-    let mut conn = state.conn.lock().map_err(to_err)?;
-    db::fields::save_fields(&mut conn, &fields).map_err(to_err)
+    let mut conn = state.conn();
+    db::with_write_retry(|| db::fields::save_fields(&mut conn, &fields)).map_err(to_err)
 }
 
 #[tauri::command]
 pub fn save_presets(state: State<AppDb>, presets: Vec<Preset>) -> Result<(), String> {
     ensure_integrity(&state)?;
-    let mut conn = state.conn.lock().map_err(to_err)?;
-    db::presets::save_presets(&mut conn, &presets).map_err(to_err)
+    let mut conn = state.conn();
+    db::with_write_retry(|| db::presets::save_presets(&mut conn, &presets)).map_err(to_err)
 }
 
 #[tauri::command]
 pub fn save_id_kinds(state: State<AppDb>, id_kinds: Vec<String>) -> Result<(), String> {
     ensure_integrity(&state)?;
-    let mut conn = state.conn.lock().map_err(to_err)?;
-    db::id_kinds::save_id_kinds(&mut conn, &id_kinds).map_err(to_err)
+    let mut conn = state.conn();
+    db::with_write_retry(|| db::id_kinds::save_id_kinds(&mut conn, &id_kinds)).map_err(to_err)
 }
 
 /* ===== v2.7.0 전화번호부 ===== */
@@ -109,8 +111,8 @@ pub fn save_id_kinds(state: State<AppDb>, id_kinds: Vec<String>) -> Result<(), S
 #[tauri::command]
 pub fn save_phonebook(state: State<AppDb>, phonebook: Vec<PhonebookEntry>) -> Result<(), String> {
     ensure_integrity(&state)?;
-    let mut conn = state.conn.lock().map_err(to_err)?;
-    db::phonebook::save_phonebook(&mut conn, &phonebook).map_err(to_err)
+    let mut conn = state.conn();
+    db::with_write_retry(|| db::phonebook::save_phonebook(&mut conn, &phonebook)).map_err(to_err)
 }
 
 /// 미니 캡처 창의 @ 자동완성 — quick_search 와 같은 이유(캡처 웹뷰는 메인
@@ -122,8 +124,7 @@ pub fn phonebook_search(state: State<AppDb>, query: String) -> Result<Vec<Phoneb
     if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
         return Ok(vec![]);
     }
-    let conn = state.conn.lock().map_err(to_err)?;
-    db::phonebook::search_phonebook(&conn, q, 50).map_err(to_err)
+    db::phonebook::search_phonebook(&state.conn(), q, 50).map_err(to_err)
 }
 
 /// 미니 창 본문 @태그 하이라이트용 전체 목록 (v3.1.0) — 읽기 전용.
@@ -134,21 +135,19 @@ pub fn phonebook_list(state: State<AppDb>) -> Result<Vec<PhonebookEntry>, String
     if !state.integrity_ok.load(Ordering::Relaxed) {
         return Ok(vec![]);
     }
-    let conn = state.conn.lock().map_err(to_err)?;
-    db::phonebook::load_phonebook(&conn).map_err(to_err)
+    db::phonebook::load_phonebook(&state.conn()).map_err(to_err)
 }
 
 #[tauri::command]
 pub fn save_settings(state: State<AppDb>, settings: Settings) -> Result<(), String> {
     ensure_integrity(&state)?;
-    let mut conn = state.conn.lock().map_err(to_err)?;
-    db::settings::save_settings(&mut conn, &settings).map_err(to_err)
+    let mut conn = state.conn();
+    db::with_write_retry(|| db::settings::save_settings(&mut conn, &settings)).map_err(to_err)
 }
 
 #[tauri::command]
 pub fn backup_export(state: State<AppDb>) -> Result<BackupPayload, String> {
-    let conn = state.conn.lock().map_err(to_err)?;
-    db::backup::export_payload(&conn).map_err(to_err)
+    db::backup::export_payload(&state.conn()).map_err(to_err)
 }
 
 #[tauri::command]
@@ -157,7 +156,7 @@ pub fn backup_import(state: State<AppDb>, payload: BackupPayload) -> Result<(), 
     // live file under a distinguishable name before touching anything.
     // The copy runs while the connection lock is held (same lock we then
     // import under) so no concurrent write can tear the snapshot.
-    let mut conn = state.conn.lock().map_err(to_err)?;
+    let mut conn = state.conn();
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
     db::rotate_backup(
         &state.db_path,
@@ -233,6 +232,65 @@ pub async fn choose_data_dir(app: AppHandle, state: State<'_, AppDb>) -> Result<
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
     app.request_restart();
+}
+
+/* ===== v3.3.4 종료 시 저장 플러시 ===== */
+
+/// 종료 요청이 이미 진행 중인가 — 트레이 [종료]를 연타해도 감시 타이머가
+/// 여러 개 생기지 않게 한다.
+static QUITTING: AtomicBool = AtomicBool::new(false);
+
+/// 프런트가 플러시를 마치기까지 기다려 주는 최대 시간. 이 시간이 지나면
+/// 무조건 종료한다 — **어떤 경우에도 앱이 안 꺼지는 상태를 만들지 않는다**
+/// (웹뷰가 죽었거나 스크립트 오류로 응답이 없어도 사용자는 앱을 닫을 수 있어야 한다).
+const QUIT_FLUSH_GRACE_MS: u64 = 2500;
+
+/// 종료 요청 — 곧바로 죽이지 않고 프런트에 "지금 저장 중인 것/실패해서 재시도
+/// 대기 중인 것을 마저 써라"고 알린 뒤 종료한다.
+///
+/// 예전에는 트레이 [종료]와 창 닫기가 `app.exit(0)` 를 바로 불렀다. 저장은
+/// 화면 조작마다 백그라운드로 돌기 때문에, 저장이 실패해 재시도를 기다리던
+/// 변경분(=화면에는 보이는데 디스크엔 없는 내용)이 그 순간 **말없이 사라졌다**.
+/// 저장 실패 배너가 떠 있는 채로 닫으면 그날 작업이 통째로 날아갈 수 있었다.
+/// 반환값은 "이 호출이 종료 절차를 **시작했는가**". false 면 이미 진행 중이라는
+/// 뜻이므로 호출자는 창 닫기를 막지 말아야 한다 — 막으면 감시 타이머가 돌기
+/// 전까지 창이 닫히지도 앱이 꺼지지도 않는 상태가 된다.
+pub fn request_quit(app: &AppHandle) -> bool {
+    if QUITTING.swap(true, Ordering::SeqCst) {
+        return false; // 이미 진행 중 — 감시 타이머가 곧 종료시킨다
+    }
+    let _ = app.emit_to("main", "wmhh://request-quit", ());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(QUIT_FLUSH_GRACE_MS));
+        handle.exit(0);
+    });
+    true
+}
+
+/// 프런트가 "플러시 끝났다"고 알려 오는 종점. 감시 타이머보다 먼저 오면
+/// 기다림 없이 바로 닫힌다(정상 경로).
+#[tauri::command]
+pub fn quit_now(app: AppHandle) {
+    app.exit(0);
+}
+
+/// 저장이 거듭 실패할 때 쓰는 **비상 덤프** — DB 를 전혀 건드리지 않고
+/// 현재 데이터(JSON)를 데이터 폴더 안 `emergency/` 에 파일로 떨군다.
+///
+/// DB 에 쓸 수 없는 상황(디스크 잠금·권한·백신·무결성 잠김)에서 사용자가 할 수
+/// 있는 일은 "앱을 닫지 말고 JSON 백업을 받아라"뿐인데, 그 안내를 못 보거나
+/// 놓치면 그대로 유실이다. 그래서 프런트가 연속 실패를 감지하면 사람 손을 거치지
+/// 않고 이걸 부른다 — 저장 경로와 완전히 독립적인(트랜잭션·SQLite 무관) 마지막
+/// 그물이다. 성공하면 그 파일 경로를 돌려주어 화면에 그대로 보여줄 수 있다.
+#[tauri::command]
+pub fn emergency_dump(state: State<AppDb>, json: String) -> Result<String, String> {
+    let dir = state.base_dir.join("emergency");
+    std::fs::create_dir_all(&dir).map_err(to_err)?;
+    let stamp = db::fs_stamp();
+    let path = dir.join(format!("wmhh_emergency_{stamp}.json"));
+    std::fs::write(&path, json).map_err(to_err)?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Brings the main window to the foreground even if another window
@@ -516,8 +574,7 @@ pub fn quick_search(state: State<AppDb>, query: String) -> Result<Vec<QuickHit>,
     if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
         return Ok(vec![]);
     }
-    let conn = state.conn.lock().map_err(to_err)?;
-    Ok(db::items::quick_search(&conn, q, 15)
+    Ok(db::items::quick_search(&state.conn(), q, 15)
         .map_err(to_err)?
         .into_iter()
         .map(|(id, memo, done)| QuickHit { id, memo, done })
