@@ -15,7 +15,7 @@
 ![tech](https://img.shields.io/badge/Tauri-Rust%20%2B%20JS-2a7c6e?style=for-the-badge&logo=tauri&logoColor=white)
 ![offline](https://img.shields.io/badge/%EC%A0%80%EC%9E%A5-100%25%20%EB%A1%9C%EC%BB%AC%20%C2%B7%20%EC%98%A4%ED%94%84%EB%9D%BC%EC%9D%B8-2ea043?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-AGPL%20v3-A31F34?style=for-the-badge)
-![version](https://img.shields.io/badge/version-v3.4.8-2a7c6e?style=for-the-badge)
+![version](https://img.shields.io/badge/version-v3.4.11-2a7c6e?style=for-the-badge)
 
 </div>
 
@@ -209,8 +209,9 @@ exe 파일 하나로 돌아갑니다. 설치도, 계정도, 인터넷도 필요 
 | 작업 | 명령 |
 |---|---|
 | 개발 실행 (핫리로드) | `npm run tauri dev` |
-| 프론트 테스트 (node:test + jsdom, 258개) | `npm test` |
+| 프론트 테스트 (node:test + jsdom, 261개) | `npm test` |
 | 백엔드 테스트 (DB 라운드트립) | `cd src-tauri && cargo test --lib` |
+| 미니 창 레이아웃 검사 (실렌더 31상태) | `node tools/capture-check.mjs` |
 | 릴리즈 빌드 | `npm run tauri build` → `src-tauri/target/release/wmhh-desktop.exe` |
 
 - **Tauri 2(Rust) + SQLite**, 프론트는 번들러 없는 순수 HTML/CSS/JS(`src/`)입니다.
