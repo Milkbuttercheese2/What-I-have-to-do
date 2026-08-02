@@ -8,6 +8,7 @@
 import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast} from './dom-utils.js';
+import {fmtT} from './datetime.js';
 import {normEntry, entryKey, isComplete, entriesForTag, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
 
 let q='';                 // 탭 안 검색어 (모듈 로컬 — render.js 의 q/dq 와 같은 패턴)
@@ -202,7 +203,10 @@ export function openRelated(name, extraEntries){
   $('rel-sub').textContent=`전화번호부 정보(관련소속·관련인·연락처)가 모두 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;
   $('rel-list').innerHTML=matched.length?matched.map(it=>{
     const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
-    return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span></div>`;
+    /* v3.1.2: 완료 업무는 완료 날짜도 표시 (완료 탭 카드와 같은 fmtT 표기) */
+    const dv=it.done&&it.doneAt!=null?new Date(it.doneAt):null;
+    const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
+    return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
   }).join(''):'<div class="empty" style="padding:14px">엮인 업무가 없습니다.</div>';
   $('relModal').classList.add('on');
 }

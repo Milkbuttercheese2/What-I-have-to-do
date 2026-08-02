@@ -115,7 +115,7 @@ pub fn phonebook_search(state: State<AppDb>, query: String) -> Result<Vec<Phoneb
         return Ok(vec![]);
     }
     let conn = state.conn.lock().map_err(to_err)?;
-    db::phonebook::search_phonebook(&conn, q, 8).map_err(to_err)
+    db::phonebook::search_phonebook(&conn, q, 5).map_err(to_err)
 }
 
 /// 미니 창 본문 @태그 하이라이트용 전체 목록 (v3.1.0) — 읽기 전용.
