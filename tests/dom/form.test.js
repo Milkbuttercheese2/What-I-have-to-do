@@ -362,7 +362,7 @@ test('새 양식을 채워진 채로 열면(바로 입력·프리셋) 남은 초
   input($('fm-memo'));
   closeForm(); await env.flush();
   env.answerConfirm(false);                          // "새로 시작"
-  openForm({memo:'방금 입력한 내용'});
+  await openForm({memo:'방금 입력한 내용'});          // v3.3.0: 확인 대화상자가 Promise 기반
   assert.equal($('fm-memo').value, '방금 입력한 내용');
   assert.equal(draftOf('new'), undefined);           // 선택에 따라 초안 폐기
   closeForm(); await env.flush();

@@ -7,7 +7,7 @@
    ========================================================================= */
 import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, esc, escAttr, showToast} from './dom-utils.js';
+import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
 import {fmtT} from './datetime.js';
 import {normEntry, entryKey, isComplete, entriesForTag, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
 
@@ -77,17 +77,17 @@ function loadPbForm(id){
   $('pb-cancel').style.display='inline-block';
   $('pb-who').focus();
 }
-function submitPbForm(){
+async function submitPbForm(){
   const e=normEntry({who:$('pb-who').value, org:$('pb-org').value, phone:$('pb-phone').value});
   if(!(e.who||e.org||e.phone)){ $('pb-who').focus(); return; }
   /* v2.9.0 무결성(소유자 지정): 전화번호부는 3칸 완비만 — 일부만 아는 관련인은 메모에 */
   if(!isComplete(e)){
-    alert('전화번호부에는 관련소속·관련인·연락처를 모두 입력해야 합니다.\n(일부만 아는 관련인은 바로 입력·양식 메모에 자유롭게 적어두세요.)');
+    await appAlert('전화번호부에는 관련소속·관련인·연락처를 모두 입력해야 합니다.\n(일부만 아는 관련인은 바로 입력·양식 메모에 자유롭게 적어두세요.)');
     (!e.org?$('pb-org'):!e.who?$('pb-who'):$('pb-phone')).focus();
     return;
   }
   const dup=S.phonebook.find(x=>x.id!==editingPbId && entryKey(x)===entryKey(e));
-  if(dup){ alert('같은 관련인이 이미 있습니다.'); return; }
+  if(dup){ await appAlert('같은 관련인이 이미 있습니다.'); return; }
   if(editingPbId){
     const cur=S.phonebook.find(x=>x.id===editingPbId);
     if(cur){ cur.who=e.who; cur.org=e.org; cur.phone=e.phone; }
@@ -130,19 +130,19 @@ function refreshFromItems(){
 /* 엑셀(.xlsx/.xls) 불러오기 — vendored SheetJS(XLSX 전역)로 첫 시트를 읽고
    헤더(이름/소속/전화 계열)를 찾아 매핑한다. 파싱은 phonebook-core.mapSheetRows.
    v2.9.0: 3칸 완비 행만 받는다(무결성 규칙). */
-function importFromXlsx(file){
+async function importFromXlsx(file){
   const reader=new FileReader();
-  reader.onerror=()=>alert('파일을 읽지 못했습니다.');
-  reader.onload=()=>{
+  reader.onerror=()=>appAlert('파일을 읽지 못했습니다.');
+  reader.onload=async ()=>{
     let rows;
     try{
       const wb=XLSX.read(new Uint8Array(reader.result), {type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       rows=XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
-    }catch(e){ alert('엑셀 파일을 읽지 못했습니다: '+e); return; }
+    }catch(e){ await appAlert('엑셀 파일을 읽지 못했습니다: '+e); return; }
     const mapped=mapSheetRows(rows);
     if(!mapped){
-      alert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다 — [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다.)');
+      await appAlert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다 — [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다.)');
       return;
     }
     const complete=mapped.entries.filter(isComplete);
@@ -173,7 +173,7 @@ async function saveXlsxTemplate(){
     const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
     const saved=await invoke('save_binary_file',{suggestedName:'전화번호부_양식.xlsx', data:bytes});
     if(saved) showToast('제목 줄 아래에 채운 뒤 [엑셀 불러오기]로 넣으세요');
-  }catch(e){ alert('엑셀 양식 저장 실패: '+e); }
+  }catch(e){ await appAlert('엑셀 양식 저장 실패: '+e); }
 }
 
 /* ── 아이템 관련인 → 전화번호부 자동 흡수 (v2.9.0 소유자 지정) ───────────
@@ -240,7 +240,7 @@ export function initPhonebook(){
     $('pb-file').value='';                       // 같은 파일 재선택도 change 가 다시 뜨게
     if(f) importFromXlsx(f);
   });
-  $('pb-list').addEventListener('click',e=>{
+  $('pb-list').addEventListener('click',async e=>{
     const ed=e.target.closest('[data-pbedit]');
     if(ed){ loadPbForm(Number(ed.dataset.pbedit)); return; }
     const del=e.target.closest('[data-pbdel]');
@@ -253,7 +253,7 @@ export function initPhonebook(){
     }
     const id=Number(del.dataset.pbdel), entry=S.phonebook.find(x=>x.id===id);
     if(!entry) return;
-    if(!confirm(`"${[entry.org,entry.who].filter(Boolean).join(' ')||entry.phone}"을(를) 삭제할까요?`)) return;
+    if(!await appConfirm(`"${[entry.org,entry.who].filter(Boolean).join(' ')||entry.phone}"을(를) 삭제할까요?`)) return;
     S.phonebook=S.phonebook.filter(x=>x.id!==id);
     if(editingPbId===id) clearPbForm();
     savePb(); renderPhonebook();

@@ -497,6 +497,13 @@
   /* ---- 모달 (필드/알람) ---- */
   .modal-bg{display:none;position:fixed;inset:34px 0 0;background:var(--overlay);z-index:50;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto}
   .modal-bg.on{display:flex}
+  /* 앱 표준 대화상자 (v3.3.0) — 네이티브 alert/confirm 대체. 짧은 문구용 좁은 모달,
+     줄바꿈(
+)을 살려 보여준다(기존 문구들이 문단을 
+ 으로 나눈다). */
+  .modal.modal-narrow{max-width:440px}
+  #appDialog{z-index:400}                      /* 어떤 팝업 위에서도 뜬다(알람 120·양식 60) */
+  #appDialog .m-sub{white-space:pre-line;line-height:1.6;margin-bottom:16px}
   .modal{background:var(--card);border-radius:16px;width:100%;max-width:560px;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.28);
          max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain}
   .modal h3{font-size:16px;font-weight:700;margin-bottom:4px}

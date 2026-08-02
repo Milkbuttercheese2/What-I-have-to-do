@@ -48,6 +48,7 @@ test('수정·삭제: 수정 저장이 항목을 갱신하고 삭제가 목록·
   $('pb-save').click();
   assert.equal(S.phonebook.find(e=>e.id===11).phone, '010-9999-0000');
   $('pb-list').querySelector('[data-pbdel="12"]').click();     // confirm 기본 true
+  await env.flush();                                           // v3.3.0: 확인 대화상자가 Promise 기반
   assert.equal(S.phonebook.length, 1);
   assert.ok(!$('pb-list').textContent.includes('이영희'));
 });

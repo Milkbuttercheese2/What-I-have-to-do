@@ -6,7 +6,7 @@
    ========================================================================= */
 import {S, reconcileCore, migrateItem} from './state.js';
 import {STORE} from './store.js';
-import {$, initToast} from './dom-utils.js';
+import {$, initToast, appAlert} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
 import {initForm, closeForm, toInbox, contactsFromTags, refreshTagHl} from './form.js';
 import {initPresets, renderPresets} from './presets.js';
@@ -170,7 +170,7 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     // S.loaded는 false로 남겨 저장을 계속 차단하되(F1), 무슨 일이 났는지와
     // 복구 경로(JSON·DB파일 불러오기)를 사용자에게 반드시 알린다.
     console.error('initial load failed', e);
-    alert('저장된 데이터를 불러오지 못했습니다.\n\n'+e+'\n\n앱은 열려 있지만 데이터 유실 방지를 위해 저장이 차단된 상태입니다.\n[JSON·DB파일 불러오기]로 백업에서 복원하거나, 앱을 다시 시작해보세요.');
+    await appAlert('저장된 데이터를 불러오지 못했습니다.\n\n'+e+'\n\n앱은 열려 있지만 데이터 유실 방지를 위해 저장이 차단된 상태입니다.\n[JSON·DB파일 불러오기]로 백업에서 복원하거나, 앱을 다시 시작해보세요.');
   }
   /* 버전 표기: v3.0.0부터 X.Y.Z semver 그대로 표시 (구 십진수 규칙의 ".0" 절삭 폐지) */
   try{ const v=await window.__TAURI__.app.getVersion(); $('appVer').textContent='v'+v; }catch{}
