@@ -3,7 +3,7 @@
    ========================================================================= */
 import {S} from './state.js';
 import {STORE} from './store.js';
-import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
+import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm} from './dom-utils.js';
 import {openForm} from './form.js';
 
 function savePresets(){ STORE.savePresets(S.presets); window.PRESETS=S.presets; }
@@ -59,27 +59,27 @@ function clearPresetForm(){ $('np-label').value=''; $('np-sum').value=''; $('np-
   $('np-save').textContent='프리셋 저장'; if($('np-new-head'))$('np-new-head').textContent='＋ 새 프리셋 만들기'; if($('np-cancel-edit'))$('np-cancel-edit').style.display='none'; }
 
 export function initPresets(){
-  $('presets').addEventListener('click',e=>{
+  $('presets').addEventListener('click',async e=>{
     const del=e.target.closest('[data-pdel]');
     if(del){ const i=+del.dataset.pdel,p=S.presets[i];
-      if(confirm(`프리셋 "${p.label}"을(를) 삭제할까요?`)){ S.presets.splice(i,1); savePresets(); renderPresets(); } return; }
+      if(await appConfirm(`프리셋 "${p.label}"을(를) 삭제할까요?`)){ S.presets.splice(i,1); savePresets(); renderPresets(); } return; }
     const b=e.target.closest('.preset'); if(!b)return;
     const p=S.presets[+b.dataset.p]; if(!p)return;
     openForm({memo:p.sum, subs:(p.subs||[]).map(t=>({title:t,mid:''}))});
   });
-  $('idKindList').addEventListener('click',e=>{
+  $('idKindList').addEventListener('click',async e=>{
     const d=e.target.closest('[data-idkdel]'); if(!d)return;
     const i=+d.dataset.idkdel, name=S.idKinds[i];
     const used=S.items.some(it=>(it.ids||[]).some(x=>x.kind===name));
     const msg = used ? `"${name}"은(는) 이미 입력된 업무에서 사용 중입니다.\n삭제해도 기존 업무의 값은 그대로 남고, 앞으로 목록에만 안 나옵니다.\n삭제할까요?`
                      : `명칭 "${name}"을(를) 삭제할까요?`;
-    if(confirm(msg)){ S.idKinds.splice(i,1); saveIdKinds(); renderIdKindList(); }
+    if(await appConfirm(msg)){ S.idKinds.splice(i,1); saveIdKinds(); renderIdKindList(); }
   });
-  $('idk-add').addEventListener('click',()=>{
+  $('idk-add').addEventListener('click',async ()=>{
     const v=$('idk-new').value.trim();
     if(!v){ $('idk-new').focus(); return; }
-    if(v==='기타'){ alert("'기타'는 항상 자동 포함되므로 추가할 수 없습니다."); return; }
-    if(S.idKinds.includes(v)){ alert('이미 있는 명칭입니다.'); return; }
+    if(v==='기타'){ await appAlert("'기타'는 항상 자동 포함되므로 추가할 수 없습니다."); return; }
+    if(S.idKinds.includes(v)){ await appAlert('이미 있는 명칭입니다.'); return; }
     S.idKinds.push(v); saveIdKinds(); $('idk-new').value=''; renderIdKindList(); $('idk-new').focus();
   });
   $('idk-new').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();$('idk-add').click();} });
@@ -94,18 +94,18 @@ export function initPresets(){
     S.presets.sort((a,b)=>order.indexOf(String(a.id))-order.indexOf(String(b.id)));
     savePresets(); renderPresets(); renderPresetList();
   });
-  $('presetList').addEventListener('click',e=>{
+  $('presetList').addEventListener('click',async e=>{
     const ed=e.target.closest('.ps-edit');
     if(ed){ loadPresetIntoForm(+ed.dataset.edit); return; }
     const d=e.target.closest('.ps-del'); if(!d)return;
     const p=S.presets[+d.dataset.del];
-    if(confirm(`프리셋 "${p.label}"을(를) 삭제할까요?`)){ S.presets.splice(+d.dataset.del,1); savePresets(); renderPresetList(); renderPresets(); if(editingPresetId===p.id)clearPresetForm(); }
+    if(await appConfirm(`프리셋 "${p.label}"을(를) 삭제할까요?`)){ S.presets.splice(+d.dataset.del,1); savePresets(); renderPresetList(); renderPresets(); if(editingPresetId===p.id)clearPresetForm(); }
   });
   $('np-subadd').addEventListener('click',()=>addPresetSubRow(''));
   enableDragReorder($('np-subs'), '.fsub-row', '.drag-handle'); // np-save가 DOM 순서 그대로 읽으므로 onDrop 콜백 불필요 (fm-subs와 동일 패턴)
   $('np-cancel-edit').addEventListener('click',()=>clearPresetForm());
-  $('np-save').addEventListener('click',()=>{
-    const label=$('np-label').value.trim(); if(!label){alert('버튼 이름을 입력하세요.');$('np-label').focus();return;}
+  $('np-save').addEventListener('click',async ()=>{
+    const label=$('np-label').value.trim(); if(!label){await appAlert('버튼 이름을 입력하세요.');$('np-label').focus();return;}
     const sum=$('np-sum').value.trim();
     const subs=[...$('np-subs').querySelectorAll('input[type=text]')].map(i=>i.value.trim()).filter(Boolean);
     if(editingPresetId){

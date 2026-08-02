@@ -3,7 +3,7 @@
    ========================================================================= */
 import {S, newId, makeItem} from './state.js';
 import {invoke, STORE} from './store.js';
-import {$, esc, escAttr, enableDragReorder} from './dom-utils.js';
+import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
@@ -128,7 +128,7 @@ function dropDraft(key){
   markDraft(0);
 }
 
-export function openForm(pre){
+export async function openForm(pre){
   saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
   pre=pre||{};
   editingId=pre.id||null;
@@ -142,7 +142,7 @@ export function openForm(pre){
   const dr=drafts()[draftKey];
   if(dr && dr.data && JSON.stringify(dr.data)!==baseline){
     const conflict = !editingId && hasContent(pre);
-    if(!conflict || confirm('작성하다 남겨둔 새 업무 임시저장 내용이 있습니다.\n이어서 쓸까요?\n\n[취소]를 누르면 방금 넣은 내용으로 새로 시작합니다(임시저장분 삭제).')){
+    if(!conflict || await appConfirm('작성하다 남겨둔 새 업무 임시저장 내용이 있습니다.\n이어서 쓸까요?\n\n[취소]를 누르면 방금 넣은 내용으로 새로 시작합니다(임시저장분 삭제).')){
       fillForm(Object.assign({id:editingId}, dr.data));
       markDraft(dr.at);
     } else { dropDraft(draftKey); draftKey='new'; markDraft(0); }
@@ -357,10 +357,10 @@ function addFormFileRow(path, active){
     setMode(on);
     if(!on) input.focus();                        // 비활성화: 수정 편의상 포커스
   });
-  link.addEventListener('click',()=>{ const p=input.value.trim();
-    if(p) invoke('open_file_path',{path:p}).catch(err=>alert('파일을 열 수 없습니다:\n'+p+'\n\n'+err)); });
+  link.addEventListener('click',async ()=>{ const p=input.value.trim();
+    if(p) invoke('open_file_path',{path:p}).catch(err=>appAlert('파일을 열 수 없습니다:\n'+p+'\n\n'+err)); });
   browse.addEventListener('click',async()=>{     // 비활성화 모드에서 이 행의 경로를 새로 선택
-    let p=null; try{ p=await invoke('pick_file_path'); }catch(e){ alert('파일 선택 실패: '+e); return; }
+    let p=null; try{ p=await invoke('pick_file_path'); }catch(e){ await appAlert('파일 선택 실패: '+e); return; }
     if(p) input.value=p;
   });
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
@@ -425,12 +425,12 @@ export function initForm(){
      행 구조·열기는 종류와 무관하게 동일(open_file_path — 폴더면 탐색기). */
   const linkMenu=on=>{ $('fm-linkmenu').style.display=on?'block':'none'; };
   $('fm-linkadd').addEventListener('click',e=>{ e.stopPropagation(); linkMenu($('fm-linkmenu').style.display==='none'); });
-  document.addEventListener('click',e=>{ if(!e.target.closest('.linkmenu-wrap')) linkMenu(false); });   // 바깥 클릭 닫기
+  document.addEventListener('click',async e=>{ if(!e.target.closest('.linkmenu-wrap')) linkMenu(false); });   // 바깥 클릭 닫기
   const pickLink=async cmd=>{
     linkMenu(false);
     let p=null;
     try{ p=await invoke(cmd); }
-    catch(e){ alert('선택 실패: '+e); return; }
+    catch(e){ await appAlert('선택 실패: '+e); return; }
     if(p) addFormFileRow(p);
   };
   $('fm-pickfile').addEventListener('click',()=>pickLink('pick_file_path'));
@@ -438,9 +438,9 @@ export function initForm(){
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
   /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
      새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */
-  $('fm-revert').addEventListener('click',()=>{
+  $('fm-revert').addEventListener('click',async ()=>{
     const cur = editingId ? S.items.find(x=>x.id===editingId) : null;
-    if(!confirm(cur ? '마지막으로 저장한 내용으로 되돌립니다.\n지금 화면의 임시저장 내용은 사라집니다. 계속할까요?'
+    if(!await appConfirm(cur ? '마지막으로 저장한 내용으로 되돌립니다.\n지금 화면의 임시저장 내용은 사라집니다. 계속할까요?'
                     : '작성 중인 내용을 모두 비웁니다. 계속할까요?')) return;
     dropDraft(draftKey);
     openForm(cur || {});                                   // 저장본(또는 빈 양식)으로 다시 그림
@@ -458,11 +458,11 @@ export function initForm(){
   $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); if(e.target.id==='fm-memo') renderMemoHl(); scheduleDraft(); });
   $('formPanel').addEventListener('change',scheduleDraft);
   $('formPanel').addEventListener('click',e=>{ if(e.target.closest('.rm,.fsub-chk,.fsub-add')) scheduleDraft(); });
-  $('fm-save').addEventListener('click',()=>{
+  $('fm-save').addEventListener('click',async ()=>{
     // F3: 저장 전 오입력 검사 (포커스 남아있으면 판정되도록 먼저 blur)
     if(document.activeElement && $('formPanel').contains(document.activeElement)) document.activeElement.blur();
     if(!validateAllDt($('formPanel'))){
-      alert('날짜·시각 입력이 올바르지 않습니다.\n빨갛게 표시된 칸을 확인해주세요.\n(예: 2026/07/10 · 18:30)');
+      await appAlert('날짜·시각 입력이 올바르지 않습니다.\n빨갛게 표시된 칸을 확인해주세요.\n(예: 2026/07/10 · 18:30)');
       return;
     }
     const d=collectForm();

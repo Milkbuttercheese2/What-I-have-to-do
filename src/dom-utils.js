@@ -55,6 +55,61 @@ export function initToast(){
 export function showSaveError(){ const el=$('saveAlert'); if(el) el.classList.add('on'); }
 export function clearSaveError(){ const el=$('saveAlert'); if(el) el.classList.remove('on'); }
 
+/* ── 앱 표준 대화상자 (v3.3.0 소유자 지정) ────────────────────────────────
+   네이티브 alert/confirm 은 창 제목이 'wmhh-desktop' 으로 뜨고 버튼·글꼴이 OS
+   것이라 앱과 따로 논다. 같은 문법의 표준 모달(.modal-bg > .modal)로 통일한다.
+   - appAlert(msg) → Promise<void>, appConfirm(msg) → Promise<boolean>
+   - ESC/배경 클릭 = 취소(확인은 버튼으로만) — 실수로 진행되지 않게.
+   - 테스트 하니스 호환: window.confirm/alert 가 스텁된 환경(jsdom)에서는
+     그 스텁을 그대로 쓴다(기존 테스트 계약 유지 — env.answerConfirm/alerts). */
+let dlgEl=null, dlgResolve=null;
+function ensureDialog(){
+  if(dlgEl) return dlgEl;
+  dlgEl=document.createElement('div');
+  dlgEl.className='modal-bg'; dlgEl.id='appDialog';
+  dlgEl.innerHTML=`<div class="modal modal-narrow" role="alertdialog" aria-modal="true">
+    <h3 id="dlg-title">알림</h3>
+    <div class="m-sub" id="dlg-msg"></div>
+    <div class="m-actions">
+      <button class="btn btn-cancel" id="dlg-cancel" style="display:none">취소</button>
+      <button class="btn btn-ok" id="dlg-ok">확인</button>
+    </div>
+  </div>`;
+  document.body.appendChild(dlgEl);
+  const close=v=>{ dlgEl.classList.remove('on'); const r=dlgResolve; dlgResolve=null; if(r) r(v); };
+  dlgEl.querySelector('#dlg-ok').addEventListener('click',()=>close(true));
+  dlgEl.querySelector('#dlg-cancel').addEventListener('click',()=>close(false));
+  dlgEl.addEventListener('click',e=>{ if(e.target===dlgEl) close(false); });   // 배경 클릭 = 취소
+  document.addEventListener('keydown',e=>{
+    if(!dlgEl.classList.contains('on')) return;
+    if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); close(false); }
+    else if(e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); close(true); }
+  }, true);
+  return dlgEl;
+}
+function openDialog(msg, withCancel, title){
+  const el=ensureDialog();
+  el.querySelector('#dlg-title').textContent=title||(withCancel?'확인':'알림');
+  /* 줄바꿈을 살려 보여준다(기존 문구들이 \n 으로 문단을 나눈다) */
+  el.querySelector('#dlg-msg').textContent=String(msg==null?'':msg);
+  el.querySelector('#dlg-cancel').style.display=withCancel?'inline-block':'none';
+  el.querySelector('#dlg-ok').textContent=withCancel?'확인':'확인';
+  el.classList.add('on');
+  setTimeout(()=>{ const b=el.querySelector('#dlg-ok'); if(b&&b.focus) b.focus(); },0);
+  return new Promise(res=>{ dlgResolve=res; });
+}
+/* jsdom 테스트 하니스는 window.confirm/alert 를 제어용으로 스텁한다 —
+   그 환경에서는 스텁을 그대로 태워 기존 테스트 계약(answerConfirm/alerts)을 지킨다. */
+const isStubbed=fn=>{ try{ return typeof window[fn]==='function' && !/\[native code\]/.test(Function.prototype.toString.call(window[fn])); }catch{ return false; } };
+export function appAlert(msg, title){
+  if(isStubbed('alert')){ window.alert(msg); return Promise.resolve(); }
+  return openDialog(msg, false, title).then(()=>{});
+}
+export function appConfirm(msg, title){
+  if(isStubbed('confirm')) return Promise.resolve(!!window.confirm(msg));
+  return openDialog(msg, true, title);
+}
+
 /* 알림 권한 요청 (최초 1회) — persist()가 부르므로 알람 모듈이 아닌 여기에 둔다 */
 let notifyAsked=false;
 export function askNotify(){ if(notifyAsked||!('Notification'in window))return; notifyAsked=true; if(Notification.permission==='default'){try{Notification.requestPermission();}catch{}} }

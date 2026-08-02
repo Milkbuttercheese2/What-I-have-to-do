@@ -5,7 +5,7 @@
    예정일 도래분 생성(runRecurSpawn)을 담당한다.
    ========================================================================= */
 import {S, makeItem} from './state.js';
-import {$, esc, escAttr, showToast} from './dom-utils.js';
+import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
 import {fmtT, parseTimeStr} from './datetime.js';
 import {isValidRecur, recurLabel, spawnLabel, initialNext, spawnDueOccurrences, DOW_KO} from './recur.js';
 import {persist, render} from './render.js';
@@ -110,12 +110,12 @@ function renderList(){
 export function openRecurModal(){ resetInput(); renderList(); $('recurModal').classList.add('on'); $('rc-memo').focus(); }
 function closeRecurModal(){ $('recurModal').classList.remove('on'); }
 
-function saveParent(){
+async function saveParent(){
   const memo=$('rc-memo').value.trim();
-  if(!memo){ alert('공통 내용(제목/메모)을 입력하세요.'); $('rc-memo').focus(); return; }
+  if(!memo){ await appAlert('공통 내용(제목/메모)을 입력하세요.'); $('rc-memo').focus(); return; }
   const recur=collectRecur();
   if(!isValidRecur(recur)){
-    alert('반복 주기가 올바르지 않습니다.\n(요일을 하나 이상 선택하거나 매월 날짜를 1~31로, 시각은 09:00 형식으로)');
+    await appAlert('반복 주기가 올바르지 않습니다.\n(요일을 하나 이상 선택하거나 매월 날짜를 1~31로, 시각은 09:00 형식으로)');
     return;
   }
   if(editingParentId){
@@ -148,7 +148,7 @@ export function initRecurBox(){
   $('rc-spawn-time').addEventListener('blur',e=>{ const n=normTime(e.target.value.trim()); if(n) e.target.value=n; });
   $('rc-save').addEventListener('click', saveParent);
   $('rc-cancel-edit').addEventListener('click', resetInput);
-  $('rc-list').addEventListener('click',e=>{
+  $('rc-list').addEventListener('click',async e=>{
     const ed=e.target.closest('[data-rc-edit]');
     if(ed){ const p=S.items.find(x=>x.id==ed.dataset.rcEdit); if(p) fillForEdit(p); return; }
     const pa=e.target.closest('[data-rc-pause]');
@@ -158,7 +158,7 @@ export function initRecurBox(){
     const de=e.target.closest('[data-rc-del]');
     if(de){ const id=+de.dataset.rcDel; const idx=S.items.findIndex(x=>x.id===id);
       if(idx>=0){ const n=childCount(id);
-        if(!confirm(`이 주기 업무를 삭제할까요?\n이미 생성된 업무 ${n}건은 그대로 남습니다.`)) return;
+        if(!await appConfirm(`이 주기 업무를 삭제할까요?\n이미 생성된 업무 ${n}건은 그대로 남습니다.`)) return;
         const removed=S.items[idx]; S.items.splice(idx,1); persist(); render(); renderList();
         showToast('주기 업무 삭제함',()=>{ S.items.splice(Math.min(idx,S.items.length),0,removed); persist(); render(); renderList(); });
       } return; }
