@@ -78,6 +78,25 @@ test('관련인·식별정보·파일: 이어붙임 + 중복 제거 (전화는 �
   assert.deepEqual(m.files, ['C:\\a.hwp','C:\\b.xlsx']);
 });
 
+test('관련인 이메일(v3.5.0): 같은 사람으로 접힐 때 빈 칸은 채우고, 있는 값은 안 덮는다', () => {
+  /* 이메일은 entryKey 에 없어서 '같은 사람'으로 접힌다 — 그냥 버리면 한쪽에만 적어 둔
+     이메일이 병합 한 번에 사라진다. 반대로 덮어쓰면 멀쩡한 주소가 조용히 바뀐다. */
+  const t=base({contacts:[
+    {who:'김철수', org:'행정과', phone:'010-1234-5678', email:''},
+    {who:'이영희', org:'세무과', phone:'010-2', email:'lee@x.go.kr'}]});
+  const s=base({id:2, contacts:[
+    {who:'김철수', org:'행정과', phone:'01012345678', email:'kim@x.go.kr'},   // 표기만 다른 같은 사람
+    {who:'이영희', org:'세무과', phone:'010-2', email:'other@y.go.kr'}]});
+  const m=mergeItems(t,s);
+  assert.equal(m.contacts.length, 2);
+  assert.equal(m.contacts[0].email, 'kim@x.go.kr');     // 빈 칸 → 채움
+  assert.equal(m.contacts[1].email, 'lee@x.go.kr');     // 이미 있음 → 그대로
+
+  // 원본 불변 계약: 보강분이 원본 객체로 새면 안 된다
+  assert.equal(t.contacts[0].email, '');
+  assert.equal(s.contacts[0].email, 'kim@x.go.kr');
+});
+
 test('분류 상태: 어느 한쪽이라도 분류를 마쳤으면 분류 대기로 안 돌아간다', () => {
   assert.equal(mergeItems(base({staged:true}), base({id:2, staged:true})).staged, true);
   assert.equal(mergeItems(base({staged:false}), base({id:2, staged:true})).staged, false);

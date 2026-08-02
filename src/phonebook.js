@@ -38,9 +38,11 @@ function sorted(){
     || (a.who||'').localeCompare(b.who||'','ko'))
     .map(e=>({e, n:cnt.get(e.id)}));
 }
+/* v3.5.0: 이메일도 검색된다 — 목록 행에 보이는 값이기 때문이다("보이는 곳에서만
+   검색된다"). 이메일을 표시하지 않는 @ 자동완성(matchEntries)·미니 창은 제외. */
 function matches(e){
   if(!q) return true;
-  return `${e.who||''} ${e.org||''} ${e.phone||''} ${phoneDigits(e.phone)}`.toLowerCase().includes(q);
+  return `${e.who||''} ${e.org||''} ${e.phone||''} ${phoneDigits(e.phone)} ${e.email||''}`.toLowerCase().includes(q);
 }
 
 export function renderPhonebook(){
@@ -55,6 +57,7 @@ export function renderPhonebook(){
     <span class="pb-org">${esc(e.org||'—')}</span>
     <span class="pb-who">${esc(e.who||'—')}</span>
     <span class="pb-phone num">${esc(e.phone||'—')}</span>
+    <span class="pb-email">${esc(e.email||'—')}</span>
     <span class="pb-tail">
       <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
       <button class="ps-edit" data-pbedit="${e.id}">수정</button>
@@ -65,32 +68,34 @@ export function renderPhonebook(){
 
 function clearPbForm(){
   editingPbId=null;
-  $('pb-org').value=''; $('pb-who').value=''; $('pb-phone').value='';
+  $('pb-org').value=''; $('pb-who').value=''; $('pb-phone').value=''; $('pb-email').value='';
   $('pb-save').textContent='추가';
   $('pb-cancel').style.display='none';
 }
 function loadPbForm(id){
   const e=S.phonebook.find(x=>x.id===id); if(!e) return;
   editingPbId=id;
-  $('pb-org').value=e.org; $('pb-who').value=e.who; $('pb-phone').value=e.phone;
+  $('pb-org').value=e.org; $('pb-who').value=e.who; $('pb-phone').value=e.phone; $('pb-email').value=e.email||'';
   $('pb-save').textContent='수정 저장';
   $('pb-cancel').style.display='inline-block';
   $('pb-who').focus();
 }
 async function submitPbForm(){
-  const e=normEntry({who:$('pb-who').value, org:$('pb-org').value, phone:$('pb-phone').value});
-  if(!(e.who||e.org||e.phone)){ $('pb-who').focus(); return; }
+  const e=normEntry({who:$('pb-who').value, org:$('pb-org').value, phone:$('pb-phone').value, email:$('pb-email').value});
+  if(!(e.who||e.org||e.phone||e.email)){ $('pb-who').focus(); return; }
   /* v2.9.0 무결성(소유자 지정): 전화번호부는 3칸 완비만 — 일부만 아는 관련인은 메모에 */
   if(!isComplete(e)){
     await appAlert('전화번호부에는 관련소속·관련인·연락처를 모두 입력해야 합니다.\n(일부만 아는 관련인은 바로 입력·양식 메모에 자유롭게 적어두세요.)');
     (!e.org?$('pb-org'):!e.who?$('pb-who'):$('pb-phone')).focus();
     return;
   }
+  /* 중복 판정은 3칸(entryKey) — 이메일만 다른 건 '같은 관련인'이라 새로 못 만든다.
+     그 사람의 이메일을 바꾸고 싶으면 [수정]으로 들어와 고친다(직접 수정만 덮어쓰기). */
   const dup=S.phonebook.find(x=>x.id!==editingPbId && entryKey(x)===entryKey(e));
-  if(dup){ await appAlert('같은 관련인이 이미 있습니다.'); return; }
+  if(dup){ await appAlert('같은 관련인이 이미 있습니다.\n(이메일만 다른 경우도 같은 사람으로 봅니다 — 이메일을 바꾸려면 그 줄의 [수정]을 쓰세요.)'); return; }
   if(editingPbId){
     const cur=S.phonebook.find(x=>x.id===editingPbId);
-    if(cur){ cur.who=e.who; cur.org=e.org; cur.phone=e.phone; }
+    if(cur){ cur.who=e.who; cur.org=e.org; cur.phone=e.phone; cur.email=e.email; }
   }else{
     e.id=newId(); S.phonebook.push(e);
   }
@@ -105,14 +110,14 @@ function openPbSync(title, sub, found){
   $('pbs-title').textContent=title;
   $('pbs-sub').textContent=sub;
   $('pbs-list').innerHTML=found.map(e=>`<div class="pbs-row">
-    <span class="pb-org">${esc(e.org)}</span><span class="pb-who">${esc(e.who)}</span><span class="pb-phone num">${esc(e.phone)}</span>
+    <span class="pb-org">${esc(e.org)}</span><span class="pb-who">${esc(e.who)}</span><span class="pb-phone num">${esc(e.phone)}</span>${e.email?`<span class="pb-email">${esc(e.email)}</span>`:''}
   </div>`).join('');
   $('pbSyncModal').classList.add('on');
 }
 function closePbSync(){ $('pbSyncModal').classList.remove('on'); pendingSync=[]; }
 function applyPbSync(){
   const n=pendingSync.length;
-  pendingSync.forEach(e=>{ S.phonebook.push({id:newId(), who:e.who, org:e.org, phone:e.phone}); });
+  pendingSync.forEach(e=>{ S.phonebook.push({id:newId(), who:e.who, org:e.org, phone:e.phone, email:e.email||''}); });
   closePbSync();
   if(n){ savePb(); renderPhonebook(); showToast(`관련인 ${n}명을 추가했습니다`); }
 }
@@ -142,7 +147,7 @@ async function importFromXlsx(file){
     }catch(e){ await appAlert('엑셀 파일을 읽지 못했습니다: '+e); return; }
     const mapped=mapSheetRows(rows);
     if(!mapped){
-      await appAlert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다 — [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다.)');
+      await appAlert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다 — [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다. 이메일 열은 있으면 함께 읽고, 없어도 됩니다.)');
       return;
     }
     const complete=mapped.entries.filter(isComplete);
@@ -163,12 +168,14 @@ async function importFromXlsx(file){
    v3.1.1(소유자 지정): 제목을 **화면 입력칸과 같은 이름**(관련소속·관련인·연락처)으로.
    불러오기의 헤더 인식(mapSheetRows)은 '소속'·'관련인'·'연락처'를 모두 포함하므로
    이 이름 그대로 왕복된다 — 제목 문구를 바꿀 땐 그 정규식과 함께 본다.
+   v3.5.0: '이메일' 열 추가(선택 — 비워 둬도 등록된다). 마찬가지로 mapSheetRows 의
+   RX.email 과 한 쌍이다.
    저장 경로는 XLSX 내보내기(backup.js)와 같다 — F14 주석 참조: {type:'array'} 를
    Uint8Array 로 감싸지 않으면 0바이트 파일이 나온다. */
 async function saveXlsxTemplate(){
   try{
-    const ws=XLSX.utils.aoa_to_sheet([['관련소속','관련인','연락처']]);   // 화면 입력칸과 같은 이름
-    ws['!cols']=[{wch:24},{wch:14},{wch:20}];
+    const ws=XLSX.utils.aoa_to_sheet([['관련소속','관련인','연락처','이메일']]);   // 화면 입력칸과 같은 이름
+    ws['!cols']=[{wch:24},{wch:14},{wch:20},{wch:26}];
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
     const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
     const saved=await invoke('save_binary_file',{suggestedName:'전화번호부_양식.xlsx', data:bytes});
@@ -183,8 +190,12 @@ async function saveXlsxTemplate(){
 export function absorbIntoPhonebook(contacts){
   const {added, updates}=absorbContacts(S.phonebook, contacts);
   if(!added.length && !updates.length) return;
-  updates.forEach(u=>{ const e=S.phonebook.find(x=>x.id===u.id); if(e) e.phone=u.phone; });
-  added.forEach(c=>{ S.phonebook.push({id:newId(), who:c.who, org:c.org, phone:c.phone}); });
+  /* updates 는 '바뀔 칸만 담은 패치'(v3.5.0: phone·email) — 들어 있는 키만 덮는다.
+     없는 키까지 대입하면 undefined 로 지워 버린다. */
+  updates.forEach(u=>{ const e=S.phonebook.find(x=>x.id===u.id); if(!e) return;
+    if('phone' in u) e.phone=u.phone;
+    if('email' in u) e.email=u.email; });
+  added.forEach(c=>{ S.phonebook.push({id:newId(), who:c.who, org:c.org, phone:c.phone, email:c.email||''}); });
   savePb(); renderPhonebook();
 }
 
@@ -228,7 +239,7 @@ export function initPhonebook(){
      '본문에 하이라이트'라는 소유자 지정으로 제거됐다. 카드 위 태그는 색 표시만(불변). */
   $('pb-save').addEventListener('click',submitPbForm);
   $('pb-cancel').addEventListener('click',()=>{ clearPbForm(); });
-  [$('pb-org'),$('pb-who'),$('pb-phone')].forEach(inp=>inp.addEventListener('keydown',e=>{
+  [$('pb-org'),$('pb-who'),$('pb-phone'),$('pb-email')].forEach(inp=>inp.addEventListener('keydown',e=>{
     if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); submitPbForm(); }
   }));
   $('pb-search').addEventListener('input',()=>{ q=$('pb-search').value.trim().toLowerCase(); renderPhonebook(); });

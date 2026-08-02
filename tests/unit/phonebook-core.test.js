@@ -74,7 +74,7 @@ test('mapSheetRows: 헤더 자동 인식 + 행 매핑 + 중복 제거, 헤더 �
   const m=mapSheetRows(rows);
   assert.ok(m);
   assert.equal(m.entries.length, 2);
-  assert.deepEqual(m.entries[0], {who:'김철수', org:'행정과', phone:'010-1234-5678'});
+  assert.deepEqual(m.entries[0], {who:'김철수', org:'행정과', phone:'010-1234-5678', email:''});
   assert.equal(m.entries[1].who, '이영희');
   assert.equal(mapSheetRows([['가','나','다'],['1','2','3']]), null);   // 헤더 인식 실패
 });
@@ -171,7 +171,80 @@ test('absorbContacts: 3칸 완비만 흡수, 완전 중복 건너뜀, 빈 번호
     {who:'', org:'', phone:''},
   ]);
   assert.deepEqual(updates, [{id:2, phone:'010-2'}]);
-  assert.deepEqual(added, [{who:'김철수', org:'행정과', phone:'010-3'}]);
+  assert.deepEqual(added, [{who:'김철수', org:'행정과', phone:'010-3', email:''}]);
+});
+
+/* ── v3.5.0 이메일(선택) ──────────────────────────────────────────────────
+   설계의 핵심 두 줄: ① 이메일은 **고유 식별에 쓰지 않는다**(달라도 같은 사람),
+   ② 그래서 같은 사람으로 접힐 때 **빈 칸이면 채우고 있으면 안 건드린다**.
+   이 두 규칙이 깨지면 이메일이 조용히 사라지거나 같은 사람이 둘로 갈라진다. */
+
+test('이메일은 고유 식별에 쓰지 않는다 — entryKey·isComplete·relatedItems 모두 무시', () => {
+  const a={who:'김철수', org:'행정과', phone:'010-1', email:'a@x.go.kr'};
+  const b={who:'김철수', org:'행정과', phone:'010-1', email:'b@y.go.kr'};
+  assert.equal(entryKey(a), entryKey(b));                  // 이메일만 달라도 같은 사람
+  assert.equal(isComplete({who:'김철수', org:'행정과', phone:'010-1'}), true);   // 이메일 없어도 등록 자격
+  assert.equal(isComplete({who:'김철수', org:'행정과', phone:'', email:'a@x.go.kr'}), false);  // 이메일만으론 불가
+
+  // 업무의 관련인 이메일이 전화번호부와 달라도 관련 업무로 걸려야 한다
+  const items=[{id:1, contacts:[b]}];
+  assert.equal(relatedItems(items, {entries:[a]}).length, 1);
+  // 이메일은 삽입 라벨·태그 텍스트에도 안 들어간다
+  assert.equal(entryLabel(a), '김철수(행정과 010-1)');
+  assert.equal(tagText(a), '@김철수');
+});
+
+test('absorbContacts: 이미 있는 사람의 빈 이메일은 보강, 이미 있는 이메일은 안 덮음', () => {
+  const book=[
+    {id:1, who:'김철수', org:'행정과', phone:'010-1', email:''},          // 이메일 비어 있음
+    {id:2, who:'이영희', org:'세무과', phone:'010-2', email:'old@x.go.kr'},// 이미 있음
+    {id:3, who:'박민수', org:'감사과', phone:'', email:''},                // 번호도 이메일도 없음
+  ];
+  const {added, updates}=absorbContacts(book, [
+    {who:'김철수', org:'행정과', phone:'010-1', email:'new@x.go.kr'},   // 빈 칸 → 보강
+    {who:'이영희', org:'세무과', phone:'010-2', email:'new@y.go.kr'},   // 이미 있음 → 그대로
+    {who:'박민수', org:'감사과', phone:'010-3', email:'new@z.go.kr'},   // 번호·이메일 함께 보강
+  ]);
+  assert.equal(added.length, 0);                                       // 항목은 하나도 안 늘어난다
+  const byId=Object.fromEntries(updates.map(u=>[u.id,u]));
+  assert.deepEqual(byId[1], {id:1, email:'new@x.go.kr'});
+  assert.equal(byId[2], undefined);                                    // 덮어쓰지 않으므로 패치 자체가 없다
+  assert.deepEqual(byId[3], {id:3, phone:'010-3', email:'new@z.go.kr'});// 한 항목에 패치는 한 건으로 합친다
+});
+
+test('absorbContacts: 새 사람은 이메일까지 함께 들어오고, 같은 배치 중복은 이메일을 잃지 않는다', () => {
+  const {added}=absorbContacts([], [
+    {who:'최수진', org:'기획과', phone:'010-9', email:''},               // 먼저 만난 쪽이 빈 칸
+    {who:'최수진', org:'기획과', phone:'010-9', email:'choi@x.go.kr'},   // 나중 것이 이메일을 안다
+  ]);
+  assert.equal(added.length, 1);
+  assert.equal(added[0].email, 'choi@x.go.kr');   // 빈 칸이 뒤의 값을 가리면 안 된다
+});
+
+test('gatherFromItems/mapSheetRows: 같은 사람을 접을 때 이메일을 잃지 않는다', () => {
+  const items=[
+    {contacts:[{who:'김철수', org:'행정과', phone:'010-1234-5678'}]},                     // 이메일 없음
+    {contacts:[{who:'김철수', org:'행정과', phone:'01012345678', email:'kim@x.go.kr'}]},  // 표기만 다른 같은 사람
+  ];
+  const found=gatherFromItems(items, []);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].email, 'kim@x.go.kr');
+
+  const m=mapSheetRows([
+    ['소속','성명','전화번호','이메일'],
+    ['행정과','김철수','010-1234-5678',''],
+    ['행정과','김철수','01012345678','kim@x.go.kr'],   // 중복 행이 이메일을 갖고 있다
+  ]);
+  assert.equal(m.entries.length, 1);
+  assert.equal(m.entries[0].email, 'kim@x.go.kr');
+});
+
+test('mapSheetRows: 이메일 열은 선택 — 없어도 되고, 그것만으론 헤더가 되지 않는다', () => {
+  const noEmail=mapSheetRows([['소속','성명','전화번호'],['행정과','김철수','010-1']]);
+  assert.equal(noEmail.entries[0].email, '');       // 열이 없으면 빈 값
+  assert.equal(noEmail.cols.email, -1);
+  // 이메일 열 하나만 있는 시트는 전화번호부로 인식하지 않는다(헤더 점수는 3칸으로만 센다)
+  assert.equal(mapSheetRows([['이메일'],['a@x.go.kr']]), null);
 });
 
 test('queryReady: 이름 2글자·번호 3자리 문턱값, 010 은 열지 않음 (v2.10.0)', async () => {
@@ -187,7 +260,8 @@ test('queryReady: 이름 2글자·번호 3자리 문턱값, 010 은 열지 않�
 });
 
 test('normEntry/phoneDigits: 문자열 강제·trim·숫자 추출', () => {
-  assert.deepEqual(normEntry({who:' 김철수 ', org:null, phone:1234}), {id:undefined, who:'김철수', org:'', phone:'1234'});
+  assert.deepEqual(normEntry({who:' 김철수 ', org:null, phone:1234}), {id:undefined, who:'김철수', org:'', phone:'1234', email:''});
+  assert.equal(normEntry({email:'  Kim@Example.go.kr '}).email, 'Kim@Example.go.kr');   // trim 만 — 대소문자 원문 유지
   assert.equal(phoneDigits('010-12 34'), '0101234');
   assert.equal(phoneDigits(null), '');
 });

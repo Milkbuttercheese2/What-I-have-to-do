@@ -234,7 +234,7 @@ for (const {w, why} of ZOOM_WIDTHS) {
     const bottomOfFirst = rowsAll[0] ? Math.round(rowsAll[0].getBoundingClientRect().bottom) : null;
     const topOfSecond   = rowsAll[1] ? Math.round(rowsAll[1].getBoundingClientRect().top) : null;
     return {title: top('.fsub-row .fsub-title'), owner: top('.fsub-row .sub-owner'), dt: top('.fsub-row .fsub-dt'),
-            cOrg: top('.contact-row .c-org'), cPhone: top('.contact-row .c-phone'),
+            cOrg: top('.contact-row .c-org'), cPhone: top('.contact-row .c-phone'), cEmail: top('.contact-row .c-email'),
             rowCount: rowsAll.length, bottomOfFirst, topOfSecond};
   });
   const gap12 = (rows.owner != null && rows.title != null) ? rows.owner - rows.title : null;
@@ -253,10 +253,15 @@ for (const {w, why} of ZOOM_WIDTHS) {
   /* 세부할일은 1줄 제목 / 2줄 담당 / 3줄 날짜·시각 (v2.5.10) — 세 줄이 각각 다른 y여야 한다. */
   const subThreeLine = rows.title != null && rows.owner != null && rows.dt != null
     && rows.owner > rows.title + 8 && rows.dt > rows.owner + 8;
+  /* 관련인은 1줄 소속·이름 / 2줄 연락처 / 3줄 이메일 (v2.5.9, v3.5.0).
+     이메일은 고정폭에 가까운 입력이라 한 줄에 나열하면 좁은 폭에서 반드시 깨진다 —
+     '자기 줄을 갖는다'가 이 레이아웃의 계약이므로 여기서 지킨다. */
   const contactTwoLine = rows.cPhone == null || rows.cOrg == null || rows.cPhone > rows.cOrg + 8;
-  console.log(`[${platformTag}] form-line-check  세부={제목:${rows.title},담당:${rows.owner},날짜시각:${rows.dt}}  세부 3줄=${subThreeLine}  관련인 2줄=${contactTwoLine}`);
+  const contactThreeLine = rows.cEmail == null || rows.cPhone == null || rows.cEmail > rows.cPhone + 8;
+  console.log(`[${platformTag}] form-line-check  세부={제목:${rows.title},담당:${rows.owner},날짜시각:${rows.dt}}  세부 3줄=${subThreeLine}  관련인 3줄=${contactTwoLine && contactThreeLine}`);
   if (!subThreeLine) findings.push({shot: 'form-line-check', viewport: 560, sel: '세부할일이 제목/담당/날짜·시각 3줄로 안 나뉨', over: 0});
   if (!contactTwoLine) findings.push({shot: 'form-line-check', viewport: 560, sel: '관련인 연락처가 별도 줄이 아님', over: 0});
+  if (!contactThreeLine) findings.push({shot: 'form-line-check', viewport: 560, sel: '관련인 이메일이 별도 줄이 아님', over: 0});
   await page.close();
 }
 

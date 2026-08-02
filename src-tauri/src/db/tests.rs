@@ -38,6 +38,7 @@ fn sample_items() -> Vec<Item> {
             who: "홍길동".into(),
             org: "행정과".into(),
             phone: "010-1111-2222".into(),
+            email: "hong@example.go.kr".into(),
         }],
         ids: vec![Identifier {
             kind: "SR번호".into(),
@@ -96,6 +97,10 @@ fn items_round_trip() {
         assert_eq!(o.memo, l.memo);
         assert_eq!(o.f, l.f);
         assert_eq!(o.contacts.len(), l.contacts.len());
+        // v3.5.0 이메일(선택)도 그대로 왕복해야 한다 — 부가 정보라 조용히 빠지기 쉽다
+        for (oc, lc) in o.contacts.iter().zip(l.contacts.iter()) {
+            assert_eq!(oc.email, lc.email);
+        }
         assert_eq!(o.ids.len(), l.ids.len());
         assert_eq!(o.subs.len(), l.subs.len());
         assert_eq!(o.done, l.done);
@@ -284,6 +289,7 @@ fn backup_export_import_round_trip() {
         who: "홍길동".into(),
         org: "행정과".into(),
         phone: "010-1111-2222".into(),
+        email: "hong@example.go.kr".into(),
     }];
     phonebook::save_phonebook(&mut conn, &book).unwrap();
 
@@ -323,14 +329,16 @@ fn backup_export_import_round_trip() {
 fn phonebook_round_trip_replace_and_search() {
     let mut conn = test_conn();
     let book = vec![
-        PhonebookEntry { id: 1, who: "김철수".into(), org: "○○세무서".into(), phone: "010-1234-5678".into() },
-        PhonebookEntry { id: 2, who: "이영희".into(), org: "행정과".into(), phone: "02-123-4567".into() },
+        PhonebookEntry { id: 1, who: "김철수".into(), org: "○○세무서".into(), phone: "010-1234-5678".into(), email: "kim@tax.go.kr".into() },
+        PhonebookEntry { id: 2, who: "이영희".into(), org: "행정과".into(), phone: "02-123-4567".into(), email: String::new() },
     ];
     phonebook::save_phonebook(&mut conn, &book).unwrap();
     let loaded = phonebook::load_phonebook(&conn).unwrap();
     assert_eq!(loaded.len(), 2);
     assert_eq!(loaded[0].who, "김철수");
     assert_eq!(loaded[0].phone, "010-1234-5678");
+    assert_eq!(loaded[0].email, "kim@tax.go.kr");   // v3.5.0 이메일 왕복
+    assert_eq!(loaded[1].email, "");                // 빈 이메일도 그대로(선택 항목)
 
     // 저장은 replace-not-merge — 한 건짜리로 다시 저장하면 한 건만 남는다.
     phonebook::save_phonebook(&mut conn, &book[..1].to_vec()).unwrap();
