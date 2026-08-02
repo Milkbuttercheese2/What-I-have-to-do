@@ -530,3 +530,26 @@ test('@ 목록: 이어갈 자리가 10행 밖이면 잇지 않고 첫 줄로 (v3
   assert.equal(selIdx(), 0, '10행 밖 자리는 잇지 않는다');
   assert.equal(pb.scrollTop, 0);
 });
+
+/* v3.4.5: "펴졌다가 다시 접히는" 창. v3.4.3~v3.4.4 의 보정은 다음 요청 크기를
+   window.innerHeight 기준으로 계산했는데, 앞서 보낸 리사이즈가 아직 반영되기
+   전이면 그 값은 **옛 크기**다 → 이미 가는 중인 490 보다 작은 444 를 뒤이어
+   요청했고, 두 요청이 차례로 적용되며 창이 커졌다 도로 접혔다(실렌더 확인:
+   지연 150ms 이상에서 매번 재현). 요청한 크기가 반영되기 전에는 다시 요청하지
+   않는다 — 그리고 누적 기준은 언제나 '내가 요청한 값'이라 줄어들 수 없다. */
+test('@ 목록: 창 크기가 반영되기 전에는 다시 요청하지 않는다 (v3.4.5)', async () => {
+  reset();
+  const book = Array.from({length: 14}, (_, i) => ({id:i+1, who:'사람'+(i+1), org:'조달청', phone:'010-4-'+i}));
+  env.onInvoke('phonebook_search', ()=>book);
+  if(body.classList.contains('search')) alt();
+  env.invokeCalls.length = 0;                       // 모드 전환분 제외 — 자동완성만 본다
+
+  inp.value='통화 @사람'; inp.selectionStart=inp.value.length;
+  inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  mock.timers.tick(150); await env.flush();
+  for(let i=0;i<10;i++){ mock.timers.tick(80); await env.flush(); }   // 보정 회차를 모두 돌린다
+
+  const hs = env.invokeCalls.filter(c=>c.cmd==='resize_capture').map(c=>c.args.height);
+  assert.equal(hs.length, 1, `창이 요청대로 안 커지는 동안에는 한 번만 요청해야 한다 (실제: ${hs.join(',')})`);
+  for(let i=1;i<hs.length;i++) assert.ok(hs[i]>=hs[i-1], '요청 높이는 한 검색 안에서 줄어들 수 없다');
+});

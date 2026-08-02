@@ -186,7 +186,9 @@ function pbWinHeight(){
 /* v3.2.5: 창은 **넉넉히** 잡고(SLACK), 남는 부분은 투명이라 보이지 않는다
    (capture.html 의 '패널은 내용 높이' 규칙과 한 쌍). */
 const PB_SLACK=48;
-const PB_FIT_TRIES=4;
+/* 리사이즈가 느린 환경에서는 회차 대부분이 '아직 반영 전'으로 지나가므로
+   넉넉히 둔다(만족하면 즉시 빠져나온다 — 실제로는 보통 1~2회). */
+const PB_FIT_TRIES=8;
 /* 창 크기를 맞추고 **모자란 만큼 다시 키운다** (v3.4.3 — 수렴할 때까지).
    v3.2.4~v3.4.2 의 자가 보정은 딱 한 번이었고, 게다가 후보가 10행을 넘으면
    "스크롤이 정상"이라며 보정을 아예 건너뛰었다. 그래서 첫 계산이 모자란 환경
@@ -205,17 +207,27 @@ function pbPinTop(){
   const pb=$id('cap-pb');
   if(pb && pbSel<PB_MAX_ROWS && pb.scrollTop!==0) pb.scrollTop=0;
 }
+/* 한 번의 자동완성에서 창은 **한 방향으로만** 움직인다 (v3.4.5).
+   v3.4.3~v3.4.4 의 보정은 다음 요청을 `window.innerHeight` 기준으로 계산했는데,
+   그 값은 앞서 보낸 리사이즈가 **아직 반영되기 전이면 옛 크기**다. 그래서 이미
+   가는 중인 490 보다 작은 444 를 뒤이어 요청했고, 두 요청이 차례로 적용되며
+   창이 커졌다가 도로 접히는 것처럼 보였다(네이티브 리사이즈가 80ms 보다 느린
+   환경에서 반복). 이제 누적 기준은 '내가 요청한 값'(want)이라 절대 줄지 않고,
+   요청한 크기가 아직 반영되지 않았으면 그 회차는 판단을 미룬다. */
 async function fitPbWindow(){
   const seq=pbSeq;
-  invoke('resize_capture',{height:pbWinHeight()}).catch(()=>{});
+  let want=pbWinHeight();                            // 이 한 번의 목표 크기 (여기서만 줄어들 수 있다)
+  invoke('resize_capture',{height:want}).catch(()=>{});
   for(let i=0;i<PB_FIT_TRIES;i++){
     await new Promise(r=>setTimeout(r,80));          // 네이티브 창 리사이즈 반영 대기
     if(seq!==pbSeq || !pbOpen || mode!=='memo') return;
     const pb=$id('cap-pb'); if(!pb) return;
     pbPinTop();                                      // 창이 바뀔 때마다 첫 행을 제자리로
+    if(Math.abs(window.innerHeight-want)>1) continue; // 요청이 아직 반영 전 — 재보지 않는다
     const short=pbNeedH()-pb.getBoundingClientRect().height;   // 목표 행수에 모자란 px
     if(short<=1) return;                             // 다 보인다 — 끝
-    invoke('resize_capture',{height:Math.ceil(window.innerHeight+short+2)}).catch(()=>{});
+    want=Math.ceil(want+short+2);                    // 항상 키우기만 (요청 기준 누적)
+    invoke('resize_capture',{height:want}).catch(()=>{});
   }
 }
 /* keepScroll=true 는 ↑↓ 로 목록을 조작할 때만 — 그 밖(새 후보 목록)에서는 언제나
