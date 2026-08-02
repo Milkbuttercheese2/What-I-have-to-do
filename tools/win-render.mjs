@@ -175,6 +175,13 @@ await capture('board',      COMPACT);
 await capture('board',      FULL);
 await capture('form',       COMPACT, openForm);
 await capture('form',       FULL,    openForm);
+/* v3.3.5: 양식은 **좁은 쪽 끝**에서도 봐야 한다. 560px 창 + 배율 110~120% 면 CSS
+   뷰포트가 467px 이지만, 창을 더 좁히면(또는 고DPI 화면에서) 320~373px 까지 내려간다.
+   그 구간에서 날짜·시각 줄(.dt-inp)이 고정폭 244px + 들여쓰기 43px 로 안 접혀 시각칸이
+   패널 밖으로 잘려 나갔다. 위 overflowsIn() 이 .dt-inp 를 이미 보고 있으므로, 폭만
+   여기에 추가하면 같은 회귀를 자동으로 잡는다. */
+for (const w of [371, 360, 320])
+  await capture('form-narrow', {width: w, height: 900}, openForm);
 await capture('preset',     COMPACT, openPreset);
 await capture('boardmode',  COMPACT, openBoardMode);
 await capture('recur',      COMPACT, openRecur);

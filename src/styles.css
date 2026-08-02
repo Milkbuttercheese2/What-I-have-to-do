@@ -641,7 +641,18 @@
   .contact-row input:focus{outline:none;border-color:var(--focus)}
   .contact-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
   /* 분리 날짜/시간 입력 */
-  .dt-inp{display:inline-flex;gap:5px}
+  /* ⚠️ v3.3.5 — wrap 을 절대 nowrap 으로 되돌리지 말 것.
+     이 줄의 자식은 전부 **고정폭**이다(날짜 112 · 📅 31 · 요일 22 · 시각 64 + 간격 15
+     = 244px). 게다가 플렉스 자식의 기본 `min-width:auto` 때문에 shrink 가 걸려 있어도
+     내용 최소폭 밑으로는 줄지 않는다. 그래서 접히지 못하면 이 244px 은 어떤 상황에서도
+     그대로이고, 여기에 정렬용 들여쓰기 43px 이 더해져 **CSS 뷰포트 371px 아래에서
+     시각칸이 양식 패널 밖으로 삐져나갔다**(브라우저 실측: 360→11px, 340→31px,
+     320→51px 넘침. 배율 110·120% 에서 창을 좁히면 이 구간에 들어간다).
+     v2.5.10 이 세부 할 일을 3줄로 쪼갠 것은 '바깥' 줄바꿈이었고, 그 3번째 줄 **안쪽**은
+     여전히 통짜였던 것이 이 문제의 정체다.
+     wrap 이면 자리가 없을 때만 시각칸이 아랫줄로 내려가므로(넉넉한 폭에서는 아무 변화
+     없다) 폭에 상관없이 잘림이 생기지 않는다 — 특정 px 을 가정하지 않는 것이 요점이다. */
+  .dt-inp{display:inline-flex;gap:5px;flex-wrap:wrap}
   /* v2.5.16: 양식의 날짜·시각 입력칸도 본문 폰트로 통일(소유자 지정). 폭(112/64px)은
      그대로 두되 고정폭 숫자 대신 tabular-nums 로 자릿수 정렬을 유지한다 —
      이 칸은 폭이 정밀하게 맞춰진 자리(§7-I)라 폰트를 바꾸면 560px 양식 3줄 배치가
