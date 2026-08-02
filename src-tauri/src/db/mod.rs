@@ -104,15 +104,6 @@ pub fn exe_desc() -> String {
         .unwrap_or_else(|_| "(알 수 없음)".into())
 }
 
-/// `DbError` 판. 호출부(lib.rs 기동 경로)가 "지금 안 되는 것"과 "망가진 것"을
-/// 갈라 볼 때 쓴다 — 이 구분이 데이터를 지킨다(아래 open_with_recovery 참조).
-pub fn is_transient_err(e: &error::DbError) -> bool {
-    match e {
-        error::DbError::Sqlite(se) => is_transient(se),
-        _ => false,
-    }
-}
-
 /// 일시적 실패(잠금·백신 I/O)면 잠깐 쉬었다 다시 해 본다.
 ///
 /// 저장이 한 번 실패하면 그 변경분은 사용자 화면에만 남고 디스크엔 없다. 그래서
@@ -153,6 +144,37 @@ pub fn integrity_check(conn: &Connection) -> DbResult<Result<(), String>> {
     } else {
         Ok(Err(result))
     }
+}
+
+/// 기동 시 무결성 판정 (v3.3.9).
+///
+/// ⚠️ **"검사를 못 했다"와 "검사 결과 손상이다"는 전혀 다르다.** 예전엔 둘 다
+/// '손상'으로 처리해 그 세션의 저장·읽기를 통째로 잠갔다. 그래서 앱을 껐다 2~3초
+/// 만에 다시 켜면(이전 프로세스가 아직 파일을 쥔 찰나) 검사가 잠금 때문에 오류로
+/// 끝나고, 파일은 멀쩡한데도 "저장이 잠겨 있습니다 / 1. 트레이 종료 2. 재실행"
+/// 안내가 계속 떴다.
+///
+/// v3.3.1 이 `open()` 에 대해 배운 것 — **잠금은 손상이 아니라 대기 대상** — 을
+/// 검사에도 적용한다: 못 끝내면 몇 번 다시 하고, 그래도 안 되면 손상으로 단정하지
+/// 않는다. 진짜 손상은 `Ok(Err(report))` 로 분명히 드러나며 그때만 잠근다.
+///
+/// 반환: (계속 써도 되는가, 로그에 남길 사연)
+pub fn integrity_verdict(conn: &Connection, attempts: u32, delay: std::time::Duration) -> (bool, Option<String>) {
+    let mut note = None;
+    for attempt in 0..attempts.max(1) {
+        match integrity_check(conn) {
+            Ok(Ok(())) => return (true, None),
+            Ok(Err(report)) => return (false, Some(format!("integrity FAILED: {report}"))),
+            Err(e) => {
+                eprintln!("DB integrity check errored (attempt {}): {e}", attempt + 1);
+                note = Some(format!("integrity check could not run: {e}"));
+                if attempt + 1 < attempts.max(1) {
+                    std::thread::sleep(delay);
+                }
+            }
+        }
+    }
+    (true, note) // 검사를 못 끝낸 것은 손상의 근거가 아니다
 }
 
 /// Opens `db_path`, recovering automatically instead of ever failing

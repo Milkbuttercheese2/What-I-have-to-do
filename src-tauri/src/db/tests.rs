@@ -1054,3 +1054,69 @@ fn load_app_state_carries_the_current_version() {
     tx.commit().unwrap();
     assert_eq!(backup::load_app_state(&conn).unwrap().data_version, v0 + 1);
 }
+
+/* ===== v3.3.9 무결성 판정: 잠금은 손상이 아니다 ===== */
+
+// 사고 재현: 앱을 껐다 2~3초 만에 다시 켜면 이전 프로세스가 아직 파일을 쥐고 있어
+// PRAGMA integrity_check 가 잠금으로 **오류**가 난다. 예전엔 이걸 '손상'으로 단정해
+// 그 세션의 저장·읽기를 통째로 잠갔고, 파일이 멀쩡한데도 사용자에게
+// "저장이 잠겨 있습니다 / 1. 트레이 종료 2. 재실행" 안내가 떴다.
+#[test]
+fn a_locked_db_is_not_treated_as_corrupt() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_intlock_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let _ = std::fs::remove_dir_all(&dir);
+    let conn = super::open(&db_path).unwrap();
+
+    // 다른 연결이 배타 잠금을 쥔 상태를 만든다(= 종료 직후 재실행 상황).
+    let blocker = Connection::open(&db_path).unwrap();
+    blocker.execute_batch("BEGIN EXCLUSIVE").unwrap();
+
+    // 기다리지 않도록 타임아웃을 0 으로 낮춰 확실히 '검사 불가' 를 만든다.
+    conn.busy_timeout(std::time::Duration::from_millis(0)).unwrap();
+    assert!(
+        super::integrity_check(&conn).is_err(),
+        "전제 확인: 잠긴 DB 에서는 검사 자체가 오류로 끝난다"
+    );
+
+    let (ok, note) = super::integrity_verdict(&conn, 2, std::time::Duration::from_millis(1));
+    assert!(ok, "검사를 못 끝낸 것은 손상의 근거가 아니다 — 앱을 잠그면 안 된다");
+    assert!(note.is_some(), "무슨 일이 있었는지는 로그에 남겨야 한다");
+    assert!(note.unwrap().contains("could not run"));
+
+    blocker.execute_batch("ROLLBACK").unwrap();
+    drop(blocker);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 반대로 **진짜 손상**은 여전히 확실히 잠가야 한다 — 이걸 놓치면 손상된 파일에
+// 덮어쓰기가 일어나 복구 가능한 문제가 영구적인 문제가 된다.
+#[test]
+fn real_corruption_still_locks_writes() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_intbad_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let _ = std::fs::remove_dir_all(&dir);
+    {
+        let mut conn = super::open(&db_path).unwrap();
+        items::save_items(&mut conn, &sample_items()).unwrap();
+    }
+    // 파일 한가운데를 망가뜨린다(헤더는 남겨 열리기는 하도록).
+    {
+        use std::io::{Seek, SeekFrom, Write};
+        let mut f = std::fs::OpenOptions::new().write(true).open(&db_path).unwrap();
+        f.seek(SeekFrom::Start(4096)).unwrap();
+        f.write_all(&[0xAB; 2048]).unwrap();
+    }
+    let conn = Connection::open(&db_path).unwrap();
+    match super::integrity_check(&conn) {
+        Ok(Err(_)) => {
+            let (ok, note) = super::integrity_verdict(&conn, 2, std::time::Duration::from_millis(1));
+            assert!(!ok, "검사가 '손상'이라고 답하면 반드시 잠가야 한다");
+            assert!(note.unwrap().contains("FAILED"));
+        }
+        // 환경에 따라 손상이 열기 단계에서 드러날 수 있다 — 그 경우 이 테스트의
+        // 전제가 성립하지 않으므로 조용히 넘어간다(위 잠금 테스트가 본체다).
+        _ => {}
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -200,8 +200,10 @@ pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
     Ok(())
 }
 
-/// Mirrors the frontend's STORE.saveAll(), which always ships the complete
-/// current item list — a single all-or-nothing transaction.
+/// 단독 트랜잭션으로 items 전체를 교체하는 편의 래퍼. 실제 저장 경로는 번호표
+/// 확인·쓰기·번호 올리기를 한 트랜잭션으로 묶어야 해서(v3.3.7) `save_items_tx` 를
+/// 직접 쓰므로, 지금은 테스트와 백업 복원 쪽에서만 쓰인다.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn save_items(conn: &mut Connection, items: &[Item]) -> DbResult<()> {
     let tx = conn.transaction()?;
     save_items_tx(&tx, items)?;

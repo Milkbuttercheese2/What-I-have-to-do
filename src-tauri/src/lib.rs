@@ -313,19 +313,20 @@ pub fn run() {
                 }
             }
 
-            let integrity_ok = match db::integrity_check(&conn) {
-                Ok(Ok(())) => true,
-                Ok(Err(report)) => {
-                    eprintln!(
-                        "DB integrity check FAILED — refusing further writes until restored: {report}"
-                    );
-                    false
-                }
-                Err(e) => {
-                    eprintln!("DB integrity check errored: {e}");
-                    false
-                }
-            };
+            /* ⚠️ v3.3.9 — "검사를 못 했다"와 "검사 결과 손상이다"는 **전혀 다르다.**
+               예전엔 둘 다 `false`(=저장·읽기 잠금)로 처리했다. 그래서 앱을 껐다
+               2~3초 만에 다시 켜면(이전 프로세스가 아직 파일을 쥔 찰나) 검사가
+               잠금 때문에 **오류**로 끝나고, 그 세션 내내 "저장이 잠겨 있습니다 /
+               1. 트레이 종료 2. 재실행" 안내가 떴다. 파일은 멀쩡한데도.
+               v3.3.1 이 `open()` 에 대해 배운 것("잠금은 손상이 아니라 대기 대상")을
+               검사에도 똑같이 적용한다: 몇 번 다시 해 보고, 그래도 검사 자체를 못
+               끝내면 **손상으로 단정하지 않는다**. 진짜 손상은 `Ok(Err(report))` 로
+               분명히 드러나며, 그때만 잠근다. */
+            let (integrity_ok, integrity_note) =
+                db::integrity_verdict(&conn, 4, std::time::Duration::from_millis(300));
+            if let Some(note) = &integrity_note {
+                db::log_line(&base_dir, &format!("start {note} (ok={integrity_ok})"));
+            }
 
             /* ---- v2.23: 전역 캡처 단축키 + 트레이 상주 + 자동 시작 ---- */
             let startup_settings = db::settings::load_settings(&conn).unwrap_or_default();
