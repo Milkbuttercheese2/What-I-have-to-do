@@ -209,3 +209,31 @@ test('거절(Stale): 재시도하지 않고, 화면 내용을 파일로 남긴�
   assert.equal(env.document.getElementById('saveAlert').classList.contains('on'), false,
     '거절은 저장 실패가 아니므로 실패 배너를 켜지 않는다');
 });
+
+test('첫 로드는 일시적 실패를 삼키고 재시도한다 — 마지막에 성공하면 경고 없이 진행 (v3.4.1)', async () => {
+  await env.resetS();
+  let n = 0;
+  env.onInvoke('load_all', () => {
+    n++;
+    if (n < 3) throw new Error('database is locked');      // 종료 직후 재실행의 잠금 재현
+    return {items: [{id: 1, memo: '살아있는 데이터'}], dataVersion: 7};
+  });
+  const p = STORE.load();
+  for(let i=0;i<8;i++){ await env.flush(1); mock.timers.tick(400); }   // 재시도 대기(400ms) 진행
+  const items = await p;
+  assert.equal(n, 3, '실패한 만큼 다시 물어봐야 한다');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].memo, '살아있는 데이터');
+});
+
+test('네 번 모두 실패하면 그때는 에러를 올린다 (진짜 문제는 숨기지 않는다)', async () => {
+  await env.resetS();
+  let n = 0;
+  env.onInvoke('load_all', () => { n++; throw new Error('진짜 손상'); });
+  const p = STORE.load();
+  const caught = p.then(()=>null, e=>e);
+  for(let i=0;i<10;i++){ await env.flush(1); mock.timers.tick(400); }
+  const err = await caught;
+  assert.match(String(err), /진짜 손상/);
+  assert.equal(n, 4);
+});
