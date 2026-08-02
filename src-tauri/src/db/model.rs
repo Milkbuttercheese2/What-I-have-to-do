@@ -186,6 +186,12 @@ pub struct AppState {
     pub settings: Settings,
     #[serde(rename = "recurDefs", default)]
     pub recur_defs: Vec<RecurDef>,
+    /// v3.3.7 번호표 — 이 화면이 어느 시점의 데이터를 보고 있는지. 저장할 때
+    /// 그대로 돌려보내면 Rust 가 그 사이 다른 저장이 있었는지 판정한다.
+    /// **백업(BackupPayload)에는 넣지 않는다** — 번호는 그 DB 파일의 상태이지
+    /// 데이터의 일부가 아니고, 백업을 복원하면 어차피 새 번호가 매겨진다.
+    #[serde(rename = "dataVersion", default)]
+    pub data_version: i64,
     /// v2.7.0 전화번호부 — 구버전 클라이언트/백업에는 없으므로 default.
     #[serde(default)]
     pub phonebook: Vec<PhonebookEntry>,

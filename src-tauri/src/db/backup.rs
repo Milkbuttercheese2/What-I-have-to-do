@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::error::DbResult;
 use super::model::{AppState, BackupPayload};
-use super::{fields, id_kinds, items, phonebook, presets, recur_defs, settings};
+use super::{fields, id_kinds, items, meta, phonebook, presets, recur_defs, settings};
 
 /// Matches the legacy HTML app's `backupPayload()` `v:5` shape so JSON
 /// backups remain interchangeable between the old and new app.
@@ -17,6 +17,8 @@ pub fn load_app_state(conn: &Connection) -> DbResult<AppState> {
         settings: settings::load_settings(conn)?,
         recur_defs: recur_defs::load_recur_defs(conn)?,
         phonebook: phonebook::load_phonebook(conn)?,
+        // v3.3.7 번호표 — 프런트가 이 값을 들고 있다가 저장할 때 되돌려준다.
+        data_version: meta::read_version(conn)?,
     })
 }
 
@@ -50,6 +52,9 @@ pub fn import_payload(conn: &mut Connection, payload: BackupPayload) -> DbResult
     recur_defs::save_recur_defs_tx(&tx, &payload.recur_defs)?;
     phonebook::save_phonebook_tx(&tx, &payload.phonebook)?;
     items::save_items_tx(&tx, &payload.items)?;
+    /* 복원도 '데이터가 바뀐 사건'이다 — 번호를 올려 두어야, 복원 직전 상태를 들고
+       있던 다른 화면(또는 다른 창)의 저장이 복원한 내용을 곧바로 덮어쓰지 못한다. */
+    meta::bump_version_tx(&tx)?;
     tx.commit()?;
     Ok(())
 }

@@ -4,6 +4,7 @@ pub mod error;
 pub mod fields;
 pub mod id_kinds;
 pub mod items;
+pub mod meta;
 pub mod model;
 pub mod phonebook;
 pub mod presets;
@@ -449,18 +450,44 @@ const SHRINK_SNAPSHOT_FLOOR: i64 = 5;
 /// most recent auto-backup being <30 min old and already reflecting the loss.
 /// Returns whether a snapshot was taken (best-effort — a snapshot failure is
 /// logged but never blocks the save itself).
+/// `save_items_guarded` 의 결과.
+///
+/// `Stale` 은 **오류가 아니라 정상적인 거절**이다 — 낡은 화면이 최신 데이터를
+/// 덮으려 했고 우리가 막았다는 뜻. 그래서 Err 가 아니라 값으로 돌려준다
+/// (프런트가 "저장 실패"로 오해해 재시도하면 안 된다. 같은 낡은 내용을 계속
+/// 다시 밀어 넣는 꼴이 된다).
+#[derive(Debug, PartialEq, Eq)]
+pub enum SaveOutcome {
+    /// 저장됨. 새 번호를 돌려주므로 프런트는 이걸 다음 저장에 쓴다.
+    Saved { version: i64, snapshotted: bool },
+    /// 거절됨. 내가 본 번호(expected)와 지금 DB 번호(current)가 다르다.
+    Stale { expected: i64, current: i64 },
+}
+
 pub fn save_items_guarded(
     conn: &mut Connection,
     db_path: &Path,
     backups_dir: &Path,
     items: &[model::Item],
     keep: usize,
-) -> DbResult<bool> {
+    expected_version: Option<i64>,
+) -> DbResult<SaveOutcome> {
     /* v3.3.4: 세어 보지 못했으면 **스냅샷을 찍는 쪽**으로 기운다. 예전엔
        `unwrap_or(0)` 이라 count 가 실패하면 prev=0 → 조건 불성립 → 보호가 조용히
        꺼졌다. 그런데 count 가 실패하는 상황(잠금·I/O 오류)이야말로 DB 가 불안정해
        스냅샷이 가장 필요한 때다. 안전한 방향은 '못 세었으면 일단 남긴다'이다 —
        잘못 찍힌 스냅샷의 대가는 백업 파일 하나뿐이고, 안 찍힌 대가는 데이터다. */
+    /* 번호표 확인이 먼저다(v3.3.7). 거절할 저장이면 스냅샷도 백업도 만들 이유가 없다 —
+       낡은 화면의 저장은 흔한 일(창을 오래 띄워둔 것만으로도 생긴다)이므로 조용히 돌려보낸다.
+       ⚠️ 여기서 한 번, 아래 트랜잭션 안에서 또 한 번 확인한다. 이 확인은 '값싼 조기 거절'이고
+       진짜 판정은 트랜잭션 안의 것이다 — 둘 사이에 다른 저장이 끼어들 수 있기 때문. */
+    if let Some(expected) = expected_version {
+        let current = self::meta::read_version(conn)?;
+        if expected != current {
+            return Ok(SaveOutcome::Stale { expected, current });
+        }
+    }
+
     let prev: Option<i64> = conn
         .query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0))
         .map_err(|e| eprintln!("item count before save failed ({e}) — 보수적으로 스냅샷을 남긴다"))
@@ -479,8 +506,19 @@ pub fn save_items_guarded(
             Err(e) => eprintln!("pre-save safety snapshot failed (saving anyway): {e}"),
         }
     }
-    self::items::save_items(conn, items)?;
-    Ok(snapshotted)
+    /* 확인과 쓰기와 번호 올리기가 **한 트랜잭션**이어야 한다. 따로 하면 그 사이 다른
+       저장이 끼어들어, 둘 다 "내 번호가 맞다"고 통과한 뒤 나중 것이 앞 것을 덮는다. */
+    let tx = conn.transaction()?;
+    let current = self::meta::read_version_tx(&tx)?;
+    if let Some(expected) = expected_version {
+        if expected != current {
+            return Ok(SaveOutcome::Stale { expected, current }); // tx 는 drop 되며 롤백
+        }
+    }
+    self::items::save_items_tx(&tx, items)?;
+    let version = self::meta::bump_version_tx(&tx)?;
+    tx.commit()?;
+    Ok(SaveOutcome::Saved { version, snapshotted })
 }
 
 /// Deletes old backups, keeping (a) the newest `keep` files and (b) the

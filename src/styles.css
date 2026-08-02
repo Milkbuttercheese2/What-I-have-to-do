@@ -654,7 +654,7 @@
 
      해법: 명시적 `min-width` 로 '글자가 안 잘리는 한계'를 못 박고 그 위 여유만 쓰게 한다.
      실측(같은 글꼴로 텍스트 폭 측정 + 패딩 16 + 테두리 2 + 캐럿 2):
-       날짜값 '2026/08/12' = 100px · 시각값 '18:00' = 57px → 여유 12+7 = 19px = 부족분 19px.
+       날짜값 '2026/08/12' = 92px · 시각값 '18:00' = 54px → 여유 12+7 = 19px = 부족분 19px.
      결과: 넉넉하면 112/64 그대로, 120% 에서는 약 102/59 로 줄며 **한 줄 유지**.
 
      ⚠️ 고정폭 입력을 한 줄에 나열할 땐 반드시 ① 자식에 명시적 `min-width`, ② 부모
@@ -665,22 +665,31 @@
      그대로 두되 고정폭 숫자 대신 tabular-nums 로 자릿수 정렬을 유지한다 —
      이 칸은 폭이 정밀하게 맞춰진 자리(§7-I)라 폰트를 바꾸면 560px 양식 3줄 배치가
      흔들릴 수 있어, win-render 의 오버플로 + 3줄 단언으로 검증한 뒤 반영했다. */
-  /* min-width = 글자가 잘리지 않는 실측 한계(날짜 '2026/08/12' 100px · 시각 '18:00' 57px).
+  /* min-width = 글자가 잘리지 않는 실측 한계(날짜 '2026/08/12' 92px · 시각 '18:00' 54px).
      넉넉하면 112/64 그대로, 좁아지면 여기까지만 줄어든다 — 이 값 밑으로 낮추지 말 것
      (낮추면 날짜가 '2026/08/1…' 처럼 잘려 보인다). */
-  .dt-inp .dt-date{width:112px;min-width:100px;font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
-  .dt-inp .dt-time{width:64px;min-width:57px;font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .dt-inp .dt-date{width:112px;min-width:96px;font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .dt-inp .dt-time{width:64px;min-width:58px;font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
   .dt-inp input:focus{outline:none;border-color:var(--focus)}
   .dt-pick{border:1px solid var(--line);background:var(--paper);border-radius:8px;cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;flex:none;
     font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif}
   .dt-pick:hover{border-color:var(--focus);background:var(--surface)}
   .dt-native{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
   .dt-inp{position:relative;align-items:center}
-  .dt-dow{font-size:11px;color:var(--ink-soft);min-width:22px;flex:none}
-  /* 요일은 마지막 여유분(v3.3.6). 22px 은 '자리 예약'이라 날짜가 비어 있어도 칸이 벌어져
-     행끼리 시작선이 맞는데, 극단적으로 좁을 때는 그 예약을 줄여 한 줄을 지키는 편이 낫다.
-     400px 위에서는 아무 변화가 없다(=평소 화면은 그대로). 이 덕에 346px 까지 버틴다. */
-  @media(max-width:400px){ .dt-dow{min-width:16px;overflow:hidden} }
+  /* 요일은 이 줄의 **완충재**다(v3.3.7). 평소엔 22px 자리를 지켜 — 날짜가 비어 있어도
+     칸이 벌어져 행끼리 시작선이 맞는다 — 자리가 모자랄 때만 줄어든다.
+     `flex:none`(=shrink 0) 이던 시절엔 이 22px 이 절대 안 줄어, 좁은 폭에서 그만큼이
+     그대로 시각칸을 벽 밖으로 밀어냈다. 날짜칸·시각칸은 min-width 로 바닥이 있으니
+     남는 압력은 자연히 여기로 온다(= 글자보다 여백을 먼저 내준다). */
+  /* ⚠️ shrink 100 은 오타가 아니다 — **양보 순서**를 정하는 값이다(v3.3.7).
+     플렉스는 `shrink × basis` 비율로 줄이므로, 요일(22px)에 큰 shrink 를 주면
+     자리가 모자랄 때 **요일이 거의 전부를 혼자 흡수**하고 날짜·시각칸은 제 크기를
+     지킨다. 실측(양식 안쪽 268px): shrink 1 이면 날짜101·요일19·시각58 로 셋 다
+     바닥까지 눌려 숨막히고, shrink 100 이면 날짜111·요일4·시각64 로 글자칸이 멀쩡하다.
+     요일은 바로 옆 날짜에 이미 들어 있는 파생 정보라 가장 먼저 내줘도 되는 것.
+     `flex:none` 이던 시절엔 이 22px 이 절대 안 줄어 그대로 시각칸을 벽 밖으로 밀어냈다. */
+  .dt-dow{font-size:11px;color:var(--ink-soft);width:22px;min-width:0;flex:0 100 auto;overflow:hidden}
+
   /* v5 카드 요약 */
   .card{cursor:pointer}
   /* v2.5.12: 카드 메모는 본문 '첫 줄'만 가져오되(render.js), 그 줄이 길면 최대 2줄까지 감싼다

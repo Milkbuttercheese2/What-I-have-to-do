@@ -22,7 +22,7 @@ test('정상 저장: save_all 1회, items 전달', async () => {
   await STORE._saving;                      // 큐 비행 완료 대기
   const calls = env.invokeCalls.filter(c=>c.cmd==='save_all');
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, {items});
+  assert.deepEqual(calls[0].args, {items, baseVersion:S.dataVersion});   // v3.3.7 번호표 동반
 });
 
 test('단일비행 last-wins: 비행 중 들어온 A,B,C 중 실제 저장은 [첫번째, 마지막]', async () => {
@@ -109,7 +109,7 @@ test('실패한 배치를 버리지 않고 대기열에 되돌린 뒤 재시도�
   await STORE._saving; await env.flush();
   const calls = env.invokeCalls.filter(c=>c.cmd==='save_all');
   assert.equal(calls.length, 2, '재시도로 두 번째 저장이 일어나야 함');
-  assert.deepEqual(calls[1].args, {items});
+  assert.deepEqual(calls[1].args.items, items);
   assert.equal(STORE._pending, null, '성공하면 대기열이 비어야 함');
   assert.equal(env.document.getElementById('saveAlert').classList.contains('on'), false);
 });
@@ -168,4 +168,44 @@ test('연속 실패가 이어지면 DB 를 건너뛰고 비상 덤프를 남긴�
   env.onInvoke('save_all', () => undefined);
   await STORE.flush();
   assert.equal(env.document.getElementById('saveAlert').classList.contains('on'), false);
+});
+
+/* ── v3.3.7 번호표: 낡은 화면이 최신 데이터를 덮지 못하게 ──────────────────
+   실제 사고: 7월 21일 상태를 들고 있던 화면이 오늘 저장을 하자, 저장이 전체
+   교체라 그 뒤에 쌓인 업무가 통째로 사라졌다(07-23·08-02 두 차례). */
+
+test('load(): 번호표를 받아 S.dataVersion 에 담는다', async () => {
+  await env.resetS();
+  env.onInvoke('load_all', () => ({items:[], dataVersion:42}));
+  await STORE.load();
+  assert.equal(S.dataVersion, 42);
+});
+
+test('저장 성공: Rust 가 준 새 번호로 갱신한다 (안 하면 다음 저장부터 전부 거절된다)', async () => {
+  await env.resetS(); S.loaded = true; S.dataVersion = 7;
+  env.onInvoke('save_all', () => ({kind:'Saved', version:8}));
+  await STORE.saveAll([{id:1}]);
+  await STORE._saving;
+  assert.equal(S.dataVersion, 8);
+  assert.equal(env.invokeCalls.find(c=>c.cmd==='save_all').args.baseVersion, 7);
+});
+
+test('거절(Stale): 재시도하지 않고, 화면 내용을 파일로 남긴다', async () => {
+  await env.resetS(); S.loaded = true; S.dataVersion = 3;
+  S.items = [{id:1, memo:'낡은 화면의 내용'}];
+  env.onInvoke('save_all', () => ({kind:'Stale', expected:3, current:99}));
+  env.onInvoke('emergency_dump', () => 'C:/데이터/emergency/wmhh_emergency_x.json');
+  // jsdom 의 location.reload 는 교체가 막혀 있어(non-configurable) 관측하지 않는다.
+  // 여기서 검증할 것은 '아무것도 잃지 않고, 낡은 내용을 다시 밀지 않는다' 세 가지다.
+
+  await STORE.saveAll(S.items);
+  await STORE._saving; await env.flush(); await env.flush();
+
+  const dumps = env.invokeCalls.filter(c=>c.cmd==='emergency_dump');
+  assert.equal(dumps.length, 1, '거절당한 화면 내용은 파일로 남아야 한다');
+  assert.deepEqual(JSON.parse(dumps[0].args.json).items, S.items);
+  assert.equal(STORE._pending, null, '거절은 재시도 대상이 아니다 — 같은 낡은 내용을 다시 밀면 안 된다');
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_all').length, 1, '거절 뒤 재시도 저장이 없어야 한다');
+  assert.equal(env.document.getElementById('saveAlert').classList.contains('on'), false,
+    '거절은 저장 실패가 아니므로 실패 배너를 켜지 않는다');
 });
