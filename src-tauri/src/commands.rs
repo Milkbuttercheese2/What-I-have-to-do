@@ -526,8 +526,8 @@ static CAPTURE_H: AtomicU32 = AtomicU32::new(126);
 
 /// 미니 캡처 창의 논리 폭. **tauri.conf.json 의 capture 창 `width` 와 반드시 같아야
 /// 한다** — v3.1.0 에서 conf 만 620 으로 바뀌어(코드는 560 유지) 창이 뜰 때 620,
-/// 크기 조정 뒤 560 으로 끌려가며 폭이 흔들렸다(v3.2.6 에서 560 으로 통일).
-const CAPTURE_W: f64 = 560.0;
+/// 크기 조정 뒤 560 으로 끌려가며 폭이 흔들렸다. v3.2.7: 소유자 지정으로 **700 고정**.
+const CAPTURE_W: f64 = 700.0;
 
 fn apply_capture_size(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("capture") {
