@@ -368,6 +368,28 @@ fn fresh_db_is_seeded_with_defaults() {
 }
 
 #[test]
+fn open_sets_busy_timeout_and_survives_a_second_connection() {
+    // v3.3.1: 잠금은 손상이 아니다 — 다른 연결이 DB 를 쥐고 있어도 열 수 있어야 하고,
+    // busy_timeout 이 걸려 있어야 종료 직후 재실행에서 즉시 실패하지 않는다.
+    let dir = std::env::temp_dir().join(format!("wmhh_test_busy_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let db = dir.join("data").join("wmhh.sqlite");
+    let first = super::open(&db).unwrap();
+    let timeout: i64 = first
+        .query_row("PRAGMA busy_timeout", [], |r| r.get(0))
+        .unwrap();
+    assert!(timeout >= 5000, "busy_timeout 이 설정되지 않았다: {timeout}");
+    // 첫 연결을 연 채로 두 번째 연결도 정상적으로 열려야 한다(복구 경로로 새지 않게)
+    let second = super::open(&db).unwrap();
+    let (c, note) = super::open_with_recovery(&db, &dir.join("backups")).unwrap();
+    assert!(note.is_none(), "정상 DB 인데 복구 안내가 떴다: {note:?}");
+    drop(c);
+    drop(second);
+    drop(first);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn integrity_check_reports_ok_on_fresh_db() {
     let conn = test_conn();
     assert_eq!(super::integrity_check(&conn).unwrap(), Ok(()));

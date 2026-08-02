@@ -24,7 +24,11 @@ fn to_err<E: std::fmt::Display>(e: E) -> String {
 fn ensure_integrity(state: &State<AppDb>) -> Result<(), String> {
     if !state.integrity_ok.load(Ordering::Relaxed) {
         return Err(
-            "데이터베이스 무결성 검사에 실패한 상태라 저장할 수 없습니다. 백업에서 복원 후 다시 시도해주세요."
+            "데이터를 지키기 위해 저장이 잠겨 있습니다(무결성 검사 실패).\n\
+             1. 오른쪽 아래 트레이 아이콘을 우클릭해 [종료] 후 앱을 다시 실행해 보세요.\n\
+             2. 그래도 같으면 [설정] → [저장 위치 확인·변경]에서 다른 폴더로 옮겨 보세요.\n\
+             3. 그래도 안 되면 [설정] → [JSON·DB파일 불러오기]로 백업을 불러오세요\n\
+             (데이터 폴더 안 backups 폴더의 최신 .sqlite, 또는 따로 저장해 둔 JSON 백업)."
                 .into(),
         );
     }
@@ -35,7 +39,11 @@ fn ensure_integrity(state: &State<AppDb>) -> Result<(), String> {
 pub fn load_all(state: State<AppDb>) -> Result<AppState, String> {
     if !state.integrity_ok.load(Ordering::Relaxed) {
         return Err(
-            "데이터베이스 무결성 검사에 실패했습니다. 자동 백업 또는 JSON 백업에서 복원이 필요합니다."
+            "저장된 데이터를 읽지 못했습니다(무결성 검사 실패).\n\
+             1. 오른쪽 아래 트레이 아이콘을 우클릭해 [종료] 후 앱을 다시 실행해 보세요.\n\
+             2. 그래도 같으면 [설정] → [저장 위치 확인·변경]에서 다른 폴더로 옮겨 보세요.\n\
+             3. 그래도 안 되면 [설정] → [JSON·DB파일 불러오기]로 백업을 불러오세요\n\
+             (데이터 폴더 안 backups 폴더의 최신 .sqlite, 또는 따로 저장해 둔 JSON 백업)."
                 .into(),
         );
     }

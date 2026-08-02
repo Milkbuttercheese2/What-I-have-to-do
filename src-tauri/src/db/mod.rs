@@ -27,6 +27,12 @@ pub fn open(path: &Path) -> DbResult<Connection> {
         fs::create_dir_all(parent)?;
     }
     let mut conn = Connection::open(path)?;
+    /* v3.3.1: 잠긴 DB 는 **기다린다**. 이게 없으면 앱을 껐다 바로 켤 때(이전
+       프로세스가 아직 파일 잠금을 들고 있는 찰나) 새 프로세스가 즉시 SQLITE_BUSY
+       로 실패하고, open_with_recovery 가 그 실패를 '파일 손상'으로 보고 **자동
+       백업으로 원본을 덮어썼다** — 멀쩡한 최신 데이터가 옛 백업으로 되돌아가는
+       사고. 잠금은 손상이 아니라 대기 대상이다. */
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.pragma_update(None, "foreign_keys", true)?;
     // Single-user desktop app, small write volume: durability over
     // throughput, and this avoids WAL's -wal/-shm sidecar files, which have
@@ -66,10 +72,22 @@ pub fn open_with_recovery(
     db_path: &Path,
     backups_dir: &Path,
 ) -> DbResult<(Connection, Option<String>)> {
-    let primary_err = match open(db_path) {
-        Ok(conn) => return Ok((conn, None)),
-        Err(e) => e,
-    };
+    /* v3.3.1: 복구(백업 덮어쓰기)는 **되돌릴 수 없는** 동작이므로, 한 번 실패했다고
+       바로 넘어가지 않는다. 종료 직후 재실행처럼 일시적인 잠금·AV 스캔·파일 핸들
+       해제 지연은 잠깐 뒤 성공하는 경우가 대부분이다. 짧게 몇 번 다시 열어 보고,
+       그래도 안 되는 '진짜' 실패만 복구 경로로 보낸다. */
+    let mut primary_err = None;
+    for attempt in 0..4 {
+        match open(db_path) {
+            Ok(conn) => return Ok((conn, None)),
+            Err(e) => {
+                eprintln!("DB open attempt {} failed: {e}", attempt + 1);
+                primary_err = Some(e);
+                std::thread::sleep(std::time::Duration::from_millis(400));
+            }
+        }
+    }
+    let primary_err = primary_err.expect("loop always records an error before exiting");
     eprintln!(
         "primary DB open failed at {}: {primary_err} — attempting recovery",
         db_path.display()
