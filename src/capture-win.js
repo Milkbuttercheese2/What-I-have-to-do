@@ -133,6 +133,16 @@ function sendDraft(text){
    @김철 처럼 치면 전화번호부를 검색해 목록을 펴고(창 높이도 잠깐 늘린다),
    고르면 "김철수(소속 전화)" 텍스트가 커서 자리에 들어간다. 메모 모드 전용. */
 const PB_BASE_H=126;                        // 메모 모드 기본 창 높이 (setMode 와 동일 값)
+/* 창 크기 요청은 반드시 이 함수로 (v3.4.8).
+   높이는 **CSS px** 로 보내고, 지금 웹뷰가 보고 있는 CSS 뷰포트 폭을 같이 보낸다 —
+   Rust 가 '창의 논리 폭 ÷ 이 값' 으로 **실제 배율을 재서** 창을 만든다.
+   앱이 건 zoom(uiScale)만으로 계산하면 안 되는 이유: Windows 접근성의 '텍스트 크기
+   조정'이 Chromium 에서는 페이지 확대로 함께 곱해진다(이 기계 135% → 실제 1.62배).
+   그걸 모르고 1.2배로 창을 만들면 창이 25% 작아 목록 아래가 잘린다 — 여러 번
+   신고된 '행이 다 안 보인다'의 진짜 원인이었다. commands.rs note_capture_ratio 참조. */
+function sizeWin(cssHeight){
+  invoke('resize_capture',{height:cssHeight, viewportWidth:window.innerWidth}).catch(()=>{});
+}
 function closePb(skipResize){
   clearTimeout(pbTimer); pbSeq++;
   /* v3.0.4: 화면 정리는 pbOpen 과 무관하게 **항상** 한다. 예전엔 여기서 먼저
@@ -145,7 +155,7 @@ function closePb(skipResize){
   const w=$id('cap-pb'); if(w) w.innerHTML='';
   if(!wasOpen) return;
   /* setMode 가 곧바로 제 높이를 다시 정하므로 그 경로에선 이중 resize 를 피한다 */
-  if(!skipResize && mode==='memo') invoke('resize_capture',{height:PB_BASE_H}).catch(()=>{});
+  if(!skipResize && mode==='memo') sizeWin(PB_BASE_H);
 }
 /* ── 목록 높이 (v3.4.6 — 재지 말고 정한다) ────────────────────────────────
    규칙: 후보가 몇이든 min(후보수, 10)행은 언제나 통째로 보인다.
@@ -281,7 +291,7 @@ async function runPb(){
   /* 창 크기 요청은 **한 번**이다 (v3.4.6). 결과를 다시 재서 보정하지 않는다 —
      위 pbNeedH 주석의 '왕복 금지'가 여기 걸린다. 뒤이어 하는 일은 첫 행을
      제자리로 되돌리는 것뿐(측정·재요청 없음). */
-  invoke('resize_capture',{height:pbWinHeight(found.length)}).catch(()=>{});
+  sizeWin(pbWinHeight(found.length));
   setTimeout(pbPinTop,80); setTimeout(pbPinTop,240);
 }
 function schedulePb(){ clearTimeout(pbTimer); pbTimer=setTimeout(runPb,150); }
@@ -310,7 +320,7 @@ function setMode(m){
   $id('cap-search').style.display=search?'':'none';
   $id('cap-results').style.display=search?'flex':'none';
   $id('cap-hint').textContent=hintFor(m);
-  invoke('resize_capture',{height:search?406:126}).catch(()=>{});   // 메모 모드 = 낮은 바, 검색 모드 = 고정 한 판
+  sizeWin(search?406:126);   // 메모 모드 = 낮은 바, 검색 모드 = 고정 한 판
   const t=search?$id('cap-search'):$id('cap-inp');
   t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   if(search) runSearch($id('cap-search').value.trim());
