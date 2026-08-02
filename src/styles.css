@@ -144,8 +144,12 @@
   .brand{display:flex;align-items:baseline;gap:12px;flex:none}
   .brand h1{font-size:19px;font-weight:700;letter-spacing:-.02em}
   .brand .sub{font-size:13px;color:var(--ink-soft)}
-  nav.tabs{display:flex;gap:4px;background:var(--chip-bg);padding:3px;border-radius:999px}
-  .tab{font-family:inherit;font-size:13px;font-weight:600;padding:6px 18px;border:none;border-radius:999px;background:transparent;color:var(--ink-soft);cursor:pointer}
+  nav.tabs{display:flex;gap:4px;background:var(--chip-bg);padding:3px;border-radius:999px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+  nav.tabs::-webkit-scrollbar{display:none}
+  /* ⚠️ nowrap 필수 — 없으면 폭이 모자랄 때 '전화번호부'가 '전화번호/부' 로 쪼개진다
+     (v3.3.3 실사용 버그). 폭이 부족하면 글자를 접는 대신 패딩이 줄고, 그래도
+     모자라면 탭 줄만 가로로 스크롤한다(페이지 가로 스크롤은 여전히 금지 §7-E). */
+  .tab{font-family:inherit;font-size:13px;font-weight:600;padding:6px 18px;border:none;border-radius:999px;background:transparent;color:var(--ink-soft);cursor:pointer;white-space:nowrap;flex:none}
   .tab.on{background:var(--tab-on-bg);color:var(--focus);box-shadow:none}
   .head-right{display:flex;align-items:center;gap:10px}
   .btn-tool{font-size:13px;padding:7px 13px;background:var(--chip-bg);color:var(--ink-soft)}
@@ -695,6 +699,8 @@
   @media(max-width:1080px){
     /* 모든 주요 컨테이너를 560px 폭으로 고정·가운데 정렬 (헤더/입력/검색줄/보드/완료/캘린더) */
     .header-inner,.cap-box,.strip,main,#view-board5,#view-done,#view-cal,#view-phone{max-width:560px}
+    /* 좁은 폭(배율 120% 포함)에서 탭 4개가 한 줄에 들어가도록 패딩만 줄인다 — 글자는 안 접는다 */
+    .tab{padding:6px 11px}
     /* 보드는 단일 열 */
     main,#view-board5{grid-template-columns:1fr}
     /* v2.5.8: 단일 열에서 검색창을 오른쪽에 띄우지 말고 한 줄 전체로 — 빈 띠에 홀로 떠

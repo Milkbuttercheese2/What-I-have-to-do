@@ -557,7 +557,7 @@ fn apply_capture_size(app: &AppHandle) {
 /// 창 크기도 같이 맞춘다.
 #[tauri::command]
 pub fn set_ui_scale(app: AppHandle, scale: u32) -> Result<(), String> {
-    let s = scale.clamp(80, 150);
+    let s = scale.clamp(90, 120);   // v3.3.3: 실사용 구간만 (프런트 MIN_SCALE/MAX_SCALE 와 같아야 한다)
     UI_SCALE.store(s, Ordering::Relaxed);
     let z = s as f64 / 100.0;
     for label in ["main", "capture"] {
