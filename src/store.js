@@ -73,8 +73,20 @@ export const STORE = {
      초기 로드(main.js)가 reconcileImported()를 호출해 그 값을 반영한다
      (기존 IndexedDB 버전도 동일한 패턴이었다 — 동기 기본값으로 시작,
      STORE.load() 완료 후 진짜 값으로 교체). */
+  /* v3.4.1: 첫 로드는 **한 번 실패했다고 포기하지 않는다.** 앱을 껐다 곧바로 켜면
+     이전 프로세스가 파일을 쥔 찰나가 있고(백신 스캔·네트워크 드라이브도 같은 결),
+     그때 한 번 실패했다는 이유로 "DB를 못 열었습니다 / 껐다 켜세요" 경고를 띄우면
+     실제로는 멀쩡한데 사용자만 놀란다. Rust 쪽은 이미 열기·무결성 검사에 재시도가
+     있으므로(v3.3.1·v3.3.9), 프런트도 같은 태도를 취해 짧게 몇 번 더 물어본다.
+     그래도 안 되면 그때 안내한다(= 진짜 문제). */
   async load(){
-    const state = await invoke('load_all');
+    let state, lastErr;
+    for(let i=0; i<4; i++){
+      try{ state = await invoke('load_all'); lastErr=null; break; }
+      catch(e){ lastErr=e; console.warn(`load_all 시도 ${i+1} 실패`, e);
+        await new Promise(r=>setTimeout(r, 400)); }
+    }
+    if(lastErr) throw lastErr;
     /* v3.3.7 번호표를 함께 받는다 — 이 시점의 데이터를 보고 있다는 표식 */
     S.dataVersion = Number(state.dataVersion) || 0;
     if(Array.isArray(state.fields)) S.imported.fields=state.fields;

@@ -38,6 +38,9 @@ fn ensure_integrity(state: &State<AppDb>) -> Result<(), String> {
 #[tauri::command]
 pub fn load_all(state: State<AppDb>) -> Result<AppState, String> {
     if !state.integrity_ok.load(Ordering::Relaxed) {
+        /* v3.4.1: 거절도 로그에 남긴다 — "경고창이 떴다"는 제보를 나중에 로그로
+           확인할 수 있어야 원인을 짚는다(성공만 기록하면 실패가 안 보인다). */
+        db::log_line(&state.base_dir, "load_all REFUSED: integrity gate closed");
         return Err(
             "저장된 데이터를 읽지 못했습니다(무결성 검사 실패).\n\
              1. 오른쪽 아래 트레이 아이콘을 우클릭해 [종료] 후 앱을 다시 실행해 보세요.\n\
@@ -47,7 +50,10 @@ pub fn load_all(state: State<AppDb>) -> Result<AppState, String> {
                 .into(),
         );
     }
-    db::backup::load_app_state(&state.conn()).map_err(to_err)
+    db::backup::load_app_state(&state.conn()).map_err(|e| {
+        db::log_line(&state.base_dir, &format!("load_all FAILED: {e}"));
+        to_err(e)
+    })
 }
 
 /// Minimum age of the newest backup before an after-save rotation writes
