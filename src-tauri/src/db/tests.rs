@@ -737,27 +737,33 @@ fn save_items_guarded_snapshots_only_on_drastic_shrink() {
     let _ = std::fs::remove_dir_all(&dir);
 
     let mut conn = super::open(&db_path).unwrap();
-    // 10건 저장(스냅샷 없음 — prev=0).
+    /* v3.6.0: **미완료** 업무로 재야 한다. 완료 업무는 저장이 건드리지 않으므로(보존된다)
+       목록에서 빠져도 손실이 아니고, 따라서 축소 감지의 대상도 아니다 — sample_items()[1]
+       (done=true)로 재면 "9→2"가 아예 축소가 아니게 된다. [0] 은 done=false. */
     let ten: Vec<Item> = (0..10)
         .map(|i| {
-            let mut it = sample_items()[1].clone();
+            let mut it = sample_items()[0].clone();
             it.id = 5000 + i;
+            // 세부할일 id 도 함께 재번호 — subtasks.id 는 전역 UNIQUE 라 복제하면 충돌한다
+            for (j, s) in it.subs.iter_mut().enumerate() {
+                s.id = 50_000 + i * 10 + j as i64;
+            }
             it
         })
         .collect();
-    assert!(!snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &ten, 20, None).unwrap()));
+    assert!(!snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &ten, &[], 20, None).unwrap()));
 
     // 사소한 축소 10→9: 스냅샷 없음.
     let nine = ten[..9].to_vec();
     assert!(
-        !snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &nine, 20, None).unwrap()),
+        !snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &nine, &[], 20, None).unwrap()),
         "작은 축소(10→9)는 스냅샷하지 않아야 함"
     );
 
     // 급격한 축소 9→2: 덮어쓰기 전 스냅샷.
     let two = nine[..2].to_vec();
     assert!(
-        snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20, None).unwrap()),
+        snapshotted(super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, &[], 20, None).unwrap()),
         "대량 축소(9→2)는 덮어쓰기 전에 스냅샷해야 함"
     );
 
@@ -884,11 +890,11 @@ fn save_items_guarded_snapshots_when_the_count_cannot_be_read() {
 
     let mut conn = super::open(&db_path).unwrap();
     let two = sample_items();
-    super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20, None).unwrap();
+    super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, &[], 20, None).unwrap();
 
     // items 를 못 읽는 상태를 만든다(count 쿼리 실패) — 테이블을 임시로 치운다.
     conn.execute_batch("ALTER TABLE items RENAME TO items_hidden").unwrap();
-    let snapshotted = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, 20, None);
+    let snapshotted = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &two, &[], 20, None);
     // 저장 자체는 실패하지만(테이블 없음), 그 전에 스냅샷은 남아 있어야 한다.
     assert!(snapshotted.is_err(), "테이블이 없으면 저장은 실패한다");
     let presave = std::fs::read_dir(&backups_dir)
@@ -980,11 +986,16 @@ fn a_stale_screen_cannot_overwrite_newer_data() {
     // 그 사이 화면 B 가 업무를 늘려 저장했다 → 번호가 올라간다.
     let mut newer = sample_items();
     for i in 0..6 {
-        let mut it = sample_items()[1].clone();
+        // v3.6.0: 미완료([0])로 늘린다 — 완료 업무는 저장이 보존하므로 아래 '2건으로 줄었다'
+        // 단언이 성립하려면 늘린 쪽이 갈아치워지는 범위(미완료) 안에 있어야 한다.
+        let mut it = sample_items()[0].clone();
         it.id = 9000 + i;
+        for (j, s) in it.subs.iter_mut().enumerate() {
+            s.id = 90_000 + i * 10 + j as i64; // subtasks.id 전역 UNIQUE
+        }
         newer.push(it);
     }
-    let saved = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &newer, 20, Some(a_version)).unwrap();
+    let saved = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &newer, &[], 20, Some(a_version)).unwrap();
     let b_version = match saved {
         super::SaveOutcome::Saved { version, .. } => version,
         other => panic!("B 의 저장은 통과해야 한다: {other:?}"),
@@ -994,7 +1005,7 @@ fn a_stale_screen_cannot_overwrite_newer_data() {
 
     // 이제 화면 A 가 낡은 번호표로 저장하려 한다 → 거절.
     let outcome =
-        super::save_items_guarded(&mut conn, &db_path, &backups_dir, &old, 20, Some(a_version)).unwrap();
+        super::save_items_guarded(&mut conn, &db_path, &backups_dir, &old, &[], 20, Some(a_version)).unwrap();
     assert_eq!(
         outcome,
         super::SaveOutcome::Stale { expected: a_version, current: b_version },
@@ -1009,7 +1020,7 @@ fn a_stale_screen_cannot_overwrite_newer_data() {
     assert_eq!(super::meta::read_version(&conn).unwrap(), b_version, "거절은 번호도 올리지 않는다");
 
     // 최신을 다시 읽은 화면(=올바른 번호표)은 정상 저장된다.
-    let ok = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &old, 20, Some(b_version)).unwrap();
+    let ok = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &old, &[], 20, Some(b_version)).unwrap();
     assert!(matches!(ok, super::SaveOutcome::Saved { .. }), "번호가 맞으면 저장된다");
     assert_eq!(items::load_items(&conn).unwrap().len(), 2);
 
@@ -1024,7 +1035,7 @@ fn saving_without_a_version_still_works() {
     let backups_dir = dir.join("backups");
     let _ = std::fs::remove_dir_all(&dir);
     let mut conn = super::open(&db_path).unwrap();
-    let out = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &sample_items(), 20, None).unwrap();
+    let out = super::save_items_guarded(&mut conn, &db_path, &backups_dir, &sample_items(), &[], 20, None).unwrap();
     assert!(matches!(out, super::SaveOutcome::Saved { .. }));
     assert_eq!(items::load_items(&conn).unwrap().len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
@@ -1126,5 +1137,146 @@ fn real_corruption_still_locks_writes() {
         // 전제가 성립하지 않으므로 조용히 넘어간다(위 잠금 테스트가 본체다).
         _ => {}
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/* ── v3.6.0 증분 저장: 완료 업무는 다시 쓰지 않는다 ─────────────────────────────
+   이 기능이 깨지는 방식은 '조용한 데이터 손실'이다 — 완료 업무가 저장 한 번에 사라져도
+   화면에는 한동안 그대로 보인다. 그래서 계약을 여기서 못박는다. */
+
+/// 활성(미완료) 업무만 저장해도 **완료 업무 행은 그대로 남아 있어야 한다.**
+/// 이 테스트가 이 기능의 존재 이유 그 자체다.
+#[test]
+fn saving_active_items_preserves_completed_ones() {
+    let mut conn = test_conn();
+    let mut all = sample_items(); // [0]=미완료(1001), [1]=완료(1002)
+    // 완료 업무를 몇 건 더 쌓아 둔다(오래된 기록을 흉내).
+    for i in 0..5 {
+        let mut it = sample_items()[1].clone();
+        it.id = 7000 + i;
+        all.push(it);
+    }
+    items::save_items(&mut conn, &all).unwrap(); // 최초 1회는 전체 저장(백업 복원과 같은 경로)
+    assert_eq!(items::load_items(&conn).unwrap().len(), 7);
+
+    // 이제 프런트가 **미완료만** 보낸다(평소 저장).
+    let active: Vec<Item> = all.iter().filter(|it| !it.done).cloned().collect();
+    assert_eq!(active.len(), 1);
+    let tx = conn.transaction().unwrap();
+    items::save_active_tx(&tx, &active, &[]).unwrap();
+    tx.commit().unwrap();
+
+    let after = items::load_items(&conn).unwrap();
+    assert_eq!(after.len(), 7, "완료 업무 6건이 그대로 남아 있어야 한다");
+    assert_eq!(after.iter().filter(|it| it.done).count(), 6);
+    // 완료 업무의 자식(관련인·세부할일)도 함께 살아 있어야 한다 — CASCADE 로 쓸려가지 않았는지.
+    let kept = after.iter().find(|it| it.id == 1002).unwrap();
+    let orig = &sample_items()[1];
+    assert_eq!(kept.contacts.len(), orig.contacts.len());
+    assert_eq!(kept.subs.len(), orig.subs.len());
+}
+
+/// 완료 체크 → 되살리기 → 다시 완료. 상태가 바뀐 업무는 `items` 에 실려 오므로
+/// 별도 목록 없이 왕복해야 한다.
+#[test]
+fn completing_and_restoring_round_trips() {
+    let mut conn = test_conn();
+    let all = sample_items();
+    items::save_items(&mut conn, &all).unwrap();
+
+    // 1001(미완료)을 완료 처리 → 활성 목록은 비고, 그 업무가 done=1 로 실려 온다.
+    let mut done_now = all[0].clone();
+    done_now.done = true;
+    done_now.done_at = Some(1_800_000_000_000);
+    let tx = conn.transaction().unwrap();
+    items::save_active_tx(&tx, &[done_now.clone()], &[]).unwrap();
+    tx.commit().unwrap();
+    let after = items::load_items(&conn).unwrap();
+    assert_eq!(after.len(), 2, "건수는 그대로");
+    assert!(after.iter().find(|it| it.id == 1001).unwrap().done, "완료로 바뀌어야 한다");
+
+    // 되살리기 → done=0 으로 실려 온다.
+    let mut back = done_now.clone();
+    back.done = false;
+    back.done_at = None;
+    let tx = conn.transaction().unwrap();
+    items::save_active_tx(&tx, &[back], &[]).unwrap();
+    tx.commit().unwrap();
+    let after = items::load_items(&conn).unwrap();
+    assert_eq!(after.len(), 2);
+    assert!(!after.iter().find(|it| it.id == 1001).unwrap().done, "다시 미완료여야 한다");
+    assert!(after.iter().find(|it| it.id == 1002).unwrap().done, "손대지 않은 완료 업무는 그대로");
+}
+
+/// 완료 업무 **삭제**만은 따로 알려줘야 한다 — 목록에 없다는 것만으로는
+/// '지웠다'와 '원래 안 보내는 완료 업무다'를 구분할 수 없기 때문.
+#[test]
+fn deleting_a_completed_item_needs_the_explicit_list() {
+    let mut conn = test_conn();
+    items::save_items(&mut conn, &sample_items()).unwrap();
+    let active: Vec<Item> = sample_items().into_iter().filter(|it| !it.done).collect();
+
+    // 알려주지 않으면 살아남는다(= 평소 저장에서 완료 업무가 보존되는 바로 그 성질).
+    let tx = conn.transaction().unwrap();
+    items::save_active_tx(&tx, &active, &[]).unwrap();
+    tx.commit().unwrap();
+    assert!(items::load_items(&conn).unwrap().iter().any(|it| it.id == 1002));
+
+    // 지목하면 사라진다.
+    let tx = conn.transaction().unwrap();
+    items::save_active_tx(&tx, &active, &[1002]).unwrap();
+    tx.commit().unwrap();
+    let after = items::load_items(&conn).unwrap();
+    assert!(!after.iter().any(|it| it.id == 1002), "지목한 완료 업무는 지워져야 한다");
+    assert_eq!(after.len(), 1);
+}
+
+/// 프런트가 실수로 '이미 완료 상태인 행'을 그대로 실어 보내도 PK 충돌로 저장이
+/// 통째로 실패하지 않는다(쓸 행을 무조건 먼저 지우기 때문). 구 프런트 호환도 이걸로 성립.
+#[test]
+fn sending_everything_still_works() {
+    let mut conn = test_conn();
+    let all = sample_items();
+    items::save_items(&mut conn, &all).unwrap();
+    let tx = conn.transaction().unwrap();
+    items::save_active_tx(&tx, &all, &[]).unwrap(); // 완료 업무까지 전부 보냄
+    tx.commit().unwrap();
+    let after = items::load_items(&conn).unwrap();
+    assert_eq!(after.len(), 2);
+    assert_eq!(after.iter().filter(|it| it.done).count(), 1);
+}
+
+/// 대량 축소 감지가 **갈아치우는 범위**만 본다: 여러 건을 한꺼번에 완료 처리하는 것은
+/// 손실이 아니므로 스냅샷을 찍지 않아야 한다(찍으면 평상시 동작마다 백업이 쌓인다).
+#[test]
+fn completing_many_at_once_is_not_a_shrink() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_bulkdone_{}", std::process::id()));
+    let db_path = dir.join("data").join("test.sqlite");
+    let backups_dir = dir.join("backups");
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut conn = super::open(&db_path).unwrap();
+
+    let active: Vec<Item> = (0..10)
+        .map(|i| {
+            let mut it = sample_items()[0].clone();
+            it.id = 6000 + i;
+            for (j, s) in it.subs.iter_mut().enumerate() {
+                s.id = 60_000 + i * 10 + j as i64;
+            }
+            it
+        })
+        .collect();
+    super::save_items_guarded(&mut conn, &db_path, &backups_dir, &active, &[], 20, None).unwrap();
+
+    // 10건 중 8건을 한꺼번에 완료 → 여전히 10건이 실려 오므로 축소가 아니다.
+    let mut bulk = active.clone();
+    for it in bulk.iter_mut().take(8) {
+        it.done = true;
+    }
+    let out =
+        super::save_items_guarded(&mut conn, &db_path, &backups_dir, &bulk, &[], 20, None).unwrap();
+    assert!(!snapshotted(out), "여러 건 완료 처리는 손실이 아니므로 스냅샷을 찍지 않는다");
+    assert_eq!(items::load_items(&conn).unwrap().len(), 10);
+
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -409,3 +409,51 @@ test('임시저장 안전장치: 총량이 넘치면 오래된 초안부터 버�
   assert.equal(draftOf(9001), undefined, '가장 오래된 초안부터 버려진다');
   closeForm();
 });
+
+/* ── v3.6.0 완료 업무 읽기 전용 ─────────────────────────────────────────────
+   저장은 완료 업무 행을 다시 쓰지 않는다(증분 저장). 그래서 완료 업무를 여기서
+   고칠 수 있게 두면 그 변경이 저장에 실리지 않아 **조용히 사라진다** —
+   읽기 전용은 UX 취향이 아니라 그 설계의 정확성 조건이다. */
+
+test('완료 업무는 읽기 전용으로 열린다 (저장 버튼 없음 · 입력 잠김 · 초안 안 만듦)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); it.done = true; S.items.push(it);
+  await openForm(it, {readonly:true});
+  assert.ok($('formPanel').classList.contains('on'));
+  assert.ok($('formPanel').classList.contains('fm-ro'), '읽기 전용 표시');
+  assert.equal($('fm-memo').disabled, true, '내용을 고칠 수 없어야 한다');
+  assert.equal($('fm-save').style.display, 'none', '저장 버튼은 감춘다');
+  assert.notEqual($('fm-restore').style.display, 'none', '[되살려서 수정]이 보여야 한다');
+  // 초안을 만들지 않는다 — 고칠 수 없는 화면의 초안은 되살아날 때 혼란만 만든다
+  const drafts = (S.settings.formDrafts)||{};
+  assert.equal(drafts[String(it.id)], undefined);
+});
+
+test('미완료 업무는 예전처럼 편집 가능하게 열린다 (읽기 전용이 새는지 확인)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  await openForm(it);
+  assert.equal($('formPanel').classList.contains('fm-ro'), false);
+  assert.equal($('fm-memo').disabled, false);
+  assert.notEqual($('fm-save').style.display, 'none');
+  assert.equal($('fm-restore').style.display, 'none');
+});
+
+test('[되살려서 수정]: 완료가 풀리고 그 변화가 저장에 실린다 (doneDirty 표시)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); it.done = true; S.items.push(it);
+  await openForm(it, {readonly:true});
+  env.answerConfirm(true);
+  $('fm-restore').click();
+  await env.flush();
+  assert.equal(it.done, false, '완료가 풀려야 한다');
+  /* 저장 payload 로 확인한다 — 저장이 성공하면 doneDirty 는 비워지는 게 정상이므로
+     (그게 계약이다) 표시가 남았는지를 보면 안 된다. 중요한 건 그 변화가 실려 나갔는가다. */
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all').pop();
+  assert.ok(sent, '되살리면 곧바로 저장한다');
+  const row = sent.args.items.find(x=>x.id===it.id);
+  assert.ok(row, '되살린 업무가 저장 목록에 실려야 한다');
+  assert.equal(row.done, false);
+  assert.equal(S.doneDirty.has(it.id), false, '저장 성공 후에는 표시가 비워진다');
+  assert.equal($('formPanel').classList.contains('fm-ro'), false, '편집 모드로 바뀐다');
+});

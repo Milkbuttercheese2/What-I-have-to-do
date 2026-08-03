@@ -491,6 +491,7 @@ pub fn save_items_guarded(
     db_path: &Path,
     backups_dir: &Path,
     items: &[model::Item],
+    deleted_done: &[i64],
     keep: usize,
     expected_version: Option<i64>,
 ) -> DbResult<SaveOutcome> {
@@ -510,8 +511,10 @@ pub fn save_items_guarded(
         }
     }
 
-    let prev: Option<i64> = conn
-        .query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0))
+    /* v3.6.0: 세는 대상은 **이번에 갈아치우는 범위**(미완료 전부 + 이번에 다시 쓸 완료 업무)다.
+       전체 건수와 비교하면 증분 저장에서는 매 저장이 '전체 vs 미완료'가 되어 급감으로 오판된다.
+       의미는 오늘과 같다 — 갈아치우는 범위가 급격히 줄면 덮어쓰기 전에 스냅샷을 남긴다. */
+    let prev: Option<i64> = self::items::count_replaced(conn, deleted_done)
         .map_err(|e| eprintln!("item count before save failed ({e}) — 보수적으로 스냅샷을 남긴다"))
         .ok();
     let new = items.len() as i64;
@@ -537,7 +540,7 @@ pub fn save_items_guarded(
             return Ok(SaveOutcome::Stale { expected, current }); // tx 는 drop 되며 롤백
         }
     }
-    self::items::save_items_tx(&tx, items)?;
+    self::items::save_active_tx(&tx, items, deleted_done)?;
     let version = self::meta::bump_version_tx(&tx)?;
     tx.commit()?;
     Ok(SaveOutcome::Saved { version, snapshotted })

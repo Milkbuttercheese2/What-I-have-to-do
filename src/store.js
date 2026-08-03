@@ -115,9 +115,18 @@ export const STORE = {
       try{
         while(this._pending){
           const data=this._pending; this._pending=null;
+          /* v3.6.0 증분 저장 — 완료 업무 행은 Rust 가 손대지 않는다. 그러니 보낼 것은
+             **미완료 전부 + 이번에 변화가 생긴 완료 업무**이고, 지워 없앤 완료 업무는
+             id 만 따로 알려준다('목록에 없다'가 지웠다는 뜻인지 원래 안 보낸다는 뜻인지
+             Rust 가 구분할 수 없기 때문). 이렇게 하면 저장 비용이 누적 업무 수가 아니라
+             '지금 다루는 업무 수'에만 비례한다. */
+          const dirty=[...S.doneDirty];
+          const alive=new Set(data.map(it=>it.id));
+          const send=data.filter(it=>!it.done || S.doneDirty.has(it.id));
+          const deletedDone=dirty.filter(id=>!alive.has(id));
           let res;
           try{
-            res = await invoke('save_all', {items:data, baseVersion:S.dataVersion});
+            res = await invoke('save_all', {items:send, deletedDone, baseVersion:S.dataVersion});
           }catch(e){
             /* 핵심: 실패한 배치를 버리지 않는다. 그 사이 더 새 배치가 들어왔다면
                그쪽이 이 내용을 이미 포함하므로(전체 교체 저장) 덮어쓰지 않는다. */
@@ -131,6 +140,10 @@ export const STORE = {
              그 catch 가 낡은 배치를 대기열에 되돌려 영원히 재시도하게 된다. */
           if(res && res.kind==='Stale'){ this._pending=null; await onStale(res); return; }
           if(res && typeof res.version==='number') S.dataVersion = res.version;
+          /* 저장된 배치에 실렸던 것만 지운다 — 비행 중에 새로 생긴 표시는 남겨서
+             다음 배치에 실린다. 실패하면(위 catch) 하나도 지우지 않으므로 재시도에
+             그대로 다시 실린다(`_pending` 을 되돌리는 규칙과 같은 성질). */
+          dirty.forEach(id=>S.doneDirty.delete(id));
         }
         failStreak=0; dumped=false;
         clearTimeout(retryTimer); retryTimer=null;

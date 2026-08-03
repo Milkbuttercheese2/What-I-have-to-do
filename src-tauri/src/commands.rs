@@ -78,26 +78,20 @@ pub enum SaveResult {
 pub fn save_all(
     state: State<AppDb>,
     items: Vec<Item>,
+    // v3.6.0 완료 탭에서 **지워 없앤** 업무의 id ('완료 처리'가 아니라 '삭제'다).
+    // 완료 업무는 저장 때 다시 쓰지 않으므로 사라졌다는 사실만은 따로 알려줘야 한다 —
+    // Rust 에게 '목록에 없다'는 *지웠다* 와 *원래 안 보내는 완료 업무다* 둘 다로 읽힌다.
+    // 없으면(구 프런트) 빈 목록 = 예전처럼 동작한다.
+    deleted_done: Option<Vec<i64>>,
     base_version: Option<i64>,
 ) -> Result<SaveResult, String> {
+    let deleted_done = deleted_done.unwrap_or_default();
     ensure_integrity(&state)?;
     let mut conn = state.conn();
     /* v3.3.6: 건수가 바뀌는 저장은 로그에 남긴다. "18건이던 게 어느 순간 8건"처럼
        통째로 되돌아간 사고를 나중에 짚으려면 **언제 몇 건이 몇 건이 됐는지**가
        있어야 한다. 매 저장마다 쓰면 로그가 의미 없이 불어나므로 변할 때만 쓴다. */
     let before: Option<i64> = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).ok();
-    let after = items.len() as i64;
-    if before != Some(after) {
-        db::log_line(
-            &state.base_dir,
-            &format!(
-                "save items {} -> {} · {}",
-                before.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
-                after,
-                db::exe_desc()
-            ),
-        );
-    }
     // A/B: 대량 축소(대량 삭제·통째 절단)를 감지하면 덮어쓰기 전에 강제 스냅샷을
     // 남긴다 — 30분 스로틀에 걸려 최근 백업이 없더라도 축소 직전 복원점이 남도록.
     // v3.3.4: 일시적 잠금/백신 I/O 는 한 번 실패로 끝내지 않고 짧게 재시도한다.
@@ -107,6 +101,7 @@ pub fn save_all(
             &state.db_path,
             &state.backups_dir,
             &items,
+            &deleted_done,
             BACKUP_KEEP,
             base_version,
         )
@@ -126,6 +121,18 @@ pub fn save_all(
         return Ok(SaveResult::Stale { expected, current });
     }
     let db::SaveOutcome::Saved { version, .. } = outcome else { unreachable!() };
+    /* v3.6.0: **저장 뒤의 실제 총 건수**와 비교한다. 예전엔 `items.len()` 과 비교했는데,
+       증분 저장에서는 그 값이 '미완료만'이라 매 저장이 "100 -> 30" 으로 찍혀 로그가
+       가짜 감소 신호로 덮인다. 이 로그의 존재 이유가 "데이터가 옛 상태로 돌아갔다"를
+       나중에 짚는 것이므로(v3.3.6), 뜻이 바뀌면 값어치가 사라진다. */
+    let after: Option<i64> = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).ok();
+    if before != after {
+        let n = |v: Option<i64>| v.map(|n| n.to_string()).unwrap_or_else(|| "?".into());
+        db::log_line(
+            &state.base_dir,
+            &format!("save items {} -> {} · {}", n(before), n(after), db::exe_desc()),
+        );
+    }
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
     // Best-effort: a failed backup rotation must not fail the save itself
     // (the save already committed by this point). The copy must run while
