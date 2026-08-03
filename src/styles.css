@@ -103,7 +103,11 @@
     font-display:swap;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
+  /* v3.5.2: 스크롤 끝에서 화면이 통째로 밀려 올라가던 현상 제거.
+     Chromium/WebView2 는 스크롤 한계를 넘겨 굴리면 페이지를 고무줄처럼 당겼다 놓는데
+     (elastic overscroll), 창 자체가 곧 앱인 데스크톱에서는 헤더 위로 빈 띠가 생겨
+     '화면이 이상해진' 것처럼 보인다. 브라우저 탭이 아니므로 당길 이유가 없다. */
+  html,body{height:100%;overscroll-behavior:none}
   /* v2.5.8: 세로 스크롤바 자리를 항상 확보 — 목록이 줄어 스크롤바가 사라질 때
      margin-left:auto(검색창 등)가 옆으로 튀는 현상 제거. Windows 클래식 스크롤바에서만
      보이던 문제(리눅스 오버레이 스크롤바에선 안 남)라 실제 타깃 기준으로 고친다. */
@@ -187,7 +191,9 @@
   /* ---- 양식 패널 ---- */
   /* v2.11.0: 팝업(양식·모달·알람)은 타이틀바(34px) 아래부터 덮는다 — 전체를 덮으면
      커스텀 타이틀바가 가려져 팝업이 열린 동안 창 이동·최소화·닫기가 안 됐다(소유자 피드백). */
-  .form-panel{display:none;position:fixed;inset:34px 0 0;z-index:60;background:var(--overlay);padding:40px 20px;overflow-y:auto}
+  /* overscroll-behavior:contain — 양식 안에서 끝까지 굴렸을 때 그 스크롤이 뒤 페이지로
+     넘어가지 않게(스크롤 체이닝 차단). 표준 모달(.modal)이 이미 쓰는 규칙과 같다. */
+  .form-panel{display:none;position:fixed;inset:34px 0 0;z-index:60;background:var(--overlay);padding:40px 20px;overflow-y:auto;overscroll-behavior:contain}
   .form-panel.on{display:block}
   .form-panel .fm-inner{max-width:720px;margin:0 auto;background:var(--surface);border-radius:18px;padding:20px 22px;box-shadow:0 24px 70px rgba(20,27,36,.22)}
   .form-panel h3{font-size:13px;font-weight:700;color:var(--focus);margin-bottom:10px}
@@ -474,7 +480,7 @@
      .at-item 의 height 를 고치면 이 346 도 함께 고쳐야 한다. */
   #atDrop{position:fixed;z-index:200;min-width:240px;max-width:380px;background:var(--card);
     border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 26px var(--overlay);padding:4px;
-    max-height:346px;overflow-y:auto}   /* 10행 온전히, 넘치면 스크롤 (v3.2.1 → v3.5.2 정확한 10행) */
+    max-height:346px;overflow-y:auto;overscroll-behavior:contain}   /* 10행 온전히, 넘치면 스크롤 (v3.2.1 → v3.5.2 정확한 10행) */
   #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px;height:34px;flex:none}
   #atDrop .at-item.sel,#atDrop .at-item:hover{background:var(--slate-bg)}
   #atDrop .at-who{flex:none;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
