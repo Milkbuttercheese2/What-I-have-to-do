@@ -86,6 +86,31 @@ test('바로 입력 @자동완성: @김철 → 드롭다운 → Enter 로 텍스
   assert.equal(drop.style.display, 'none');
 });
 
+test('@자동완성: 목록 안에서 난 스크롤은 닫지 않고, 페이지 스크롤만 닫는다 (v3.5.2)', async () => {
+  /* 이 리스너는 '페이지가 움직이면 엉뚱한 자리에 뜬 채 남지 않게' 닫는 것인데, 캡처
+     단계라 **목록 자체의 스크롤**까지 받아 두 가지가 깨져 있었다: 휠로 굴리면 닫히고,
+     ↓ 로 10행을 넘기면 scrollIntoView 가 스스로를 닫았다. 후보가 10명 이하면 스크롤이
+     없어 멀쩡해 보이므로 오래 안 보였다 — 실렌더 검증은 tools/interact-check.mjs. */
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
+  const inp=$('inp');
+  inp.value='민원 @김철'; inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  input(inp);
+  const drop=env.document.getElementById('atDrop');
+  assert.equal(drop.style.display, 'block');
+
+  // 목록 안에서 난 스크롤 → 그대로 열려 있어야 한다
+  drop.dispatchEvent(new env.window.Event('scroll', {bubbles:true}));
+  assert.equal(drop.style.display, 'block', '목록 자체의 스크롤이 드롭다운을 닫으면 안 된다');
+  const row=drop.querySelector('.at-item');
+  if(row){ row.dispatchEvent(new env.window.Event('scroll', {bubbles:true}));
+    assert.equal(drop.style.display, 'block', '행에서 난 스크롤도 닫으면 안 된다'); }
+
+  // 페이지(목록 밖) 스크롤 → 닫힌다
+  env.document.body.dispatchEvent(new env.window.Event('scroll', {bubbles:true}));
+  assert.equal(drop.style.display, 'none');
+});
+
 test('빠른 메모 등록: 메모 속 @태그의 관련인이 자동 첨부된다 (중복 없이)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'},

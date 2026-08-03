@@ -103,7 +103,11 @@
     font-display:swap;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
+  /* v3.5.2: 스크롤 끝에서 화면이 통째로 밀려 올라가던 현상 제거.
+     Chromium/WebView2 는 스크롤 한계를 넘겨 굴리면 페이지를 고무줄처럼 당겼다 놓는데
+     (elastic overscroll), 창 자체가 곧 앱인 데스크톱에서는 헤더 위로 빈 띠가 생겨
+     '화면이 이상해진' 것처럼 보인다. 브라우저 탭이 아니므로 당길 이유가 없다. */
+  html,body{height:100%;overscroll-behavior:none}
   /* v2.5.8: 세로 스크롤바 자리를 항상 확보 — 목록이 줄어 스크롤바가 사라질 때
      margin-left:auto(검색창 등)가 옆으로 튀는 현상 제거. Windows 클래식 스크롤바에서만
      보이던 문제(리눅스 오버레이 스크롤바에선 안 남)라 실제 타깃 기준으로 고친다. */
@@ -187,7 +191,9 @@
   /* ---- 양식 패널 ---- */
   /* v2.11.0: 팝업(양식·모달·알람)은 타이틀바(34px) 아래부터 덮는다 — 전체를 덮으면
      커스텀 타이틀바가 가려져 팝업이 열린 동안 창 이동·최소화·닫기가 안 됐다(소유자 피드백). */
-  .form-panel{display:none;position:fixed;inset:34px 0 0;z-index:60;background:var(--overlay);padding:40px 20px;overflow-y:auto}
+  /* overscroll-behavior:contain — 양식 안에서 끝까지 굴렸을 때 그 스크롤이 뒤 페이지로
+     넘어가지 않게(스크롤 체이닝 차단). 표준 모달(.modal)이 이미 쓰는 규칙과 같다. */
+  .form-panel{display:none;position:fixed;inset:34px 0 0;z-index:60;background:var(--overlay);padding:40px 20px;overflow-y:auto;overscroll-behavior:contain}
   .form-panel.on{display:block}
   .form-panel .fm-inner{max-width:720px;margin:0 auto;background:var(--surface);border-radius:18px;padding:20px 22px;box-shadow:0 24px 70px rgba(20,27,36,.22)}
   .form-panel h3{font-size:13px;font-weight:700;color:var(--focus);margin-bottom:10px}
@@ -462,10 +468,20 @@
   .rel-tag.done{background:var(--chip-bg);color:var(--ink-soft)}
 
   /* @ 자동완성 드롭다운 — 카드 규칙(흰 면·1px 경계·둥근 모서리)을 따르는 떠 있는 목록 */
+  /* v3.5.2: **행 높이를 고정하고 상자 높이를 산술로 구한다** (미니 창 @자동완성이 v3.4.6에서
+     배운 규칙과 같다). 예전엔 max-height:330px 어림값이라 34px 행이 9.6개 들어가
+     **마지막 행이 반쯤 걸쳐** 보였다 — '10행까지'라는 의도와 실제가 어긋난 것.
+     box-sizing:border-box 이므로 max-height 는 패딩·테두리를 포함한다:
+       10행 × 34 + 위 패딩 4 + 테두리(1+1) = 346
+     ⚠️ 아래 패딩(4)은 이 합에 **넣지 않는다.** overflow 는 패딩 상자에서 잘리므로, 아래
+     패딩까지 더해 350 으로 잡으면 그 4px 사이로 **11번째 행이 빼꼼 보인다** — 미니 창
+     @자동완성이 v3.4.6 에서 똑같이 겪은 함정이고, 실제로 그렇게 보이고 있었다.
+     346 이면 잘리는 경계가 10번째 행의 끝과 정확히 겹친다(아래 패딩은 스크롤 끝에 남는다).
+     .at-item 의 height 를 고치면 이 346 도 함께 고쳐야 한다. */
   #atDrop{position:fixed;z-index:200;min-width:240px;max-width:380px;background:var(--card);
     border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 26px var(--overlay);padding:4px;
-    max-height:330px;overflow-y:auto}   /* 10행까지 한눈에, 넘치면 스크롤 (v3.2.1) */
-  #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+    max-height:346px;overflow-y:auto;overscroll-behavior:contain}   /* 10행 온전히, 넘치면 스크롤 (v3.2.1 → v3.5.2 정확한 10행) */
+  #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px;height:34px;flex:none}
   #atDrop .at-item.sel,#atDrop .at-item:hover{background:var(--slate-bg)}
   #atDrop .at-who{flex:none;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #atDrop .at-org{flex:1;min-width:0;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
