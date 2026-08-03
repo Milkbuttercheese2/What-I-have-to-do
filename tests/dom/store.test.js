@@ -22,7 +22,8 @@ test('정상 저장: save_all 1회, items 전달', async () => {
   await STORE._saving;                      // 큐 비행 완료 대기
   const calls = env.invokeCalls.filter(c=>c.cmd==='save_all');
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, {items, baseVersion:S.dataVersion});   // v3.3.7 번호표 동반
+  // v3.3.7 번호표 + v3.6.0 증분 저장(지워 없앤 완료 업무 id — 여기선 없으므로 빈 목록)
+  assert.deepEqual(calls[0].args, {items, deletedDone:[], baseVersion:S.dataVersion});
 });
 
 test('단일비행 last-wins: 비행 중 들어온 A,B,C 중 실제 저장은 [첫번째, 마지막]', async () => {
@@ -271,4 +272,60 @@ test('flush(): 재시도를 기다리던 사이드카도 종료 전에 밀어 �
   await env.flush(1);                          // 첫 시도 실패 → 재시도 대기 상태
   await STORE.flush();                         // 종료 경로
   assert.equal(n, 2, '종료 시 한 번 더 밀어 넣어야 한다');
+});
+
+/* ── v3.6.0 증분 저장: 완료 업무는 다시 쓰지 않는다 ─────────────────────────────
+   저장 비용이 누적 업무 수가 아니라 '지금 다루는 업무 수'에만 비례하게 하는 장치.
+   깨지면 조용한 데이터 손실이 되므로 계약을 여기서 못박는다. */
+
+test('평소 저장: 완료 업무는 아예 보내지 않는다 (비용이 활성 건수에만 비례)', async () => {
+  await env.resetS(); S.loaded = true;
+  const items = [{id:1, memo:'활성'}, {id:2, memo:'완료', done:true}, {id:3, memo:'활성2'}];
+  await STORE.saveAll(items);
+  await STORE._saving;
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all')[0].args;
+  assert.deepEqual(sent.items.map(it=>it.id), [1,3], '완료 업무는 실리지 않는다');
+  assert.deepEqual(sent.deletedDone, []);
+});
+
+test('완료 체크: 그 업무는 done=true 로 실려 간다 (변화가 저장에 반영되도록)', async () => {
+  const {toggleDone} = await import('../../src/state.js');
+  await env.resetS(); S.loaded = true;
+  const it = {id:1, memo:'a', done:false};
+  const items = [it, {id:2, memo:'옛 완료', done:true}];
+  toggleDone(it);                                  // 완료 처리 → doneDirty 에 표시
+  await STORE.saveAll(items);
+  await STORE._saving;
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all')[0].args;
+  assert.deepEqual(sent.items.map(x=>x.id), [1], '방금 완료된 것만 실린다(옛 완료는 그대로 둔다)');
+  assert.equal(sent.items[0].done, true);
+  assert.deepEqual(sent.deletedDone, []);
+});
+
+test('완료 업무 삭제: 목록엔 없고 deletedDone 에 id 만 실린다', async () => {
+  const {markDoneRemoved} = await import('../../src/state.js');
+  await env.resetS(); S.loaded = true;
+  const gone = {id:2, memo:'지울 완료', done:true};
+  markDoneRemoved(gone);                           // 삭제 표시 후 목록에서 빠짐
+  await STORE.saveAll([{id:1, memo:'활성'}]);
+  await STORE._saving;
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all')[0].args;
+  assert.deepEqual(sent.items.map(x=>x.id), [1]);
+  assert.deepEqual(sent.deletedDone, [2], '지웠다는 사실은 따로 알려야 한다');
+});
+
+test('저장 실패: 완료 업무 표시가 유실되지 않고 재시도에 다시 실린다', async () => {
+  const {toggleDone} = await import('../../src/state.js');
+  await env.resetS(); S.loaded = true;
+  const it = {id:1, memo:'a', done:false};
+  toggleDone(it);
+  env.onInvoke('save_all', () => { throw new Error('디스크 오류'); });
+  await STORE.saveAll([it]);
+  await STORE._saving;
+  assert.ok(S.doneDirty.has(1), '실패했으면 표시를 지우면 안 된다 — 지우면 그 변화가 영영 저장되지 않는다');
+
+  env.onInvoke('save_all', () => ({kind:'Saved', version:1}));
+  mock.timers.tick(2000);                          // 재시도 타이머
+  await STORE._saving;
+  assert.equal(S.doneDirty.has(1), false, '성공하면 지운다');
 });

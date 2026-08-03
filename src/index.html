@@ -113,6 +113,9 @@
         <span class="fm-place" id="fm-place"></span>
         <!-- v2.5.22 임시저장: 작성 중 내용은 자동으로 임시저장되고, [되돌리기]로 마지막 저장본 복구 -->
         <span class="fm-draft" id="fm-draft"></span>
+        <!-- v3.6.0: 완료 업무는 읽기 전용으로 열린다(저장이 완료 업무를 다시 쓰지 않으므로
+             여기서 고치면 조용히 사라진다). 고치려면 이 버튼으로 먼저 되살린다. -->
+        <button class="btn btn-ok" id="fm-restore" style="display:none" title="완료를 취소하고 편집할 수 있게 되돌립니다">되살려서 수정</button>
         <button class="btn btn-cancel" id="fm-revert" title="마지막으로 저장한 내용으로 되돌립니다 (임시저장분 삭제)">되돌리기</button>
         <button class="btn btn-ok" id="fm-save" title="Ctrl+S · Ctrl+Enter 로도 저장됩니다">저장</button>
       </div>

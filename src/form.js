@@ -1,7 +1,7 @@
 /* =========================================================================
    바로 입력 + 양식 패널
    ========================================================================= */
-import {S, newId, makeItem} from './state.js';
+import {S, newId, makeItem, toggleDone} from './state.js';
 import {invoke, STORE} from './store.js';
 import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
@@ -128,13 +128,40 @@ function dropDraft(key){
   markDraft(0);
 }
 
-export async function openForm(pre){
+/* v3.6.0: 완료 업무는 **읽기 전용**으로 연다.
+   UX 취향이 아니라 **정확성 조건**이다 — 저장은 완료 업무 행을 다시 쓰지 않으므로(증분 저장),
+   여기서 고칠 수 있게 두면 그 변경이 저장에 실리지 않아 **조용히 사라진다.**
+   고치려면 먼저 되살려야 한다(체크박스 또는 아래 [되살려서 수정]).
+   `S.doneDirty` 로 표시되는 경로를 toggleDone·삭제 둘로 좁게 유지하는 것이 이 설계의 근간. */
+function setReadonly(on){
+  const p=$('formPanel');
+  p.classList.toggle('fm-ro', on);
+  p.querySelectorAll('input,textarea,select,button').forEach(el=>{
+    if(el.id==='fm-close'||el.id==='fm-restore') return;   // 닫기·되살리기는 살려 둔다
+    el.disabled=on;
+  });
+  $('fm-restore').style.display=on?'inline-block':'none';
+  $('fm-save').style.display=on?'none':'';
+  $('fm-revert').style.display=on?'none':'';
+}
+
+export async function openForm(pre, opts){
   saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
   pre=pre||{};
+  const readonly=!!(opts&&opts.readonly);
   editingId=pre.id||null;
-  draftKey = editingId ? String(editingId) : 'new';
+  draftKey = readonly ? null : (editingId ? String(editingId) : 'new');   // 읽기 전용은 초안을 만들지 않는다
   lastWritten=null;
   fillForm(pre);
+  if(readonly){
+    setReadonly(true);
+    baseline=null; markDraft(0);
+    updatePlacePreview();
+    $('fm-place').textContent='완료된 업무입니다 — 수정하려면 [되살려서 수정]';
+    $('formPanel').classList.add('on');
+    return;
+  }
+  setReadonly(false);
   baseline=JSON.stringify(collectForm());          // '마지막 저장본' 기준선
   /* 임시저장분이 있으면 그 내용으로 다시 채운다 (collectForm 결과 = openForm 입력 모양).
      새 양식을 이미 채워진 상태로 여는 경우(바로 입력 텍스트·프리셋)만 예외 —
@@ -445,6 +472,17 @@ export function initForm(){
   $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
   /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
      새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */
+  /* v3.6.0 [되살려서 수정] — 완료를 취소해 편집 가능한 상태로 되돌린다.
+     toggleDone 이 S.doneDirty 에 표시하므로 이 변화가 저장에 실린다(그게 이 버튼의 요점).
+     persist() 로 즉시 저장한 뒤 같은 업무를 편집 모드로 다시 연다. */
+  $('fm-restore').addEventListener('click',async ()=>{
+    const cur = editingId ? S.items.find(x=>x.id===editingId) : null;
+    if(!cur) { closeForm(); return; }
+    if(!await appConfirm('이 업무를 완료 취소하고 수정할 수 있게 되돌립니다.\n계속할까요?')) return;
+    toggleDone(cur);                    // done=false + doneDirty 표시
+    persist();
+    openForm(cur);                      // 편집 모드로 다시 열기
+  });
   $('fm-revert').addEventListener('click',async ()=>{
     const cur = editingId ? S.items.find(x=>x.id===editingId) : null;
     if(!await appConfirm(cur ? '마지막으로 저장한 내용으로 되돌립니다.\n지금 화면의 임시저장 내용은 사라집니다. 계속할까요?'

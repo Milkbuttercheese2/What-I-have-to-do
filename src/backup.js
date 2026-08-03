@@ -152,6 +152,10 @@ export function initBackup(){
       catch(err){ await appAlert('백업 복원 실패 (데이터는 변경되지 않았습니다): '+err); return; }
       // DB 복원이 성공한 뒤에만 메모리 상태를 갈아끼운다
       S.items=migrated;
+      /* v3.6.0: 복원은 DB 를 통째로 갈아끼운다(backup_import 는 전체 교체). 그 전에 쌓인
+         '완료 업무 변경 표시'는 이제 없는 데이터를 가리키므로 반드시 비운다 — 남겨두면
+         다음 저장에서 deletedDone 으로 나가 **id 가 겹치는 엉뚱한 완료 업무를 지운다.** */
+      S.doneDirty.clear();
       S.imported.fields=payload.fields;
       S.imported.presets=payload.presets;
       S.imported.idKinds=payload.idKinds;

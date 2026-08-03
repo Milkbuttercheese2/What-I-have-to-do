@@ -1,7 +1,7 @@
 /* =========================================================================
    렌더 — 보드/완료 카드 재생성 + persist()
    ========================================================================= */
-import {S, toggleDone} from './state.js';
+import {S, toggleDone, markDoneRemoved} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
 import {fmtDue, fmtT} from './datetime.js';
@@ -235,11 +235,16 @@ export function initRender(){
     if(del&&del.dataset.del){ e.stopPropagation(); const id=+del.dataset.del; const idx=S.items.findIndex(x=>x.id==id);
       if(idx>=0){
         const removed=S.items[idx];
+        /* v3.6.0: 완료 업무는 저장이 다시 쓰지 않으므로 '지웠다'는 사실을 따로 알려야 한다.
+           되돌릴 때도 마찬가지 — 다시 넣으려면 그 배치에 실려야 하므로 또 표시한다. */
+        markDoneRemoved(removed);
         S.items.splice(idx,1); persist();
-        showToast('업무 삭제함',()=>{ S.items.splice(Math.min(idx,S.items.length),0,removed); persist(); });
+        showToast('업무 삭제함',()=>{ S.items.splice(Math.min(idx,S.items.length),0,removed); markDoneRemoved(removed); persist(); });
       } return; }
+    /* v3.6.0: 완료 업무는 읽기 전용으로 연다 — 저장이 완료 업무 행을 다시 쓰지 않으므로
+       여기서 고치면 그 변경이 조용히 사라진다. 고치려면 [되살려서 수정]으로 먼저 되살린다. */
     const open=e.target.closest('[data-open]');
-    if(open){ const it=S.items.find(x=>x.id==open.dataset.open); if(it)openForm(it); return; }
+    if(open){ const it=S.items.find(x=>x.id==open.dataset.open); if(it)openForm(it,{readonly:!!it.done}); return; }
   });
   initMergeDrag();
   /* 주기 재렌더 — 편집 중·드래그 중 보호 (재렌더는 DOM 을 갈아엎어 드래그를 끊는다) */

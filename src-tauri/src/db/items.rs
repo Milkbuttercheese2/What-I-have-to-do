@@ -137,6 +137,70 @@ pub fn load_items(conn: &Connection) -> DbResult<Vec<Item>> {
 /// `backup::import_payload` for the two callers).
 pub fn save_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
     tx.execute("DELETE FROM items", [])?; // cascades to item_fields/contacts/identifiers/subtasks
+    insert_items_tx(tx, items)
+}
+
+/// v3.6.0 증분 저장 — **완료 업무 행은 건드리지 않는다.** 저장 비용이 누적 업무 수가
+/// 아니라 '지금 다루는 업무 수'에만 비례하게 만드는 것이 목적이다(월 75건씩 쌓이면
+/// 1년쯤 뒤 전체 교체는 체크박스 한 번에 0.3초씩 멈춘다).
+///
+/// 계약 한 줄: **`items` 는 저장 후 DB 에 있어야 할 업무(미완료 전부 + 이번에 내용이 바뀐
+/// 완료 업무)이고, `deleted_done` 은 지워 없앤 완료 업무이며, 그 밖의 완료 업무 행은
+/// 손대지 않는다.**
+/// - 평소 저장: `done=0` 행만 교체 → 완료 업무는 손대지 않는다(이득의 전부)
+/// - 완료 체크: 그 업무가 `items` 에 `done=1` 로 실려 오므로 옛 행이 지워지고 다시 들어간다
+/// - 되살리기: `items` 에 `done=0` 으로 실려 오므로 옛 `done=1` 행이 지워지고 다시 들어간다
+/// - 완료 업무 삭제: `items` 에 없고 `deleted_done` 에 있으므로 지워진 채로 끝난다
+///
+/// **왜 삭제만 따로 받아야 하나**: '목록에 없다'가 Rust 에게는 *지웠다* 와 *원래 안 보내는
+/// 완료 업무다* 두 가지로 읽힌다. 미완료 업무는 위 첫 줄이 전부 지우고 다시 넣으므로 이
+/// 모호함이 없고, **완료 업무를 지웠을 때만** 구분이 불가능하다.
+///
+/// **쓸 행은 무조건 먼저 지운다.** 이렇게 하면 프런트가 실수로 '이미 완료 상태인 행'을
+/// 실어 보내도 PK 충돌로 저장이 통째로 실패하지 않는다(no-op DELETE 몇 번이 전부).
+///
+/// ⚠️ 이 설계는 **완료 업무가 수정되지 않는다**는 보장 위에 서 있다. 수정이 가능하면 그
+/// 변경은 `items` 에 실리지 않아 **조용히 저장되지 않는다** — 그래서 프런트는 완료 업무
+/// 양식을 읽기 전용으로 열고, 고치려면 먼저 되살리게 한다(UX 취향이 아니라 정확성 조건).
+/// `it.done` 이 바뀌는 곳이 `state.js toggleDone()` 한 곳뿐이라 이 보장이 지켜진다.
+pub fn save_active_tx(tx: &Transaction, items: &[Item], deleted_done: &[i64]) -> DbResult<()> {
+    tx.execute("DELETE FROM items WHERE done = 0", [])?; // 자식은 FK CASCADE
+    {
+        // id 목록을 SQL 문자열로 이어 붙이지 않는다 — 준비된 문장을 반복한다.
+        let mut del = tx.prepare("DELETE FROM items WHERE id = ?1")?;
+        for it in items {
+            del.execute([it.id])?; // 쓸 행 먼저 비우기 (위 DELETE 로 이미 지워진 것은 no-op)
+        }
+        for id in deleted_done {
+            del.execute([id])?;
+        }
+    }
+    insert_items_tx(tx, items)
+}
+
+/// 이번 저장이 **책임지는 행 수**(저장 전 기준). `save_items_guarded` 의 대량 축소 감지가
+/// 이 값을 `items.len()` 과 비교한다.
+///
+/// 왜 이 조합인가 — 감지하려는 것은 **사라지는 행**이고, 새 설정에서 사라질 수 있는 행은 둘뿐이다:
+/// 1. 지금 `done=0` 인 행 (저장이 통째로 지우고 `items` 로 다시 채운다)
+/// 2. `deleted_done` 으로 지목된 완료 행
+/// 완료 처리(활성 → 완료)는 **손실이 아니다** — 그 업무가 `items` 에 실려 오므로 `items.len()`
+/// 에 그대로 잡힌다. 그래서 "30건 중 20건을 한꺼번에 완료" 같은 정상 동작이 급감으로 오판되지
+/// 않는다. 반대로 프런트가 목록을 통째로 빠뜨리면 `items.len()` 이 0 이 되어 바로 걸린다.
+pub fn count_replaced(conn: &Connection, deleted_done: &[i64]) -> DbResult<i64> {
+    let mut n: i64 = conn.query_row("SELECT COUNT(*) FROM items WHERE done = 0", [], |r| r.get(0))?;
+    if !deleted_done.is_empty() {
+        let mut q = conn.prepare("SELECT 1 FROM items WHERE id = ?1 AND done = 1")?;
+        for id in deleted_done {
+            if q.exists([id])? {
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
+}
+
+fn insert_items_tx(tx: &Transaction, items: &[Item]) -> DbResult<()> {
     {
         let mut ins_item = tx.prepare(
             "INSERT INTO items (id, memo, received_at, due_at, staged, done, done_at, due_alarm, recur_id, recur, owner, updated_at)
