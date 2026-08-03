@@ -61,7 +61,7 @@ const INIT = `(()=>{
       if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
       if(c==='phonebook_list')return store.phonebook;
       return null;}},
-    app:{getVersion:async()=>'3.6.0'},
+    app:{getVersion:async()=>'3.6.1'},
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};

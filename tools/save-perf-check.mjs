@@ -59,7 +59,7 @@ const mkInit = (total, active) => `(()=>{
       if(c==='save_all'){ window.__saveSizes.push((a&&a.items||[]).length); store.items=(a&&a.items)||store.items; return {kind:'Saved',version:1}; }
       if(c==='save_settings'){store.settings=(a&&a.settings)||store.settings;return null;}
       return null;}},
-    app:{getVersion:async()=>'3.6.0'},
+    app:{getVersion:async()=>'3.6.1'},
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};
