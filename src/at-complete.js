@@ -156,5 +156,10 @@ export function initAtComplete(){
   /* 입력칸 밖 클릭·포커스 이탈·스크롤이면 닫는다 (스크롤 추적보다 닫는 쪽이 단순·안전) */
   document.addEventListener('mousedown',e=>{ if(anchor && !drop.contains(e.target) && e.target!==anchor) close(); });
   document.addEventListener('focusin',e=>{ if(anchor && e.target!==anchor && !drop.contains(e.target)) close(); });
-  window.addEventListener('scroll',()=>{ if(anchor) close(); }, true);
+  /* ⚠️ v3.5.2: **드롭다운 자기 안의 스크롤은 제외한다.** 이 리스너는 '페이지가 움직이면
+     엉뚱한 자리에 뜬 채로 남지 않게' 닫으려는 것인데, 캡처 단계라 목록 자체의 스크롤도
+     그대로 받아 두 가지가 깨져 있었다: ① 휠로 목록을 굴리면 그 순간 닫힌다,
+     ② 10행을 넘겨 ↓ 로 내려가면 setSel 의 scrollIntoView 가 scroll 을 발생시켜 닫힌다
+     (후보가 10명 이하일 땐 스크롤이 없어 멀쩡해 보이므로 오래 안 보였다). */
+  window.addEventListener('scroll',e=>{ if(anchor && !(drop && drop.contains(e.target))) close(); }, true);
 }

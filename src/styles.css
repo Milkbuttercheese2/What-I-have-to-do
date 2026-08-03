@@ -462,10 +462,20 @@
   .rel-tag.done{background:var(--chip-bg);color:var(--ink-soft)}
 
   /* @ 자동완성 드롭다운 — 카드 규칙(흰 면·1px 경계·둥근 모서리)을 따르는 떠 있는 목록 */
+  /* v3.5.2: **행 높이를 고정하고 상자 높이를 산술로 구한다** (미니 창 @자동완성이 v3.4.6에서
+     배운 규칙과 같다). 예전엔 max-height:330px 어림값이라 34px 행이 9.6개 들어가
+     **마지막 행이 반쯤 걸쳐** 보였다 — '10행까지'라는 의도와 실제가 어긋난 것.
+     box-sizing:border-box 이므로 max-height 는 패딩·테두리를 포함한다:
+       10행 × 34 + 위 패딩 4 + 테두리(1+1) = 346
+     ⚠️ 아래 패딩(4)은 이 합에 **넣지 않는다.** overflow 는 패딩 상자에서 잘리므로, 아래
+     패딩까지 더해 350 으로 잡으면 그 4px 사이로 **11번째 행이 빼꼼 보인다** — 미니 창
+     @자동완성이 v3.4.6 에서 똑같이 겪은 함정이고, 실제로 그렇게 보이고 있었다.
+     346 이면 잘리는 경계가 10번째 행의 끝과 정확히 겹친다(아래 패딩은 스크롤 끝에 남는다).
+     .at-item 의 height 를 고치면 이 346 도 함께 고쳐야 한다. */
   #atDrop{position:fixed;z-index:200;min-width:240px;max-width:380px;background:var(--card);
     border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 26px var(--overlay);padding:4px;
-    max-height:330px;overflow-y:auto}   /* 10행까지 한눈에, 넘치면 스크롤 (v3.2.1) */
-  #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+    max-height:346px;overflow-y:auto}   /* 10행 온전히, 넘치면 스크롤 (v3.2.1 → v3.5.2 정확한 10행) */
+  #atDrop .at-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px;height:34px;flex:none}
   #atDrop .at-item.sel,#atDrop .at-item:hover{background:var(--slate-bg)}
   #atDrop .at-who{flex:none;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #atDrop .at-org{flex:1;min-width:0;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
