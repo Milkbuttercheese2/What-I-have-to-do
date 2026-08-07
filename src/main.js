@@ -107,10 +107,13 @@ document.addEventListener('keydown',e=>{
   else if($('recurModal').classList.contains('on')){ e.preventDefault(); $('rc-save').click(); }
   else if($('presetModal').classList.contains('on')){ e.preventDefault(); $('np-save').click(); }
 });
-/* F14: ESC 로 팝업 닫기. 배경 클릭 닫기는 드래그 선택 시 오작동하므로 의도적으로 제외.
-   알람 모달은 명시적 확인이 필요하므로 대상에서 제외. */
+/* F14: ESC 로 팝업 닫기. 배경 클릭 닫기는 드래그 선택 시 오작동하므로 의도적으로 제외. */
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
+  /* v3.6.2(소유자 지정): 알림창도 ESC 로 닫는다 — 맨 위(z120)라 가장 먼저 본다.
+     단순히 감추면 F5 게이트(모달이 떠 있는 동안만 재알림 금지)가 풀려 20초 뒤 같은 알람이
+     다시 울리므로, ESC 는 [확인] 클릭과 동일하게 처리한다(al=true 확인 + 배지 해제 + 저장). */
+  if($('alarmBg').classList.contains('on')){ $('alarmOk').click(); return; }
   /* v2.11.0: 양식 위에 뜨는 팝업(관련 업무 z70 등)을 먼저 닫는다 — 예전 순서(양식 먼저)는
      칩 팝업이 떠 있는데 ESC 가 밑의 양식을 닫아버리는 역전이었다. */
   if($('relModal').classList.contains('on')){ $('relModal').classList.remove('on'); return; }

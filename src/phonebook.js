@@ -60,8 +60,10 @@ export function renderPhonebook(){
     <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
     <span class="pb-tail">
       <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
-      <button class="ps-edit" data-pbedit="${e.id}">수정</button>
-      <button class="ps-del" data-pbdel="${e.id}">삭제</button>
+      <!-- v3.6.2: 버튼에 title="" — 행의 '엮인 업무' 안내 툴팁이 상속돼 수정/삭제 위에서도
+           떠서 눌렀을 때 하는 일과 어긋났다(빈 title 이 조상 툴팁을 막는다) -->
+      <button class="ps-edit" data-pbedit="${e.id}" title="">수정</button>
+      <button class="ps-del" data-pbdel="${e.id}" title="">삭제</button>
     </span>
   </div>`).join('');
 }

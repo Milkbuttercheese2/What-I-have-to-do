@@ -58,6 +58,15 @@ test('al=true(확인됨)·스누즈 중은 미발화, 스누즈 만료는 발화
   closeModal();
 });
 
+test('알림창은 메모 첫 줄만 보여준다 (v3.6.2 — 카드 v2.5.12 와 동일 규칙)', async () => {
+  await env.resetS(); S.loaded = true;
+  S.items.push(mk({memo:'첫 줄 요약\n둘째 줄 상세내용\n셋째 줄', f:{due:iso(-5)}}));
+  checkAlarms();
+  assert.ok($('alarmList').textContent.includes('첫 줄 요약'));
+  assert.ok(!$('alarmList').textContent.includes('둘째 줄 상세내용'));
+  closeModal();
+});
+
 test('alarmOn=false → 억제', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.alarmOn = false;
