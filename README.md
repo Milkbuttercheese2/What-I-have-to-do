@@ -15,7 +15,7 @@
 ![tech](https://img.shields.io/badge/Tauri-Rust%20%2B%20JS-2a7c6e?style=for-the-badge&logo=tauri&logoColor=white)
 ![offline](https://img.shields.io/badge/%EC%A0%80%EC%9E%A5-100%25%20%EB%A1%9C%EC%BB%AC%20%C2%B7%20%EC%98%A4%ED%94%84%EB%9D%BC%EC%9D%B8-2ea043?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-AGPL%20v3-A31F34?style=for-the-badge)
-![version](https://img.shields.io/badge/version-v3.4.11-2a7c6e?style=for-the-badge)
+![version](https://img.shields.io/badge/version-v3.6.3-2a7c6e?style=for-the-badge)
 
 </div>
 
@@ -85,7 +85,7 @@ exe 파일 하나로 돌아갑니다. 설치도, 계정도, 인터넷도 필요 
 **내 업무 검색**(기본) · **빠른 메모** · **양식 메모**. 먼저 뜰 화면과 `Alt` 로 넘어갈 화면을
 [설정]에서 각각 지정합니다. 검색 화면에서는 `↑`·`↓` 로 고르고 `Enter` 로 그 업무를 엽니다.
 
-**제대로 정리하기** — 카드를 누르면 양식이 열립니다. 관련인(관련소속·관련인·연락처), 식별정보
+**제대로 정리하기** — 카드를 누르면 양식이 열립니다. 관련인(관련소속·관련인·연락처 — 이메일은 선택), 식별정보
 (입찰공고번호·SR번호 같은 것), 세부 할 일(단계마다 점검 시각과 **담당자**), 파일·**폴더** 링크
 (클릭하면 파일은 연결 프로그램, 폴더는 탐색기로 열립니다), 마감 시각을 채웁니다. **쓰다 만 양식은 자동으로 임시저장**되니 `Esc` 로 닫아도 이어서 쓸 수 있습니다
 (카드에 반영되는 건 [저장]을 눌렀을 때뿐입니다).
@@ -209,9 +209,10 @@ exe 파일 하나로 돌아갑니다. 설치도, 계정도, 인터넷도 필요 
 | 작업 | 명령 |
 |---|---|
 | 개발 실행 (핫리로드) | `npm run tauri dev` |
-| 프론트 테스트 (node:test + jsdom, 261개) | `npm test` |
+| 프론트 테스트 (node:test + jsdom, 278개) | `npm test` |
 | 백엔드 테스트 (DB 라운드트립) | `cd src-tauri && cargo test --lib` |
 | 미니 창 레이아웃 검사 (실렌더 31상태) | `node tools/capture-check.mjs` |
+| @자동완성·관련 업무 팝업 실조작 검사 | `node tools/interact-check.mjs` |
 | 릴리즈 빌드 | `npm run tauri build` → `src-tauri/target/release/wmhh-desktop.exe` |
 
 - **Tauri 2(Rust) + SQLite**, 프론트는 번들러 없는 순수 HTML/CSS/JS(`src/`)입니다.
