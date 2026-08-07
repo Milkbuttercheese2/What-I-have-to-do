@@ -26,7 +26,9 @@ export function checkAlarms(){
     (it.subs||[]).forEach(s=>{ if(!s.done)test(s,'mid',s.mid,'중간점검',s.title); });
   });
   if(!fire.length)return; firedNow=fire;
-  $('alarmList').innerHTML=fire.map(a=>`<div class="a-item"><b>${a.label}</b>${esc(a.title||'(메모 없음)')}<span class="num">${fmtT(a.iso)}</span></div>`).join('');
+  /* v3.6.2: 알림창도 카드(v2.5.12)처럼 메모의 첫 줄만 보여준다 — 여러 줄 메모가 통째로
+     떠서 알림창이 길어지던 문제. 세부 점검(title)은 원래 한 줄이라 영향 없음. */
+  $('alarmList').innerHTML=fire.map(a=>`<div class="a-item"><b>${a.label}</b>${esc((a.title||'').split(/\r?\n/)[0].trim()||'(메모 없음)')}<span class="num">${fmtT(a.iso)}</span></div>`).join('');
   $('alarmBg').classList.add('on'); beep(); try{window.focus();}catch{} startTitleFlash(fire.length);
   invoke('focus_main_window').catch(()=>{}); // window.focus() can't steal OS focus from another app; this can
   invoke('alarm_attention',{on:true}).catch(()=>{}); // v2.5.3 작업표시줄 깜빡임 + 빨간 배지 (확인 전까지 유지)
