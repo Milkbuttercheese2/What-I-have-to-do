@@ -8,7 +8,7 @@
 ![tech](https://img.shields.io/badge/Tauri-Rust%20%2B%20JS-2a7c6e?style=for-the-badge&logo=tauri&logoColor=white)
 ![offline](https://img.shields.io/badge/%EC%A0%80%EC%9E%A5-100%25%20%EB%A1%9C%EC%BB%AC%20%C2%B7%20%EC%98%A4%ED%94%84%EB%9D%BC%EC%9D%B8-2ea043?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-AGPL%20v3-A31F34?style=for-the-badge)
-![version](https://img.shields.io/badge/version-v3.6.4-2a7c6e?style=for-the-badge)
+![version](https://img.shields.io/badge/version-v3.6.3-2a7c6e?style=for-the-badge)
 
 </div>
 
@@ -67,7 +67,7 @@
 
 ## 시작하기
 
-1. [`최종 프로그램 산출물/`](./최종%20프로그램%20산출물) 에서 `뭐하려 했더라v3.6.4.exe` 를 받습니다.
+1. [`최종 프로그램 산출물/`](./최종%20프로그램%20산출물) 에서 `뭐하려 했더라v3.6.3.exe` 를 받습니다.
 2. 아무 폴더(바탕화면·D드라이브 등)에 두고 더블클릭합니다. **설치도, 관리자 권한도 필요 없습니다.**
 3. 첫 실행 때 데이터를 보관할 폴더를 물어봅니다. 고른 폴더 안에 `뭐하려했더라_데이터` 가 생기고
    **데이터와 자동 백업이 전부 거기에만** 저장됩니다. 건너뛰어도 되고, 나중에 [설정]에서 옮길 수 있습니다.
