@@ -12,6 +12,7 @@ import {linkifyAt} from './phonebook-core.js';
 import {mergeItems} from './merge.js';
 import {openForm} from './form.js';
 import {renderCal} from './calendar.js';
+import {registerView, refreshView} from './views.js';
 
 /* 부모(주기 정의)는 보드 밖 — 화면 어디에도 카드로 그리지 않는다 */
 const onBoard = it => !it.recur;
@@ -105,13 +106,10 @@ export function cardHtml(it,place){
       <button class="del" data-del="${it.id}" title="삭제">×</button>
     </div></div>`;
 }
-/* v2.5.0 보드 모드에 맞는 main 표시 — 보드 탭일 때만 placeMode() 쪽을 보인다 */
-function syncBoardVisibility(){
-  const t=document.querySelector('.tab.on');
-  const onTab=!t||t.dataset.view==='board';
-  $('view-board').style.display = onTab&&placeMode()==='time' ? 'grid':'none';
-  $('view-board5').style.display = onTab&&placeMode()==='owner' ? 'grid':'none';
-}
+/* v2.5.0 보드 모드에 맞는 main 표시 — 보드 탭일 때만 placeMode() 쪽을 보인다.
+   보이는 조건은 아래 registerView('board') 의 when 이 갖고 있으므로 여기서는
+   지금 화면의 표시를 다시 반영만 한다(그리기 함수는 부르지 않는다 — 재귀). */
+function syncBoardVisibility(){ refreshView(); }
 export function render(){
   syncBoardVisibility();
   /* 정렬: 세부 점검·마감시각 레벨 구분 없이, 먼저 도래하는 시각이 위로.
@@ -221,6 +219,15 @@ function initMergeDrag(){
 }
 
 export function initRender(){
+  /* 이 모듈이 소유한 화면 둘을 등록한다 (탭 배선은 main.js 가 아니라 여기).
+     보드 탭은 보드 모드에 따라 4열/5열 중 하나만 보이고, 검색줄·입력칸이 함께 붙는다. */
+  registerView({key:'board', els:[
+    {id:'view-board',  display:'grid', when:()=>placeMode()==='time'},
+    {id:'view-board5', display:'grid', when:()=>placeMode()==='owner'},
+    {id:'strip',       display:'flex'},
+    {id:'capture',     display:'block'},
+  ]});
+  registerView({key:'done', els:[{id:'view-done'}], render:renderDone});
   /* 카드 상호작용 */
   document.body.addEventListener('click',async e=>{
     /* 파일 링크 클릭 — 카드 열기(data-open)보다 먼저 처리 */

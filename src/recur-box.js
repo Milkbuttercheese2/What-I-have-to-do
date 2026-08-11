@@ -9,6 +9,7 @@ import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
 import {fmtT, parseTimeStr} from './datetime.js';
 import {isValidRecur, recurLabel, spawnLabel, initialNext, spawnDueOccurrences, DOW_KO} from './recur.js';
 import {persist, render} from './render.js';
+import {openModal, closeModal} from './modals.js';
 
 let editingParentId=null;   // 수정 중인 부모 id (없으면 신규)
 
@@ -107,8 +108,8 @@ function renderList(){
   }).join('') : '<div class="empty">등록된 주기 업무가 없습니다. 위에서 공통 내용과 반복 주기를 등록하세요.</div>';
 }
 
-export function openRecurModal(){ resetInput(); renderList(); $('recurModal').classList.add('on'); $('rc-memo').focus(); }
-function closeRecurModal(){ $('recurModal').classList.remove('on'); }
+export function openRecurModal(){ resetInput(); renderList(); openModal('recurModal',{save:()=>$('rc-save').click()}); $('rc-memo').focus(); }
+function closeRecurModal(){ closeModal('recurModal'); }
 
 async function saveParent(){
   const memo=$('rc-memo').value.trim();

@@ -10,6 +10,8 @@ import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
 import {fmtT} from './datetime.js';
 import {normEntry, entryKey, isComplete, entriesForTag, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts} from './phonebook-core.js';
+import {registerView} from './views.js';
+import {openModal, closeModal} from './modals.js';
 
 let q='';                 // 탭 안 검색어 (모듈 로컬 — render.js 의 q/dq 와 같은 패턴)
 let editingPbId=null;     // 수정 중인 항목 id (null = 새로 추가 모드)
@@ -114,9 +116,11 @@ function openPbSync(title, sub, found){
   $('pbs-list').innerHTML=found.map(e=>`<div class="pbs-row">
     <span class="pb-org">${esc(e.org)}</span><span class="pb-who">${esc(e.who)}</span><span class="pb-phone num">${esc(e.phone)}</span>${e.email?`<span class="pb-email">${esc(e.email)}</span>`:''}
   </div>`).join('');
-  $('pbSyncModal').classList.add('on');
+  /* close 를 함께 준다 — ESC 로 닫을 때도 대기 목록을 반드시 비우기 위해서다
+     (예전 ESC 는 화면만 닫아 pendingSync 가 남았다). */
+  openModal('pbSyncModal',{close:closePbSync});
 }
-function closePbSync(){ $('pbSyncModal').classList.remove('on'); pendingSync=[]; }
+function closePbSync(){ closeModal('pbSyncModal'); pendingSync=[]; }
 function applyPbSync(){
   const n=pendingSync.length;
   pendingSync.forEach(e=>{ S.phonebook.push({id:newId(), who:e.who, org:e.org, phone:e.phone, email:e.email||''}); });
@@ -250,11 +254,12 @@ export function openRelated(name, extraEntries){
     const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
     return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
   }).join(''):'<div class="empty" style="padding:14px">엮인 업무가 없습니다.</div>';
-  $('relModal').classList.add('on');
+  openModal('relModal');
 }
-export function closeRelated(){ $('relModal').classList.remove('on'); }
+export function closeRelated(){ closeModal('relModal'); }
 
 export function initPhonebook(){
+  registerView({key:'phone', els:[{id:'view-phone'}], render:renderPhonebook});
   document.body.appendChild($('relModal'));           // 어느 탭에서든 뜨도록 (표준 모달 규칙)
   document.body.appendChild($('pbSyncModal'));
   $('pbs-add').addEventListener('click',applyPbSync);

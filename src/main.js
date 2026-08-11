@@ -8,19 +8,21 @@ import {S, reconcileCore, migrateItem} from './state.js';
 import {STORE} from './store.js';
 import {$, initToast, appAlert} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
-import {initForm, closeForm, toInbox, contactsFromTags, refreshTagHl} from './form.js';
+import {initForm, toInbox, contactsFromTags, refreshTagHl} from './form.js';
 import {initPresets, renderPresets} from './presets.js';
-import {initRender, render, renderDone} from './render.js';
-import {initCalendar, renderCal} from './calendar.js';
+import {initRender, render} from './render.js';
+import {initCalendar} from './calendar.js';
 import {initAlarms} from './alarms.js';
 import {initBackup, reconcileImported} from './backup.js';
 import {initCapture, sendCaptureConfig} from './capture-bridge.js';
-import {initSettingsMenu, closeSettings, syncSettings} from './settings-menu.js';
+import {initSettingsMenu, syncSettings} from './settings-menu.js';
 import {initRecurBox, runRecurSpawn} from './recur-box.js';
-import {initPhonebook, renderPhonebook} from './phonebook.js';
+import {initPhonebook} from './phonebook.js';
 import {initAtComplete} from './at-complete.js';
+import {showView} from './views.js';
+import {openModal, closeModal, closeTop, topSave} from './modals.js';
 import {makeItem} from './state.js';
-import {setPlaceMode, placeMode} from './placement.js';
+import {setPlaceMode} from './placement.js';
 import {initUiScale, applyUiScale} from './ui-scale.js';
 import {applyTheme} from './theme.js';
 import {initQuit} from './quit.js';
@@ -36,18 +38,11 @@ initSettingsMenu(); initRecurBox(); initUiScale();
 initPhonebook(); initAtComplete(); initQuit();
 renderPresets();
 
-/* 탭 */
+/* 탭 — 어떤 화면이 있는지는 여기서 알지 못한다. 각 모듈이 init*() 에서
+   registerView() 로 자기 화면을 등록하므로(views.js), 화면을 추가해도 이 줄은 그대로다. */
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
-  const v=t.dataset.view;
-  $('view-board').style.display=v==='board'&&placeMode()==='time'?'grid':'none';
-  $('view-board5').style.display=v==='board'&&placeMode()==='owner'?'grid':'none';
-  $('strip').style.display=v==='board'?'flex':'none';
-  $('view-cal').classList.toggle('on',v==='cal');
-  $('view-done').classList.toggle('on',v==='done');
-  $('view-phone').classList.toggle('on',v==='phone');
-  $('capture').style.display=v==='board'?'block':'none';
-  if(v==='cal')renderCal(); if(v==='done')renderDone(); if(v==='phone')renderPhonebook();
+  showView(t.dataset.view);
 }));
 /* '완료 전체 비우기' 제거됨 */
 
@@ -72,8 +67,8 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
    헤더 모드 필(v2.5.0)이 산만하다 하여 v2.5.6에서 [설정] 메뉴의 팝업으로 이동. */
 document.body.appendChild($('boardModeModal'));   // 어느 탭에서든 뜨도록 body 직속
 function syncBoardModeSel(m){ [...$('boardModeModal').querySelectorAll('.bm-opt')].forEach(x=>x.classList.toggle('on', x.dataset.mode===m)); }
-function closeBoardModeModal(){ $('boardModeModal').classList.remove('on'); }
-$('boardModeBtn').addEventListener('click',()=>{ syncBoardModeSel(S.settings.boardMode==='owner'?'owner':'time'); $('boardModeModal').classList.add('on'); });
+function closeBoardModeModal(){ closeModal('boardModeModal'); }
+$('boardModeBtn').addEventListener('click',()=>{ syncBoardModeSel(S.settings.boardMode==='owner'?'owner':'time'); openModal('boardModeModal'); });
 $('boardModeClose').addEventListener('click', closeBoardModeModal);
 $('boardModeModal').addEventListener('click',e=>{
   const b=e.target.closest('.bm-opt');
@@ -85,13 +80,13 @@ $('boardModeModal').addEventListener('click',e=>{
 });
 
 /* Ctrl+S = '저장'으로 통일 (v2.5.22): 열려 있는 편집 화면을 저장한다.
-   양식 팝업 > 주기 업무 > 프리셋 순으로 위에 떠 있는 것부터, 아무것도 없으면 JSON 백업. */
+   어떤 팝업이 저장 가능한지는 그 팝업을 연 모듈이 openModal 의 save 로 등록한다
+   (modals.js) — 여기서 팝업 이름을 나열하지 않는다. */
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='S')){
     e.preventDefault();
-    if($('formPanel').classList.contains('on')){ $('fm-save').click(); }
-    else if($('recurModal').classList.contains('on')){ $('rc-save').click(); }
-    else if($('presetModal').classList.contains('on')){ $('np-save').click(); }
+    const save=topSave();
+    if(save){ save(); }
     /* v2.6.4: 바로 입력칸에 쓰는 중이면 그 메모를 등록한다 — 커서가 그 칸에 있는데
        Ctrl+S 가 백업 파일 대화상자를 띄우면 '저장'이라는 말과 어긋난다. */
     else if(document.activeElement===$('inp') && $('inp').value.trim()){ toInbox(); }
@@ -103,26 +98,15 @@ document.addEventListener('keydown',e=>{
    #inp 의 Ctrl+Enter=등록은 form.js 가 따로 처리한다. IME 조합 중은 무시. */
 document.addEventListener('keydown',e=>{
   if(e.key!=='Enter'||!(e.ctrlKey||e.metaKey)||e.isComposing||e.keyCode===229) return;
-  if($('formPanel').classList.contains('on')){ e.preventDefault(); $('fm-save').click(); }
-  else if($('recurModal').classList.contains('on')){ e.preventDefault(); $('rc-save').click(); }
-  else if($('presetModal').classList.contains('on')){ e.preventDefault(); $('np-save').click(); }
+  const save=topSave();
+  if(save){ e.preventDefault(); save(); }
 });
-/* F14: ESC 로 팝업 닫기. 배경 클릭 닫기는 드래그 선택 시 오작동하므로 의도적으로 제외. */
-document.addEventListener('keydown',e=>{
-  if(e.key!=='Escape') return;
-  /* v3.6.2(소유자 지정): 알림창도 ESC 로 닫는다 — 맨 위(z120)라 가장 먼저 본다.
-     단순히 감추면 F5 게이트(모달이 떠 있는 동안만 재알림 금지)가 풀려 20초 뒤 같은 알람이
-     다시 울리므로, ESC 는 [확인] 클릭과 동일하게 처리한다(al=true 확인 + 배지 해제 + 저장). */
-  if($('alarmBg').classList.contains('on')){ $('alarmOk').click(); return; }
-  /* v2.11.0: 양식 위에 뜨는 팝업(관련 업무 z70 등)을 먼저 닫는다 — 예전 순서(양식 먼저)는
-     칩 팝업이 떠 있는데 ESC 가 밑의 양식을 닫아버리는 역전이었다. */
-  if($('relModal').classList.contains('on')){ $('relModal').classList.remove('on'); return; }
-  if($('pbSyncModal').classList.contains('on')){ $('pbSyncModal').classList.remove('on'); return; }
-  if($('formPanel').classList.contains('on')){ closeForm(); return; }
-  if($('presetModal').classList.contains('on')){ $('presetModal').classList.remove('on'); return; }
-  if($('boardModeModal').classList.contains('on')){ closeBoardModeModal(); return; }
-  if($('settingsModal').classList.contains('on')){ closeSettings(); return; }
-});
+/* F14: ESC 로 팝업 닫기. 배경 클릭 닫기는 드래그 선택 시 오작동하므로 의도적으로 제외.
+   무엇을 닫을지는 '실제로 화면 맨 위에 있는 것'이 정한다(modals.js closeTop) — 예전처럼
+   팝업 이름을 z 순서로 미리 예측해 적어두지 않는다. 그 목록은 실제로 세 번 어긋났었다
+   (v2.11.0 양식/관련 업무 역전, 주기 업무 팝업 누락, 동기화 팝업 대기 목록 잔존).
+   @자동완성 드롭다운·appAlert 는 캡처 단계에서 ESC 를 먼저 먹고 멈춘다(변경 없음). */
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeTop(); });
 
 function tickClock(){ const n=new Date();
   $('clock').textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
