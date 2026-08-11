@@ -6,6 +6,7 @@ import {$, esc, escAttr} from './dom-utils.js';
 import {DOW} from './datetime.js';
 import {placeOf} from './placement.js';
 import {cardHtml} from './render.js';
+import {registerView} from './views.js';
 
 let calY=new Date().getFullYear(), calM=new Date().getMonth(), calSel=null;
 
@@ -43,6 +44,7 @@ export function renderCal(){
 }
 
 export function initCalendar(){
+  registerView({key:'cal', els:[{id:'view-cal'}], render:renderCal});
   $('cal-prev').addEventListener('click',()=>{calM--;if(calM<0){calM=11;calY--;}calSel=null;renderCal();});
   $('cal-next').addEventListener('click',()=>{calM++;if(calM>11){calM=0;calY++;}calSel=null;renderCal();});
   $('cal-today').addEventListener('click',()=>{const n=new Date();calY=n.getFullYear();calM=n.getMonth();calSel=null;renderCal();});

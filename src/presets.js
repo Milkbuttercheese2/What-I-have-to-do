@@ -5,6 +5,7 @@ import {S} from './state.js';
 import {STORE} from './store.js';
 import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm} from './dom-utils.js';
 import {openForm} from './form.js';
+import {openModal, closeModal} from './modals.js';
 
 function savePresets(){ STORE.savePresets(S.presets); window.PRESETS=S.presets; }
 function saveIdKinds(){ window.ID_KINDS=S.idKinds; STORE.saveIdKinds(S.idKinds); }
@@ -18,7 +19,7 @@ export function renderPresets(){
 }
 
 /* 프리셋 관리 모달 — 설정 메뉴(settings-menu.js)에서 연다 */
-export function openPresetModal(){ renderPresetList(); clearPresetForm(); renderIdKindList(); $('presetModal').classList.add('on'); }
+export function openPresetModal(){ renderPresetList(); clearPresetForm(); renderIdKindList(); openModal('presetModal',{save:()=>$('np-save').click()}); }
 
 /* 식별번호 명칭 관리 */
 function renderIdKindList(){
@@ -88,7 +89,7 @@ export function initPresets(){
     S.idKinds.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
     saveIdKinds(); renderIdKindList();
   });
-  $('presetClose').addEventListener('click',()=>$('presetModal').classList.remove('on'));
+  $('presetClose').addEventListener('click',()=>closeModal('presetModal'));
   enableDragReorder($('presetList'), '.ps-item', '.drag-handle', (container)=>{
     const order=[...container.querySelectorAll('.ps-item')].map(el=>el.dataset.pid);
     S.presets.sort((a,b)=>order.indexOf(String(a.id))-order.indexOf(String(b.id)));

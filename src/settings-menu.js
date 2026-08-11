@@ -17,6 +17,7 @@ import {$} from './dom-utils.js';
 import {openPresetModal} from './presets.js';
 import {applyTheme, normTheme, normCapScreen, normCapPair, CAP_SCREEN_NAME} from './theme.js';
 import {sendCaptureConfig} from './capture-bridge.js';
+import {openModal, closeModal} from './modals.js';
 
 /* 설정 키 ↔ 세그먼트 UI ↔ 정규화 함수 (한 줄에 하나씩, 추가는 여기만 고치면 된다) */
 const SEGS=[
@@ -30,9 +31,9 @@ export function openSettings(){
   /* v2.10.0 저장 위치 상시 표기 — 열 때마다 갱신(위치 변경 예약 후에도 최신을 보여주도록) */
   const p=$('dataDirPath');
   if(p){ p.textContent='저장 위치 확인 중…'; invoke('get_data_dir').then(d=>{ p.textContent=d?('저장 위치: '+d):''; }).catch(()=>{ p.textContent=''; }); }
-  $('settingsModal').classList.add('on');
+  openModal('settingsModal');
 }
-export function closeSettings(){ $('settingsModal').classList.remove('on'); }
+export function closeSettings(){ closeModal('settingsModal'); }
 
 /* 저장된 값 → 버튼 on/비활성 표시 */
 export function syncSettings(){

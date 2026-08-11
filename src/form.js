@@ -9,6 +9,7 @@ import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
 import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
+import {openModal, closeModal} from './modals.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -128,6 +129,12 @@ function dropDraft(key){
   markDraft(0);
 }
 
+/* 양식 패널을 팝업 스택에 올린다 — 여는 경로가 둘(읽기 전용·일반)이라 한 곳으로 모은다.
+   close 는 closeForm (초안 플러시가 딸려 있어 그냥 감추면 안 된다),
+   save 는 자기 저장 버튼 — 예전엔 main.js 가 $('fm-save').click() 으로 남의 버튼을
+   대신 눌렀는데, 그 버튼을 소유한 이 모듈이 아는 게 맞다. */
+function showFormPanel(){ openModal('formPanel',{close:closeForm, save:()=>$('fm-save').click()}); }
+
 /* v3.6.0: 완료 업무는 **읽기 전용**으로 연다.
    UX 취향이 아니라 **정확성 조건**이다 — 저장은 완료 업무 행을 다시 쓰지 않으므로(증분 저장),
    여기서 고칠 수 있게 두면 그 변경이 저장에 실리지 않아 **조용히 사라진다.**
@@ -158,7 +165,7 @@ export async function openForm(pre, opts){
     baseline=null; markDraft(0);
     updatePlacePreview();
     $('fm-place').textContent='완료된 업무입니다 — 고치려면 카드의 ○를 눌러 완료를 취소하세요';
-    $('formPanel').classList.add('on');
+    showFormPanel();
     return;
   }
   setReadonly(false);
@@ -175,7 +182,7 @@ export async function openForm(pre, opts){
     } else { dropDraft(draftKey); draftKey='new'; markDraft(0); }
   } else { if(dr) dropDraft(draftKey); draftKey = editingId ? String(editingId) : 'new'; markDraft(0); }
   updatePlacePreview();
-  $('formPanel').classList.add('on');
+  showFormPanel();
   const m=$('fm-memo'); m.focus();
   const pos=m.value.indexOf('○○'); if(pos>=0)m.setSelectionRange(pos,pos+2);
 }
@@ -260,7 +267,7 @@ function fillForm(pre){
    최종 저장/되돌리기는 dropDraft()로 초안을 먼저 지우므로 여기서 되살아나지 않는다. */
 export function closeForm(){
   saveDraftNow();
-  $('formPanel').classList.remove('on'); editingId=null; draftKey=null; baseline=null; markDraft(0);
+  closeModal('formPanel'); editingId=null; draftKey=null; baseline=null; markDraft(0);
 }
 
 /* 관련인 행 — v3.2.0(소유자 지정)부터 연락처는 저장 시 표준 하이픈 표기로 정규화한다
