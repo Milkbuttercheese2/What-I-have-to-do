@@ -46,30 +46,30 @@ const INIT = `(()=>{
   const iso=now.toISOString();
   const mk=o=>Object.assign({id:1,memo:'',owner:'',f:{received:iso,due:''},contacts:[],ids:[],subs:[],files:[],done:false,staged:false,al:{},recur:null,recurId:null},o);
   const items=[
-    mk({id:1,memo:'행정과 전화 — 회의실 예약 대장 정비 요청. 부서별 사용현황 취합 후 회신',staged:true}),
-    mk({id:2,memo:'예산 집행 잔액 정리해서 재무팀에 회신하기',f:{received:iso,due:at(0,17,0)},
-      contacts:[{who:'김주무관',org:'재무팀',phone:'02-1234-5678',email:'kim.jm@example.go.kr'}],
-      ids:[{kind:'SR번호',val:'SR-2026-0718-0091'}],
-      files:['C:\\\\업무\\\\2026\\\\예산_집행내역_정리.xlsx'],
-      subs:[{id:21,title:'집행내역 대사 후 잔액 확정',mid:at(0,16,0),done:false,al:null,owner:''}]}),
-    mk({id:3,memo:'감사 대비 증빙자료 스캔·정리',f:{received:iso,due:at(4,10,0)},
-      subs:[{id:30,title:'담당 부서 지정 및 협조 요청',mid:at(-1,10,0),done:true,al:null,owner:''},
-            {id:31,title:'1차 증빙 취합 상태 점검',mid:at(1,9,30),done:false,al:null,owner:'박주무관'}]}),
-    mk({id:4,memo:'차기 사업 계획서 초안 작성',f:{received:iso,due:at(6,15,0)}}),
-    mk({id:5,memo:'노후 비품 교체 신청 취합',f:{received:iso,due:at(0,14,0)},
-      subs:[{id:51,title:'각 팀 신청서 회신 확인',mid:at(0,13,0),done:false,al:null,owner:'최주무관'}]}),
-    mk({id:6,memo:'완료된 주간 실적 보고 제출',done:true,f:{received:iso,due:at(-1,10,0)}}),
-    mk({id:7,memo:'매주 월요일 주간회의 자료 준비',recur:{type:'dow',dow:[1],time:'09:00',next:at(3,9,0),paused:false}}),
+    mk({id:1,memo:'시설관리과 요청 — 청사 전기설비 유지관리 용역 계약변경 사유 검토',staged:true}),
+    mk({id:2,memo:'청사 전기설비 유지관리 용역 계약변경 검토 후 회계과에 회신',f:{received:iso,due:at(0,17,0)},
+      contacts:[{who:'김계약 주무관',org:'시설관리과',phone:'02-0000-1201',email:'g.contract@example.go.kr'}],
+      ids:[{kind:'계약번호',val:'2026-시설-용역-014'}],
+      files:['C:\\\\조달계약\\\\2026\\\\전기설비_용역_계약변경_검토서.xlsx'],
+      subs:[{id:21,title:'계약변경 사유서와 산출내역 대조',mid:at(0,16,0),done:false,al:null,owner:''}]}),
+    mk({id:3,memo:'청사 청소용역 입찰 제안서 평가자료 준비',f:{received:iso,due:at(4,10,0)},
+      subs:[{id:30,title:'평가위원 위촉 공문 발송',mid:at(-1,10,0),done:true,al:null,owner:''},
+            {id:31,title:'제안서 평가표 배부 여부 확인',mid:at(1,9,30),done:false,al:null,owner:'박조달 주무관'}]}),
+    mk({id:4,memo:'소액수의계약 견적서 검토 결과 보고',f:{received:iso,due:at(6,15,0)}}),
+    mk({id:5,memo:'나라장터 공고문 정정 요청사항 확인',f:{received:iso,due:at(0,14,0)},
+      subs:[{id:51,title:'입찰공고 정정 사유 확인',mid:at(0,13,0),done:false,al:null,owner:'최회계 주무관'}]}),
+    mk({id:6,memo:'완료된 복합기 임차계약 종료 정산',done:true,f:{received:iso,due:at(-1,10,0)}}),
+    mk({id:7,memo:'매주 월요일 조달·계약 현황 보고자료 취합',recur:{type:'dow',dow:[1],time:'09:00',next:at(3,9,0),paused:false}}),
   ];
   /* v3.5.0: 이메일은 선택 항목이라 **있는 사람과 없는 사람을 섞어** 둔다 —
      설명서 그림이 '비워도 된다'를 그림만으로 말해 주게. */
-  const phonebook=[{id:901,who:'김주무관',org:'재무팀',phone:'02-1234-5678',email:'kim.jm@example.go.kr'},
-                   {id:902,who:'박주무관',org:'감사담당관실',phone:'02-9876-5432',email:''},
-                   {id:903,who:'최주무관',org:'총무과',phone:'010-2222-3333',email:'choi.jm@example.go.kr'}];
+  const phonebook=[{id:901,who:'김계약 주무관',org:'시설관리과',phone:'02-0000-1201',email:'g.contract@example.go.kr'},
+                   {id:902,who:'박조달 주무관',org:'조달계약과',phone:'02-0000-1202',email:''},
+                   {id:903,who:'최회계 주무관',org:'회계과',phone:'02-0000-1203',email:'c.accounting@example.go.kr'}];
   let store={items,phonebook,fields:null,
-    presets:[{label:'계약 변경 통보 접수건 처리',memo:'○○ 사업 계약변경 통보 접수 및 검토',subs:[]},
-             {label:'감사 자료 제출',memo:'○○ 감사 대비 증빙자료 정리',subs:[]}],
-    idKinds:['입찰공고번호','SR번호'],settings:{alarmOn:false,boardMode:'time',captureDraft:''},recurDefs:[]};
+    presets:[{label:'계약변경 검토 요청',memo:'○○ 용역 계약변경 통보 접수 및 검토',subs:[]},
+             {label:'입찰공고 정정 확인',memo:'나라장터 공고문 정정 사유 및 변경사항 확인',subs:[]}],
+    idKinds:['계약번호','입찰공고번호'],settings:{alarmOn:false,boardMode:'time',captureDraft:''},recurDefs:[]};
   const noop=async()=>{};
   window.__TAURI__={
     core:{invoke:async(c,a)=>{
@@ -80,7 +80,7 @@ const INIT = `(()=>{
       if(c==='phonebook_list')return store.phonebook;
       if(c==='phonebook_search'){var q2=(a&&a.query)||'';return store.phonebook.filter(function(e){return (e.who+e.org+e.phone).indexOf(q2)>=0;});}
       if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
-      if(c==='pick_file_path')return 'C:\\\\업무\\\\2026\\\\회의실_예약대장.hwp';
+      if(c==='pick_file_path')return 'C:\\\\조달계약\\\\2026\\\\입찰공고_정정사유서.hwp';
       return null;}},
     app:{getVersion:async()=>'3.6.1'},   /* 설명서 그림의 헤더 버전 — 스크린샷을 다시 뽑을 때 함께 올린다 */
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
@@ -90,7 +90,7 @@ const INIT = `(()=>{
 
 /* 실행 채널: Windows 는 PW_CHANNEL=msedge (러너/개발 PC 에 기본 설치된 Edge),
    리눅스는 PLAYWRIGHT_CHROMIUM 경로. win-render.mjs 와 같은 규칙. */
-const channel = process.env.PW_CHANNEL || '';
+const channel = process.env.PW_CHANNEL || (process.platform === 'win32' ? 'msedge' : '');
 const browser = await chromium.launch(channel ? {channel} : {executablePath: EXEC});
 
 async function open(viewport, page_url='index.html') {
@@ -140,7 +140,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
 /* ---- 5. form.png : 양식(채워진 상태) -------------------------------- */
 {
   const page = await open({width: 1180, height: 900});
-  await page.click('.card:has-text("예산 집행")'); await page.waitForTimeout(600);
+  await page.click('.card:has-text("계약변경 검토 후 회계과에 회신")'); await page.waitForTimeout(600);
   await shotEl(page, '#formPanel .fm-inner', 'form.png');
   await page.close();
   console.log('form.png');
@@ -149,7 +149,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
 {
   const page = await open({width: 1180, height: 900});
   try{
-    await page.click('.card:has-text("예산 집행")'); await page.waitForTimeout(600);
+    await page.click('.card:has-text("계약변경 검토 후 회계과에 회신")'); await page.waitForTimeout(600);
     // 이 항목은 파일 1개(활성/링크 상태). 두 번째 행을 추가(mock pick_file_path가 경로 반환)한 뒤
     // 그 행의 토글을 눌러 편집(경로 입력 + 찾기) 상태로 바꿔 두 상태를 한 컷에 보여준다.
     await page.click('#fm-linkadd'); await page.waitForTimeout(300);
@@ -186,8 +186,8 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
     const fmtT=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
     const list=document.getElementById('alarmList');
     if(list) list.innerHTML=
-      '<div class="a-item"><b>마감 </b>예산 집행 잔액 정리해서 재무팀에 회신하기<span class="mono">'+fmtT(now)+'</span></div>'+
-      '<div class="a-item"><b>점검 </b>각 팀 신청서 회신 확인<span class="mono">'+fmtT(now)+'</span></div>';
+      '<div class="a-item"><b>마감 </b>전기설비 유지관리 용역 계약변경 검토 회신<span class="mono">'+fmtT(now)+'</span></div>'+
+      '<div class="a-item"><b>점검 </b>입찰공고 정정 사유 확인<span class="mono">'+fmtT(now)+'</span></div>';
     const bg=document.getElementById('alarmBg'); if(bg) bg.classList.add('on');
   });
   await page.waitForTimeout(400);
@@ -202,7 +202,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
   /* v2.5.21 이후 미니 창은 '내 업무 검색'으로 뜬다 — Alt 로 빠른 메모 화면을 꺼내야 한다 */
   await page.keyboard.press('Alt'); await page.waitForTimeout(300);
   const inp = await page.$('#cap-inp');
-  if(inp){ await inp.click(); await page.keyboard.type('행정과 회의실 예약 대장 정비 요청 — 내일까지 회신', {delay:12}); }
+  if(inp){ await inp.click(); await page.keyboard.type('긴급 — 입찰공고 정정 사유 검토 후 회계과 회신', {delay:12}); }
   await page.waitForTimeout(300);
   await shotPage(page, 'capture-memo.png');
   await page.close();
@@ -232,7 +232,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
   const page = await open({width: 620, height: 406}, 'capture.html');
   await page.evaluate(()=>{ document.documentElement.style.background='#e9e7e2'; document.body.style.padding='10px'; });
   const s = await page.$('#cap-search');
-  if(s){ await s.click(); await page.keyboard.type('정리', {delay:14}); }
+  if(s){ await s.click(); await page.keyboard.type('계약', {delay:14}); }
   await page.waitForTimeout(500);
   await shotPage(page, 'capture-search.png');
   await page.close();
