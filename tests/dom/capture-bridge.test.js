@@ -87,3 +87,22 @@ test("첫 화면이 검색·빠른 메모면 Rust 에 form:false — 미니 창�
   sendCaptureConfig();
   assert.deepEqual(env.invokeCalls.filter(c=>c.cmd==='set_capture_form_mode').at(-1).args, {form:false});
 });
+
+test('빠른검색에서 완료 업무는 읽기 전용, 미완료 업무는 편집 가능으로 열린다', async () => {
+  await env.resetS(); S.loaded = true;
+  const done = {id:1, memo:'완료 업무', done:true};
+  const open = {id:2, memo:'진행 중 업무', done:false};
+  S.items.push(done, open);
+
+  env.fireEvent('wmhh://open-item', {id:done.id});
+  await env.flush();
+  assert.ok($('formPanel').classList.contains('on'));
+  assert.ok($('formPanel').classList.contains('fm-ro'), '완료 업무는 읽기 전용으로 연다');
+  assert.equal($('fm-memo').disabled, true, '완료 업무 입력은 잠긴다');
+
+  $('formPanel').classList.remove('on');
+  env.fireEvent('wmhh://open-item', {id:open.id});
+  await env.flush();
+  assert.equal($('formPanel').classList.contains('fm-ro'), false, '미완료 업무는 편집 모드로 연다');
+  assert.equal($('fm-memo').disabled, false);
+});
