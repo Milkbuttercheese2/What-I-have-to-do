@@ -430,6 +430,21 @@ test('완료 업무는 읽기 전용으로 열린다 (저장 버튼 없음 · �
   assert.equal(drafts[String(it.id)], undefined);
 });
 
+test('완료 업무의 세부 체크·드래그도 읽기 전용으로 잠긴다 (화면만 바뀌는 가짜 수정 방지)', async () => {
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); it.done = true; it.subs[0].done = false; S.items.push(it);
+  await openForm(it, {readonly:true});
+  const row = $('fm-subs').querySelector('.fsub-row');
+  const chk = row.querySelector('.fsub-chk');
+  const handle = row.querySelector('.drag-handle');
+  assert.equal(chk.getAttribute('aria-disabled'), 'true');
+  assert.equal(handle.getAttribute('aria-disabled'), 'true');
+  chk.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));
+  assert.equal(row.dataset.done, '0', '읽기 전용에서는 세부 완료 상태도 바뀌지 않아야 한다');
+  assert.equal(it.subs[0].done, false, '원본 데이터가 바뀌지 않아야 한다');
+  closeForm();
+});
+
 test('미완료 업무는 예전처럼 편집 가능하게 열린다 (읽기 전용이 새는지 확인)', async () => {
   await env.resetS(); S.loaded = true;
   const it = fullItem(); S.items.push(it);

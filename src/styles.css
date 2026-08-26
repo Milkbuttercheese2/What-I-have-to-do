@@ -287,6 +287,7 @@
   /* v3.6.0 읽기 전용(완료 업무) — 잠겼다는 것이 한눈에 보이되 내용은 또렷하게 읽히도록.
      입력칸을 흐리게 하지 않는다: 여기 오는 이유의 대부분이 '내용 확인'이기 때문이다. */
   .fm-ro input,.fm-ro textarea,.fm-ro select{background:var(--chip-bg);cursor:default}
+  .fm-ro .fsub-chk,.fm-ro .drag-handle{pointer-events:none;cursor:default;opacity:.65}
   .fm-ro .fm-place{color:var(--slate);font-weight:600}
   .fm-place b{color:var(--focus)}
   /* v2.5.22 임시저장 표시 — 저장 버튼 왼쪽의 조용한 상태 문구 */

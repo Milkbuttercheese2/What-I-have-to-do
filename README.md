@@ -88,7 +88,7 @@
 | 작업 | 명령 |
 |---|---|
 | 개발 실행 (핫리로드) | `npm run tauri dev` |
-| 프론트 테스트 (node:test + jsdom, 295개) | `npm test` |
+| 프론트 테스트 (node:test + jsdom, 296개) | `npm test` |
 | 백엔드 테스트 (DB 라운드트립, 39개) | `cd src-tauri && cargo test --lib` |
 | 미니 창 레이아웃 검사 (실렌더 31상태) | `node tools/capture-check.mjs` |
 | @자동완성·관련 업무 팝업 실조작 검사 (21항목) | `node tools/interact-check.mjs` |

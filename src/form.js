@@ -148,6 +148,12 @@ function setReadonly(on){
     if(el.id==='fm-close') return;                          // 닫기는 살려 둔다
     el.disabled=on;
   });
+  /* 세부 완료 체크·드래그 핸들은 input/button이 아니어서 disabled만으로 잠기지 않는다.
+     완료 업무에서는 화면만 바뀌고 저장되지 않는 가짜 수정을 만들지 않도록 함께 잠근다. */
+  p.querySelectorAll('.fsub-chk,.drag-handle').forEach(el=>{
+    if(on) el.setAttribute('aria-disabled','true');
+    else el.removeAttribute('aria-disabled');
+  });
   $('fm-save').style.display=on?'none':'';
   $('fm-revert').style.display=on?'none':'';
 }
@@ -356,7 +362,8 @@ function addFormSubRow(title,mid,focusIt,sub){
     <span class="dt-inp fsub-dt">${dtInner(md.date, md.time)}</span>
     <button class="rm" title="삭제">×</button>`;
   const chk=row.querySelector('.fsub-chk');
-  chk.addEventListener('click',()=>{ const on=row.dataset.done==='1'; row.dataset.done=on?'0':'1'; chk.classList.toggle('on',!on);
+  chk.addEventListener('click',()=>{ if(chk.getAttribute('aria-disabled')==='true') return;
+    const on=row.dataset.done==='1'; row.dataset.done=on?'0':'1'; chk.classList.toggle('on',!on);
     row.querySelector('.fsub-title').classList.toggle('sdone',!on); });
   if(sub.done) row.querySelector('.fsub-title').classList.add('sdone');
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
