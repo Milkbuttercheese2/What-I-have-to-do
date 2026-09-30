@@ -66,3 +66,4 @@ jobs:
         with:
           name: wmhh-exe
           path: 최종 프로그램 산출물/뭐하려 했더라v*.exe
+          retention-days: 7
