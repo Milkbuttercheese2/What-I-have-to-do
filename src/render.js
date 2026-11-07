@@ -110,8 +110,43 @@ export function cardHtml(it,place){
    보이는 조건은 아래 registerView('board') 의 when 이 갖고 있으므로 여기서는
    지금 화면의 표시를 다시 반영만 한다(그리기 함수는 부르지 않는다 — 재귀). */
 function syncBoardVisibility(){ refreshView(); }
+/* v3.7.0 한눈 요약 줄(흐름도의 '9 단계 · 27 절차' 줄) — 숫자 넷, 순서도 소유자 지정.
+   · 진행 업무 = 보드에 있는 미완료 업무 전체
+   · 오늘 할 일 = 오늘 걸린 업무(마감·미완료 세부 점검이 오늘이거나 이미 지난 것) 중 아직 안 끝난 것
+   · 오늘 완료 = 오늘 걸린 업무 중 끝난 것 — 오늘 완료 처리했거나, 마감·점검일이 오늘인 완료 업무
+   · 시각 지남 = 미완료인데 마감·점검 시각이 이미 지난 업무(빨강)
+   전부 파생값이다(저장 안 함). 검색어와 무관하게 전체 기준. 주기 부모(보드 밖)는 제외. */
+export function metricsOf(items, now){
+  now=now||Date.now();
+  const s0=new Date(now); s0.setHours(0,0,0,0);
+  const e0=new Date(now); e0.setHours(23,59,59,999);
+  const start=s0.getTime(), end=e0.getTime();
+  const t=iso=>{ const x=iso?new Date(iso).getTime():NaN; return isNaN(x)?null:x; };
+  let active=0, todo=0, doneToday=0, overdue=0;
+  for(const it of items){
+    if(!onBoard(it)) continue;
+    if(it.done){
+      const times=(it.subs||[]).map(s=>t(s.mid)).concat([t((it.f||{}).due)]).filter(x=>x!=null);
+      const doneAtToday=it.doneAt && it.doneAt>=start && it.doneAt<=end;
+      if(doneAtToday || times.some(x=>x>=start && x<=end)) doneToday++;
+      continue;
+    }
+    const times=(it.subs||[]).filter(s=>!s.done).map(s=>t(s.mid)).concat([t((it.f||{}).due)]).filter(x=>x!=null);
+    active++;
+    if(times.some(x=>x<=end)) todo++;
+    if(times.some(x=>x<now)) overdue++;
+  }
+  return {active, todo, doneToday, overdue};
+}
+function renderMetrics(){
+  const el=$('metrics'); if(!el) return;
+  const m=metricsOf(S.items);
+  el.innerHTML=`<span><b>${m.active}</b>진행 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 할 일</span>`
+    +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
+}
 export function render(){
   syncBoardVisibility();
+  renderMetrics();
   /* 정렬: 세부 점검·마감시각 레벨 구분 없이, 먼저 도래하는 시각이 위로.
      (미완료 세부 mid + 마감 due 중 가장 이른 시각 기준 오름차순 → 시각 없으면 뒤, 최신 등록 순) */
   const keyTime=(it)=>{
@@ -136,7 +171,7 @@ export function render(){
       $('c5-'+k).textContent=list.length;
       $('col5-'+k).innerHTML=list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`;
     }
-    renderCal(); renderDone();
+    renderHidden();
     return;
   }
   const cols={inbox:[],today:[],doing:[],planned:[]};
@@ -147,14 +182,67 @@ export function render(){
     $('c-'+k).textContent=list.length;
     $('col-'+k).innerHTML=list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`;
   }
-  renderCal(); renderDone();
+  renderHidden();
+}
+/* v3.7.0 속도: 달력·완료는 **보이고 있을 때만** 다시 그린다. 안 보일 땐 탭을 열 때 views.js 가 그 화면의
+   render(renderCal·renderDone)를 부르므로 늘 최신으로 열린다. 예전엔 저장할 때마다 완료 업무 전부와
+   달력 42칸을 숨은 채로 다시 만들었다(완료가 쌓일수록 저장이 느려지던 원인). */
+function renderHidden(){
+  const on=id=>{ const el=$(id); return !!el && el.classList.contains('on'); };
+  if(on('view-cal')) renderCal();
+  if(on('view-done')) renderDone();
+}
+/* v3.7.0 완료 업무를 '언제 끝냈나'로 묶는다 — 오늘 / 어제 / 이번 주 / 지난주 / 그 이전은 월별.
+   완료 시각(doneAt)이 없는 옛 데이터는 '날짜 모름' 묶음. 묶음 키는 표시용 파생값(저장 안 함). */
+export function doneGroupOf(doneAt, now){
+  if(!doneAt) return {key:'nodate', label:'완료 날짜 모름', order:-1};
+  now=now||Date.now();
+  const d0=new Date(now); d0.setHours(0,0,0,0); const today=d0.getTime();
+  const wk=new Date(d0); wk.setDate(wk.getDate()-((wk.getDay()+6)%7)); const week=wk.getTime();   // 이번 주 월요일
+  /* v3.7.1 소유자 지정: 오늘 · 이번 주 · 이번 달, 그 이전은 달별(어제·지난주 묶음 폐지).
+     이번 주가 지난달에 걸쳐 시작해도(월요일이 지난달) 이번 주로 본다 — 주가 달보다 먼저. */
+  const m1=new Date(d0); m1.setDate(1); const month=m1.getTime();                                       // 이번 달 1일
+  if(doneAt>=today) return {key:'today', label:'오늘', order:1e15};
+  if(doneAt>=week) return {key:'week', label:'이번 주', order:1e15-1};
+  if(doneAt>=month) return {key:'month', label:'이번 달', order:1e15-2};
+  const d=new Date(doneAt);
+  return {key:`m${d.getFullYear()}-${d.getMonth()}`, label:`${d.getFullYear()}년 ${d.getMonth()+1}월`, order:d.getFullYear()*12+d.getMonth()};
 }
 export function renderDone(){
-  const list=S.items.filter(onBoard).filter(it=>it.done).filter(it=>textMatch(it, dq)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
-  $('done-count').textContent=S.items.filter(onBoard).filter(it=>it.done).length;
-  $('col-done').innerHTML=list.length?list.map(it=>cardHtml(it,'done')).join(''):`<div class="empty">${dq?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`;
+  const all=S.items.filter(onBoard).filter(it=>it.done);
+  const list=all.filter(it=>textMatch(it, dq)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
+  $('done-count').textContent=all.length;
+  const now=Date.now();
+  const dm=$('done-metrics');
+  if(dm){
+    const g=all.map(it=>doneGroupOf(it.doneAt, now).key);
+    const n=k=>g.filter(x=>x===k).length;
+    /* 요약 숫자는 '그 기간에 끝낸 건수'(누적) — 이번 주 = 오늘 + 이번 주, 이번 달 = 오늘 + 이번 주 + 이번 달.
+       단 이번 주가 지난달에서 시작했으면 지난달 날짜분은 이번 달에 넣지 않는다(달력 기준). */
+    const mStart=new Date(now); mStart.setHours(0,0,0,0); mStart.setDate(1);
+    const inMonth=all.filter(it=>it.doneAt && it.doneAt>=mStart.getTime()).length;
+    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span><span><b>${inMonth}</b>이번 달</span>`;
+  }
+  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
+  const groups=[];
+  for(const it of list){
+    const g=doneGroupOf(it.doneAt, now);
+    let grp=groups.find(x=>x.key===g.key);
+    if(!grp){ grp=Object.assign({items:[]}, g); groups.push(grp); }
+    grp.items.push(it);
+  }
+  groups.sort((a,b)=>b.order-a.order);
+  $('col-done').innerHTML=groups.map(g=>`<section class="done-group" data-group="${g.key}">
+      <div class="dg-head"><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span></div>
+      <div class="cards dg-cards">${g.items.map(it=>cardHtml(it,'done')).join('')}</div>
+    </section>`).join('');
 }
-export async function persist(){ window.items=S.items; await STORE.saveAll(S.items); render(); askNotify(); }
+/* v3.7.0 속도: 화면을 **먼저** 그리고 저장은 뒤에서 한다(소유자 지적 — 메모 저장 뒤 살짝 멈칫).
+   예전엔 `await saveAll` 뒤에 render 해서, 디스크 쓰기(진행 중인 앞 저장 + 백업 회전까지)가 끝날 때까지
+   보드가 옛 모습으로 멈춰 있었다. 저장 실패는 store.js 가 배너·재시도로 따로 다루고(화면 코드를 막지
+   않는다), 번호표 거절(Stale)은 store.js 가 화면을 다시 읽으므로 먼저 그려도 데이터가 어긋나지 않는다.
+   돌려주는 프로미스는 실제 저장 완료 — 기다려야 하는 곳은 지금처럼 await 하면 된다. */
+export function persist(){ window.items=S.items; render(); askNotify(); return STORE.saveAll(S.items); }
 
 /* ── 메모 합치기 (v2.8.0) ────────────────────────────────────────────────
    보드 카드를 끌어 다른 카드에 놓으면 그 카드(받는 쪽)로 병합한다.
@@ -183,39 +271,55 @@ function mergeCards(targetId, sourceId){
 /* 보드 두 뷰의 카드만 드래그 병합 대상 (완료 탭·캘린더 상세는 제외) */
 const boardCard=el=>el.closest&&el.closest('#view-board .card,#view-board5 .card');
 
+/* v3.7.0: HTML5 드래그 → 마우스 이벤트 (dom-utils enableDragReorder 주석과 같은 이유 —
+   파일 끌어다 놓기를 위해 dragDropEnabled 를 켜면 Windows WebView2 에서 HTML5 드래그가 죽는다).
+   카드를 6px 이상 끌면 유령 카드가 손을 따라오고, 다른 보드 카드 위에서 놓으면 병합한다.
+   놓을 대상은 이벤트 target 으로 판정한다(유령은 pointer-events:none) — jsdom 테스트 가능.
+   드래그로 끝난 mouseup 뒤에 따라오는 click 한 번은 삼킨다(놓자마자 양식이 열리지 않게). */
 function initMergeDrag(){
-  /* 핸들 없이 카드 전체를 드래그 — 체크·삭제·@태그 위에서 시작한 드래그는 제외
-     (enableDragReorder 처럼 mousedown 때만 draggable 을 켠다: 캘린더 상세 등
-     다른 곳의 카드에 유령 드래그가 생기지 않는다) */
+  let start=null, ghost=null, swallowUntil=0;
+  const clear=()=>{
+    document.querySelectorAll('.card.dragging,.card.merge-over').forEach(el=>el.classList.remove('dragging','merge-over'));
+    if(ghost){ ghost.remove(); ghost=null; }
+    document.body.classList.remove('is-dragging');
+    dragMergeId=null; start=null;
+  };
   document.body.addEventListener('mousedown',e=>{
+    if(e.button!==0) return;
     const card=boardCard(e.target);
-    if(card&&!e.target.closest('.chk,.del,.at-tag')) card.setAttribute('draggable','true');
+    if(!card||!card.dataset.open||e.target.closest('.chk,.del,.at-tag')) return;
+    start={x:e.clientX, y:e.clientY, card};
   });
-  document.body.addEventListener('dragstart',e=>{
-    const card=boardCard(e.target);
-    if(!card||card.getAttribute('draggable')!=='true'||!card.dataset.open){ return; }
-    dragMergeId=Number(card.dataset.open);
-    card.classList.add('dragging');
-    try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',''); }catch{}
-  });
-  document.body.addEventListener('dragover',e=>{
-    if(dragMergeId==null) return;
+  document.addEventListener('mousemove',e=>{
+    if(!start) return;
+    if(e.buttons===0 && dragMergeId!=null){ clear(); return; }   // 창 밖에서 버튼을 놓고 돌아온 경우 — 끌기 취소
+    if(dragMergeId==null){
+      if(Math.hypot(e.clientX-start.x, e.clientY-start.y)<6) return;
+      dragMergeId=Number(start.card.dataset.open);
+      start.card.classList.add('dragging');
+      document.body.classList.add('is-dragging');
+      try{ ghost=start.card.cloneNode(true); ghost.classList.remove('dragging'); ghost.classList.add('drag-ghost'); document.body.appendChild(ghost); }catch{ ghost=null; }
+    }
+    if(ghost){ ghost.style.left=(e.clientX+12)+'px'; ghost.style.top=(e.clientY+10)+'px'; }
     const card=boardCard(e.target);
     document.querySelectorAll('.card.merge-over').forEach(el=>{ if(el!==card) el.classList.remove('merge-over'); });
-    if(card&&Number(card.dataset.open)!==dragMergeId){ e.preventDefault(); card.classList.add('merge-over'); }
+    if(card&&!card.classList.contains('drag-ghost')&&Number(card.dataset.open)!==dragMergeId) card.classList.add('merge-over');
   });
-  document.body.addEventListener('drop',e=>{
+  document.addEventListener('mouseup',e=>{
+    if(!start) return;
+    const src=dragMergeId;
     const card=boardCard(e.target);
-    const src=dragMergeId; dragMergeId=null;
-    if(src==null||!card) return;
-    e.preventDefault();
+    clear();
+    if(src==null) return;                         // 6px 안쪽 = 그냥 클릭
+    swallowUntil=Date.now()+400;                  // 놓은 직후 따라오는 click 만 (타이머 없이 — 다음 클릭을 막지 않게)
+    if(!card) return;
     const tid=Number(card.dataset.open);
-    if(tid!==src) mergeCards(tid, src);
+    if(tid&&tid!==src) mergeCards(tid, src);
   });
-  document.body.addEventListener('dragend',()=>{
-    dragMergeId=null;
-    document.querySelectorAll('.card.dragging,.card.merge-over').forEach(el=>{ el.classList.remove('dragging','merge-over'); el.removeAttribute('draggable'); });
-  });
+  document.addEventListener('click',e=>{
+    if(swallowUntil && Date.now()<swallowUntil && boardCard(e.target)){ swallowUntil=0; e.stopPropagation(); e.preventDefault(); }
+  },true);
+  window.addEventListener('blur',clear);
 }
 
 export function initRender(){
@@ -257,7 +361,7 @@ export function initRender(){
   /* 주기 재렌더 — 편집 중·드래그 중 보호 (재렌더는 DOM 을 갈아엎어 드래그를 끊는다) */
   setInterval(()=>{ const a=document.activeElement;
     if(document.querySelector('.card.dragging'))return;
-    if(a&&(a.matches('#search,#done-search,#inp,.dt-date,.dt-time')||a.closest('#formPanel,#presetModal')))return;
+    if(a&&(a.matches('#search,#done-search,.dt-date,.dt-time')||a.closest('#formPanel,#presetModal')))return;
     render(); },60000);
   /* 검색 */
   $('search').addEventListener('input',e=>{q=e.target.value.trim().toLowerCase();render();});

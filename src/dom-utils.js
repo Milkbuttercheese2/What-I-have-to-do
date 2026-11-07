@@ -10,35 +10,43 @@ export function escAttr(s){return String(s ?? '').replace(/&/g,'&amp;').replace(
 
 /* 드래그로 순서 바꾸기 — 핸들(.drag-handle)을 잡아야만 드래그 시작.
    컨테이너 안의 rowSelector 요소들을 재정렬. onDrop(container) 콜백으로 저장 처리. */
+/* v3.7.0: HTML5 드래그(draggable/dragstart/drop) → 마우스 이벤트로 교체.
+   파일·폴더를 창에 끌어다 놓아 링크를 거는 기능 때문에 메인 창의 dragDropEnabled 를
+   켰는데, Windows WebView2 는 그게 켜지면 **웹 페이지 안의 HTML5 드래그가 통째로 죽는다**
+   (dragover/drop 이 오지 않는다). 그래서 내부 드래그는 mousedown→mousemove→mouseup 으로
+   직접 구현한다. 부수 효과로 반투명 유령 이미지 없이 행이 손을 따라 바로 자리를 옮긴다.
+   ⚠️ 다시 draggable/dragstart 로 되돌리면 정렬이 조용히 안 먹는다 — Windows 에서만. */
 export function enableDragReorder(container, rowSelector, handleSelector, onDrop){
-  let dragEl=null;
-  const clearDraggable=()=>container.querySelectorAll('[draggable="true"]').forEach(r=>r.removeAttribute('draggable'));
+  let dragEl=null, moved=false, startY=0;
   container.addEventListener('mousedown',e=>{
+    if(e.button!==0) return;
     const h=e.target.closest(handleSelector);
     const row=e.target.closest(rowSelector);
-    if(h&&row&&container.contains(row)) row.setAttribute('draggable','true');
+    if(!h||!row||!container.contains(row)) return;
+    e.preventDefault();                                  // 글자 선택 방지
+    dragEl=row; moved=false; startY=e.clientY;
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
   });
-  // 컨테이너 밖에서 놓아도 draggable 이 남지 않도록 문서 전역에서 해제
-  document.addEventListener('mouseup',()=>{ if(!dragEl) clearDraggable(); });
-  container.addEventListener('dragstart',e=>{
-    const row=e.target.closest(rowSelector);
-    if(!row||row.getAttribute('draggable')!=='true'){ e.preventDefault(); return; }
-    dragEl=row; row.classList.add('dragging');
-    try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',''); }catch{}
-  });
-  container.addEventListener('dragover',e=>{
-    if(!dragEl)return; e.preventDefault();
+  function onMove(e){
+    if(!dragEl) return;
+    if(e.buttons===0 && moved){ onUp(); return; }       // 창 밖에서 버튼을 놓고 돌아온 경우 — 거기서 끝낸다
+    if(!moved){ if(Math.abs(e.clientY-startY)<3) return; moved=true; dragEl.classList.add('dragging'); document.body.classList.add('is-dragging'); }
     const after=[...container.querySelectorAll(rowSelector+':not(.dragging)')].reduce((closest,child)=>{
       const box=child.getBoundingClientRect(); const offset=e.clientY-box.top-box.height/2;
       if(offset<0&&offset>closest.offset) return {offset,el:child}; return closest;
     },{offset:-Infinity,el:null}).el;
-    if(after==null) container.appendChild(dragEl); else container.insertBefore(dragEl,after);
-  });
-  container.addEventListener('drop',e=>{ e.preventDefault(); });
-  container.addEventListener('dragend',()=>{
-    if(dragEl){ dragEl.classList.remove('dragging'); }
-    dragEl=null; clearDraggable(); if(onDrop) onDrop(container);
-  });
+    if(after==null){ if(container.lastElementChild!==dragEl) container.appendChild(dragEl); }
+    else if(after.previousElementSibling!==dragEl) container.insertBefore(dragEl,after);
+  }
+  function onUp(){
+    document.removeEventListener('mousemove',onMove);
+    document.removeEventListener('mouseup',onUp);
+    const was=moved; if(dragEl) dragEl.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
+    dragEl=null; moved=false;
+    if(was&&onDrop) onDrop(container);
+  }
 }
 
 /* 실행취소 토스트 */
@@ -78,7 +86,8 @@ function ensureDialog(){
   if(dlgEl) return dlgEl;
   dlgEl=document.createElement('div');
   dlgEl.className='modal-bg'; dlgEl.id='appDialog';
-  dlgEl.innerHTML=`<div class="modal modal-narrow" role="alertdialog" aria-modal="true">
+  dlgEl.innerHTML=`<div class="modal modal-narrow has-x" role="alertdialog" aria-modal="true">
+    <button type="button" class="fm-x modal-x" id="dlg-x" aria-label="닫기" title="닫기 (ESC)">×</button>
     <h3 id="dlg-title">알림</h3>
     <div class="m-sub" id="dlg-msg"></div>
     <div class="m-actions">
@@ -90,6 +99,7 @@ function ensureDialog(){
   const close=v=>{ dlgEl.classList.remove('on'); const r=dlgResolve; dlgResolve=null; if(r) r(v); };
   dlgEl.querySelector('#dlg-ok').addEventListener('click',()=>close(true));
   dlgEl.querySelector('#dlg-cancel').addEventListener('click',()=>close(false));
+  dlgEl.querySelector('#dlg-x').addEventListener('click',()=>close(false));     // 닫기(×) = 취소
   dlgEl.addEventListener('click',e=>{ if(e.target===dlgEl) close(false); });   // 배경 클릭 = 취소
   document.addEventListener('keydown',e=>{
     if(!dlgEl.classList.contains('on')) return;

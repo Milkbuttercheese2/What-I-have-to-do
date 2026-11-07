@@ -114,9 +114,8 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
 {
   const page = await open({width: 1360, height: 900});
   await page.click('#settingsBtn'); await page.waitForTimeout(200);
-  await page.click('#boardModeBtn'); await page.waitForTimeout(300);
-  await page.click('.bm-opt[data-mode="owner"]'); await page.waitForTimeout(300);
-  await page.click('#boardModeClose').catch(()=>{}); await page.waitForTimeout(200);
+  await page.click('#segBoardMode .seg-btn[data-v="owner"]'); await page.waitForTimeout(300);   /* v3.7.0 설정 안 세그먼트 */
+  await page.click('#settingsClose').catch(()=>{}); await page.waitForTimeout(200);
   await page.keyboard.press('Escape'); await page.waitForTimeout(400);   // 모달 확실히 닫기
   await shotPage(page, 'board-owner.png');
   await page.close();

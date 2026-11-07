@@ -385,8 +385,10 @@ pub fn run() {
                 }
             }
 
-            // 자동 시작 실행이지만 '시작 시 최소화'가 꺼져 있으면 창 표시
-            if autostart_launch && !sget_bool("autostartMinimized", true) {
+            // 자동 시작 실행이지만 '시작 시 최소화'가 꺼져 있으면 창 표시.
+            // v3.7.0: 기본값을 '창 열기'(false)로 바꿨다 — 소유자 요청이 "컴퓨터를 켜면 앱이
+            // 열리게"이고, 트레이에만 숨으면 켜졌는지조차 모른다. 숨기려면 설정에서 고른다.
+            if autostart_launch && !sget_bool("autostartMinimized", false) {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
                 }
@@ -433,6 +435,7 @@ pub fn run() {
             commands::resize_capture,
             commands::set_capture_form_mode,
             commands::set_ui_scale,
+            commands::set_autostart,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

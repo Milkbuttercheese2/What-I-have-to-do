@@ -98,7 +98,7 @@ test('done 아이템은 보드 제외, renderDone에 표시 — 완료 카드 = 
   S.items.push(mk({memo:'끝난 일', done:true, doneAt:Date.now(),
     f:{due:iso(-60)}, subs:[{id:newId(), title:'세부흔적', mid:iso(-120), done:false}], recurId:1}));
   S.items.push(mk({memo:'doneAt없음', done:true, doneAt:null}));
-  render();
+  render(); renderDone();   // v3.7.0: 숨은 완료 화면은 render() 가 다시 그리지 않는다(탭을 열 때 그린다)
   for(const k of ['inbox','today','doing','planned'])
     assert.ok(!$('col-'+k).textContent.includes('끝난 일'));
   assert.equal($('done-count').textContent, '2');
@@ -118,7 +118,7 @@ test('완료 업무는 마감이 지났어도 빨간 알람 점(ad-ring)을 표�
   await env.resetS(); S.loaded = true;
   // 마감이 이미 지난 완료 업무 — 알람 확인 기록(al) 없음
   S.items.push(mk({memo:'지난 완료건', done:true, doneAt:Date.now(), f:{due:iso(-120)}}));
-  render();
+  render(); renderDone();
   assert.ok($('col-done').textContent.includes('지난 완료건'));
   assert.ok(!$('col-done').innerHTML.includes('ad-ring'));   // 울림(빨강) 점 없음
   assert.ok(!$('col-done').innerHTML.includes('adot'));      // 알람 점 자체가 없음

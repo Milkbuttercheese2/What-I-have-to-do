@@ -78,8 +78,10 @@ await page.goto(`http://127.0.0.1:${port}/index.html`, {waitUntil:'networkidle'}
 await page.waitForTimeout(800);
 
 console.log('\n@ 자동완성 드롭다운');
-await page.click('#inp');
-await page.type('#inp', '@김철', {delay:40});
+/* v3.7.0: 메인 바로 입력칸(#inp) 폐지 — 같은 자동완성을 양식 메모에서 검사한다 */
+await page.click('#blankForm'); await page.waitForTimeout(300);
+await page.click('#fm-memo');
+await page.type('#fm-memo', '@김철', {delay:40});
 await page.waitForTimeout(300);
 
 const d = await page.evaluate(() => {
@@ -130,7 +132,8 @@ await page.keyboard.press('Escape'); await page.waitForTimeout(200);
 chk('ESC 로만 닫힌다', await page.evaluate(() => document.getElementById('atDrop').style.display === 'none'));
 
 console.log('\n전화번호부 → 관련 업무 팝업 → 양식');
-await page.evaluate(() => { document.getElementById('inp').value = ''; });
+await page.evaluate(() => { document.getElementById('fm-memo').value = ''; });
+await page.keyboard.press('Escape'); await page.waitForTimeout(200);          // 양식 닫기(드롭다운은 위에서 이미 닫힘)
 await page.evaluate(() => [...document.querySelectorAll('.tab')].find(t => t.textContent.includes('전화번호부')).click());
 await page.waitForTimeout(400);
 chk('전화번호부 목록이 그려진다', (await page.$$('#pb-list .pb-item')).length === 15);
@@ -142,7 +145,7 @@ const nth = n => page.evaluate(i => { const el = document.querySelectorAll('#rel
    기대값은 화면에 적힌 글자로 잡는다 — 정렬 규칙을 테스트가 다시 추측하면
    앱이 맞아도 틀렸다고 나온다(첫 작성 때 실제로 그랬다). */
 for (const i of [0, 1, 2]) {
-  await page.click('#pb-list .pb-item:first-child .pb-who'); await page.waitForTimeout(300);
+  await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(300);
   if (i === 0) {
     const st = await page.evaluate(() => ({on: document.getElementById('relModal').classList.contains('on'),
       hits: document.querySelectorAll('#rel-list .rel-hit').length}));
@@ -159,16 +162,16 @@ for (const i of [0, 1, 2]) {
 }
 
 /* 배경 클릭으로 닫은 뒤 다시 열기 */
-await page.click('#pb-list .pb-item:first-child .pb-who'); await page.waitForTimeout(250);
+await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(250);
 await page.evaluate(() => document.getElementById('relModal').click());
 await page.waitForTimeout(200);
-await page.click('#pb-list .pb-item:first-child .pb-who'); await page.waitForTimeout(250);
+await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(250);
 chk('배경 클릭으로 닫은 뒤 다시 열린다', await page.evaluate(() => document.getElementById('relModal').classList.contains('on')));
 await page.evaluate(() => document.getElementById('relClose').click()); await page.waitForTimeout(200);
 
 let flaky = 0;
 for (let i = 0; i < 10; i++) {
-  await page.click('#pb-list .pb-item:first-child .pb-who'); await page.waitForTimeout(110);
+  await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(110);
   if (!await page.evaluate(() => document.getElementById('relModal').classList.contains('on')
       && document.querySelectorAll('#rel-list .rel-hit').length === 3)) flaky++;
   await page.evaluate(() => document.getElementById('relClose').click()); await page.waitForTimeout(70);
@@ -187,7 +190,7 @@ for (const wait of [0, 60, 150]) {
   try {
     await p2.evaluate(() => [...document.querySelectorAll('.tab')].find(t => t.textContent.includes('전화번호부')).click());
     await p2.waitForSelector('#pb-list .pb-item', {timeout:4000});
-    await p2.click('#pb-list .pb-item:first-child .pb-who'); await p2.waitForTimeout(250);
+    await p2.click('#pb-list .pb-item .pb-who'); await p2.waitForTimeout(250);
     res.modalOn = await p2.evaluate(() => document.getElementById('relModal').classList.contains('on'));
     res.hits = await p2.evaluate(() => document.querySelectorAll('#rel-list .rel-hit').length);
     if (res.hits) { await p2.click('#rel-list .rel-hit:first-child'); await p2.waitForTimeout(300);

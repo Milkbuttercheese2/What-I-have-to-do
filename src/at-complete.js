@@ -20,7 +20,7 @@ let token=null;           // memo 계열일 때의 {start, caret} (contact 계�
 let applying=false;       // 선택 적용 중 재진입 방지 (프로그램적 input 이벤트가 다시 열지 않게)
 let mirror=null;          // textarea 커서 좌표 측정용 미러
 
-const isMemo=el=>el && (el.id==='inp'||el.id==='fm-memo');
+const isMemo=el=>el && el.id==='fm-memo';   // v3.7.0 메인 바로 입력칸(#inp) 폐지
 /* v2.10.0: 관련소속(.c-org)은 자동완성 제외(소유자 지정) — 소속은 같은 값이 수십 명에
    걸려 목록이 소음이 된다. 이름·연락처 칸만 검색한다. */
 const isContact=el=>el && el.matches && el.matches('#fm-contacts .contact-row .c-who, #fm-contacts .contact-row .c-phone');
@@ -54,7 +54,7 @@ function caretRect(ta){
 function openAt(el, list, rect){
   anchor=el; items=list; sel=0;
   drop.innerHTML=items.map((e,i)=>`<div class="at-item${i===0?' sel':''}" data-ati="${i}">
-    <span class="at-who">${esc(e.who||'—')}</span><span class="at-org">${esc(e.org||'')}</span><span class="at-phone num">${esc(e.phone||'')}</span>
+    <span class="at-who">${esc(e.who||'')}</span><span class="at-org">${esc(e.org||'')}</span><span class="at-phone num">${esc(e.phone||'')}</span>
   </div>`).join('');
   drop.style.display='block';
   /* 화면 밖 방지: 우측은 안으로 밀고, 아래 공간이 없으면 위로 편다 */

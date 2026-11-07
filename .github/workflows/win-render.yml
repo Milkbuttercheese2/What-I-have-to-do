@@ -36,3 +36,4 @@ jobs:
         with:
           name: win-render
           path: docs/win-render/
+          retention-days: 7

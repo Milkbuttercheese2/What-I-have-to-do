@@ -1,15 +1,15 @@
 /* =========================================================================
    바로 입력 + 양식 패널
    ========================================================================= */
-import {S, newId, makeItem} from './state.js';
+import {S, newId, makeItem, toggleDone} from './state.js';
 import {invoke, STORE} from './store.js';
-import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm} from './dom-utils.js';
+import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm, showToast} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
 import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
-import {openModal, closeModal} from './modals.js';
+import {openModal, closeModal, isOpen} from './modals.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -33,22 +33,8 @@ export function captureMemo(t){
   S.items.push(makeItem({memo:t, staged:true, f:{received:new Date().toISOString()}, contacts:contactsFromTags(t)}));
   persist(); return true;
 }
-/* 바로 입력 버튼/Ctrl+Enter — #inp 를 읽어 captureMemo 로 위임 */
-export function toInbox(){
-  const t=$('inp').value.trim(); if(!t){$('inp').focus();return;}
-  captureMemo(t);
-  $('inp').value=''; $('inp').style.height=''; $('inp').focus();   // 등록 후 높이 초기화(min-height로 복귀)
-  renderInpHl();                                                   // v3.0.1: 하이라이트도 비움
-}
-/* v2.5.4: 바로 입력창 자동 세로 확장 — 내용에 맞춰 늘어난다(최소 CSS min-height, 최대 60vh 뒤 스크롤).
-   WebView2에서 드래그 리사이즈가 잘 안 잡히던 문제를 근본 해결(타이핑만으로 늘어남). resize 핸들은 그대로 둠. */
-export function autoGrowInp(){
-  const el=$('inp'); if(!el) return;
-  el.style.height='auto';
-  const min=parseFloat(getComputedStyle(el).minHeight)||0;
-  const max=Math.max(min, Math.round(window.innerHeight*0.6));
-  el.style.height=Math.min(Math.max(el.scrollHeight, min), max)+'px';
-}
+/* v3.7.0: 메인 화면의 '바로 입력' 칸(#inp)과 toInbox·autoGrowInp 는 없앴다(소유자 지정 —
+   입력은 [입력] 버튼 = 양식, 또는 Ctrl+Alt+Space 빠른 메모). captureMemo 는 미니 창이 계속 쓴다. */
 
 /* (2) 양식 패널 */
 let editingId=null;
@@ -145,12 +131,19 @@ function setReadonly(on){
   const p=$('formPanel');
   p.classList.toggle('fm-ro', on);
   p.querySelectorAll('input,textarea,select,button').forEach(el=>{
-    if(el.id==='fm-close') return;                          // 닫기는 살려 둔다
+    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book') return;   // 닫기·다시 진행·2쪽 보기는 살려 둔다
     el.disabled=on;
   });
   $('fm-save').style.display=on?'none':'';
   $('fm-revert').style.display=on?'none':'';
+  /* v3.7.0: 완료 업무엔 [업무 종료] 대신 [다시 진행] — 검색(미니 창·관련 업무)으로 연 완료
+     업무는 카드의 ○ 가 손 닿는 곳에 없어서, 소유자 요청으로 여기서 바로 되돌리게 했다.
+     되돌리기는 toggleDone 하나만 거친다 — S.doneDirty 경로를 넓히지 않는다(설계 근간). */
+  $('fm-finish').style.display=on?'none':'';
+  $('fm-reopen').style.display=on?'':'none';
 }
+/* 지금 열린 양식이 읽기 전용(완료 업무)인가 — 파일 끌어다 놓기가 묻는다(filedrop.js) */
+export function formReadonly(){ return isOpen('formPanel') && $('formPanel').classList.contains('fm-ro'); }
 
 export async function openForm(pre, opts){
   saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
@@ -164,7 +157,7 @@ export async function openForm(pre, opts){
     setReadonly(true);
     baseline=null; markDraft(0);
     updatePlacePreview();
-    $('fm-place').textContent='완료된 업무입니다 — 고치려면 카드의 ○를 눌러 완료를 취소하세요';
+    $('fm-place').textContent='고치려면 [다시 진행]';
     showFormPanel();
     return;
   }
@@ -197,17 +190,11 @@ function renderMemoHl(){
   hl.innerHTML=linkifyAt(esc($('fm-memo').value), S.phonebook)+'\n';
   hl.scrollTop=$('fm-memo').scrollTop;
 }
-/* 바로 입력(#inp)도 같은 본문 하이라이트 (v3.0.1 소유자 지정 — 빠른메모에도 태그) */
-function renderInpHl(){
-  const hl=$('inp-hl'); if(!hl) return;
-  hl.innerHTML=linkifyAt(esc($('inp').value), S.phonebook)+'\n';
-  hl.scrollTop=$('inp').scrollTop;
-}
 /* 하이라이트 일괄 갱신 (v3.0.3) — 전화번호부가 '나중에' 바뀌는 경로용 훅.
    초기 로드 완료·백업 복원 전에 타이핑한 텍스트는 그 시점의 (빈) 전화번호부로
    그려진 채 남는다 — input 이벤트가 없으면 다시 안 그려지므로, 로드/복원이
    끝난 뒤 이 훅으로 실존 판정을 다시 태운다(실사용 "하이라이트 안 뜸" 버그의 원인). */
-export function refreshTagHl(){ renderInpHl(); renderMemoHl(); }
+export function refreshTagHl(){ renderMemoHl(); }
 /* 태그 hover 반응 (v3.0.1) — 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로
    판정한다(textarea 가 위라 CSS :hover 불가). 맞으면 .hover + 포인터 커서. */
 function wireTagHover(ta, hlId){
@@ -231,7 +218,8 @@ function wireTagHover(ta, hlId){
 
 function fillForm(pre){
   pre=pre||{};
-  $('fm-title').textContent=editingId?'양식 채우기 — 저장하면 규칙에 따라 자동 배치됩니다':'양식 입력';
+  /* v3.7.0: 제목은 짧게 — '저장하면 자동 배치' 설명은 옆의 '저장 위치' 칩이 대신 말한다 */
+  $('fm-title').textContent=editingId?'업무':'새 업무';
   $('fm-memo').value = pre.memo || '';
   renderMemoHl();
 
@@ -407,6 +395,17 @@ function addFormFileRow(path, active){
   $('fm-files').appendChild(row);
 }
 
+/* v3.7.0 파일 끌어다 놓기 → 이 양식의 링크 칸에 추가 (filedrop.js). 이미 있는 경로는 건너뛴다.
+   S.items 는 건드리지 않는다 — 반영은 [저장]뿐(임시저장은 평소처럼 돈다). 추가한 개수를 돌려준다. */
+export function addLinkPaths(paths){
+  const key=p=>String(p||'').trim().replace(/\//g,'\\').replace(/\\+$/,'').toLowerCase();
+  const have=new Set([...$('fm-files').querySelectorAll('.ffile-path')].map(i=>key(i.value)));
+  let n=0;
+  for(const p of paths||[]){ const v=String(p||'').trim(); if(!v||have.has(key(v))) continue; have.add(key(v)); addFormFileRow(v); n++; }
+  if(n) scheduleDraft();
+  return n;
+}
+
 function collectForm(){
   const f={};
   $('fm-grid').querySelectorAll('[data-fkey]').forEach(sp=>{ const v=readDtInput(sp); f[sp.dataset.fkey] = (v===null?'':v); });
@@ -438,16 +437,6 @@ function updatePlacePreview(){ try{ const d=collectForm(); const p=placeOf({stag
 export function initForm(){
   // 팝업이 어느 탭에서든 뜨도록 formPanel을 body 직속으로 이동
   document.body.appendChild($('formPanel'));
-  $('toInbox').addEventListener('click', toInbox);
-  $('inp').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();toInbox();} });
-  $('inp').addEventListener('input', ()=>{ autoGrowInp(); renderInpHl(); });   // v2.5.4 자동 확장 + v3.0.1 태그 하이라이트
-  /* v3.0.1 바로 입력 태그 클릭 → 관련 업무. v3.0.2: 기하 판정(.hover)으로 통일 */
-  $('inp').addEventListener('click',()=>{
-    const sp=$('inp-hl') && $('inp-hl').querySelector('.at-tag.hover');
-    if(sp) openRelated(sp.dataset.at);
-  });
-  $('inp').addEventListener('scroll',()=>{ const hl=$('inp-hl'); if(hl) hl.scrollTop=$('inp').scrollTop; });
-  wireTagHover($('inp'), 'inp-hl');
   wireTagHover($('fm-memo'), 'fm-memo-hl');
   $('fm-contactadd').addEventListener('click',()=>addContactRow());
   $('fm-idadd').addEventListener('click',()=>{
@@ -476,7 +465,7 @@ export function initForm(){
   };
   $('fm-pickfile').addEventListener('click',()=>pickLink('pick_file_path'));
   $('fm-pickfolder').addEventListener('click',()=>pickLink('pick_folder_path'));
-  $('blankForm').addEventListener('click',()=>{ const t=$('inp').value.trim(); openForm(t?{memo:t}:{}); if(t){$('inp').value='';$('inp').style.height='';} });
+  $('blankForm').addEventListener('click',()=>openForm({}));          // v3.7.0 [입력] = 빈 양식
   /* 되돌리기 — 마지막으로 저장된 내용으로 복구(임시저장분 폐기).
      새 항목은 되돌릴 저장본이 없으므로 '작성 중인 내용 비우기'로 동작한다. */
   $('fm-revert').addEventListener('click',async ()=>{
@@ -499,7 +488,31 @@ export function initForm(){
   $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); if(e.target.id==='fm-memo') renderMemoHl(); scheduleDraft(); });
   $('formPanel').addEventListener('change',scheduleDraft);
   $('formPanel').addEventListener('click',e=>{ if(e.target.closest('.rm,.fsub-chk,.fsub-add')) scheduleDraft(); });
-  $('fm-save').addEventListener('click',async ()=>{
+  $('fm-save').addEventListener('click',()=>commitForm());
+  /* v3.7.0 업무 종료 — 연 채로 저장 + 완료 처리. 완료 체크(카드의 ○)와 같은 toggleDone 을 탄다. */
+  $('fm-finish').addEventListener('click',()=>commitForm({finish:true}));
+  /* v3.7.0 다시 진행 — 완료 업무(읽기 전용)를 진행 중으로 되돌리고 그 자리에서 고칠 수 있게 다시 연다 */
+  $('fm-reopen').addEventListener('click',()=>{
+    const it=editingId ? S.items.find(x=>x.id===editingId) : null;
+    if(!it||!it.done) return;
+    toggleDone(it); persist();
+    openForm(it);
+    showToast('진행 중으로 되돌렸습니다',()=>{
+      const cur=S.items.find(x=>x.id===it.id);
+      if(!cur||cur.done) return;
+      if(isOpen('formPanel') && editingId===cur.id){ dropDraft(draftKey); closeForm(); }
+      toggleDone(cur); persist();
+    });
+  });
+  $('fm-close').addEventListener('click',()=>closeForm());
+  $('fm-book').addEventListener('click',()=>openBook());
+  initBook();
+}
+
+/* 양식 확정 — [저장]·[업무 종료] 공용. finish 면 저장과 함께 완료 처리하고 [실행 취소]를 준다. */
+async function commitForm(opts){
+  const finish=!!(opts&&opts.finish);
+  {
     // F3: 저장 전 오입력 검사 (포커스 남아있으면 판정되도록 먼저 blur)
     if(document.activeElement && $('formPanel').contains(document.activeElement)) document.activeElement.blur();
     if(!validateAllDt($('formPanel'))){
@@ -517,12 +530,122 @@ export function initForm(){
         it.al = it.al || {};
         if(oldDue !== d.f.due) delete it.al.due;   // F2: 마감이 바뀌면 알람 재무장
       }
-    }else{
-      S.items.push(makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs, files:d.files}));
     }
+    let target=prev;
+    if(!editingId){
+      target=makeItem({memo:d.memo, staged:false, f:d.f, contacts:d.contacts, ids:d.ids, subs:d.subs, files:d.files});
+      S.items.push(target);
+    }
+    if(finish && target && !target.done) toggleDone(target);
     dropDraft(draftKey);                       // 최종 저장 = 임시저장분 폐기
     closeForm(); persist();
     /* v2.9.0 자동 연동(소유자 지정): 저장한 관련인 중 3칸 완비만 전화번호부에 흡수 */
     absorbIntoPhonebook(d.contacts);
+    if(finish && target){
+      const id=target.id;
+      showToast('업무를 종료했습니다',()=>{ const cur=S.items.find(x=>x.id===id); if(cur&&cur.done){ toggleDone(cur); persist(); } });
+    }
+  }
+}
+
+/* ── 메모 2쪽 보기 (v3.7.0 → v3.7.1 개편, 소유자 지정: "한글 두 쪽 보기처럼, 편집 가능") ──────────
+   쪽(종이 한 장 크기)을 두 장씩 나란히 놓고 **아래로 스크롤**하며 읽는다(1·2쪽, 그 아래 3·4쪽 …).
+   각 쪽은 같은 크기의 textarea 라서 그 자리에서 고칠 수 있고, 고친 내용은 곧바로 양식 메모(#fm-memo)에
+   반영된다(임시저장·@태그 하이라이트가 평소처럼 돈다). 완료 업무(읽기 전용 양식)에서는 쪽도 읽기 전용.
+   쪽 나누기: 같은 글꼴·폭의 숨은 측정 칸에 글을 넣어 '이 쪽에 넘치지 않는 최대 길이'를 이분 탐색으로
+   찾고, 가능하면 줄바꿈·띄어쓰기에서 끊는다. 쪽 조각을 그대로 이어 붙이면 원문이 된다(글자 추가 없음).
+   ⚠️ 한글 조합 중(isComposing)에는 다시 나누지 않는다 — 조합 중에 textarea 값을 바꾸면 글자가 깨진다. */
+let bookTas=[], bookRO=false, bookBusy=false;
+const bookFull=()=>bookTas.map(t=>t.value).join('');
+function bookFits(m, str){ m.value=str; return m.scrollHeight <= m.clientHeight+1; }
+function paginate(text){
+  const m=$('book-measure'); const pages=[]; let s=0;
+  if(!m || !text) return [text||''];
+  while(s<text.length){
+    if(bookFits(m, text.slice(s))){ pages.push(text.slice(s)); break; }
+    let lo=s+1, hi=text.length;                       // fits(s..lo) 는 참이라고 보고 최대 끝을 찾는다
+    while(lo<hi){ const mid=Math.ceil((lo+hi)/2); if(bookFits(m, text.slice(s,mid))) lo=mid; else hi=mid-1; }
+    let e=Math.max(lo, s+1);
+    const piece=text.slice(s,e);
+    const nl=piece.lastIndexOf('\n'), sp=piece.lastIndexOf(' ');
+    const soft = nl>piece.length*0.6 ? nl+1 : (sp>piece.length*0.8 ? sp+1 : 0);
+    if(soft>0 && e<text.length) e=s+soft;
+    pages.push(text.slice(s,e)); s=e;
+  }
+  return pages;
+}
+/* 쪽을 다시 나누고 화면에 반영 — 바뀐 쪽만 값을 고치고, 쪽 수가 달라질 때만 쪽을 새로 만든다.
+   caret: 전체 글에서의 커서 위치(있으면 그 위치가 들어 있는 쪽으로 커서를 옮긴다) */
+function renderBook(text, caret){
+  const pages=paginate(text);
+  const box=$('book-pages');
+  if(pages.length!==bookTas.length){
+    box.innerHTML=pages.map((_,i)=>`<div class="book-page"><textarea class="book-ta" spellcheck="false" maxlength="50000" aria-label="${i+1}쪽"></textarea><span class="book-no num">${i+1}</span></div>`).join('');
+    bookTas=[...box.querySelectorAll('.book-ta')];
+    bookTas.forEach(t=>{ t.readOnly=bookRO; });
+  }
+  pages.forEach((p,i)=>{ if(bookTas[i].value!==p) bookTas[i].value=p; });
+  $('book-pos').textContent=`${pages.length}쪽`;
+  if(caret!=null){
+    let start=0, idx=pages.length-1;
+    for(let i=0;i<pages.length;i++){ if(caret<=start+pages[i].length && (caret<start+pages[i].length || i===pages.length-1)){ idx=i; break; } start+=pages[i].length; }
+    if(idx===pages.length-1){ start=pages.slice(0,idx).reduce((a,p)=>a+p.length,0); }
+    const t=bookTas[idx];
+    if(t && document.activeElement!==t) t.focus({preventScroll:false});
+    if(t){ const off=Math.max(0, Math.min(t.value.length, caret-start)); t.setSelectionRange(off,off); }
+  }
+}
+/* 쪽 i 의 시작 위치(전체 글 기준) */
+const pageStart=i=>bookTas.slice(0,i).reduce((a,t)=>a+t.value.length,0);
+function bookChanged(t){
+  if(bookRO || bookBusy) return;
+  const i=bookTas.indexOf(t); if(i<0) return;
+  const caret=pageStart(i)+t.selectionStart;
+  const full=bookFull();
+  bookBusy=true;
+  try{ renderBook(full, caret); }finally{ bookBusy=false; }
+  const m=$('fm-memo');
+  if(m && m.value!==full){ m.value=full; m.dispatchEvent(new Event('input',{bubbles:true})); }   // 양식 메모에 즉시 반영(임시저장·하이라이트)
+}
+export function openBook(){
+  const text=String($('fm-memo').value||'');
+  bookRO=formReadonly();
+  $('book-title').textContent=(text.split('\n')[0]||'메모').slice(0,60);
+  bookTas=[]; $('book-pages').innerHTML='';
+  openModal('bookModal');
+  requestAnimationFrame(()=>{ renderBook(text, null); $('book-view').scrollTop=0; if(!bookRO&&bookTas[0]) bookTas[0].focus(); });  // 레이아웃이 잡힌 뒤 쪽을 나눈다
+}
+function initBook(){
+  if(!$('bookModal')) return;
+  document.body.appendChild($('bookModal'));          // 양식 위에서도 뜨도록 body 직속
+  $('bookClose').addEventListener('click',()=>closeModal('bookModal'));
+  $('bookDone').addEventListener('click',()=>closeModal('bookModal'));
+  const box=$('book-pages');
+  box.addEventListener('input',e=>{ if(e.target.classList.contains('book-ta') && !e.isComposing) bookChanged(e.target); });
+  box.addEventListener('compositionend',e=>{ if(e.target.classList.contains('book-ta')) bookChanged(e.target); });
+  /* 쪽 경계 넘나들기 — 쪽 끝에서 → / ↓ 는 다음 쪽 처음으로, 쪽 처음에서 ← / ↑ 는 앞 쪽 끝으로,
+     쪽 처음에서 Backspace 는 앞 쪽의 마지막 글자를, 쪽 끝에서 Delete 는 다음 쪽의 첫 글자를 지운다 */
+  box.addEventListener('keydown',e=>{
+    const t=e.target; if(!t.classList || !t.classList.contains('book-ta') || e.isComposing) return;
+    const i=bookTas.indexOf(t), a=t.selectionStart, b=t.selectionEnd, len=t.value.length;
+    if(a!==b) return;
+    const go=(j,pos)=>{ const u=bookTas[j]; if(!u) return; e.preventDefault(); u.focus(); const p=pos==='end'?u.value.length:0; u.setSelectionRange(p,p); };
+    if((e.key==='ArrowRight'||e.key==='ArrowDown') && a===len && i<bookTas.length-1) go(i+1,'start');
+    else if((e.key==='ArrowLeft'||e.key==='ArrowUp') && a===0 && i>0) go(i-1,'end');
+    else if(!bookRO && e.key==='Backspace' && a===0 && i>0){
+      e.preventDefault(); const p=bookTas[i-1]; const g=pageStart(i)-1; p.value=p.value.slice(0,-1); bookChangedAt(g);
+    }
+    else if(!bookRO && e.key==='Delete' && a===len && i<bookTas.length-1){
+      e.preventDefault(); const n=bookTas[i+1]; const g=pageStart(i)+len; n.value=n.value.slice(1); bookChangedAt(g);
+    }
   });
+  window.addEventListener('resize',()=>{ if(isOpen('bookModal')) renderBook(bookFull(), null); });
+}
+/* 전체 글 위치 기준으로 다시 나누고 커서를 둔다(쪽 경계 Backspace/Delete 용) */
+function bookChangedAt(caret){
+  const full=bookFull();
+  bookBusy=true;
+  try{ renderBook(full, caret); }finally{ bookBusy=false; }
+  const m=$('fm-memo');
+  if(m && m.value!==full){ m.value=full; m.dispatchEvent(new Event('input',{bubbles:true})); }
 }

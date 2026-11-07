@@ -8,14 +8,15 @@ import {S, reconcileCore, migrateItem} from './state.js';
 import {STORE} from './store.js';
 import {$, initToast, appAlert} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
-import {initForm, toInbox, contactsFromTags, refreshTagHl} from './form.js';
+import {initForm, openForm, contactsFromTags, refreshTagHl} from './form.js';
+import {initFileDrop} from './filedrop.js';
 import {initPresets, renderPresets} from './presets.js';
 import {initRender, render} from './render.js';
 import {initCalendar} from './calendar.js';
 import {initAlarms} from './alarms.js';
 import {initBackup, reconcileImported} from './backup.js';
 import {initCapture, sendCaptureConfig} from './capture-bridge.js';
-import {initSettingsMenu, syncSettings} from './settings-menu.js';
+import {initSettingsMenu, syncSettings, syncAutostart} from './settings-menu.js';
 import {initRecurBox, runRecurSpawn} from './recur-box.js';
 import {initPhonebook} from './phonebook.js';
 import {initAtComplete} from './at-complete.js';
@@ -35,7 +36,7 @@ window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
 initSettingsMenu(); initRecurBox(); initUiScale();
-initPhonebook(); initAtComplete(); initQuit();
+initPhonebook(); initAtComplete(); initQuit(); initFileDrop();
 renderPresets();
 
 /* 탭 — 어떤 화면이 있는지는 여기서 알지 못한다. 각 모듈이 init*() 에서
@@ -63,21 +64,8 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   });
 }
 
-/* 보드 모드 선택 (시간 | 시간·담당자) — settings.boardMode 로 영속.
-   헤더 모드 필(v2.5.0)이 산만하다 하여 v2.5.6에서 [설정] 메뉴의 팝업으로 이동. */
-document.body.appendChild($('boardModeModal'));   // 어느 탭에서든 뜨도록 body 직속
-function syncBoardModeSel(m){ [...$('boardModeModal').querySelectorAll('.bm-opt')].forEach(x=>x.classList.toggle('on', x.dataset.mode===m)); }
-function closeBoardModeModal(){ closeModal('boardModeModal'); }
-$('boardModeBtn').addEventListener('click',()=>{ syncBoardModeSel(S.settings.boardMode==='owner'?'owner':'time'); openModal('boardModeModal'); });
-$('boardModeClose').addEventListener('click', closeBoardModeModal);
-$('boardModeModal').addEventListener('click',e=>{
-  const b=e.target.closest('.bm-opt');
-  if(b){ const m=b.dataset.mode;
-    if((S.settings.boardMode||'time')!==m){ S.settings.boardMode=m; STORE.saveSettings(S.settings); setPlaceMode(m); render(); }
-    syncBoardModeSel(m); return;                 // 선택 즉시 적용, 모달은 열어둔다
-  }
-  if(e.target.id==='boardModeModal') closeBoardModeModal();   // 배경 클릭 닫기
-});
+/* 보드 모드 선택 — v3.7.0 부터 설정 팝업의 '보드 배치' 세그먼트가 직접 고른다(settings-menu.js).
+   예전 별도 팝업(boardModeModal)은 없앴다. */
 
 /* Ctrl+S = '저장'으로 통일 (v2.5.22): 열려 있는 편집 화면을 저장한다.
    어떤 팝업이 저장 가능한지는 그 팝업을 연 모듈이 openModal 의 save 로 등록한다
@@ -87,9 +75,6 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();
     const save=topSave();
     if(save){ save(); }
-    /* v2.6.4: 바로 입력칸에 쓰는 중이면 그 메모를 등록한다 — 커서가 그 칸에 있는데
-       Ctrl+S 가 백업 파일 대화상자를 띄우면 '저장'이라는 말과 어긋난다. */
-    else if(document.activeElement===$('inp') && $('inp').value.trim()){ toInbox(); }
     else { $('bkExp').click(); }
   }
 });
@@ -107,11 +92,22 @@ document.addEventListener('keydown',e=>{
    (v2.11.0 양식/관련 업무 역전, 주기 업무 팝업 누락, 동기화 팝업 대기 목록 잔존).
    @자동완성 드롭다운·appAlert 는 캡처 단계에서 ESC 를 먼저 먹고 멈춘다(변경 없음). */
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeTop(); });
+/* v3.7.0 단축키 — Ctrl+N 새 업무(빈 양식) · Ctrl+F 업무 검색(보드). 팝업이 떠 있으면 손대지 않는다
+   (양식 안의 Ctrl+F 는 웹뷰 기본 동작에 맡김). */
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey)||e.altKey||e.shiftKey) return;
+  if(document.querySelector('.modal-bg.on,.form-panel.on,.alarm-bg.on')) return;
+  const k=e.key.toLowerCase();
+  if(k==='n'){ e.preventDefault(); openForm({}); }
+  else if(k==='f'){
+    e.preventDefault();
+    const boardTab=document.querySelector('.tab[data-view="board"]');
+    if(boardTab && !boardTab.classList.contains('on')) boardTab.click();
+    $('search').focus(); $('search').select();
+  }
+});
 
-function tickClock(){ const n=new Date();
-  $('clock').textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
-  const days=['일','월','화','수','목','금','토']; $('today').textContent=`${n.getFullYear()}. ${n.getMonth()+1}. ${n.getDate()} (${days[n.getDay()]})`; }
-setInterval(tickClock,1000); tickClock();
+/* v3.7.0: 헤더 시계·날짜 표기 폐지(소유자 지정) — tickClock 제거 */
 /* 주기 업무: 자정 넘김·장시간 실행 대비 주기적으로 도래분 생성 */
 setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
 
@@ -127,8 +123,9 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     S.loaded = true;                                   // F1: 이제부터 저장 허용
     reconcileImported();
     /* 보드 모드 복원 (v2.5.0) — 저장된 boardMode 반영 후 아래 render()가 그린다 */
-    const bm = S.settings.boardMode==='owner' ? 'owner' : 'time';
-    setPlaceMode(bm); syncBoardModeSel(bm);
+    /* v3.7.0 소유자 지정: 기본 보드 모드 = 시간·담당자(5열). 'time' 을 명시로 고른 사람만 4열. */
+    const bm = S.settings.boardMode==='time' ? 'time' : 'owner';
+    setPlaceMode(bm);
     /* 화면 크기·테마 복원 + 미니 창에 구성 전달.
        v2.6.4: 이 '보기 설정' 호출들은 각각 try 로 감싼다 — 여기서 예외가 나면 아래 초기 로드
        전체가 catch 로 떨어져, 데이터는 멀쩡한데 "불러오지 못했습니다" 경고가 뜨고 S.loaded 가
@@ -137,6 +134,9 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     try{ applyUiScale(S.settings.uiScale); }catch(e){ console.warn('화면 크기 복원 실패',e); }
     try{ applyTheme(S.settings); syncSettings(); }catch(e){ console.warn('테마 복원 실패',e); }
     try{ sendCaptureConfig(); }catch(e){ console.warn('미니 창 구성 전달 실패',e); }
+    /* v3.7.0 자동 실행: 매 실행마다 설정값(기본 켬)에 레지스트리를 맞춘다(켜는 쪽은 exe 경로 자가 치유).
+       설정에 키가 아직 없어도(업데이트 직후) 기본값으로 동작한다 — Rust 쪽 기본값도 같은 방향이다. */
+    try{ syncAutostart(true); }catch(e){ console.warn('자동 실행 동기화 실패',e); }
     /* v3.0.3: 로드 전 타이핑분의 @태그 하이라이트를 전화번호부 도착 후 다시 그린다 */
     try{ refreshTagHl(); }catch(e){ console.warn('태그 하이라이트 갱신 실패',e); }
     /* 캡처 초안 회수(v3.1.0): 지난 세션이 미등록 초안을 남긴 채 꺼졌다면
@@ -162,7 +162,7 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
        실제 원인 1순위가 '앱이 완전히 꺼지기 전 재실행'이라 그것부터 짚는다. */
     await appAlert(
       '저장된 데이터를 불러오지 못했습니다.\n'+
-      '지금은 데이터를 지키기 위해 저장이 잠겨 있습니다 — 아래 순서대로 해보세요.\n\n'+
+      '지금은 데이터를 지키기 위해 저장이 잠겨 있습니다. 아래 순서대로 해보세요.\n\n'+
       '1. 화면 오른쪽 아래 시계 옆 트레이 아이콘을 우클릭해 [종료]를 누른 뒤 앱을 다시 실행합니다.\n'+
       '   (앱이 완전히 꺼지기 전에 다시 열면 잠깐 이런 일이 생길 수 있습니다.)\n\n'+
       '2. 그래도 같으면 [설정] → [저장 위치 확인·변경]에서 다른 폴더로 옮겨 보세요.\n\n'+
