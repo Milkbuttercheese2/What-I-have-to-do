@@ -24,7 +24,7 @@ import {applyAlarmOn} from './alarms.js';
 
 /* 보드 배치 — 기본은 담당자·시간(5열, v3.7.0 소유자 지정). 'time' 을 명시로 고른 사람만 4열. */
 export const normBoardMode = v => v==='time' ? 'time' : 'owner';
-const BOARD_DESC = {owner:'분류 대기 · 본인/타인 진행(오늘 · 오늘 외) — 5열', time:'분류 대기 · 오늘 처리 · 진행 중 · 예정 — 4열'};
+const BOARD_DESC = {owner:'5열 · 분류 대기 · 본인/타인 진행(오늘 · 오늘 외)', time:'4열 · 분류 대기 · 오늘 처리 · 진행 중 · 예정'};
 
 /* 설정 키 ↔ 세그먼트 UI (한 줄에 하나씩, 추가는 여기만 고치면 된다).
    get: 저장값 → 버튼 값 / set: 버튼 값 → 저장값 */
@@ -81,7 +81,7 @@ export async function syncAutostart(quiet){
   const want=S.settings.autostart!==false;
   try{
     const now=await invoke('set_autostart',{enabled:want});
-    if(typeof now==='boolean' && now!==want && !quiet) showToast('자동 실행 설정을 바꾸지 못했습니다 — 보안 프로그램이 막았을 수 있습니다');
+    if(typeof now==='boolean' && now!==want && !quiet) showToast('자동 실행 설정을 바꾸지 못했습니다. 보안 프로그램이 막았을 수 있습니다');
   }catch(e){
     console.warn('자동 실행 설정 실패',e);
     if(!quiet) showToast('자동 실행 설정을 바꾸지 못했습니다: '+e);

@@ -42,13 +42,13 @@ export function mergePaths(list, paths){
    반환: {kind:'form'} | {kind:'card', id} | {kind:'new'} | {kind:'blocked', why} */
 export function dropTarget(el){
   const top=topId();
-  if(top==='formPanel') return formReadonly() ? {kind:'blocked', why:'완료된 업무에는 연결할 수 없습니다 — [다시 진행]으로 되돌린 뒤 놓으세요.'} : {kind:'form'};
+  if(top==='formPanel') return formReadonly() ? {kind:'blocked', why:'완료된 업무에는 연결할 수 없습니다. [다시 진행]으로 되돌린 뒤 놓으세요.'} : {kind:'form'};
   if(top) return {kind:'blocked', why:'열려 있는 창을 닫은 뒤 놓으세요.'};
   const card=el&&el.closest&&el.closest('.card[data-open]:not(.drag-ghost)');
   if(card){
     const it=S.items.find(x=>String(x.id)===card.dataset.open);
     if(!it) return {kind:'new'};
-    if(it.done) return {kind:'blocked', why:'완료된 업무에는 연결할 수 없습니다 — 완료를 취소한 뒤 놓으세요.'};
+    if(it.done) return {kind:'blocked', why:'완료된 업무에는 연결할 수 없습니다. 완료를 취소한 뒤 놓으세요.'};
     return {kind:'card', id:it.id};
   }
   return {kind:'new'};
@@ -61,7 +61,7 @@ export function applyDrop(target, paths){
   paths=(paths||[]).filter(p=>String(p||'').trim());
   if(!paths.length) return false;
   if(target.kind==='blocked'){ showToast(target.why); return false; }
-  if(target.kind==='form'){ const n=addLinkPaths(paths); showToast(n?`링크 ${n}개를 양식에 추가했습니다 — 저장해야 반영됩니다`:'이미 연결된 링크입니다'); return n>0; }
+  if(target.kind==='form'){ const n=addLinkPaths(paths); showToast(n?`링크 ${n}개를 양식에 추가했습니다. 저장해야 반영됩니다`:'이미 연결된 링크입니다'); return n>0; }
   if(target.kind==='card'){
     const it=S.items.find(x=>x.id===target.id); if(!it||it.done) return false;
     const before=(it.files||[]).slice();
@@ -76,7 +76,7 @@ export function applyDrop(target, paths){
   }
   /* 새 양식 — 메모는 비워 두고(사용자가 쓴다) 링크만 채운다 */
   openForm({files:mergePaths([], paths).files});
-  showToast(`${paths.length===1?fileName(paths[0]):'링크 '+paths.length+'개'} — 새 업무 양식에 담았습니다`);
+  showToast(`${paths.length===1?fileName(paths[0]):'링크 '+paths.length+'개'}을(를) 새 업무 양식에 담았습니다`);
   return true;
 }
 

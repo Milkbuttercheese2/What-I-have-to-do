@@ -13,7 +13,6 @@ import {mergeItems} from './merge.js';
 import {openForm} from './form.js';
 import {renderCal} from './calendar.js';
 import {registerView, refreshView} from './views.js';
-import {renderGraphView} from './graph-view.js';
 
 /* 부모(주기 정의)는 보드 밖 — 화면 어디에도 카드로 그리지 않는다 */
 const onBoard = it => !it.recur;
@@ -148,8 +147,6 @@ function renderMetrics(){
 export function render(){
   syncBoardVisibility();
   renderMetrics();
-  /* v3.7.0 관계도 탭을 보는 중이면 함께 새로 그린다(거기서 양식을 열어 저장한 경우). 안 보일 땐 비용 없음 */
-  { const gv=$('view-graph'); if(gv && gv.classList.contains('on')) renderGraphView(); }
   /* 정렬: 세부 점검·마감시각 레벨 구분 없이, 먼저 도래하는 시각이 위로.
      (미완료 세부 mid + 마감 due 중 가장 이른 시각 기준 오름차순 → 시각 없으면 뒤, 최신 등록 순) */
   const keyTime=(it)=>{
@@ -202,11 +199,12 @@ export function doneGroupOf(doneAt, now){
   now=now||Date.now();
   const d0=new Date(now); d0.setHours(0,0,0,0); const today=d0.getTime();
   const wk=new Date(d0); wk.setDate(wk.getDate()-((wk.getDay()+6)%7)); const week=wk.getTime();   // 이번 주 월요일
-  const DAY=86400e3;
+  /* v3.7.1 소유자 지정: 오늘 · 이번 주 · 이번 달, 그 이전은 달별(어제·지난주 묶음 폐지).
+     이번 주가 지난달에 걸쳐 시작해도(월요일이 지난달) 이번 주로 본다 — 주가 달보다 먼저. */
+  const m1=new Date(d0); m1.setDate(1); const month=m1.getTime();                                       // 이번 달 1일
   if(doneAt>=today) return {key:'today', label:'오늘', order:1e15};
-  if(doneAt>=today-DAY) return {key:'yday', label:'어제', order:1e15-1};
-  if(doneAt>=week) return {key:'week', label:'이번 주', order:1e15-2};
-  if(doneAt>=week-7*DAY) return {key:'lweek', label:'지난주', order:1e15-3};
+  if(doneAt>=week) return {key:'week', label:'이번 주', order:1e15-1};
+  if(doneAt>=month) return {key:'month', label:'이번 달', order:1e15-2};
   const d=new Date(doneAt);
   return {key:`m${d.getFullYear()}-${d.getMonth()}`, label:`${d.getFullYear()}년 ${d.getMonth()+1}월`, order:d.getFullYear()*12+d.getMonth()};
 }
@@ -219,7 +217,11 @@ export function renderDone(){
   if(dm){
     const g=all.map(it=>doneGroupOf(it.doneAt, now).key);
     const n=k=>g.filter(x=>x===k).length;
-    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('yday')+n('week')}</b>이번 주</span><span><b>${n('lweek')}</b>지난주</span>`;
+    /* 요약 숫자는 '그 기간에 끝낸 건수'(누적) — 이번 주 = 오늘 + 이번 주, 이번 달 = 오늘 + 이번 주 + 이번 달.
+       단 이번 주가 지난달에서 시작했으면 지난달 날짜분은 이번 달에 넣지 않는다(달력 기준). */
+    const mStart=new Date(now); mStart.setHours(0,0,0,0); mStart.setDate(1);
+    const inMonth=all.filter(it=>it.doneAt && it.doneAt>=mStart.getTime()).length;
+    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span><span><b>${inMonth}</b>이번 달</span>`;
   }
   if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[];

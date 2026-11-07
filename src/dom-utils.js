@@ -86,7 +86,8 @@ function ensureDialog(){
   if(dlgEl) return dlgEl;
   dlgEl=document.createElement('div');
   dlgEl.className='modal-bg'; dlgEl.id='appDialog';
-  dlgEl.innerHTML=`<div class="modal modal-narrow" role="alertdialog" aria-modal="true">
+  dlgEl.innerHTML=`<div class="modal modal-narrow has-x" role="alertdialog" aria-modal="true">
+    <button type="button" class="fm-x modal-x" id="dlg-x" aria-label="닫기" title="닫기 (ESC)">×</button>
     <h3 id="dlg-title">알림</h3>
     <div class="m-sub" id="dlg-msg"></div>
     <div class="m-actions">
@@ -98,6 +99,7 @@ function ensureDialog(){
   const close=v=>{ dlgEl.classList.remove('on'); const r=dlgResolve; dlgResolve=null; if(r) r(v); };
   dlgEl.querySelector('#dlg-ok').addEventListener('click',()=>close(true));
   dlgEl.querySelector('#dlg-cancel').addEventListener('click',()=>close(false));
+  dlgEl.querySelector('#dlg-x').addEventListener('click',()=>close(false));     // 닫기(×) = 취소
   dlgEl.addEventListener('click',e=>{ if(e.target===dlgEl) close(false); });   // 배경 클릭 = 취소
   document.addEventListener('keydown',e=>{
     if(!dlgEl.classList.contains('on')) return;

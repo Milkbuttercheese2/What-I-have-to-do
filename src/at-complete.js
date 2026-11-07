@@ -54,7 +54,7 @@ function caretRect(ta){
 function openAt(el, list, rect){
   anchor=el; items=list; sel=0;
   drop.innerHTML=items.map((e,i)=>`<div class="at-item${i===0?' sel':''}" data-ati="${i}">
-    <span class="at-who">${esc(e.who||'—')}</span><span class="at-org">${esc(e.org||'')}</span><span class="at-phone num">${esc(e.phone||'')}</span>
+    <span class="at-who">${esc(e.who||'')}</span><span class="at-org">${esc(e.org||'')}</span><span class="at-phone num">${esc(e.phone||'')}</span>
   </div>`).join('');
   drop.style.display='block';
   /* 화면 밖 방지: 우측은 안으로 밀고, 아래 공간이 없으면 위로 편다 */

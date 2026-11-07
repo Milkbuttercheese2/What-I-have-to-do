@@ -10,8 +10,6 @@ import {persist} from './render.js';
 import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 import {openModal, closeModal, isOpen} from './modals.js';
-import {linkedItems} from './links.js';
-import {showGraphFor} from './graph-view.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -133,7 +131,7 @@ function setReadonly(on){
   const p=$('formPanel');
   p.classList.toggle('fm-ro', on);
   p.querySelectorAll('input,textarea,select,button').forEach(el=>{
-    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book'||el.id==='fm-graph') return;   // 닫기·다시 진행·2쪽 보기는 살려 둔다
+    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book') return;   // 닫기·다시 진행·2쪽 보기는 살려 둔다
     el.disabled=on;
   });
   $('fm-save').style.display=on?'none':'';
@@ -159,7 +157,7 @@ export async function openForm(pre, opts){
     setReadonly(true);
     baseline=null; markDraft(0);
     updatePlacePreview();
-    $('fm-place').textContent='완료된 업무 — 고치려면 [다시 진행]';
+    $('fm-place').textContent='고치려면 [다시 진행]';
     showFormPanel();
     return;
   }
@@ -251,14 +249,6 @@ function fillForm(pre){
   // 파일 링크
   const fw=$('fm-files'); fw.innerHTML='';
   (pre.files||[]).forEach(p=>addFormFileRow(p));
-  renderLinks();
-}
-/* v3.7.0 [관계도] 단추 — 엮인 업무가 있는 기존 업무에서만 보인다. 누르면 양식을 닫고 관계도 탭을
-   이 업무 중심으로 연다(graph-view.js). 관계도 자체는 양식 안이 아니라 별도 탭(소유자 지정). */
-function renderLinks(){
-  const b=$('fm-graph'); if(!b) return;
-  const it=editingId ? S.items.find(x=>x.id===editingId) : null;
-  b.style.display=(it && linkedItems(S.items, it, 1).length) ? '' : 'none';
 }
 /* 팝업 닫기 — editingId 리셋까지 한 곳에서 (ESC·되돌리기·저장 공용).
    v2.5.22: 닫기 전에 임시저장을 확정 플러시한다 (ESC·다른 창으로 나가도 내용 보존).
@@ -515,9 +505,8 @@ export function initForm(){
     });
   });
   $('fm-close').addEventListener('click',()=>closeForm());
-  $('fm-book').addEventListener('click',()=>openBook($('fm-memo').value));
+  $('fm-book').addEventListener('click',()=>openBook());
   initBook();
-  $('fm-graph').addEventListener('click',()=>{ const id=editingId; if(id==null) return; closeForm(); showGraphFor(id); });
 }
 
 /* 양식 확정 — [저장]·[업무 종료] 공용. finish 면 저장과 함께 완료 처리하고 [실행 취소]를 준다. */
@@ -559,45 +548,104 @@ async function commitForm(opts){
   }
 }
 
-/* ── 메모 2쪽 보기 (v3.7.0, 소유자 요청) ─────────────────────────────────
-   긴 메모를 책처럼 두 쪽씩 펼쳐 읽는다. 읽기 전용 — 고치는 곳은 양식 메모 하나뿐이다.
-   글은 CSS 다단(column-count:2, 고정 높이)으로 흐르고 넘치는 분량은 오른쪽으로 이어진
-   단이 된다. ◀ ▶(또는 ←/→)는 '한 펼침(두 쪽)'씩 가로로 넘긴다.
-   한 펼침의 폭 = 내용 폭 + 단 간격(다단 레이아웃에서 다음 펼침이 시작되는 위치). */
-let bookPage=0;
-function bookGeom(){
-  const el=$('book-text'); const cs=getComputedStyle(el);
-  const padL=parseFloat(cs.paddingLeft)||0, padR=parseFloat(cs.paddingRight)||0;
-  const gap=parseFloat(cs.columnGap)||0;
-  const step=Math.max(1, el.clientWidth-padL-padR+gap);
-  const pages=Math.max(1, Math.round((el.scrollWidth-padL-padR+gap)/step));
-  return {el, step, pages};
+/* ── 메모 2쪽 보기 (v3.7.0 → v3.7.1 개편, 소유자 지정: "한글 두 쪽 보기처럼, 편집 가능") ──────────
+   쪽(종이 한 장 크기)을 두 장씩 나란히 놓고 **아래로 스크롤**하며 읽는다(1·2쪽, 그 아래 3·4쪽 …).
+   각 쪽은 같은 크기의 textarea 라서 그 자리에서 고칠 수 있고, 고친 내용은 곧바로 양식 메모(#fm-memo)에
+   반영된다(임시저장·@태그 하이라이트가 평소처럼 돈다). 완료 업무(읽기 전용 양식)에서는 쪽도 읽기 전용.
+   쪽 나누기: 같은 글꼴·폭의 숨은 측정 칸에 글을 넣어 '이 쪽에 넘치지 않는 최대 길이'를 이분 탐색으로
+   찾고, 가능하면 줄바꿈·띄어쓰기에서 끊는다. 쪽 조각을 그대로 이어 붙이면 원문이 된다(글자 추가 없음).
+   ⚠️ 한글 조합 중(isComposing)에는 다시 나누지 않는다 — 조합 중에 textarea 값을 바꾸면 글자가 깨진다. */
+let bookTas=[], bookRO=false, bookBusy=false;
+const bookFull=()=>bookTas.map(t=>t.value).join('');
+function bookFits(m, str){ m.value=str; return m.scrollHeight <= m.clientHeight+1; }
+function paginate(text){
+  const m=$('book-measure'); const pages=[]; let s=0;
+  if(!m || !text) return [text||''];
+  while(s<text.length){
+    if(bookFits(m, text.slice(s))){ pages.push(text.slice(s)); break; }
+    let lo=s+1, hi=text.length;                       // fits(s..lo) 는 참이라고 보고 최대 끝을 찾는다
+    while(lo<hi){ const mid=Math.ceil((lo+hi)/2); if(bookFits(m, text.slice(s,mid))) lo=mid; else hi=mid-1; }
+    let e=Math.max(lo, s+1);
+    const piece=text.slice(s,e);
+    const nl=piece.lastIndexOf('\n'), sp=piece.lastIndexOf(' ');
+    const soft = nl>piece.length*0.6 ? nl+1 : (sp>piece.length*0.8 ? sp+1 : 0);
+    if(soft>0 && e<text.length) e=s+soft;
+    pages.push(text.slice(s,e)); s=e;
+  }
+  return pages;
 }
-function showBookPage(n){
-  const {el, step, pages}=bookGeom();
-  bookPage=Math.max(0, Math.min(pages-1, n));
-  el.scrollLeft=bookPage*step;
-  $('book-pos').textContent=pages>1?`${bookPage*2+1}–${bookPage*2+2}쪽 / ${pages*2}쪽`:'';
-  $('book-prev').disabled=bookPage<=0; $('book-next').disabled=bookPage>=pages-1;
+/* 쪽을 다시 나누고 화면에 반영 — 바뀐 쪽만 값을 고치고, 쪽 수가 달라질 때만 쪽을 새로 만든다.
+   caret: 전체 글에서의 커서 위치(있으면 그 위치가 들어 있는 쪽으로 커서를 옮긴다) */
+function renderBook(text, caret){
+  const pages=paginate(text);
+  const box=$('book-pages');
+  if(pages.length!==bookTas.length){
+    box.innerHTML=pages.map((_,i)=>`<div class="book-page"><textarea class="book-ta" spellcheck="false" maxlength="50000" aria-label="${i+1}쪽"></textarea><span class="book-no num">${i+1}</span></div>`).join('');
+    bookTas=[...box.querySelectorAll('.book-ta')];
+    bookTas.forEach(t=>{ t.readOnly=bookRO; });
+  }
+  pages.forEach((p,i)=>{ if(bookTas[i].value!==p) bookTas[i].value=p; });
+  $('book-pos').textContent=`${pages.length}쪽`;
+  if(caret!=null){
+    let start=0, idx=pages.length-1;
+    for(let i=0;i<pages.length;i++){ if(caret<=start+pages[i].length && (caret<start+pages[i].length || i===pages.length-1)){ idx=i; break; } start+=pages[i].length; }
+    if(idx===pages.length-1){ start=pages.slice(0,idx).reduce((a,p)=>a+p.length,0); }
+    const t=bookTas[idx];
+    if(t && document.activeElement!==t) t.focus({preventScroll:false});
+    if(t){ const off=Math.max(0, Math.min(t.value.length, caret-start)); t.setSelectionRange(off,off); }
+  }
 }
-export function openBook(text){
-  text=String(text||'');
+/* 쪽 i 의 시작 위치(전체 글 기준) */
+const pageStart=i=>bookTas.slice(0,i).reduce((a,t)=>a+t.value.length,0);
+function bookChanged(t){
+  if(bookRO || bookBusy) return;
+  const i=bookTas.indexOf(t); if(i<0) return;
+  const caret=pageStart(i)+t.selectionStart;
+  const full=bookFull();
+  bookBusy=true;
+  try{ renderBook(full, caret); }finally{ bookBusy=false; }
+  const m=$('fm-memo');
+  if(m && m.value!==full){ m.value=full; m.dispatchEvent(new Event('input',{bubbles:true})); }   // 양식 메모에 즉시 반영(임시저장·하이라이트)
+}
+export function openBook(){
+  const text=String($('fm-memo').value||'');
+  bookRO=formReadonly();
   $('book-title').textContent=(text.split('\n')[0]||'메모').slice(0,60);
-  $('book-text').textContent=text||'(메모가 비어 있습니다)';
+  bookTas=[]; $('book-pages').innerHTML='';
   openModal('bookModal');
-  bookPage=0;
-  requestAnimationFrame(()=>showBookPage(0));          // 레이아웃이 잡힌 뒤 쪽 수를 센다
+  requestAnimationFrame(()=>{ renderBook(text, null); $('book-view').scrollTop=0; if(!bookRO&&bookTas[0]) bookTas[0].focus(); });  // 레이아웃이 잡힌 뒤 쪽을 나눈다
 }
 function initBook(){
   if(!$('bookModal')) return;
   document.body.appendChild($('bookModal'));          // 양식 위에서도 뜨도록 body 직속
   $('bookClose').addEventListener('click',()=>closeModal('bookModal'));
-  $('book-prev').addEventListener('click',()=>showBookPage(bookPage-1));
-  $('book-next').addEventListener('click',()=>showBookPage(bookPage+1));
-  document.addEventListener('keydown',e=>{
-    if(!isOpen('bookModal')) return;
-    if(e.key==='ArrowLeft'){ e.preventDefault(); showBookPage(bookPage-1); }
-    else if(e.key==='ArrowRight'){ e.preventDefault(); showBookPage(bookPage+1); }
+  $('bookDone').addEventListener('click',()=>closeModal('bookModal'));
+  const box=$('book-pages');
+  box.addEventListener('input',e=>{ if(e.target.classList.contains('book-ta') && !e.isComposing) bookChanged(e.target); });
+  box.addEventListener('compositionend',e=>{ if(e.target.classList.contains('book-ta')) bookChanged(e.target); });
+  /* 쪽 경계 넘나들기 — 쪽 끝에서 → / ↓ 는 다음 쪽 처음으로, 쪽 처음에서 ← / ↑ 는 앞 쪽 끝으로,
+     쪽 처음에서 Backspace 는 앞 쪽의 마지막 글자를, 쪽 끝에서 Delete 는 다음 쪽의 첫 글자를 지운다 */
+  box.addEventListener('keydown',e=>{
+    const t=e.target; if(!t.classList || !t.classList.contains('book-ta') || e.isComposing) return;
+    const i=bookTas.indexOf(t), a=t.selectionStart, b=t.selectionEnd, len=t.value.length;
+    if(a!==b) return;
+    const go=(j,pos)=>{ const u=bookTas[j]; if(!u) return; e.preventDefault(); u.focus(); const p=pos==='end'?u.value.length:0; u.setSelectionRange(p,p); };
+    if((e.key==='ArrowRight'||e.key==='ArrowDown') && a===len && i<bookTas.length-1) go(i+1,'start');
+    else if((e.key==='ArrowLeft'||e.key==='ArrowUp') && a===0 && i>0) go(i-1,'end');
+    else if(!bookRO && e.key==='Backspace' && a===0 && i>0){
+      e.preventDefault(); const p=bookTas[i-1]; const g=pageStart(i)-1; p.value=p.value.slice(0,-1); bookChangedAt(g);
+    }
+    else if(!bookRO && e.key==='Delete' && a===len && i<bookTas.length-1){
+      e.preventDefault(); const n=bookTas[i+1]; const g=pageStart(i)+len; n.value=n.value.slice(1); bookChangedAt(g);
+    }
   });
-  window.addEventListener('resize',()=>{ if(isOpen('bookModal')) showBookPage(bookPage); });
+  window.addEventListener('resize',()=>{ if(isOpen('bookModal')) renderBook(bookFull(), null); });
+}
+/* 전체 글 위치 기준으로 다시 나누고 커서를 둔다(쪽 경계 Backspace/Delete 용) */
+function bookChangedAt(caret){
+  const full=bookFull();
+  bookBusy=true;
+  try{ renderBook(full, caret); }finally{ bookBusy=false; }
+  const m=$('fm-memo');
+  if(m && m.value!==full){ m.value=full; m.dispatchEvent(new Event('input',{bubbles:true})); }
 }

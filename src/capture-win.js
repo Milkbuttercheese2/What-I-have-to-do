@@ -312,7 +312,7 @@ function movePbSel(d){
 function renderPb(keepScroll){
   const w=$id('cap-pb'); if(!w) return;
   w.innerHTML=pbItems.map((e,i)=>`<div class="cap-pb-it${i===pbSel?' sel':''}" data-pb="${i}">
-    <span class="cap-pb-who">${esc(e.who||'—')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
+    <span class="cap-pb-who">${esc(e.who||'')}</span><span class="cap-pb-org">${esc(e.org||'')}</span><span class="cap-pb-phone">${esc(e.phone||'')}</span>
   </div>`).join('');
   if(!keepScroll) w.scrollTop=0;                       // 새 후보 목록은 언제나 맨 위부터
   /* 10행 상한은 **목록 자체**에 건다(실측). 창 여유(PB_SLACK)와 무관하게 정확히
