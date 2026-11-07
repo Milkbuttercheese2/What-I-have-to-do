@@ -854,6 +854,27 @@ pub fn resize_capture(app: AppHandle, height: u32, viewport_width: Option<f64>) 
     Ok(())
 }
 
+/* ===== v3.7.0 윈도우 시작 시 자동 실행 ===== */
+
+/// 자동 실행 켜기/끄기 — Run 키 등록/해제(tauri-plugin-autostart).
+/// v2.31 에 토글 UI 와 함께 사라졌던 커맨드를 되살렸다(소유자 요청: 컴퓨터를 켜면 앱이 열리게).
+/// 설정값(settings.autostart)의 저장은 프런트 몫이다 — Rust 는 레지스트리만 맞춘다.
+/// 켜는 쪽은 매번 enable() 을 다시 불러 포터블 exe 가 옮겨졌을 때 경로를 고친다(lib.rs 와 같은 이유).
+/// 돌려주는 값 = 지금 실제로 등록돼 있는가(설정 화면이 실패를 알 수 있게).
+#[tauri::command]
+pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let al = app.autolaunch();
+    let res = if enabled { al.enable() } else { al.disable() };
+    // 이미 꺼진 상태에서 disable() 은 '값이 없다' 오류를 낼 수 있다 — 결과가 목표와 같으면 성공으로 본다.
+    let now = al.is_enabled().unwrap_or(false);
+    match res {
+        Ok(_) => Ok(now),
+        Err(_) if now == enabled => Ok(now),
+        Err(e) => Err(to_err(e)),
+    }
+}
+
 /* ===== v3.0.0 파일 링크 ===== */
 
 /// 파일 링크용 네이티브 파일 선택창 — 선택한 파일의 절대경로만 돌려준다

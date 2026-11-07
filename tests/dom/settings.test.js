@@ -106,6 +106,6 @@ test("화면 배치(3P2): 첫 화면과 겹치는 둘째 화면 버튼은 못 �
   assert.match($('capOrderNote').textContent, /Alt 전환이 없습니다/);
   click(segBtn('segCapStart','memo'));                             // 다시 미니 창 경로로
   assert.deepEqual(env.invokeCalls.filter(c=>c.cmd==='set_capture_form_mode').at(-1).args, {form:false});
-  assert.match($('capOrderNote').textContent, /Ctrl\+Alt\+Space →/);
+  assert.match($('capOrderNote').textContent, /빠른 메모 → Alt →/);
   closeSettings();
 });

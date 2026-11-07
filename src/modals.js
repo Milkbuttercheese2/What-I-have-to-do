@@ -82,3 +82,6 @@ export function topSave(){
 }
 
 export function isOpen(id){ return stack.some(m => m.id === id); }
+
+/* v3.7.0 지금 화면 맨 위 팝업의 id (없으면 null) — 파일 끌어다 놓기가 '어디에 놓였나'를 정할 때 쓴다 */
+export function topId(){ const i = topIndex(); return i < 0 ? null : stack[i].id; }

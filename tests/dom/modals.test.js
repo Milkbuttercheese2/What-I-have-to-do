@@ -15,7 +15,7 @@ const on = id => $(id).classList.contains('on');
 const setZ = (id, z) => { $(id).style.zIndex = String(z); $(id).style.position = 'fixed'; };
 setZ('formPanel', 60); setZ('relModal', 70); setZ('alarmBg', 120);
 setZ('presetModal', 50); setZ('settingsModal', 50); setZ('recurModal', 50);
-setZ('pbSyncModal', 50); setZ('boardModeModal', 50);
+setZ('pbSyncModal', 50);
 
 /* 각 테스트가 남긴 스택을 비운다 (closeTop 은 비면 false) */
 const drain = () => { while(closeTop()); };

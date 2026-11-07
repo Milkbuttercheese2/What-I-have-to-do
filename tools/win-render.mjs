@@ -142,9 +142,9 @@ const openPreset = async page => {
   await page.click('#presetManageBtn'); await page.waitForTimeout(400);
   await page.click('#np-new-head'); await page.waitForTimeout(300);   // '＋ 새 프리셋 만들기' 펼치기
 };
+/* v3.7.0: 보드 배치는 설정 팝업 안의 세그먼트(#segBoardMode)로 옮겨졌다 — 그 줄이 보이는 설정 화면을 연다 */
 const openBoardMode = async page => {
-  await page.click('#settingsBtn'); await page.waitForTimeout(250);
-  await page.click('#boardModeBtn'); await page.waitForTimeout(400);
+  await page.click('#settingsBtn'); await page.waitForTimeout(400);
 };
 const openRecur = async page => {
   await page.click('#settingsBtn'); await page.waitForTimeout(250);
@@ -152,9 +152,8 @@ const openRecur = async page => {
 };
 const ownerMode = async page => {
   await page.click('#settingsBtn'); await page.waitForTimeout(250);
-  await page.click('#boardModeBtn'); await page.waitForTimeout(300);
-  await page.click('.bm-opt[data-mode="owner"]'); await page.waitForTimeout(300);
-  await page.click('#boardModeClose').catch(()=>{}); await page.waitForTimeout(300);
+  await page.click('#segBoardMode .seg-btn[data-v="owner"]'); await page.waitForTimeout(300);
+  await page.click('#settingsClose').catch(()=>{}); await page.waitForTimeout(300);
 };
 /* v2.6.0: 설정 팝업(테마·미니 창 선택) + 다크 모드 화면 */
 const openSettings = async page => {

@@ -7,7 +7,7 @@ mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
 const {S, newId} = await import('../../src/state.js');
 const {isoToDateStr, isoToTimeStr} = await import('../../src/datetime.js');
-const {toInbox, captureMemo, openForm, closeForm, initForm} = await import('../../src/form.js');
+const {captureMemo, openForm, closeForm, initForm} = await import('../../src/form.js');
 initForm();
 
 const $ = id => env.document.getElementById(id);
@@ -29,20 +29,6 @@ function fullItem(){
     al:{due:true},
   };
 }
-
-test('toInbox: staged 아이템 생성 + save_all + 입력창 클리어', async () => {
-  await env.resetS(); S.loaded = true;
-  $('inp').value = '  급한 메모  ';
-  toInbox();
-  await env.flush();
-  assert.equal(S.items.length, 1);
-  const it = S.items[0];
-  assert.equal(it.memo, '급한 메모');
-  assert.equal(it.staged, true);
-  assert.ok(!isNaN(new Date(it.f.received)));
-  assert.equal($('inp').value, '');
-  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_all'));
-});
 
 test('captureMemo: trim된 staged 아이템 생성 + save_all (toInbox·캡처 창 공용 코어)', async () => {
   await env.resetS(); S.loaded = true;
@@ -424,7 +410,10 @@ test('완료 업무는 읽기 전용으로 열린다 (저장 버튼 없음 · �
   assert.equal($('fm-memo').disabled, true, '내용을 고칠 수 없어야 한다');
   assert.equal($('fm-save').style.display, 'none', '저장 버튼은 감춘다');
   assert.equal($('fm-revert').style.display, 'none', '되돌리기도 감춘다(고칠 게 없으므로)');
-  assert.match($('fm-place').textContent, /완료를 취소/, '고치는 방법을 알려준다');
+  assert.match($('fm-place').textContent, /다시 진행/, '고치는 방법을 알려준다');
+  assert.equal($('fm-reopen').style.display, '', 'v3.7.0 [다시 진행] 버튼이 보인다');
+  assert.equal($('fm-reopen').disabled, false, '읽기 전용이어도 [다시 진행]은 눌린다');
+  assert.equal($('fm-finish').style.display, 'none', '완료 업무엔 [업무 종료]가 없다');
   // 초안을 만들지 않는다 — 고칠 수 없는 화면의 초안은 되살아날 때 혼란만 만든다
   const drafts = (S.settings.formDrafts)||{};
   assert.equal(drafts[String(it.id)], undefined);

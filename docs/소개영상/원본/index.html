@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>조달법령 시연</title>
+<style>
+@font-face{font-family:"Pretendard";src:url(PretendardVariable.woff2) format("woff2");font-weight:45 920}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#ECEAE6;font-family:"Pretendard",sans-serif}
+#shape{position:absolute;overflow:hidden;background:#111}
+#screen{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#screen img{position:absolute;left:0;top:0;width:1920px;height:1080px;display:none}
+.label{position:absolute;left:50%;top:50%;white-space:nowrap;color:#fff;font-size:48px;font-weight:600;letter-spacing:-.01em}
+#icon{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px}
+#ring{position:absolute;border:3px solid #2a7c6e;border-radius:10px;pointer-events:none}
+.cap{position:absolute;left:0;right:0;margin:0 auto;width:fit-content;max-width:1640px;text-align:center;line-height:1.38;bottom:50px;white-space:normal;word-break:keep-all;background:rgba(17,17,17,.92);color:#fff;font-size:32px;font-weight:550;padding:13px 26px;border-radius:16px;letter-spacing:-.01em}
+#cursor{position:absolute;left:0;top:0;width:54px;height:54px;transform-origin:8px 5px}
+.card{position:absolute;top:640px;width:400px;min-height:150px;background:#fff;border:1.5px solid #cfccc6;border-radius:18px;padding:22px 24px}
+.card b{display:block;color:#2a7c6e;font-size:24px;font-weight:700;margin-bottom:10px}
+.card span{display:block;color:#111;font-size:25px;font-weight:550;line-height:1.28;letter-spacing:-.01em}
+.ask{position:absolute;left:50%;top:345px;white-space:nowrap;color:#111;font-size:38px;font-weight:550;letter-spacing:-.01em}
+#ringTag{position:absolute;background:#2a7c6e;color:#fff;font-size:26px;font-weight:650;padding:7px 16px;border-radius:12px;white-space:nowrap}
+</style></head><body>
+<div id="shape"><div id="screen"></div><div id="labels"></div>
+<svg id="icon" viewBox="0 0 52 52" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><circle id="arc" cx="26" cy="26" r="20"/><path id="tick" d="M14 27l8.5 8.5L38 18"/></svg></div>
+<div id="stage"></div><div id="ring"></div><div id="ringTag"></div><div id="caps"></div>
+<svg id="cursor" viewBox="0 0 40 40"><path d="M6 4l0 26 7.2-6.6 4.6 11 5.4-2.3-4.7-10.8 10-.7z" fill="#111" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/></svg>
+<script src="timeline.js"></script>
+<script>
+const $=(id)=>document.getElementById(id);
+const BEAT=1, W=1920, H=1080;
+const WIN={x:40,y:22.5,w:1840,h:1035,r:20};
+const pill=(w)=>({x:(W-w*1.25)/2,y:484,w:w*1.25,h:112,r:56});
+const CIRCLE={x:904,y:484,w:112,h:112,r:56};
+const P0=[1760,960];
+
+const spring=(z,w)=>{const wd=w*Math.sqrt(1-z*z);return(t)=>t<=0?0:1-Math.exp(-z*w*t)*(Math.cos(wd*t)+(z*w/wd)*Math.sin(wd*t));};
+const sShape=spring(.84,15), sCam=spring(.92,8.5), sCur=spring(.9,12), sRing=spring(.86,16);
+const track=(v0,changes,sp)=>{let prev=v0;const d=changes.map(([t,v])=>{const r=[t,v-prev];prev=v;return r;});
+  return(t)=>{let x=v0;for(const[c,dv]of d)x+=dv*sp(t-c);return x;};};
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ramp=(t,a,b)=>{const u=clamp((t-a)/(b-a));return u*u*(3-2*u);};
+
+// timeline.js의 사건을 시간 함수로 푼다. 프레임 사이에 상태를 남기지 않는다.
+const ev=TIMELINE.map((e)=>({...e,t:e.b*BEAT}));
+const boxOf=(shot,name)=>{if(Array.isArray(name))return{x:name[0],y:name[1],w:name[2]||0,h:name[3]||0};const b=SHOTS[shot]&&SHOTS[shot][name];if(!b)throw new Error(`no box ${shot}.${name}`);return b;};
+const camOf=(c)=>{if(!c||c==="full")return{s:WIN.w/W,cx:W/2,cy:H/2};const s=Math.min(WIN.w/c[2],WIN.h/c[3]);
+  const hw=WIN.w/2/s,hh=WIN.h/2/s;return{s,cx:clamp(c[0]+c[2]/2,hw,W-hw),cy:clamp(c[1]+c[3]/2,hh,H-hh)};};
+const toStage=(cam,x,y)=>[WIN.x+WIN.w/2+(x-cam.cx)*cam.s,WIN.y+WIN.h/2+(y-cam.cy)*cam.s];
+
+const shapeCh={x:[],y:[],w:[],h:[],r:[]}, camCh={s:[],cx:[],cy:[]}, curCh={x:[],y:[]}, ringCh={x:[],y:[],w:[],h:[],o:[]};
+const shotAt=[], clicks=[], morphs=[], labels=[], tags=[];
+let shot=null, camNow=camOf("full");
+for(const e of ev){
+  if(e.shot){shotAt.push({t:e.t,name:e.shot,hard:!!e.hard});shot=e.shot;}
+  if(e.cam){camNow=camOf(e.cam);for(const k of["s","cx","cy"])camCh[k].push([e.t,camNow[k]]);}
+  if(e.shape){const r=e.shape==="window"?WIN:e.shape==="circle"?CIRCLE:pill(e.shape);for(const k of["x","y","w","h","r"])shapeCh[k].push([e.t,r[k]]);morphs.push({t:e.t,kind:e.shape==="window"?"window":"small"});}
+  if(e.label!==undefined)labels.push({t:e.t,text:e.label});
+  if(e.cur){let p;if(Array.isArray(e.cur)&&e.stage)p=e.cur;else{const b=boxOf(shot,e.cur);p=toStage(camNow,b.x+b.w*.5,b.y+b.h*.55);}curCh.x.push([e.t-(e.lead??.3),p[0]]);curCh.y.push([e.t-(e.lead??.3),p[1]]);}
+  if(e.click)clicks.push(e.t);
+  if(e.ring!==undefined)tags.push({t:e.t,text:e.tag||''});
+  if(e.ring!==undefined){if(e.ring===null)ringCh.o.push([e.t,0]);else{const b=boxOf(shot,e.ring);const pad=5;ringCh.x.push([e.t,b.x-pad]);ringCh.y.push([e.t,b.y-pad]);ringCh.w.push([e.t,b.w+2*pad]);ringCh.h.push([e.t,b.h+2*pad]);ringCh.o.push([e.t,1]);}}
+}
+const firstBtn=pill(BTN_W);
+const shapeT=Object.fromEntries(["x","y","w","h","r"].map(k=>[k,track(firstBtn[k],shapeCh[k],sShape)]));
+const c0=camOf("full");
+const camT={s:track(c0.s,camCh.s,sCam),cx:track(c0.cx,camCh.cx,sCam),cy:track(c0.cy,camCh.cy,sCam)};
+const curT={x:track(P0[0],curCh.x,sCur),y:track(P0[1],curCh.y,sCur)};
+const rb0=ringCh.x[0]?[ringCh.x[0][1],ringCh.y[0][1],ringCh.w[0][1],ringCh.h[0][1]]:[0,0,0,0];
+const ringT={x:track(rb0[0],ringCh.x,sRing),y:track(rb0[1],ringCh.y,sRing),w:track(rb0[2],ringCh.w,sRing),h:track(rb0[3],ringCh.h,sRing),o:track(0,ringCh.o,spring(.95,20))};
+
+// DOM 준비
+const imgs={};for(const n of new Set(shotAt.map(s=>s.name))){const i=new Image();i.src=`shots/${n}.jpg`;$("screen").appendChild(i);imgs[n]=i;}
+const labelEls=labels.filter(l=>l.text).map(l=>{const d=document.createElement("div");d.className="label";d.textContent=l.text;$("labels").appendChild(d);return{...l,el:d};});
+labels.forEach((l,i)=>{l.end=labels[i+1]?labels[i+1].t:1e9;});
+labelEls.forEach((l)=>{l.end=labels.find(x=>x.t===l.t).end;});
+const capEls=CAPTIONS.map(([a,b,text])=>{const d=document.createElement("div");d.className="cap";d.textContent=text;$("caps").appendChild(d);return{t0:a*BEAT,t1:b*BEAT,el:d};});
+const allImgs=Object.values(imgs);
+const cardEls=STAGE.cards.map(([t0,kind,name,t1,left])=>{const d=document.createElement("div");d.className="card";d.innerHTML=`<b>${kind}</b><span>${name}</span>`;d.style.left=left+"px";$("stage").appendChild(d);return{t0,t1,el:d};});
+const askEl=document.createElement("div");askEl.className="ask";askEl.textContent=STAGE.ask[1];$("stage").appendChild(askEl);
+window.ready=Promise.all([document.fonts.load('600 38px "Pretendard"'),...allImgs.map(i=>i.decode())]);
+
+function seek(tt){
+  const t=Math.max(0,Math.min(tt,TOTAL));
+  const r=Object.fromEntries(["x","y","w","h","r"].map(k=>[k,shapeT[k](t)]));
+  const S=$("shape").style;S.left=r.x+"px";S.top=r.y+"px";S.width=r.w+"px";S.height=r.h+"px";S.borderRadius=r.r+"px";
+  // 화면 내용: 창이 열린 정도로 보이고, 교체는 짧은 번짐으로 한다.
+  let open=0;{let m=null;for(const x of morphs)if(x.t<=t)m=x;if(m)open=m.kind==="window"?ramp(t,m.t+.12,m.t+.34):1-ramp(t,m.t,m.t+.1);}
+  const cam={s:camT.s(t),cx:camT.cx(t),cy:camT.cy(t)};
+  const sc=$("screen").style;
+  // 창 크기가 변하는 동안 카메라 기준을 창 중심에 둔다.
+  sc.transform=`translate(${r.w/2-cam.cx*cam.s}px,${r.h/2-cam.cy*cam.s}px) scale(${cam.s})`;
+  sc.opacity=open;
+  sc.visibility=open>0?"visible":"hidden";
+  let cur=null,prev=null;for(const s of shotAt){if(s.t<=t){prev=cur;cur=s;}}
+  for(const i of allImgs)i.style.display="none";
+  if(open>0&&cur){const dur=cur.hard?.2:.09,u=clamp((t-cur.t)/dur);const a=imgs[cur.name];a.style.display="block";a.style.zIndex=2;a.style.opacity=u<1?u:1;
+    const blur=cur.hard?(1-u)*7:0;a.style.filter=blur>.05?`blur(${blur}px)`:"none";
+    if(u<1&&prev){const b=imgs[prev.name];if(b!==a){b.style.display="block";b.style.zIndex=1;b.style.opacity=1;const bb=cur.hard?u*7:0;b.style.filter=bb>.05?`blur(${bb}px)`:"none";}}}
+  // 라벨은 자기 등장·퇴장 시간을 따로 쓴다.
+  for(const l of labelEls){const inn=l.t===0?1:ramp(t,l.t+.13,l.t+.3),out=1-ramp(t,l.end,l.end+.1),o=Math.min(inn,out);const st=l.el.style;st.display=o>0?"block":"none";
+    if(o>0){st.opacity=o;st.filter=o<.99?`blur(${(1-o)*6}px)`:"none";st.transform=`translate(-50%,calc(-50% + ${(1-inn)*8}px))`;}}
+  // 로더·체크
+  const loaderA=ramp(t,LOADER[0]+.1,LOADER[0]+.25)*(1-ramp(t,LOADER[1],LOADER[1]+.08));
+  const checkA=ramp(t,LOADER[1],LOADER[1]+.1)*(1-ramp(t,LOADER[2],LOADER[2]+.1));
+  $("icon").style.display=loaderA+checkA>0?"block":"none";
+  const arc=$("arc");arc.style.opacity=loaderA;arc.setAttribute("stroke-dasharray",`${40+22*Math.sin((t-LOADER[0])*5.2)} 126`);arc.setAttribute("transform",`rotate(${(t-LOADER[0])*480} 26 26)`);
+  const tick=$("tick");tick.style.opacity=checkA;tick.setAttribute("stroke-dasharray","46");tick.setAttribute("stroke-dashoffset",46*(1-ramp(t,LOADER[1],LOADER[1]+.28)));
+  // 강조 테두리
+  const ro=clamp(ringT.o(t))*open;const rs=$("ring").style;rs.display=ro>.01?"block":"none";
+  if(ro>.01){const p=toStage(cam,ringT.x(t),ringT.y(t));rs.left=p[0]+"px";rs.top=p[1]+"px";rs.width=ringT.w(t)*cam.s+"px";rs.height=ringT.h(t)*cam.s+"px";rs.opacity=ro;}
+  // 자막
+  for(const c of capEls){const inn=ramp(t,c.t0,c.t0+.2),out=1-ramp(t,c.t1-.14,c.t1),o=Math.min(inn,out);const st=c.el.style;st.display=o>0?"block":"none";
+    if(o>0){st.opacity=o;st.filter=o<.99?`blur(${(1-o)*6}px)`:"none";st.transform=`translateY(${(1-inn)*10}px)`;}}
+  // 오프닝 문서 카드와 질문
+  for(const c of cardEls){const inn=sShape(t-c.t0),o=clamp(inn)*(1-ramp(t,c.t1,c.t1+.3));const st=c.el.style;st.display=o>0?"block":"none";if(o>0){st.opacity=o;st.transform=`translateY(${(1-inn)*40}px)`;}}
+  {const inn=ramp(t,STAGE.ask[0],STAGE.ask[0]+.3),o=inn*(1-ramp(t,STAGE.out,STAGE.out+.3));const st=askEl.style;st.display=o>0?"block":"none";if(o>0){st.opacity=o;st.transform=`translate(-50%,${(1-inn)*12}px)`;}}
+  // 강조 꼬리표
+  {let tg="";for(const x of tags)if(x.t<=t)tg=x.text;const st=$("ringTag").style;if(tg&&ro>.5){const p=toStage(cam,ringT.x(t)+ringT.w(t),ringT.y(t));st.display="block";$("ringTag").textContent=tg;st.left=Math.min(p[0]+14,1872-$("ringTag").offsetWidth)+"px";st.top=(p[1]+4)+"px";st.opacity=ro;}else st.display="none";}
+  // 커서
+  let press=0;for(const c of clicks){const d=t-c;if(d>-.07&&d<.16)press=Math.max(press,d<0?(d+.07)/.07:1-d/.16);}
+  $("cursor").style.transform=`translate(${curT.x(t)-8}px,${curT.y(t)-5}px) scale(${1-.16*press})`;
+  // 같은 프레임을 건너뛰기 위한 상태 지문
+  return [r.x,r.y,r.w,r.h,r.r,cam.s,cam.cx,cam.cy,open,cur&&cur.name,clamp((t-(cur?cur.t:0))/.2),prev&&prev.name,ro,ringT.x(t),ringT.y(t),ringT.w(t),ringT.h(t),curT.x(t),curT.y(t),press,loaderA,checkA,loaderA>0?t:0,checkA>0?t:0,$("ringTag").textContent,$("ringTag").style.display,...cardEls.map(c=>c.el.style.display==='none'?0:c.el.style.opacity+c.el.style.transform),askEl.style.opacity,
+    ...labelEls.map(l=>l.el.style.display==="none"?0:l.el.style.opacity+l.el.style.transform),...capEls.map(c=>c.el.style.display==="none"?0:c.el.style.opacity+c.el.style.transform)]
+    .map(v=>typeof v==="number"?Math.round(v*50)/50:v).join("|");
+}
+window.seek=seek;
+window.CLICKS=clicks;
+const q=new URLSearchParams(location.search);if(q.has("t"))window.ready.then(()=>seek(+q.get("t")));else window.ready.then(()=>seek(0));
+</script></body></html>

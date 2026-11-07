@@ -1,13 +1,21 @@
   :root{
     /* ===== 원래 색상 팔레트 (따뜻한 종이 톤) ===== */
-    --ink:#1f2a33; --ink-soft:#68717c;
-    --line:#eceef0; --line-soft:#f3f4f5;
-    --paper:#f4f3f0; --card:#ffffff;
+    /* v3.7.0 디자인 최신화 — 자매 앱 '조달법령 흐름도'의 차가운 중립 팔레트로 이식
+       (캔버스 #f2f4f7 위에 흰 패널이 떠 있는 구성 · 잉크 #131a24 · 보조 #687284 · 선 #e0e5eb). */
+    --ink:#131a24; --ink-soft:#687284; --ink-2:#3a4453;
+    --line:#e0e5eb; --line-soft:#eceff3;
+    --paper:#f2f4f7; --card:#ffffff; --sunk:#f7f8fa;
+    --shadow:0 1px 2px rgba(19,26,36,.06),0 12px 32px rgba(19,26,36,.12);
+    --seg-thumb:#ffffff;            /* 세그먼트·탭의 선택 손잡이(흰 면 + 그림자) */
     /* 업무 단계 색상 (컬럼 점 · 카드 좌측선 전용) */
-    --stage-inbox:#8a919b;    /* 분류 대기 — 무채 회색 */
-    --stage-today:#cf6a55;    /* 오늘 처리 — 적색 */
-    --stage-doing:#c69a52;    /* 진행 중 — 노랑(황토) */
-    --stage-planned:#5aa08f;  /* 예정 · 대기 — 녹색 */
+    /* v3.7.0 단계 색 = Okabe–Ito 색각 안전 팔레트(과학 시각화 표준, 적록 색약에서도 서로 구분됨).
+       본인/타인을 같은 '오늘'·'오늘 외'라도 다른 색상(hue)으로 갈라, 5열에서 열을 색만으로 구분할 수 있다. */
+    --stage-inbox:#8b95a3;    /* 분류 대기 — 무채 회색 */
+    --stage-today:#D55E00;    /* 오늘 처리 · 본인 오늘 — 주홍(vermillion) */
+    --stage-doing:#E69F00;    /* 진행 중 — 주황(orange) */
+    --stage-planned:#009E73;  /* 예정·대기 · 본인 오늘 외 — 청록(bluish green) */
+    --stage-oth-today:#CC79A7;/* 타인 오늘 — 자주(reddish purple) */
+    --stage-oth-plan:#0072B2; /* 타인 오늘 외 — 파랑(blue) */
 
     /* UI 액센트 (태그 · 버튼 · 프리셋 등) — 기존 청록 유지 */
     --amber:#2a7c6e; --amber-bg:#edf4f2;
@@ -33,8 +41,8 @@
     --on-accent:#ffffff;            /* **테마 토큰 색면**(청록 --focus/--amber, --red) 위 글자 전용.
                                        고정색 면(#e81123 닫기)·토스트 위 글자에는 쓰지 않는다 — 아래 규칙 참고 */
     --focus-strong:#226659;         /* 주 버튼 hover */
-    --tab-on-bg:#dcebe5;            /* 선택된 탭·세그먼트 — 트랙(--chip-bg) 대비 다크와 같은 정도로 또렷하게 */
-    --chip-bg:#f3f4f5;              /* 옅은 회색 면 — 보조 버튼·카운트 칩·탭 트랙 */
+    --tab-on-bg:#e4f2ef;            /* 선택된 탭·세그먼트 — 트랙(--chip-bg) 대비 다크와 같은 정도로 또렷하게 */
+    --chip-bg:#eceff3;              /* 옅은 회색 면 — 보조 버튼·카운트 칩·탭 트랙 */
     --tag-imm-bg:#fbe3dd; --tag-imm-fg:#c0392b;   /* 임박 시각칩 */
     --tag-id-bg:#e9e4f2;  --tag-id-fg:#5b4a86;    /* 식별정보 태그 */
     --warn-border:#e0b9b4;
@@ -64,12 +72,16 @@
        핵심은 가시성: ① 면을 남색 계열 3단(#0f1420 배경 → #161c29 카드 → #1e2537 입력칸)으로
        확실히 나눠 경계가 보이게, ② 보조 글자를 충분히 밝게(#aeb9cf), ③ 경계선을 또렷하게(#2b3346),
        ④ 강조는 라이트와 같은 청록 계열(#56bdab). */
-    --ink:#e8ecf4; --ink-soft:#aeb9cf;
-    --line:#2b3346; --line-soft:#1c2333;
-    --paper:#0f1420; --card:#161c29; --surface:#1e2537;
-    --stage-inbox:#93a0b8; --stage-today:#f0876c; --stage-doing:#f6a94a; --stage-planned:#7fd6a0;
-    --amber:#56bdab; --amber-bg:#1c3a35;
-    --slate:#56bdab; --slate-bg:#1c3a35;
+    /* v3.7.0: 흐름도 다크 팔레트(남색기 뺀 중립 #0c1016/#141a22)로 이식 — 보조 글자는 가독성 위해 한 단계 밝게 */
+    --ink:#e6ebf1; --ink-soft:#9aa4b2; --ink-2:#c2cad5;
+    --line:#262e39; --line-soft:#1c232c;
+    --paper:#0c1016; --card:#141a22; --surface:#1a212b; --sunk:#10151c;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.5);
+    --seg-thumb:#2a3340;
+    --stage-inbox:#9aa4b2; --stage-today:#F2834A; --stage-doing:#F2B544; --stage-planned:#2EC4A0;
+    --stage-oth-today:#E59BC9; --stage-oth-plan:#56B4E9;   /* 같은 Okabe–Ito 색상을 어두운 면에서 대비가 나도록 밝힘 */
+    --amber:#56bdab; --amber-bg:#15302b;
+    --slate:#56bdab; --slate-bg:#15302b;
     --tag-hl-bg:#24443e;
     --red:#ff8071;  --red-bg:#3a2320;
     --green:#7fd6a0; --green-bg:#1c3327;
@@ -80,8 +92,8 @@
     --icon-muted:#7c8798;
     --on-accent:#0f1420;            /* 밝아진 강조색 위에는 어두운 글자가 또렷하다 */
     --focus-strong:#74cdbd;
-    --tab-on-bg:#1c3a35;
-    --chip-bg:#1e2537;              /* 다크에서 --line-soft(#1c2333)는 카드와 구분이 안 돼 면 색을 따로 준다 */
+    --tab-on-bg:#15302b;
+    --chip-bg:#1e2630;              /* 다크에서 --line-soft(#1c2333)는 카드와 구분이 안 돼 면 색을 따로 준다 */
     --tag-imm-bg:#43241f; --tag-imm-fg:#ff9e8b;
     --tag-id-bg:#2b2542;  --tag-id-fg:#c79bf0;
     --warn-border:#5e3630;
@@ -311,8 +323,12 @@
   /* ---- 시간·담당자 모드 보드 (5열, v2.5.0) — main 공통 규칙 뒤에서 열 폭만 덮어씀 ---- */
   #view-board5{display:none;grid-template-columns:repeat(5,minmax(200px,292px));width:auto;max-width:1460px;justify-content:center;margin:0 auto;min-height:calc(100vh - 250px)}
   #view-board5 .col{width:auto;min-width:0;max-width:none;padding:16px 12px}
-  .card.p-metoday::before,.card.p-othtoday::before{background:var(--stage-today)}
-  .card.p-meplan::before,.card.p-othplan::before{background:var(--stage-planned)}
+  .card.p-metoday::before{background:var(--stage-today)}
+  .card.p-othtoday::before{background:var(--stage-oth-today)}
+  .card.p-meplan::before{background:var(--stage-planned)}
+  .card.p-othplan::before{background:var(--stage-oth-plan)}
+  .dot-othtoday{background:var(--stage-oth-today)}
+  .dot-othplan{background:var(--stage-oth-plan)}
   .col:last-child{border-right:none}
   .col-head{display:flex;align-items:center;gap:8px;margin-bottom:3px}
   .dot{width:9px;height:9px;border-radius:50%;flex:none}
@@ -358,7 +374,7 @@
   /* × 아이콘 버튼 공통 hover */
   .rm:hover,.del:hover{color:var(--red);background:var(--red-bg)}
   .del{margin-left:auto;font-size:16px;line-height:1;color:var(--icon-muted);cursor:pointer;padding:3px 6px;background:none;border:none;border-radius:8px;transition:color .12s,background .12s}
-  .empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:22px 8px;border:1.5px dashed var(--line);border-radius:9px;line-height:1.6}
+  .empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:22px 8px;border:1.5px solid var(--line);border-radius:9px;line-height:1.6}
   .empty b{color:var(--ink)}
 
   /* ---- 드로어 ---- */
@@ -567,7 +583,7 @@
   .modal-split .modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px 22px 8px}
   .modal-split .modal-foot{flex:none;padding:12px 22px 16px;border-top:1px solid var(--line-soft);background:var(--card);
                            border-radius:0 0 9px 9px}
-  .preset-new{border-style:dashed !important;border-color:var(--slate) !important;color:var(--slate) !important;background:transparent !important;font-weight:600}
+  .preset-new{border-style:solid !important;border-color:var(--slate) !important;color:var(--slate) !important;background:transparent !important;font-weight:600}
   .preset-new:hover{background:var(--slate-bg) !important}
   .ps-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
   /* 주기 업무 관리 목록 */
@@ -595,7 +611,7 @@
   .ps-item .ps-del:hover,.idk-item .ps-del:hover{background:var(--red-bg);color:var(--red)}
   .ps-item .ps-edit:hover{background:var(--slate-bg)}
   .ps-item .ps-del:hover{background:var(--red-bg)}
-  .ps-new{border:1px dashed var(--line);border-radius:9px;padding:12px 14px;background:var(--dash-bg);margin-bottom:14px}
+  .ps-new{border:1px solid var(--line);border-radius:9px;padding:12px 14px;background:var(--dash-bg);margin-bottom:14px}
   .ps-new-head{font-size:13px;font-weight:700;color:var(--focus);margin-bottom:10px}
   .ps-new-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:8px 10px;margin-bottom:10px}
   .ps-subs-head{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.04em}
@@ -844,3 +860,450 @@
     .seg{width:100%}
     .seg-btn{flex:1;padding:5px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis}
   }
+
+  /* =====================================================================
+     v3.7.0 디자인 최신화 — '조달법령 흐름도'의 시각 언어를 이식한다.
+     규칙 다섯 가지(값은 위 :root 토큰):
+       ① 캔버스(--paper #f2f4f7) 위에 흰 패널(--card)이 1px 선·14px 곡률로 떠 있다.
+          흰 띠(헤더·입력부)를 화면 끝까지 까는 대신, 내용 덩어리마다 패널을 준다.
+       ② 세그먼트·탭은 '트랙 + 흰 손잡이' — 선택된 것은 흰 면에 그림자, 글자는 잉크색.
+       ③ 화면 머리는 큰 제목 + 한 줄 요약 숫자(흐름도의 '9 단계 · 27 절차' 줄).
+       ④ 보드 열은 머리 띠(옅은 면 + 실선)와 카드 칸으로 나누고, 열 사이는 세로 실선(흐름도의 레인).
+       ⑤ 팝업은 같은 패널 규칙 + --shadow 하나. 머리줄·액션줄은 길어도 화면에 붙어 있다.
+     기존 규칙을 지우지 않고 이 블록이 뒤에서 덮는다 — 되돌리려면 이 블록만 지우면 된다.
+     ===================================================================== */
+
+  /* ── 창 머리: 타이틀바·헤더를 캔버스와 한 면으로 ── */
+  .titlebar{background:var(--paper);border-bottom:0}
+  header{background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid transparent;padding:10px 28px}
+  .brand{flex-direction:column;align-items:flex-start;gap:0}
+  .brand h1{font-size:20px;letter-spacing:-.025em;line-height:1.25}
+  .brand .sub{font-size:12px}
+  .head-right .btn-tool{background:var(--card);border:1px solid var(--line);color:var(--ink-2);padding:6px 12px}
+  .head-right .btn-tool:hover{border-color:var(--focus);color:var(--focus);background:var(--card)}
+  .clock{display:flex;flex-direction:column;align-items:flex-end}
+  .clock .t{font-size:18px;font-weight:600;letter-spacing:-.01em}
+
+  /* ── 세그먼트·탭: 트랙 + 흰 손잡이 (흐름도 .seg) ── */
+  nav.tabs,.seg{background:var(--chip-bg);border-radius:10px;padding:3px;gap:2px}
+  .tab,.seg-btn{border-radius:8px;color:var(--ink-soft);font-weight:500;transition:background .12s,color .12s,box-shadow .12s}
+  .tab:hover,.seg-btn:hover:not(:disabled){color:var(--ink)}
+  .tab.on,.seg-btn.on{background:var(--seg-thumb);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.02)}
+
+  /* ── 입력부: [＋ 입력] · 프리셋 · 빠른 메모 안내를 한 줄 패널에 (v3.7.0 — 바로 입력칸 폐지) ── */
+  .capture{background:transparent;border-bottom:0;padding:6px 28px 0}
+  .cap-box{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px 10px 10px}
+  .cap-row{display:contents}
+  /* 배치(v3.7.0 소유자 지정): 왼쪽 = 빠른 메모 단축키 안내 · 오른쪽 = 프리셋 → [＋ 입력](맨 오른쪽) */
+  .btn-new{height:38px;padding:0 18px;font-size:14px;border-radius:10px;order:3}
+  .presets{order:2;flex:0 1 auto;min-width:0;margin-top:0;margin-left:auto;gap:6px;justify-content:flex-end}
+  .preset,.preset-wrap{border-radius:999px}
+  .preset{font-size:12px;padding:5px 12px}
+  .preset-wrap .preset{padding:5px 6px 5px 12px}
+  .cap-hint{order:1;padding-left:4px;font-size:12px;color:var(--ink-soft);white-space:nowrap}
+  .cap-hint kbd{font-family:inherit;font-size:11px;font-weight:600;color:var(--ink-2);background:var(--sunk);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px}
+
+  /* ── 요약 줄 + 검색 (흐름도 .metrics) ── */
+  .strip{padding:14px 28px 0;gap:10px 16px}
+  .metrics{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;font-size:12.5px;color:var(--ink-soft);min-width:0}
+  .metrics span{white-space:nowrap}
+  .metrics b{font-size:16px;font-weight:600;color:var(--ink);margin-right:4px;font-variant-numeric:tabular-nums}
+  .metrics .m-ok b{color:var(--focus)}
+  .metrics .m-warn b{color:var(--red)}
+  .s-search{background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23687284' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 11px 50%;
+    padding:7px 12px 7px 32px;border-radius:10px}
+  .s-search:focus{box-shadow:0 0 0 3px var(--focus-ring)}
+
+  /* ── 보드 패널: 열을 세로선으로 나눈 하나의 흰 판 (흐름도 .board + 레인) ── */
+  main,#view-board5{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    width:min(1460px,calc(100% - 56px));max-width:none;margin:12px auto 28px;min-height:calc(100vh - 230px);
+    grid-template-columns:repeat(4,minmax(0,1fr));justify-content:stretch;overflow:hidden}
+  #view-board5{grid-template-columns:repeat(5,minmax(0,1fr))}
+  /* 열 = '머리 띠' + '카드 칸' 두 층 (v3.7.0 소유자 피드백: 머리 밑줄이 열 끝까지 안 닿아 영역 구분이 흐렸다).
+     머리 띠는 열 폭 전체를 채우는 옅은 면(--sunk)에 아래 실선 — 열 사이 세로선과 만나 격자가 닫힌다. */
+  .col,#view-board5 .col{padding:0;border-left:1px solid var(--line)}
+  .col:first-child{border-left:0}
+  .col-head{gap:7px;margin:0;padding:12px 14px;background:var(--sunk);border-bottom:1px solid var(--line);min-height:46px}
+  .cards{padding:12px 12px 18px}
+  .col-head h2{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .col-head .count{font-size:12px;padding:1px 8px;background:var(--sunk);border:1px solid var(--line-soft)}
+  .col-desc:empty{display:none}
+  .cards{gap:7px}
+  .cards:has(> .empty){padding-bottom:14px}
+  .card{border-radius:10px;border-color:var(--line);padding:11px 12px 10px 14px;box-shadow:none}
+  .card:hover{border-color:color-mix(in srgb,var(--ink-soft) 55%,var(--line));box-shadow:0 1px 2px rgba(19,26,36,.05),0 8px 20px rgba(19,26,36,.08);transform:translateY(-1px)}
+  .card::before{top:12px;height:18px;width:3px}
+  .card-memo{font-size:13.5px;font-weight:600;letter-spacing:-.005em}
+  .card-subline{font-size:13px}
+  .empty{border:1px solid var(--line-soft);border-radius:10px;background:var(--sunk);font-size:12.5px;padding:18px 8px}
+  /* 드래그(마우스 구현, v3.7.0) — 끌리는 카드 유령 */
+  body.is-dragging,body.is-dragging *{cursor:grabbing !important;user-select:none}
+  .drag-ghost{position:fixed;z-index:500;pointer-events:none;opacity:.92;transform:rotate(1.2deg);box-shadow:var(--shadow) !important;width:260px}
+
+  /* ── 화면 머리(달력·완료·전화번호부): 큰 제목 ── */
+  .done-head h2,.cal-head h2{font-size:24px;letter-spacing:-.02em}
+  .cal-grid{border-radius:14px}
+  .cal-detail{border-radius:14px}
+  .pb-item,.rel-hit,.pbs-row{border-radius:10px}
+
+  /* ── 팝업: 같은 패널 규칙 ── */
+  .modal-bg,.form-panel,.alarm-bg{backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+  .modal{border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+  .modal .t-head{font-size:13px;color:var(--ink-2)}
+
+  /* ── 양식: 머리줄·액션줄이 붙어 있는 패널 ── */
+  .form-panel{padding:28px 20px}
+  .form-panel .fm-inner{border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:0 22px}
+  .fm-head{position:sticky;top:-28px;z-index:4;display:flex;align-items:center;gap:10px;
+    background:var(--surface);margin:0 -22px 12px;padding:16px 16px 12px 22px;border-bottom:1px solid var(--line-soft);border-radius:16px 16px 0 0}
+  .fm-head h3{margin:0;font-size:16px;color:var(--ink);letter-spacing:-.01em;white-space:nowrap}
+  .fm-head .fm-place{margin-right:0;margin-left:auto;padding:3px 10px;border-radius:999px;background:var(--sunk);border:1px solid var(--line-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .fm-ro .fm-head .fm-place{background:var(--slate-bg);border-color:transparent}
+  .fm-x{flex:none;width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:var(--ink-soft);font-size:20px;line-height:1;cursor:pointer}
+  .fm-x:hover{background:var(--chip-bg);color:var(--ink)}
+  .fm-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .fm-label-row .fm-label{margin:0}
+  .fm-mini{font-family:inherit;font-size:11.5px;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink-2);border-radius:8px;padding:3px 10px;cursor:pointer}
+  .fm-mini:hover{border-color:var(--focus);color:var(--focus)}
+  .fm-memo{min-height:220px}
+  .fm-inner .t-head{font-size:12px;color:var(--ink-2);letter-spacing:0}
+  .t-note{font-weight:400;color:var(--ink-soft);font-size:11px}
+  .fm-subs,.fm-ids,.fm-contacts,.fm-files-wrap,.fm-grid{padding-top:10px;border-top:1px solid var(--line-soft)}
+  .fm-actions{position:sticky;bottom:-28px;z-index:4;background:var(--surface);margin:18px -22px 0;padding:12px 22px 16px;
+    border-top:1px solid var(--line-soft);border-radius:0 0 16px 16px}
+  .fm-draft{margin-right:auto}
+  .btn-finish{font-size:14px;padding:8px 16px;background:var(--slate-bg);color:var(--slate)}
+  .btn-finish:hover{background:var(--focus);color:var(--on-accent)}
+  .btn-reopen{font-size:14px;padding:8px 16px;background:var(--focus);color:var(--on-accent)}
+  .btn-reopen:hover{background:var(--focus-strong)}
+  .btn-cancel:hover{background:var(--line);color:var(--ink)}
+  /* 파일을 끌어 올 때 양식의 링크 칸·카드 강조 */
+  .fm-files-wrap.drop-on{outline:2px solid var(--focus);outline-offset:4px;border-radius:10px;background:var(--slate-bg)}
+  .card.drop-on{border-color:var(--focus);box-shadow:0 0 0 2px var(--focus-ring)}
+
+  /* ── 파일 드롭 안내막 ── */
+  .drop-veil{position:fixed;inset:34px 0 0;z-index:450;display:none;pointer-events:none;
+    background:color-mix(in srgb,var(--focus) 8%,transparent);border:2px solid var(--focus);border-radius:14px;margin:8px}
+  .drop-veil.on{display:block}
+  .drop-card{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);background:var(--card);color:var(--ink);
+    border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px 16px;font-size:13px;font-weight:600;white-space:nowrap}
+
+  /* ── 메모 2쪽 보기 ── */
+  #bookModal{z-index:75}                                   /* 양식(60) 위 */
+  .book-modal{max-width:min(1100px,calc(100vw - 40px));display:flex;flex-direction:column;gap:12px}
+  .book-head{display:flex;align-items:center;gap:10px}
+  .book-head h3{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .book-pos{margin-left:auto;font-size:12px;color:var(--ink-soft)}
+  .book-view{height:min(62vh,620px);overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sunk);position:relative}
+  .book-view::after{content:"";position:absolute;top:22px;bottom:22px;left:50%;border-left:1px solid var(--line-soft);pointer-events:none}
+  .book-text{height:100%;column-count:2;column-gap:56px;column-fill:auto;padding:24px 28px;font-size:14.5px;line-height:1.75;
+    white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);overflow-x:hidden}
+  .book-nav{display:flex;justify-content:space-between}
+
+  /* ── 전화번호부 일괄 바꾸기 ── */
+  #pbSwapModal{z-index:72}
+  .pbsw-search{width:100%;font-family:inherit;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+  .pbsw-search:focus{outline:none;border-color:var(--focus)}
+  .rel-hit.on{border-color:var(--focus);background:var(--slate-bg)}
+  .pbsw-opt{display:flex;align-items:center;gap:7px;font-size:13px;margin:10px 2px 4px;cursor:pointer}
+  .pbsw-opt input{accent-color:var(--focus)}
+  .pbsw-sum{margin:6px 2px 0}
+  .pb-item .ps-swap{font-family:inherit;font-size:11px;font-weight:600;background:none;border:none;border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--ink-soft);flex:none}
+  .pb-item .ps-swap:hover{background:var(--slate-bg);color:var(--slate)}
+
+  /* ── 컴팩트(≤1080px): 패널 폭 560 + 좌우 여백 ── */
+  @media(max-width:1080px){
+    main,#view-board5{width:min(560px,calc(100% - 32px));grid-template-columns:1fr}
+    .col,#view-board5 .col{border-left:0;border-top:1px solid var(--line)}
+    .col:first-child{border-top:0}
+    .capture{padding:6px 16px 0}
+    .strip{padding:12px 16px 0}
+    header{padding:10px 16px}
+    .brand{flex-direction:row;align-items:baseline}
+    .cap-hint{display:none}                         /* 좁은 폭: 단축키 안내는 생략(버튼·프리셋 우선) */
+    .presets{flex:1 1 auto;margin-left:0;justify-content:flex-start}   /* 안내가 빠지면 프리셋은 왼쪽부터, [입력]은 오른쪽 끝 */
+    .metrics{gap:2px 12px}
+    .form-panel{padding:16px 10px}
+    .fm-head{top:-16px}
+    .fm-actions{bottom:-16px}
+    .book-text{column-count:1}
+    .book-view::after{display:none}
+  }
+
+  /* ── 설정 팝업 (v3.7.0 전면 개편) — 구역 제목 + 카드 묶음(설정 앱식) ──
+     카드 = 옅은 테두리의 흰 면, 줄 사이는 실선. 왼쪽 이름·설명 / 오른쪽 선택·› */
+  .set-modal{max-width:620px;padding:0 0 16px;background:var(--paper)}
+  .set-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;
+    padding:16px 16px 12px 22px;background:var(--paper);border-bottom:1px solid var(--line)}
+  .set-top h3{margin:0;font-size:17px}
+  .set-sec{margin:18px 22px 7px;font-size:12px;font-weight:700;color:var(--ink-soft);letter-spacing:.02em}
+  .set-sec kbd{font-family:inherit;font-size:10.5px;font-weight:600;color:var(--ink-2);background:var(--card);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;margin:0 1px}
+  .set-card{margin:0 16px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .set-card .set-row{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:14px;
+    width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line-soft);background:transparent;text-align:left;font-family:inherit;color:var(--ink)}
+  .set-card .set-row:first-child{border-top:0}
+  .set-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .set-card .set-lab{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .set-desc{font-size:11.5px;color:var(--ink-soft);line-height:1.45;overflow-wrap:anywhere}
+  .set-card .seg{flex:none}
+  .set-go{cursor:pointer;transition:background .12s}
+  .set-go:hover{background:var(--sunk)}
+  .set-go:hover .set-lab{color:var(--focus)}
+  .set-chev{flex:none;font-size:20px;line-height:1;color:var(--icon-muted)}
+  .set-go:hover .set-chev{color:var(--focus)}
+  .set-modal .m-actions{margin:16px 16px 0}
+  @media(max-width:1080px){
+    .set-card .set-row{flex-direction:column;align-items:stretch;gap:8px}
+    .set-card .set-go{flex-direction:row;align-items:center}
+    .set-card .seg{width:100%}
+  }
+
+  /* v3.7.0 전화번호부 행 꼬리 칸에 [바꾸기]가 더해져 넓힌다 (업무 N · 수정 · 바꾸기 · 삭제) */
+  #view-phone{--pb-tail:12.5rem}
+
+  /* v3.7.0 버전 표기 — 설정 팝업 맨 아래 왼쪽, 조용한 글자 */
+  .set-modal .m-actions{align-items:center}
+  .set-ver{margin-right:auto;font-size:11.5px;color:var(--icon-muted)}
+
+  /* =====================================================================
+     v3.7.0 화면 개편 — 캘린더 · 완료 · 전화번호부 (보드와 같은 '패널 + 머리 띠' 규칙)
+     ===================================================================== */
+  /* 화면 머리: 큰 제목 + 오른쪽 도구, 아래에 패널 */
+  #view-cal,#view-done,#view-phone{padding:18px 28px 40px}
+  #view-done,#view-phone{max-width:1180px}
+  .done-head,.cal-head{margin-bottom:14px}
+  .done-head .metrics{margin-left:4px}
+
+  /* ── 캘린더: 달력 패널 + 옆 상세 ── */
+  #view-cal{max-width:1460px}
+  .cal-head .cal-nav button{background:var(--card);border:1px solid var(--line);color:var(--ink-2)}
+  .cal-head .cal-nav button:hover{border-color:var(--focus);color:var(--focus);background:var(--card)}
+  .cal-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
+  .cal-grid{border:1px solid var(--line);background:var(--card)}
+  .cal-dow{background:var(--sunk);border-bottom:1px solid var(--line);font-size:12px;padding:9px 0}
+  .cal-dow.sat{color:var(--stage-oth-plan)}
+  .cal-day{min-height:104px;padding:6px 6px 4px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);transition:background .1s}
+  .cal-day:nth-child(7n){border-right:0}
+  .cal-day:hover{background:var(--sunk)}
+  .cal-day.other{background:color-mix(in srgb,var(--sunk) 60%,var(--card))}
+  .cal-day.other .pill{opacity:.55}
+  .cal-day.sat-d .dnum{color:var(--stage-oth-plan)}
+  .cal-day.other .dnum{color:var(--cal-other-num)}
+  .dnum{width:24px;height:24px;border-radius:999px;font-size:12.5px}
+  .cal-day.today .dnum{background:var(--focus);color:var(--on-accent)}
+  .cal-day.sel{outline:2px solid var(--focus);outline-offset:-2px;border-radius:0;background:var(--slate-bg)}
+  .pill{border-radius:6px;font-size:11px;padding:2px 6px}
+  .pill.p-more{background:transparent;color:var(--ink-soft);font-weight:600;padding-left:4px}
+  .cal-detail{position:sticky;top:96px;margin-top:0;border-radius:14px;padding:0;overflow:hidden;max-height:calc(100vh - 176px);display:flex;flex-direction:column}
+  .cal-detail h3{margin:0;padding:12px 14px;background:var(--sunk);border-bottom:1px solid var(--line);font-size:15px;display:flex;align-items:baseline;gap:8px}
+  .cal-dw{font-size:12px;font-weight:500;color:var(--ink-soft)}
+  .cal-cnt{margin-left:auto;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line-soft);color:var(--ink-soft)}
+  .cal-detail .cards{padding:12px;overflow-y:auto}
+
+  /* ── 완료: 날짜 묶음 패널 ── */
+  #col-done{display:flex;flex-direction:column;gap:14px}
+  .done-group{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .dg-head{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line)}
+  .dg-label{font-size:13.5px;font-weight:700}
+  .dg-head .count{margin-left:auto;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line-soft);color:var(--ink-soft)}
+  .done-group[data-group="today"] .dg-label{color:var(--focus)}
+  .dg-cards{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;padding:12px}
+  #view-done .card{opacity:1}
+  #view-done .card.done .card-memo{text-decoration:none;color:var(--ink-2)}
+
+  /* ── 전화번호부: 소속 묶음 + 머리글자 ── */
+  .pb-new{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+  #view-phone .m-sub{margin:0 2px 10px}
+  .pb-list{gap:14px}
+  .pb-group{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .pb-ghead{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line);font-size:13.5px;font-weight:700}
+  .pb-ghead .count{margin-left:auto;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line-soft);color:var(--ink-soft)}
+  .pb-group .pb-item{border:0;border-top:1px solid var(--line-soft);border-radius:0;background:transparent;padding:9px 0}
+  .pb-group .pb-ghead + .pb-item{border-top:0}
+  .pb-group .pb-item:hover{transform:none;box-shadow:none;background:var(--sunk);border-color:var(--line-soft)}
+  .pb-item .pb-who{display:flex;align-items:center;gap:8px}
+  .pb-avatar{flex:none;width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+    background:var(--slate-bg);color:var(--slate);font-size:11.5px;font-weight:700}
+  /* 행 동작(수정·바꾸기·삭제)은 hover 때만 — 평소엔 업무 수 배지만 보여 덜 복잡하게 */
+  .pb-item .ps-edit,.pb-item .ps-swap,.pb-item .ps-del{opacity:0;transition:opacity .12s}
+  .pb-item:hover .ps-edit,.pb-item:hover .ps-swap,.pb-item:hover .ps-del,
+  .pb-item :focus-visible{opacity:1}
+
+  /* ── 양식: 연결된 업무 ── */
+  .fm-links{padding-top:10px;border-top:1px solid var(--line-soft);margin-top:4px}
+  .fm-links .rel-list{max-height:240px}
+  .rel-why{flex:none;max-width:45%;font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  @media(max-width:1080px){
+    #view-cal,#view-done,#view-phone{padding:14px 16px 32px}
+    .cal-body{grid-template-columns:1fr}
+    .cal-detail{position:static;max-height:none}
+    .cal-day{min-height:78px}
+    .dg-cards{grid-template-columns:1fr}
+    .pb-item .ps-edit,.pb-item .ps-swap,.pb-item .ps-del{opacity:1}   /* 좁은 폭(터치 포함)에선 항상 보인다 */
+    .rel-why{display:none}
+  }
+
+  /* v3.7.0 정렬 보정: #col-done 은 .cards 클래스를 겸해 보드 카드 칸의 안쪽 여백을 물려받았다 — 묶음 패널이 머리줄과 어긋나지 않게 0 */
+  #col-done{padding:0}
+  /* 전화번호부: 묶음 안 행의 글자 시작선 = 입력줄(패딩12 + 입력칸 테두리1·패딩11) */
+  .pb-group .pb-item{padding:9px 12px}
+
+  /* ── 캘린더 하루 시간표 (v3.7.0 소유자 지정) — 세로 0~24시 · 일정은 그 시각의 가로선 + 이름표.
+     HOUR_PX(44)·CHIP_PX(26)는 calendar.js 상수와 같아야 한다(선 위치를 JS 가 px 로 계산). */
+  .cal-timeline{overflow-y:auto;padding:0 12px 12px 0;flex:1 1 auto;min-height:0;position:relative}
+  .tl-canvas{position:relative;margin-left:58px;margin-top:10px}
+  .tl-hour{position:absolute;left:0;right:0;height:44px;border-top:1px solid var(--line-soft)}
+  .tl-hour:nth-child(6n+1){border-top-color:var(--line)}
+  .tl-hl{position:absolute;left:-52px;top:-8px;width:44px;text-align:right;font-size:11px;color:var(--ink-soft)}
+  .tl-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--cal-mid);z-index:1}
+  .tl-line.tl-due{border-top-color:var(--cal-due)}
+  .tl-line::before{content:"";position:absolute;left:-5px;top:-6px;width:8px;height:8px;border-radius:50%;background:inherit;border:2px solid var(--cal-mid);background:var(--card)}
+  .tl-line.tl-due::before{border-color:var(--cal-due)}
+  .tl-chip{position:absolute;left:14px;right:0;height:26px;z-index:2;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:7px;
+    font-size:12px;cursor:pointer;background:var(--cal-mid-bg);color:var(--cal-mid);border:1px solid color-mix(in srgb,var(--cal-mid) 30%,transparent);
+    white-space:nowrap;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .1s,box-shadow .1s}
+  .tl-chip.tl-due{background:var(--cal-due-bg);color:var(--cal-due);border-color:color-mix(in srgb,var(--cal-due) 30%,transparent)}
+  .tl-chip:hover{transform:translateX(2px);box-shadow:0 2px 8px rgba(0,0,0,.10)}
+  .tl-time{font-weight:700;flex:none}
+  .tl-kind{flex:none;font-size:10.5px;font-weight:700;padding:0 6px;border-radius:999px;background:var(--card)}
+  .tl-what{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .tl-now{position:absolute;left:-6px;right:0;border-top:2px solid var(--red);z-index:3;pointer-events:none}
+  .tl-now::before{content:"지금";position:absolute;left:-46px;top:-9px;font-size:10.5px;font-weight:700;color:var(--red)}
+  .tl-empty{margin:12px 0 0 12px;font-size:12.5px;color:var(--ink-soft)}
+  @media(max-width:1080px){ .cal-timeline{max-height:520px} }
+
+  /* 옛 규칙 .cal-detail.on{display:block} 이 flex 를 덮어 시간표 칸이 늘어나기만 하고 스크롤되지 않았다 */
+  .cal-detail.on{display:flex}
+
+
+  /* ── 관계도 탭 (v3.7.0) — '조달법령 흐름도' 행정규칙 근거지도의 화면 구성 ──
+     도구 패널 · 사슬 패널(열 머리 + 사각 노드 + 선 모양) · 오른쪽 살피기 칸 · 아래 목록 표 */
+  #view-graph{display:none;max-width:1460px;margin:0 auto;padding:18px 28px 40px}
+  #view-graph.on{display:block}
+  .gr-toolbar{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:14px}
+  .gr-tb-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .gr-tb-row .s-search{flex:1;min-width:220px;margin:0}
+  .gr-total{font-size:12px;color:var(--ink-soft);white-space:nowrap}
+  .gr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .gr-chip{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12.5px;color:var(--ink-2);background:var(--card);
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px;cursor:pointer}
+  .gr-chip i{width:8px;height:8px;border-radius:50%;background:currentColor}
+  .gr-chip b{font-weight:700;color:var(--ink)}
+  .gr-chip.g-person i{color:var(--cal-mid)} .gr-chip.g-id i{color:var(--tag-id-fg)} .gr-chip.g-recur i{color:var(--stage-doing)}
+  .gr-chip.g-person i,.gr-chip.g-id i,.gr-chip.g-recur i{background:currentColor}
+  .gr-chip.off{opacity:.45;text-decoration:line-through}
+  .gr-chip:hover{border-color:var(--focus)}
+  .gr-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+  .gr-layout.has-insp{grid-template-columns:minmax(0,1fr) 400px}
+  .gr-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .gr-phead{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;padding:12px 14px;border-bottom:1px solid var(--line-soft)}
+  .gr-phead h3{margin:0;font-size:16px;font-weight:700;min-width:0;max-width:60%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gr-sub{font-size:12px;color:var(--ink-soft)}
+  .gr-phead .g-legend{flex-basis:100%;padding:0}
+  .gr-back{padding:4px 10px;font-size:12px}
+  .gr-back:disabled{opacity:.4;cursor:default}
+  .gr-canvas{padding:8px 10px 12px;overflow-x:auto}
+  .gr-canvas .link-graph{min-width:640px}
+  .gr-intro{padding:20px 18px}
+  .gr-intro h3{margin:0 0 12px;font-size:15px}
+  .gr-ex{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft)}
+  .gr-exbtn{font-family:inherit;font-size:13px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-left:3px solid var(--focus);border-radius:6px;padding:6px 10px;cursor:pointer}
+  .gr-exbtn:hover{border-color:var(--focus)}
+  .gr-sec{margin:20px 2px 10px;font-size:15px;font-weight:700}
+  .gr-table{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .gr-tr{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.4fr) 76px;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line-soft);font-size:13px;cursor:pointer}
+  .gr-tr:hover{background:var(--sunk)}
+  .gr-tr.on{background:var(--slate-bg)}
+  .gr-th{border-top:0;background:var(--sunk);border-bottom:1px solid var(--line);font-size:12px;color:var(--ink-soft);cursor:default}
+  .gr-th:hover{background:var(--sunk)}
+  .gr-th + .gr-tr{border-top:0}
+  .gr-td1{display:flex;align-items:center;gap:8px;min-width:0}
+  .gr-td2{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+  .gr-td3{text-align:right;color:var(--ink-soft)}
+  .gr-pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid}
+  .gr-pill.g-person{color:var(--cal-mid);border-color:color-mix(in srgb,var(--cal-mid) 35%,transparent);background:var(--cal-mid-bg)}
+  .gr-pill.g-id{color:var(--tag-id-fg);border-color:color-mix(in srgb,var(--tag-id-fg) 35%,transparent);background:var(--tag-id-bg)}
+  .gr-pill.g-recur{color:var(--stage-doing);border-color:color-mix(in srgb,var(--stage-doing) 40%,transparent);background:color-mix(in srgb,var(--stage-doing) 10%,var(--card))}
+  .gr-more{font-size:11px;color:var(--ink-soft);align-self:center}
+  /* 살피기 칸(근거지도의 오른쪽 서랍) */
+  .gr-insp:empty{display:none}
+  .gr-insp{position:sticky;top:96px;max-height:calc(100vh - 120px);overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 18px;box-shadow:var(--shadow)}
+  .gi-top{display:flex;align-items:center;justify-content:space-between}
+  .gi-crumb{font-size:12px;color:var(--ink-soft)}
+  .gi-title{margin:4px 0 10px;font-size:18px;font-weight:700;line-height:1.35}
+  .gi-acts{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .gi-acts .gr-open{margin-left:auto;padding:6px 16px;font-size:13px}
+  .gi-sec{margin-top:16px}
+  .gi-h{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;margin-bottom:8px}
+  .gi-h i{width:16px;height:0;border-top:2.4px solid currentColor}
+  .gi-h b{font-weight:700;color:var(--ink-soft)}
+  .gi-sec.g-person .gi-h i{color:var(--cal-mid)} .gi-sec.g-id .gi-h i{color:var(--tag-id-fg)} .gi-sec.g-recur .gi-h i{color:var(--stage-doing)}
+  .gi-row{display:flex;gap:6px;margin-bottom:6px}
+  .gi-go{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-family:inherit;font-size:13px;text-align:left;color:var(--ink);
+    background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 10px;cursor:pointer}
+  .gi-go:hover{border-color:var(--focus)}
+  .gi-open{flex:none;font-family:inherit;font-size:12px;font-weight:600;color:var(--focus);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:0 12px;cursor:pointer}
+  .gi-open:hover{border-color:var(--focus);background:var(--slate-bg)}
+  /* 노드·선 — 근거지도의 사각 노드(왼쪽 색 막대) + 선 모양으로 종류 구분 */
+  .link-graph .gn-box{fill:var(--card);stroke:var(--line);stroke-width:1.2}
+  .link-graph .gn-bar{fill:var(--line)}
+  .link-graph .gn text{font-size:12.5px;fill:var(--ink)}
+  .link-graph .g-colhead{font-size:11.5px;font-weight:600;fill:var(--ink-soft)}
+  .link-graph .g-colline{stroke:var(--line-soft);stroke-width:1}
+  .link-graph .g-center .gn-box{stroke:var(--focus);stroke-width:2.2}
+  .link-graph .g-center .gn-bar{fill:var(--focus)}
+  .link-graph .g-center text{font-weight:700}
+  .link-graph .g-hub .gn-box{fill:var(--sunk)}
+  .link-graph .g-hub text{font-weight:600}
+  .link-graph .g-hub.g-person .gn-bar{fill:var(--cal-mid)} .link-graph .g-hub.g-person text{fill:var(--cal-mid)}
+  .link-graph .g-hub.g-id .gn-bar{fill:var(--tag-id-fg)} .link-graph .g-hub.g-id text{fill:var(--tag-id-fg)}
+  .link-graph .g-hub.g-recur .gn-bar{fill:var(--stage-doing)} .link-graph .g-hub.g-recur text{fill:var(--stage-doing)}
+  .link-graph .g-task{cursor:pointer}
+  .link-graph .g-task .gn-bar{fill:var(--focus)}
+  .link-graph .g-task.g-done .gn-bar{fill:var(--done)}
+  .link-graph .g-task.g-done text{fill:var(--ink-soft)}
+  .link-graph .g-task:hover .gn-box,.link-graph .g-task:focus-visible .gn-box{stroke:var(--focus);fill:var(--slate-bg)}
+  .link-graph .g-task:focus{outline:none}
+  .link-graph .g-task.g-sel .gn-box{stroke:var(--focus);stroke-width:2.2}
+  .link-graph .g-e{fill:none;stroke-width:1.6}
+  .link-graph .g-e.g-person{stroke:var(--cal-mid)}
+  .link-graph .g-e.g-id{stroke:var(--tag-id-fg)}
+  .link-graph .g-e.g-recur{stroke:var(--stage-doing)}
+  .link-graph .g-e-hub{stroke-width:2.2}
+  .link-graph .g-e.g-faint{opacity:.18}
+  .link-graph .g-e.g-hot{stroke-width:2.4}
+  .link-graph .g-fade{opacity:.35}
+  .g-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}
+  .g-lg{display:inline-flex;align-items:center;gap:6px}
+  .g-lg::before{content:"";width:20px;height:0;border-top:2px solid currentColor}
+  .g-lg.g-person{color:var(--cal-mid)}
+  .g-lg.g-id{color:var(--tag-id-fg)}
+  .g-lg.g-recur{color:var(--stage-doing)}
+  @media(max-width:1080px){
+    #view-graph{max-width:560px;padding:14px 16px 32px}
+    .gr-layout.has-insp{grid-template-columns:1fr}
+    .gr-insp{position:static;max-height:none;box-shadow:none}
+    .gr-tr{grid-template-columns:minmax(0,1fr) 56px}
+    .gr-td2{display:none}
+    .gr-th span:nth-child(2){display:none}
+  }
+  .fm-mini-row{display:inline-flex;gap:6px}
+  @media(max-width:1080px){
+    #view-graph{max-width:560px;padding:14px 16px 32px}
+    .gr-body{grid-template-columns:1fr}
+    .gr-list{max-height:220px}
+  }
+  .gr-capnote{padding:10px 14px;border-top:1px solid var(--line-soft);font-size:12px;color:var(--ink-soft);text-align:center}
+
+  /* v3.7.0 왼쪽 위 앱 이름 삭제 — 머리줄은 [빈 칸 | 탭 | 설정] 3칸, 탭이 가운데 */
+  .header-inner{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+  .brand{min-width:0}
+  .head-right{justify-self:end}
+  @media(max-width:1080px){
+    .header-inner{grid-template-columns:1fr auto}
+    .brand{display:none}
+  }
+
+  /* v3.7.0 소유자 지정: 점선·파선(dashed/dotted) 디자인을 쓰지 않는다 — 구분선·빈 상자·관계도 선 모두 실선. 종류 구분은 색으로. */

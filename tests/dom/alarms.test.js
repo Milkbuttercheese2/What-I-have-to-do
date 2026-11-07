@@ -99,19 +99,18 @@ test('확인 → al=true + 모달 닫힘 + persist + 작업표시줄 배지 off 
   assert.ok(env.invokeCalls.some(c=>c.cmd==='alarm_attention'&&c.args&&c.args.on===false));
 });
 
-test('토글: alarmOn 반전 + save_settings + 버튼 표시 + 열린 모달 닫기', async () => {
+test('v3.7.0 알림 끄기(설정 세그먼트 → applyAlarmOn): 떠 있는 알림창을 닫고 다시 울리지 않는다', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.alarmOn = true;
   S.items.push(mk({f:{due:iso(-5)}}));
   checkAlarms();
   assert.ok($('alarmBg').classList.contains('on'));
-  $('alarmToggle').click();                                           // 끄기
-  await env.flush();
-  assert.equal(S.settings.alarmOn, false);
-  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_settings'));
-  assert.equal($('alarmToggle').textContent, '알람 꺼짐');
+  const {applyAlarmOn} = await import('../../src/alarms.js');
+  S.settings.alarmOn = false; applyAlarmOn();
   assert.equal($('alarmBg').classList.contains('on'), false);         // 모달도 닫힘
-  $('alarmToggle').click();                                           // 다시 켜기
-  assert.equal(S.settings.alarmOn, true);
-  assert.equal($('alarmToggle').textContent, '알람 켜짐');
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='alarm_attention' && c.args && c.args.on===false));
+  S.items.push(mk({f:{due:iso(-3)}}));
+  checkAlarms();
+  assert.equal($('alarmBg').classList.contains('on'), false);         // 꺼져 있으면 다시 안 뜬다
+  S.settings.alarmOn = true; applyAlarmOn();                          // 켤 때는 아무것도 닫지 않는다
 });
