@@ -16,6 +16,9 @@ export const DEFAULT_SETTINGS = {
   alarmOn:true,
   closeToTray:true,                   // 메인 창 X = 종료 대신 트레이로
   trayNoticeShown:false,              // "트레이에서 계속 실행" 첫 안내를 이미 봤는가
+  boardMode:'owner',                  // v3.7.0 기본 = 시간·담당자(5열) — 소유자 지정
+  autostart:true,                     // v3.7.0 윈도우 시작 시 자동 실행 기본 켬 — 소유자 요청
+  autostartMinimized:false,           // 자동 실행되면 창을 연다(트레이에 숨기지 않음)
 };
 export const DEFAULT_PRESETS = [];
 

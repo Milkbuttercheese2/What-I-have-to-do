@@ -72,10 +72,10 @@ test('새로고침: 3칸 완비 관련인만 확인 팝업(표준 모달)에 모
   assert.ok(env.document.getElementById('toast-msg').textContent.includes('없습니다'));
 });
 
-test('바로 입력 @자동완성: @김철 → 드롭다운 → Enter 로 텍스트 삽입', async () => {
+test('양식 메모 @자동완성: @김철 → 드롭다운 → Enter 로 텍스트 삽입', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
-  const inp=$('inp');
+  openForm({}); const inp=$('fm-memo');   // v3.7.0 메인 바로 입력칸 폐지 — 같은 자동완성이 양식 메모에서 돈다
   inp.value='민원 @김철'; inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
   input(inp);
   const drop=env.document.getElementById('atDrop');
@@ -93,7 +93,7 @@ test('@자동완성: 목록 안에서 난 스크롤은 닫지 않고, 페이지 
      없어 멀쩡해 보이므로 오래 안 보였다 — 실렌더 검증은 tools/interact-check.mjs. */
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
-  const inp=$('inp');
+  openForm({}); const inp=$('fm-memo');   // v3.7.0 메인 바로 입력칸 폐지 — 같은 자동완성이 양식 메모에서 돈다
   inp.value='민원 @김철'; inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
   input(inp);
   const drop=env.document.getElementById('atDrop');
@@ -128,10 +128,10 @@ test('빠른 메모 등록: 메모 속 @태그의 관련인이 자동 첨부된�
   assert.deepEqual(S.items[1].contacts, []);
 });
 
-test('바로 입력 @자동완성: 일치 없으면 드롭다운이 열리지 않는다', async () => {
+test('양식 메모 @자동완성: 일치 없으면 드롭다운이 열리지 않는다', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1'}]);
-  const inp=$('inp');
+  openForm({}); const inp=$('fm-memo');   // v3.7.0 메인 바로 입력칸 폐지 — 같은 자동완성이 양식 메모에서 돈다
   inp.value='@없는사람'; inp.setSelectionRange(inp.value.length, inp.value.length);
   input(inp);
   assert.equal(env.document.getElementById('atDrop').style.display, 'none');
@@ -279,19 +279,19 @@ test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 �
   ];
   renderPhonebook();
   const rows=[...$('pb-list').querySelectorAll('.pb-item')].map(el=>Number(el.dataset.pbid));
-  assert.deepEqual(rows, [2,1,3]);                              // 업무 많은 마바사 먼저, 나머지는 소속순(가과<나과)
+  assert.deepEqual(rows, [2,3,1]);                              // v3.7.0 소속별 묶음: 업무 합 많은 나과(마바사→아자차) 먼저, 그다음 가과
   const first=$('pb-list').querySelector('.pb-item .pb-cnt');
   assert.equal(first.textContent, '업무 1');
 });
 
-test('바로 입력 본문 하이라이트: 실존 태그만 표시, 태그 클릭 → 관련 업무 (v3.0.1)', async () => {
+test('양식 메모 본문 하이라이트: 실존 태그만 표시, 태그 클릭 → 관련 업무 (v3.0.1)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1'}]);
   S.items=[{id:1, memo:'통화 @김철수', contacts:[], done:false}];
-  const inp=$('inp');
+  openForm({}); const inp=$('fm-memo');   // v3.7.0 메인 바로 입력칸 폐지 — 같은 자동완성이 양식 메모에서 돈다
   inp.value='통화 @김철수 그리고 @없는이';
   inp.dispatchEvent(new env.window.Event('input', {bubbles:true}));
-  const hl=env.document.getElementById('inp-hl');
+  const hl=env.document.getElementById('fm-memo-hl');
   assert.equal(hl.querySelectorAll('.at-tag').length, 1);        // 실존 관련인만
   hl.querySelector('.at-tag').classList.add('hover');
   inp.dispatchEvent(new env.window.MouseEvent('click', {bubbles:true, cancelable:true}));

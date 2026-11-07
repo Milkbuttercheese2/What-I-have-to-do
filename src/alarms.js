@@ -45,11 +45,13 @@ function startTitleFlash(n){
   _titleFlash=setInterval(()=>{ on=!on; document.title = on ? `알림 ${n}건 — 확인하세요` : _baseTitle; },900);
 }
 function stopTitleFlash(){ if(_titleFlash){ clearInterval(_titleFlash); _titleFlash=null; } document.title=_baseTitle; }
-export function renderAlarmToggle(){
-  const b=$('alarmToggle'); if(!b)return;
-  b.textContent = S.settings.alarmOn ? '알람 켜짐' : '알람 꺼짐';
-  b.classList.toggle('alarm-off', !S.settings.alarmOn);
-  b.title = S.settings.alarmOn ? '클릭하면 알람을 끕니다' : '클릭하면 알람을 켭니다';
+/* v3.7.0: 알람 켜기/끄기는 헤더 버튼이 아니라 설정 팝업의 '알림' 세그먼트에서 한다(소유자 지정).
+   설정 쪽(settings-menu.js)이 저장한 뒤 이 함수를 불러 '끌 때의 뒷정리'를 맡긴다 —
+   떠 있는 알림창 닫기·제목 깜빡임 중지·작업 표시줄 배지 걷기. */
+let attentionOff=()=>{};
+export function applyAlarmOn(){
+  if(S.settings.alarmOn) return;
+  closeModal('alarmBg'); firedNow=[]; stopTitleFlash(); attentionOff();
 }
 
 export function initAlarms(){
@@ -58,15 +60,9 @@ export function initAlarms(){
   window.addEventListener('focus',stopTitleFlash);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) stopTitleFlash(); });
   /* v2.5.3: 확인·미룸·알람 끔이 작업표시줄 배지도 함께 걷는다 (미룸은 재울림 때 다시 켜짐) */
-  const attentionOff=()=>invoke('alarm_attention',{on:false}).catch(()=>{});
+  attentionOff=()=>invoke('alarm_attention',{on:false}).catch(()=>{});
   $('alarmOk').addEventListener('click',()=>{ firedNow.forEach(a=>{a.obj.al=a.obj.al||{};a.obj.al[a.key]=true;}); firedNow=[]; closeModal('alarmBg'); stopTitleFlash(); attentionOff(); persist(); });
   /* v2.5.11: '10분 뒤 다시'(스누즈) 기능 제거 — 알람창은 [확인]만. 옛 데이터의 snooze-until
      값은 Rust가 계속 디코드하고 카드 점은 '울림'으로 접어 표시하므로 호환 문제 없음. */
-  $('alarmToggle').addEventListener('click',()=>{
-    S.settings.alarmOn=!S.settings.alarmOn; saveSettings(); renderAlarmToggle();
-    if(!S.settings.alarmOn){ closeModal('alarmBg'); firedNow=[]; stopTitleFlash(); attentionOff(); }
-    showToast(S.settings.alarmOn?'알람을 켰습니다':'알람을 껐습니다');
-  });
-  renderAlarmToggle();
   setInterval(checkAlarms,20000); setTimeout(checkAlarms,2500);
 }

@@ -336,3 +336,33 @@ export function mapSheetRows(rows){
   }
   return {entries, cols:col};
 }
+
+/* ── 인물 일괄 바꾸기 (v3.7.0, 소유자 요청) ─────────────────────────────────
+   업무 하나에서 관련인 A 를 B 로 바꾼 사본을 돌려준다(바뀐 게 없으면 null). 원본 불변.
+   - 관련인: A 와 3칸이 같은(entryKey) 사람만 B 의 3칸(+이메일)으로. 그 업무에 B 가 이미
+     있으면 A 줄은 지운다(같은 사람이 두 줄이 되지 않게).
+   - 메모 @태그: **A 가 관련인으로 엮인 업무에서만** @A이름 → @B이름. 이름만 같은 다른
+     사람(동명이인)의 업무 메모를 건드리지 않기 위해서다. 이름이 같으면 메모는 그대로.
+   - 태그 경계는 extractTags/linkifyAt 과 같은 규칙(줄 시작·공백 뒤 @, 뒤는 공백·문장부호·( ·끝). */
+export function swapPersonIn(item, from, to){
+  if(!item||!from||!to) return null;
+  const fk=entryKey(from), tk=entryKey(to);
+  if(fk===tk) return null;
+  const cs=item.contacts||[];
+  if(!cs.some(c=>entryKey(c)===fk)) return null;
+  const hasTo=cs.some(c=>entryKey(c)===tk);
+  const next=[]; let placed=hasTo;
+  for(const c of cs){
+    if(entryKey(c)!==fk){ next.push(c); continue; }
+    if(placed) continue;                                  // B 가 이미 있음 → A 줄 제거
+    next.push({who:String(to.who||'').trim(), org:String(to.org||'').trim(), phone:String(to.phone||'').trim(), email:String(to.email||'').trim()});
+    placed=true;
+  }
+  let memo=String(item.memo||'');
+  const fName=tagText(from).slice(1), tName=tagText(to).slice(1);
+  if(fName && tName && fName!==tName){
+    const esc=fName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    memo=memo.replace(new RegExp(`(^|\\s)@${esc}(?=$|[\\s@&<>"'(.,;:!?·)\\]])`,'g'), (m,pre)=>`${pre}@${tName}`);
+  }
+  return Object.assign({}, item, {contacts:next, memo});
+}
