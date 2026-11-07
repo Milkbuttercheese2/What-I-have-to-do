@@ -1,0 +1,72 @@
+# OSV-Scanner 예외 목록 (v3.7.2, 2026-11-07)
+#
+# 공공 GitLab 의 푸시 보안 검사(OSV-Scanner)가 아래 항목으로 푸시를 거부해 둔 예외다.
+# 전부 OSV 데이터베이스에 '고친 판'이 없는 안내성 항목이라 의존성 갱신으로 없앨 수 없다.
+# 고칠 수 있는 취약점(undici·source-map-js·tokio 등)은 예외로 두지 않고 v3.7.2 에서 실제로 갱신했다.
+#
+# 규칙
+# - 새 항목은 '고친 판이 없음'을 확인한 경우에만 사유와 함께 넣는다. 고친 판이 있으면 갱신이 답이다.
+# - ignoreUntil 이 지나면 예외가 풀려 검사가 다시 걸린다. 그때 상위(tauri 등) 갱신으로 사라졌는지 확인하고
+#   남아 있으면 사유를 다시 확인해 날짜만 늘린다.
+# - 같은 내용을 src-tauri/osv-scanner.toml 에도 둔다(검사기가 lockfile 옆의 설정을 읽는 판이 있어서).
+
+# ── glib 0.18.5: 리눅스 GTK 바인딩 ──
+# tauri → wry/webkit2gtk 경유. Cargo 의 target 조건(linux 등)으로만 들어가며 윈도 실행 파일에는 컴파일되지 않는다.
+# 고친 판은 glib 0.20 이지만 tauri 2.x 의 gtk 0.18 계열이 0.18 을 고정해 단독으로 올릴 수 없다.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-05-07
+reason = "glib 0.18 VariantStrIter unsoundness. Linux-only GTK dependency pulled by tauri/wry; not compiled into the Windows build. Fix (glib 0.20) blocked by tauri 2.x gtk 0.18 pin."
+
+[[IgnoredVulns]]
+id = "GHSA-wrw7-89jp-8q8g"
+ignoreUntil = 2027-05-07
+reason = "Same advisory as RUSTSEC-2024-0429 (glib 0.18, Linux-only, not in the Windows build)."
+
+# ── 관리 중단(unmaintained) 안내: 취약점이 아니라 '더 이상 관리되지 않는다'는 알림이다 ──
+# proc-macro-error·zvariant 계열은 리눅스 전용(glib-macros·zbus) 경로로만 들어온다.
+# unic-* 는 윈도 빌드에도 들어간다(tauri-utils → urlpattern 0.3) — 상위 tauri 갱신으로만 바뀐다.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-05-07
+reason = "proc-macro-error unmaintained (informational, no fixed version). Pulled only by glib-macros 0.18 (Linux GTK via tauri tray-icon); not in the Windows build."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0075"
+ignoreUntil = 2027-05-07
+reason = "unic-char-range unmaintained (informational, no fixed version). Transitive via tauri-utils -> urlpattern 0.3; only replaceable by an upstream tauri update."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0080"
+ignoreUntil = 2027-05-07
+reason = "unic-common unmaintained (informational, no fixed version). Transitive via tauri-utils -> urlpattern 0.3; only replaceable by an upstream tauri update."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0081"
+ignoreUntil = 2027-05-07
+reason = "unic-char-property unmaintained (informational, no fixed version). Transitive via tauri-utils -> urlpattern 0.3; only replaceable by an upstream tauri update."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0098"
+ignoreUntil = 2027-05-07
+reason = "unic-ucd-version unmaintained (informational, no fixed version). Transitive via tauri-utils -> urlpattern 0.3; only replaceable by an upstream tauri update."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0100"
+ignoreUntil = 2027-05-07
+reason = "unic-ucd-ident unmaintained (informational, no fixed version). Transitive via tauri-utils -> urlpattern 0.3; only replaceable by an upstream tauri update."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2027-05-07
+reason = "zvariant unmaintained (informational, no fixed version; already at latest 5.15.1). Linux D-Bus stack (zbus via tauri-plugin-opener); not in the Windows build."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2027-05-07
+reason = "zbus_names unmaintained (informational, no fixed version; already at latest 4.3.5). Linux D-Bus stack via tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2027-05-07
+reason = "zvariant_derive unmaintained (informational, no fixed version; already at latest 5.15.1). Linux D-Bus stack via tauri."
