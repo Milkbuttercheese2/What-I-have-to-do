@@ -10,7 +10,6 @@ import {$, initToast, appAlert} from './dom-utils.js';
 import {initDtDelegation} from './datetime.js';
 import {initForm, openForm, contactsFromTags, refreshTagHl} from './form.js';
 import {initFileDrop} from './filedrop.js';
-import {initGraphView} from './graph-view.js';
 import {initPresets, renderPresets} from './presets.js';
 import {initRender, render} from './render.js';
 import {initCalendar} from './calendar.js';
@@ -37,7 +36,7 @@ window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
 initSettingsMenu(); initRecurBox(); initUiScale();
-initPhonebook(); initAtComplete(); initQuit(); initFileDrop(); initGraphView();
+initPhonebook(); initAtComplete(); initQuit(); initFileDrop();
 renderPresets();
 
 /* 탭 — 어떤 화면이 있는지는 여기서 알지 못한다. 각 모듈이 init*() 에서
@@ -163,7 +162,7 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
        실제 원인 1순위가 '앱이 완전히 꺼지기 전 재실행'이라 그것부터 짚는다. */
     await appAlert(
       '저장된 데이터를 불러오지 못했습니다.\n'+
-      '지금은 데이터를 지키기 위해 저장이 잠겨 있습니다 — 아래 순서대로 해보세요.\n\n'+
+      '지금은 데이터를 지키기 위해 저장이 잠겨 있습니다. 아래 순서대로 해보세요.\n\n'+
       '1. 화면 오른쪽 아래 시계 옆 트레이 아이콘을 우클릭해 [종료]를 누른 뒤 앱을 다시 실행합니다.\n'+
       '   (앱이 완전히 꺼지기 전에 다시 열면 잠깐 이런 일이 생길 수 있습니다.)\n\n'+
       '2. 그래도 같으면 [설정] → [저장 위치 확인·변경]에서 다른 폴더로 옮겨 보세요.\n\n'+

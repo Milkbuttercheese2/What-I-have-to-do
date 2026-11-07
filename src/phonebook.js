@@ -67,9 +67,9 @@ export function renderPhonebook(){
   groups.forEach(g=>g.rows.sort((a,b)=>(b.n-a.n)||(a.e.who||'').localeCompare(b.e.who||'','ko')));
   const initial=e=>esc((String(e.who||e.org||'?').trim()[0])||'?');
   const row=({e,n})=>`<div class="pb-item" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
-    <span class="pb-org">${esc(e.org||'—')}</span>
-    <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span>${esc(e.who||'—')}</span>
-    <span class="pb-phone num">${esc(e.phone||'—')}</span>
+    <span class="pb-org">${esc(e.org||'')}</span>
+    <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span>${esc(e.who||'')}</span>
+    <span class="pb-phone num">${esc(e.phone||'')}</span>
     <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
     <span class="pb-tail">
       <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
@@ -84,19 +84,26 @@ export function renderPhonebook(){
     +g.rows.map(row).join('')+`</section>`).join('');
 }
 
+/* v3.7.1 추가·수정 팝업(#pbEditModal) — 입력 규칙은 그대로, 입력 자리만 화면의 긴 줄에서 팝업으로 옮겼다 */
 function clearPbForm(){
   editingPbId=null;
   $('pb-org').value=''; $('pb-who').value=''; $('pb-phone').value=''; $('pb-email').value='';
+  $('pbe-title').textContent='관련인 추가';
   $('pb-save').textContent='추가';
-  $('pb-cancel').style.display='none';
 }
+function openPbEdit(id){
+  if(id!=null){ if(!loadPbForm(id)) return; } else clearPbForm();
+  openModal('pbEditModal',{close:closePbEdit, save:submitPbForm});
+  setTimeout(()=>{ try{ (id!=null?$('pb-who'):$('pb-org')).focus(); }catch{} },0);
+}
+function closePbEdit(){ closeModal('pbEditModal'); clearPbForm(); }
 function loadPbForm(id){
-  const e=S.phonebook.find(x=>x.id===id); if(!e) return;
+  const e=S.phonebook.find(x=>x.id===id); if(!e) return false;
   editingPbId=id;
   $('pb-org').value=e.org; $('pb-who').value=e.who; $('pb-phone').value=e.phone; $('pb-email').value=e.email||'';
-  $('pb-save').textContent='수정 저장';
-  $('pb-cancel').style.display='inline-block';
-  $('pb-who').focus();
+  $('pbe-title').textContent='관련인 수정';
+  $('pb-save').textContent='저장';
+  return true;
 }
 async function submitPbForm(){
   const e=normEntry({who:$('pb-who').value, org:$('pb-org').value, phone:$('pb-phone').value, email:$('pb-email').value});
@@ -110,14 +117,14 @@ async function submitPbForm(){
   /* 중복 판정은 3칸(entryKey) — 이메일만 다른 건 '같은 관련인'이라 새로 못 만든다.
      그 사람의 이메일을 바꾸고 싶으면 [수정]으로 들어와 고친다(직접 수정만 덮어쓰기). */
   const dup=S.phonebook.find(x=>x.id!==editingPbId && entryKey(x)===entryKey(e));
-  if(dup){ await appAlert('같은 관련인이 이미 있습니다.\n(이메일만 다른 경우도 같은 사람으로 봅니다 — 이메일을 바꾸려면 그 줄의 [수정]을 쓰세요.)'); return; }
+  if(dup){ await appAlert('같은 관련인이 이미 있습니다.\n(이메일만 다른 경우도 같은 사람으로 봅니다. 이메일을 바꾸려면 그 줄의 [수정]을 쓰세요.)'); return; }
   if(editingPbId){
     const cur=S.phonebook.find(x=>x.id===editingPbId);
     if(cur){ cur.who=e.who; cur.org=e.org; cur.phone=e.phone; cur.email=e.email; }
   }else{
     e.id=newId(); S.phonebook.push(e);
   }
-  savePb(); clearPbForm(); renderPhonebook(); $('pb-who').focus();
+  savePb(); closePbEdit(); renderPhonebook();
 }
 
 /* ── 새로고침·엑셀 공용 확인 팝업 (v2.9.0 — 네이티브 confirm 대신 앱 표준 모달) ──
@@ -167,7 +174,7 @@ async function importFromXlsx(file){
     }catch(e){ await appAlert('엑셀 파일을 읽지 못했습니다: '+e); return; }
     const mapped=mapSheetRows(rows);
     if(!mapped){
-      await appAlert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다 — [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다. 이메일 열은 있으면 함께 읽고, 없어도 됩니다.)');
+      await appAlert('관련소속/관련인/연락처 열을 찾지 못했습니다.\n첫 몇 줄 안에 제목 줄이 있어야 합니다. [엑셀 양식]으로 받은 파일에 채워 넣으면 확실합니다.\n(소속·기관·부서 / 이름·성명·관련인 / 전화·연락처 같은 말이 들어가면 인식됩니다. 이메일 열은 있으면 함께 읽고, 없어도 됩니다.)');
       return;
     }
     const complete=mapped.entries.filter(isComplete);
@@ -180,10 +187,10 @@ async function importFromXlsx(file){
       const v=String(e.email||'').trim();
       return ex && v && v!==String(ex.email||'').trim();
     }).length;
-    const mailNote=ignoredEmail?` 이미 있는 ${ignoredEmail}명의 이메일은 반영되지 않습니다 — 바꾸려면 그 줄의 [수정]을 쓰세요.`:'';
+    const mailNote=ignoredEmail?` 이미 있는 ${ignoredEmail}명의 이메일은 반영되지 않습니다. 바꾸려면 그 줄의 [수정]을 쓰세요.`:'';
     if(!fresh.length){
       showToast(ignoredEmail
-        ? `추가할 새 관련인이 없습니다 — 이미 있는 ${ignoredEmail}명의 이메일도 바뀌지 않습니다([수정]으로 변경)`
+        ? `추가할 새 관련인이 없습니다. 이미 있는 ${ignoredEmail}명의 이메일도 바뀌지 않습니다([수정]으로 변경)`
         : '추가할 새 관련인이 없습니다');
       return;
     }
@@ -235,8 +242,8 @@ export function absorbIntoPhonebook(contacts){
     fresh.forEach(k=>emailNoticed.add(`${k.id}|${k.ignored}`));
     const who=fresh[0].who||fresh[0].org||'관련인';
     showToast(fresh.length===1
-      ? `${who}은(는) 전화번호부에 이미 다른 이메일이 있어 그대로 두었습니다 — 바꾸려면 [수정]`
-      : `관련인 ${fresh.length}명은 전화번호부에 이미 다른 이메일이 있어 그대로 두었습니다 — 바꾸려면 [수정]`);
+      ? `${who}은(는) 전화번호부에 이미 다른 이메일이 있어 그대로 두었습니다. 바꾸려면 [수정]`
+      : `관련인 ${fresh.length}명은 전화번호부에 이미 다른 이메일이 있어 그대로 두었습니다. 바꾸려면 [수정]`);
   }
   if(!added.length && !updates.length) return;
   /* updates 는 '바뀔 칸만 담은 패치'(v3.5.0: phone·email) — 들어 있는 키만 덮는다.
@@ -260,7 +267,7 @@ export function openRelated(name, extraEntries){
   const entries=entriesForTag(S.phonebook, name).concat(extraEntries||[]);
   const matched=relatedItems(S.items, {entries});
   $('rel-title').textContent=`@${name} 관련 업무`;
-  $('rel-sub').textContent=`전화번호부 정보(관련소속·관련인·연락처)가 모두 일치하는 업무 ${matched.length}건 — 누르면 양식이 열립니다.`;
+  $('rel-sub').textContent=`전화번호부 정보(관련소속·관련인·연락처)가 모두 일치하는 업무 ${matched.length}건입니다. 누르면 양식이 열립니다.`;
   $('rel-list').innerHTML=matched.length?matched.map(it=>{
     const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
     /* v3.1.2: 완료 업무는 완료 날짜도 표시 (완료 탭 카드와 같은 fmtT 표기) */
@@ -291,15 +298,15 @@ function renderSwapList(){
     .sort((a,b)=>(a.org||'').localeCompare(b.org||'','ko')||(a.who||'').localeCompare(b.who||'','ko'))
     .slice(0,50);
   $('pbsw-list').innerHTML=list.length?list.map(e=>`<div class="rel-hit${swapTo&&swapTo.id===e.id?' on':''}" data-swapto="${e.id}">
-      <span class="rel-txt"><b>${esc(e.who||'—')}</b> · ${esc(e.org||'—')} · <span class="num">${esc(e.phone||'—')}</span></span></div>`).join('')
-    :'<div class="empty" style="padding:14px">바꿀 사람이 없습니다 — 먼저 전화번호부에 B 를 추가하세요.</div>';
+      <span class="rel-txt"><b>${esc(e.who||'')}</b> · ${esc(e.org||'')} · <span class="num">${esc(e.phone||'')}</span></span></div>`).join('')
+    :'<div class="empty" style="padding:14px">바꿀 사람이 없습니다. 먼저 전화번호부에 새 담당자를 추가하세요.</div>';
   const go=$('pbsw-go'), sum=$('pbsw-sum');
   if(!swapTo){ go.disabled=true; sum.textContent=''; return; }
   const plan=swapPlan(swapFrom, swapTo), done=plan.filter(x=>x.before.done).length;
   go.disabled=!plan.length && !$('pbsw-del').checked;
   sum.textContent=plan.length
     ? `업무 ${plan.length}건${done?`(완료 ${done}건 포함)`:''}의 관련인이 ${swapTo.who||swapTo.org} 님으로 바뀝니다.`
-    : '이 사람과 엮인 업무가 없습니다 — 원래 인물 삭제만 할 수 있습니다.';
+    : '이 사람과 엮인 업무가 없습니다. 원래 인물 삭제만 할 수 있습니다.';
 }
 export function openSwap(id){
   swapFrom=S.phonebook.find(x=>x.id===id)||null; swapTo=null;
@@ -351,7 +358,10 @@ export function initPhonebook(){
      hover 기하 판정으로 직접 처리)과 전화번호부 행뿐이다 — v2.9.0의 별도 칩(#fm-tags)은
      '본문에 하이라이트'라는 소유자 지정으로 제거됐다. 카드 위 태그는 색 표시만(불변). */
   $('pb-save').addEventListener('click',submitPbForm);
-  $('pb-cancel').addEventListener('click',()=>{ clearPbForm(); });
+  document.body.appendChild($('pbEditModal'));
+  $('pb-add').addEventListener('click',()=>openPbEdit(null));
+  $('pb-cancel').addEventListener('click',closePbEdit);
+  $('pbEditModal').addEventListener('click',e=>{ if(e.target.id==='pbEditModal') closePbEdit(); });
   [$('pb-org'),$('pb-who'),$('pb-phone'),$('pb-email')].forEach(inp=>inp.addEventListener('keydown',e=>{
     if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); submitPbForm(); }
   }));
@@ -377,7 +387,7 @@ export function initPhonebook(){
   $('pbSwapModal').addEventListener('click',e=>{ if(e.target.id==='pbSwapModal') closeSwap(); });
   $('pb-list').addEventListener('click',async e=>{
     const ed=e.target.closest('[data-pbedit]');
-    if(ed){ loadPbForm(Number(ed.dataset.pbedit)); return; }
+    if(ed){ openPbEdit(Number(ed.dataset.pbedit)); return; }
     const sw=e.target.closest('[data-pbswap]');
     if(sw){ openSwap(Number(sw.dataset.pbswap)); return; }
     const del=e.target.closest('[data-pbdel]');
@@ -392,7 +402,7 @@ export function initPhonebook(){
     if(!entry) return;
     if(!await appConfirm(`"${[entry.org,entry.who].filter(Boolean).join(' ')||entry.phone}"을(를) 삭제할까요?`)) return;
     S.phonebook=S.phonebook.filter(x=>x.id!==id);
-    if(editingPbId===id) clearPbForm();
+    if(editingPbId===id) closePbEdit();
     savePb(); renderPhonebook();
   });
 }

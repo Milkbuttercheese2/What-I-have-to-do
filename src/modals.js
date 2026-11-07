@@ -48,8 +48,29 @@ function topIndex(){
    opts.save  — 이 팝업이 열려 있을 때 Ctrl+S / Ctrl+Enter 가 할 일(선택).
                 저장 버튼을 가진 모듈이 자기 버튼을 직접 안다 — 예전처럼 main.js
                 가 남의 모듈 버튼($('fm-save').click())을 대신 누르지 않는다. */
+/* v3.7.1 디자인 정책: 모든 팝업 오른쪽 위에 같은 닫기(×). 팝업 마크업마다 손으로 넣지 않고 열 때 한 번 붙인다 —
+   새 팝업을 만들어도 저절로 같은 모양이 된다. 누르면 그 팝업의 close(뒷정리 포함)를 탄다(ESC 와 같은 길).
+   이미 자기 닫기 단추(.fm-x)가 있는 팝업(양식·설정·2쪽 보기)은 그대로 둔다. */
+function ensureCloseX(id, el){
+  const panel = el.querySelector('.modal, .alarm, .fm-inner'); if(!panel) return;
+  if(panel.querySelector('.fm-x')) return;
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'fm-x modal-x'; x.setAttribute('aria-label', '닫기'); x.title = '닫기 (ESC)'; x.textContent = '×';
+  x.addEventListener('click', () => closeById(id));
+  panel.classList.add('has-x');
+  panel.appendChild(x);
+}
+/* 스택의 그 팝업을 닫는다 — 등록된 close(뒷정리)를 부른다. 스택에 없으면 화면만 닫는다 */
+export function closeById(id){
+  const i = stack.findIndex(m => m.id === id);
+  if(i < 0){ closeModal(id); return; }
+  const m = stack.splice(i, 1)[0];
+  try{ m.close(); }catch(e){ console.warn('팝업 닫기 실패', id, e); }
+}
+
 export function openModal(id, opts = {}){
   const el = $(id); if(!el) return;
+  ensureCloseX(id, el);
   const i = stack.findIndex(m => m.id === id);
   if(i >= 0) stack.splice(i, 1);                 // 이미 열려 있으면 맨 위로 다시 올린다
   el.classList.add('on');

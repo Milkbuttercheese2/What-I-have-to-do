@@ -232,14 +232,32 @@ test('syncAutostart: 설정이 없으면(업데이트 직후) 켬으로 등록�
 });
 
 /* ── 2쪽 보기 · 요약 숫자 ─────────────────────────────────────────────── */
-test('2쪽 보기: 메모를 읽기 전용 팝업으로 펼치고 ESC 로 닫는다', async () => {
+test('v3.7.1 2쪽 보기: 쪽에서 고치면 양식 메모에 바로 반영되고, 완료 업무에서는 읽기 전용', async () => {
   await fresh();
-  openBook('첫 줄 제목\n둘째 줄');
+  const raf = env.window.requestAnimationFrame;
+  env.window.requestAnimationFrame = (fn) => { fn(); return 0; };          // 쪽 나누기를 바로 돌린다
+  globalThis.requestAnimationFrame = env.window.requestAnimationFrame;
+  const it = mk({memo:'첫 줄 제목\n둘째 줄'}); S.items.push(it);
+  await openForm(it);
+  openBook();
   assert.ok(isOpen('bookModal'));
   assert.equal($('book-title').textContent, '첫 줄 제목');
-  assert.equal($('book-text').textContent, '첫 줄 제목\n둘째 줄');
+  const ta = doc.querySelector('#book-pages .book-ta');
+  assert.ok(ta, '쪽이 그려진다');
+  assert.equal(ta.value, '첫 줄 제목\n둘째 줄');
+  assert.equal(ta.readOnly, false);
+  ta.value = '첫 줄 제목\n고친 둘째 줄'; ta.setSelectionRange(ta.value.length, ta.value.length);
+  ta.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  assert.equal($('fm-memo').value, '첫 줄 제목\n고친 둘째 줄', '양식 메모에 즉시 반영');
   closeTop();
   assert.ok(!isOpen('bookModal'));
+  closeForm();
+  const done = mk({memo:'끝난 메모', done:true, doneAt:Date.now()}); S.items.push(done);
+  await openForm(done, {readonly:true});
+  openBook();
+  assert.equal(doc.querySelector('#book-pages .book-ta').readOnly, true, '완료 업무는 쪽도 읽기 전용');
+  closeTop(); closeForm();
+  env.window.requestAnimationFrame = raf; globalThis.requestAnimationFrame = raf;
 });
 
 test('metricsOf: 오늘 할 일(오늘·지난 미완료) · 오늘 완료(오늘 끝냈거나 오늘 일정인 완료) — 주기 부모 제외', () => {
@@ -259,17 +277,20 @@ test('metricsOf: 오늘 할 일(오늘·지난 미완료) · 오늘 완료(오�
 });
 
 /* ── 완료 묶음 · 캘린더 상세 · 전화번호부 묶음 · 연결된 업무 ───────────── */
-test('doneGroupOf: 오늘/어제/이번 주/지난주/월별/날짜 모름', async () => {
+test('doneGroupOf: 오늘 / 이번 주 / 이번 달 / 그 이전은 달별 / 날짜 모름 (v3.7.1)', async () => {
   const {doneGroupOf} = await import('../../src/render.js');
   const now = new Date(2026, 10, 12, 15, 0).getTime();          // 2026-11-12 (목)
   const at = (m,d,h=10) => new Date(2026, m, d, h, 0).getTime();
   assert.equal(doneGroupOf(at(10,12), now).key, 'today');
-  assert.equal(doneGroupOf(at(10,11), now).key, 'yday');
+  assert.equal(doneGroupOf(at(10,11), now).key, 'week');          // 어제도 이번 주
   assert.equal(doneGroupOf(at(10,9), now).key, 'week');           // 월요일
-  assert.equal(doneGroupOf(at(10,8), now).key, 'lweek');          // 지난 일요일
-  assert.equal(doneGroupOf(at(10,2), now).key, 'lweek');          // 지난주 월요일
-  assert.equal(doneGroupOf(at(10,1), now).label, '2026년 11월');
+  assert.equal(doneGroupOf(at(10,8), now).key, 'month');          // 지난 일요일 = 이번 달
+  assert.equal(doneGroupOf(at(10,1), now).key, 'month');
+  assert.equal(doneGroupOf(at(9,31), now).label, '2026년 10월');
   assert.equal(doneGroupOf(null, now).key, 'nodate');
+  /* 이번 주가 지난달에 걸친 경우: 2026-12-02(수), 월요일은 11-30 → 11-30 은 이번 주 */
+  const now2 = new Date(2026, 11, 2, 9, 0).getTime();
+  assert.equal(doneGroupOf(new Date(2026, 10, 30, 10).getTime(), now2).key, 'week');
 });
 
 test('완료 탭: 묶음 머리와 카드가 그려지고, 카드를 누르면 읽기 전용 양식이 열린다', async () => {
@@ -322,77 +343,7 @@ test('전화번호부: 소속별 묶음 머리가 생기고 행에 머리글자�
   assert.equal(doc.querySelector('#pb-list .pb-avatar').textContent, '가');
 });
 
-test('linkedItems: 관련인(3칸)·식별정보·주기로 엮고, 동명이인·자기 자신·주기 부모는 뺀다', async () => {
-  const {linkedItems} = await import('../../src/links.js');
-  const P = {who:'김철수', org:'행정과', phone:'010-1111-1111'};
-  const me = mk({id:1, contacts:[P], ids:[{kind:'계약번호', val:'2026-01'}], recurId:77});
-  const items = [me,
-    mk({id:2, contacts:[{...P, phone:'01011111111'}]}),                     // 같은 사람(숫자만 비교)
-    mk({id:3, ids:[{kind:'계약번호', val:'2026 - 01'.replace(/ /g,'')}]}),  // 같은 식별정보
-    mk({id:4, recurId:77, done:true, doneAt:1}),                             // 같은 주기
-    mk({id:5, contacts:[{who:'김철수', org:'다른과', phone:'010-9'}]}),      // 동명이인 — 제외
-    mk({id:6, recur:{type:'dow'}, contacts:[P]}),                            // 주기 부모 — 제외
-  ];
-  const r = linkedItems(items, me);
-  assert.deepEqual(r.map(x=>x.it.id), [3,2,4]);                              // 미완료 먼저, 그 안에서 최근 것 먼저
-  assert.deepEqual(r[0].why, ['계약번호 2026-01']);
-  assert.deepEqual(r[1].why, ['관련인 김철수']);
-  assert.deepEqual(r[2].why, ['같은 주기 업무']);
-});
 
-test('관계도 탭(근거지도식): 칩·연결 목록·사슬·살피기 칸 · 노드 클릭=가운데 이동 · ◀ · [열기] · 전체 지도 · 칩으로 종류 끄기', async () => {
-  await fresh();
-  const {initGraphView, renderGraphView, showGraphFor} = await import('../../src/graph-view.js');
-  initGraphView();
-  const P = {who:'김철수', org:'행정과', phone:'010-1111-1111', email:''};
-  const a = mk({memo:'지금 업무', contacts:[P], ids:[{kind:'계약번호', val:'K-1'}]});
-  const b = mk({memo:'예전 업무', contacts:[P], done:true, doneAt:Date.now()-1e6});
-  const c = mk({memo:'같은 계약', ids:[{kind:'계약번호', val:'K-1'}]});
-  const lone = mk({memo:'외톨이'});
-  S.items.push(a, b, c, lone);
-  renderGraphView();
-  const rows=[...doc.querySelectorAll('#gr-table .gr-tr[data-gsel]')].map(r=>r.textContent);
-  assert.equal(rows.length, 3, '엮인 업무가 있는 것만 연결 목록에');
-  assert.ok(!rows.some(t=>t.includes('외톨이')));
-  assert.match($('gr-chips').textContent, /관련인 1/);
-  assert.match($('gr-chips').textContent, /식별정보 1/);
-  assert.ok($('gr-panel').querySelector('.gr-intro'), '고르기 전엔 안내 + 예시');
-  showGraphFor(a.id);
-  assert.match($('gr-panel').textContent, /지금 업무/);
-  assert.match($('gr-panel').textContent, /고리 2개 · 엮인 업무 2건/);
-  assert.ok($('gr-panel').querySelector('svg.link-graph'));
-  assert.equal($('gr-panel').querySelectorAll('.g-hub').length, 2, '관련인 고리 + 식별정보 고리');
-  assert.equal($('gr-insp').querySelectorAll('.gi-sec').length, 2, '살피기 칸: 고리별 묶음');
-  click($('gr-panel').querySelector(`.g-task[data-gcenter="${b.id}"]`));
-  assert.match($('gr-panel').querySelector('.gr-title').textContent, /예전 업무/, '노드를 누르면 그 업무가 가운데로');
-  assert.ok(!isOpen('formPanel'), '노드 클릭은 양식을 열지 않는다');
-  click($('gr-back'));
-  assert.match($('gr-panel').querySelector('.gr-title').textContent, /지금 업무/, '◀ 로 되돌아간다');
-  /* 칩으로 식별정보 끄기 → 사슬에서 식별정보 고리가 빠진다 */
-  click($('gr-chips').querySelector('[data-gkind="id"]'));
-  assert.equal($('gr-panel').querySelectorAll('.g-hub').length, 1);
-  click($('gr-chips').querySelector('[data-gkind="id"]'));
-  /* 전체 지도 — 업무 3, 고른 업무 강조 */
-  click($('gr-mode').querySelector('[data-v="all"]'));
-  assert.equal($('gr-panel').querySelectorAll('.g-task').length, 3);
-  assert.ok($('gr-panel').querySelector(`.g-task.g-sel[data-gcenter="${a.id}"]`));
-  click($('gr-mode').querySelector('[data-v="chain"]'));
-  /* [열기] → 양식, 양식의 [관계도] → 다시 이 탭 */
-  click($('gr-insp').querySelector('.gr-open'));
-  await env.flush();
-  assert.ok(isOpen('formPanel'));
-  assert.equal($('fm-memo').value, '지금 업무');
-  assert.notEqual($('fm-graph').style.display, 'none', '양식의 [관계도] 단추가 보인다');
-  click($('fm-graph'));
-  assert.ok(!isOpen('formPanel'));
-  /* 선택 해제 */
-  click($('gr-clear'));
-  assert.ok($('gr-panel').querySelector('.gr-intro'));
-  assert.equal($('gr-insp').innerHTML, '');
-  await openForm(lone);
-  assert.equal($('fm-graph').style.display, 'none', '엮인 게 없으면 단추가 없다');
-  closeForm();
-});
 
 test('설정의 알림 켬/끔: alarmOn 저장 + 끌 때 뒷정리 + 헤더엔 알람 버튼이 없다', async () => {
   await fresh();
@@ -409,51 +360,8 @@ test('설정의 알림 켬/끔: alarmOn 저장 + 끌 때 뒷정리 + 헤더엔 �
   closeSettings();
 });
 
-test('graphLayout: 3단 배치 — 업무는 오른쪽 열에 겹치지 않게, 고리는 가운데 열에 최소 간격, 같은 고리 업무끼리 모인다', async () => {
-  const {graphLayout, GRAPH} = await import('../../src/links.js');
-  const mkL = (id, keys, done=false) => ({it:{id, memo:'업무'+id, done}, via:keys.map(k=>({kind:k.startsWith('i')?'id':'person', key:k, label:k}))});
-  const g = graphLayout([mkL(1,['pa']), mkL(2,['ib']), mkL(3,['pa'],true), mkL(4,['pa','ib']), mkL(5,['ib'])]);
-  assert.equal(g.hubs.length, 2);
-  assert.deepEqual(g.hubs.map(h=>h.kind), ['person','id'], '관련인 고리가 위');
-  g.tasks.forEach(t=>assert.equal(t.x, GRAPH.colT));
-  g.hubs.forEach(h=>assert.equal(h.x, GRAPH.colH));
-  for(let i=1;i<g.tasks.length;i++) assert.ok(g.tasks[i].y-g.tasks[i-1].y >= GRAPH.rowT-1e-6);
-  for(let i=1;i<g.hubs.length;i++) assert.ok(g.hubs[i].y-g.hubs[i-1].y >= GRAPH.rowH-1e-6);
-  assert.deepEqual(g.tasks.map(t=>t.id), [1,4,3,2,5], '첫 고리 순 · 그 안에서 미완료 먼저');
-  g.hubs.concat(g.tasks).forEach(n=>assert.ok(n.y>=g.top+13 && n.y<=g.H-13, '모든 노드가 열 머리 아래·그림 안'));
-  assert.equal(g.center.y, g.top+(g.H-g.top)/2);
-  const many = graphLayout(Array.from({length:24},(_,i)=>mkL(i+1,['p'+(i%7)])));
-  many.hubs.concat(many.tasks).forEach(n=>assert.ok(n.y>=many.top+13 && n.y<=many.H-13));
-});
 
-test('linkCounts: 색인으로 센 수 = linkedItems 길이 (무작위 300건)', async () => {
-  const {linkCounts, linkedItems} = await import('../../src/links.js');
-  let seed=7; const rnd=n=>{ seed=(seed*1103515245+12345)%2147483648; return seed%n; };
-  const people=Array.from({length:12},(_,i)=>({who:'사람'+i, org:'과'+(i%4), phone:'010-'+(1000+i)}));
-  const items=Array.from({length:300},(_,i)=>mk({id:i+1,
-    contacts: rnd(3)? [people[rnd(12)]] : [],
-    ids: rnd(4)===0 ? [{kind:'계약번호', val:'K-'+rnd(20)}] : [],
-    recurId: rnd(10)===0 ? 900+rnd(3) : null, recur: i===5 ? {type:'dow'} : null}));
-  const cnt=linkCounts(items);
-  for(const it of items){ if(it.recur) continue; assert.equal(cnt.get(it.id)||0, linkedItems(items, it, 1e9).length, 'id '+it.id); }
-  const t0=Date.now(); const big=Array.from({length:3000},(_,i)=>mk({id:i+1, contacts:[people[i%12]]})); linkCounts(big);
-  assert.ok(Date.now()-t0 < 1500, '3천 건도 빠르게');
-});
 
-test('linkIndex: 업무별 고리 = linkedItems 의 via 합집합, 고리마다 2건 이상', async () => {
-  const {linkIndex, linkedItems} = await import('../../src/links.js');
-  let seed=11; const rnd=n=>{ seed=(seed*1103515245+12345)%2147483648; return seed%n; };
-  const people=Array.from({length:8},(_,i)=>({who:'사람'+i, org:'과', phone:'010-'+(2000+i)}));
-  const items=Array.from({length:150},(_,i)=>mk({id:i+1, contacts: rnd(2)?[people[rnd(8)]]:[], ids: rnd(5)===0?[{kind:'계약번호', val:'K'+rnd(9)}]:[], recurId: rnd(9)===0?77:null}));
-  const ix=linkIndex(items);
-  for(const h of ix.hubs.values()) assert.ok(h.ids.size>=2);
-  for(const it of items){
-    const want=new Set(linkedItems(items, it, 1e9).flatMap(l=>l.via.map(v=>v.key)));
-    assert.deepEqual(new Set(ix.keysOf.get(it.id)), want, 'id '+it.id);
-  }
-  const off=linkIndex(items, {kinds:['person']});
-  for(const h of off.hubs.values()) assert.equal(h.kind, 'person');
-});
 
 test('v3.7.0 속도: persist 는 저장이 끝나기 전에 화면부터 그린다', async () => {
   await fresh();

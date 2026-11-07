@@ -29,12 +29,12 @@ export function checkAlarms(){
   if(!fire.length)return; firedNow=fire;
   /* v3.6.2: 알림창도 카드(v2.5.12)처럼 메모의 첫 줄만 보여준다 — 여러 줄 메모가 통째로
      떠서 알림창이 길어지던 문제. 세부 점검(title)은 원래 한 줄이라 영향 없음. */
-  $('alarmList').innerHTML=fire.map(a=>`<div class="a-item"><b>${a.label}</b>${esc((a.title||'').split(/\r?\n/)[0].trim()||'(메모 없음)')}<span class="num">${fmtT(a.iso)}</span></div>`).join('');
+  $('alarmList').innerHTML=fire.map(a=>`<div class="a-item ${a.key==='due'?'a-due':'a-mid'}"><b>${a.label}</b>${esc((a.title||'').split(/\r?\n/)[0].trim()||'(메모 없음)')}<span class="num">${fmtT(a.iso)}</span></div>`).join('');
   openModal('alarmBg',{close:()=>$('alarmOk').click()}); beep(); try{window.focus();}catch{} startTitleFlash(fire.length);
   invoke('focus_main_window').catch(()=>{}); // window.focus() can't steal OS focus from another app; this can
   invoke('alarm_attention',{on:true}).catch(()=>{}); // v2.5.3 작업표시줄 깜빡임 + 빨간 배지 (확인 전까지 유지)
   if('Notification'in window&&Notification.permission==='granted'){ fire.forEach(a=>{try{
-    const nt=new Notification('뭐하려 했더라 — '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
+    const nt=new Notification('뭐하려 했더라 · '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
     nt.onclick=()=>{ try{window.focus();}catch{} try{nt.close();}catch{} };
   }catch{}}); }
 }
@@ -42,7 +42,7 @@ let _titleFlash=null, _baseTitle='';
 function startTitleFlash(n){
   stopTitleFlash();
   let on=false;
-  _titleFlash=setInterval(()=>{ on=!on; document.title = on ? `알림 ${n}건 — 확인하세요` : _baseTitle; },900);
+  _titleFlash=setInterval(()=>{ on=!on; document.title = on ? `알림 ${n}건, 확인하세요` : _baseTitle; },900);
 }
 function stopTitleFlash(){ if(_titleFlash){ clearInterval(_titleFlash); _titleFlash=null; } document.title=_baseTitle; }
 /* v3.7.0: 알람 켜기/끄기는 헤더 버튼이 아니라 설정 팝업의 '알림' 세그먼트에서 한다(소유자 지정).
