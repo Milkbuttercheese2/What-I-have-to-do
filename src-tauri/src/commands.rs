@@ -711,6 +711,11 @@ pub struct QuickHit {
     pub done: bool,
 }
 
+/// v3.7.3 소유자 지정: 결과 상한 15 → 100. 진행 업무를 먼저(ORDER BY done) 채우므로, 15건일 땐
+/// 검색어에 걸리는 진행 업무가 15건을 넘으면 완료 업무가 아예 안 보였다. 창 높이는 프런트가
+/// 최대 406px 로 묶고 나머지는 스크롤이라, 상한을 올려도 창이 커지지 않는다.
+const QUICK_SEARCH_LIMIT: i64 = 100;
+
 /// 미니 캡처 창(메인 모듈 접근 불가)의 업무 검색 — 읽기 전용이므로 무결성
 /// 게이트에 걸려도 빈 목록만 돌려준다 (검색이 복구를 방해할 이유가 없다).
 #[tauri::command]
@@ -719,7 +724,7 @@ pub fn quick_search(state: State<AppDb>, query: String) -> Result<Vec<QuickHit>,
     if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
         return Ok(vec![]);
     }
-    Ok(db::items::quick_search(&state.conn(), q, 15)
+    Ok(db::items::quick_search(&state.conn(), q, QUICK_SEARCH_LIMIT)
         .map_err(to_err)?
         .into_iter()
         .map(|(id, memo, done)| QuickHit { id, memo, done })
