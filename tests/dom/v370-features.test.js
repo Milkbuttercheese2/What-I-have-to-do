@@ -15,7 +15,7 @@ const {initPhonebook, adoptPhonebook, openSwap, renderPhonebook} = await import(
 const {mergePaths, dropTarget, applyDrop, handleDragDrop} = await import('../../src/filedrop.js');
 const {initSettingsMenu, openSettings, closeSettings, syncAutostart} = await import('../../src/settings-menu.js');
 const {placeMode, setPlaceMode} = await import('../../src/placement.js');
-const {closeTop, isOpen} = await import('../../src/modals.js');
+const {closeTop, isOpen, topSave} = await import('../../src/modals.js');
 initToast(); initForm(); initRender(); initPhonebook(); initSettingsMenu();
 
 const $ = id => env.document.getElementById(id);
@@ -232,6 +232,32 @@ test('syncAutostart: 설정이 없으면(업데이트 직후) 켬으로 등록�
 });
 
 /* ── 2쪽 보기 · 요약 숫자 ─────────────────────────────────────────────── */
+test('v3.7.5 2쪽 보기 단축키: ESC 는 양식으로 돌아가고(고친 글 유지), Ctrl+S 는 저장하고 둘 다 닫는다', async () => {
+  await fresh();
+  const raf = env.window.requestAnimationFrame;
+  env.window.requestAnimationFrame = (fn) => { fn(); return 0; };
+  globalThis.requestAnimationFrame = env.window.requestAnimationFrame;
+  const it = mk({memo:'원래 메모'}); S.items.push(it);
+  const edit = (txt) => { const ta = doc.querySelector('#book-pages .book-ta'); ta.value = txt; ta.setSelectionRange(txt.length, txt.length);
+    ta.dispatchEvent(new env.window.Event('input', {bubbles:true})); };
+  // ESC
+  await openForm(it); openBook(); edit('ESC 로 고친 메모');
+  closeTop();                                                        // ESC 와 같은 길
+  assert.ok(!isOpen('bookModal'), '2쪽 보기는 닫힌다');
+  assert.ok(isOpen('formPanel'), '양식은 그대로 열려 있다');
+  assert.equal($('fm-memo').value, 'ESC 로 고친 메모', '고친 글은 양식에 남는다');
+  assert.equal(S.items.find(x=>x.id===it.id).memo, '원래 메모', '아직 저장하지 않았다');
+  closeTop(); closeForm();
+  // Ctrl+S
+  await openForm(S.items.find(x=>x.id===it.id)); openBook(); edit('저장할 메모');
+  const save = topSave(); assert.ok(save, '2쪽 보기에도 저장 동작이 있다');
+  save();
+  assert.ok(!isOpen('bookModal'), '2쪽 보기가 닫힌다');
+  assert.ok(!isOpen('formPanel'), '양식도 닫혀 메인 화면으로');
+  assert.equal(S.items.find(x=>x.id===it.id).memo, '저장할 메모', '고친 글이 저장된다');
+  env.window.requestAnimationFrame = raf; globalThis.requestAnimationFrame = raf;
+});
+
 test('v3.7.1 2쪽 보기: 쪽에서 고치면 양식 메모에 바로 반영되고, 완료 업무에서는 읽기 전용', async () => {
   await fresh();
   const raf = env.window.requestAnimationFrame;
