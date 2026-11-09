@@ -19,21 +19,24 @@ import { S } from './state.js';
 import { STORE } from './store.js';
 import { showToast } from './dom-utils.js';
 
-/* v3.3.3 소유자 지정: 배율 범위를 90~120% 로 좁힌다 — 80%/150% 는 레이아웃이
-   깨지거나(탭 줄바꿈) 쓸모가 적어 실사용 구간만 남겼다. 범위 밖 저장값은
-   normScale 이 잘라 주므로 예전에 150% 로 두었던 설정도 자동으로 120% 가 된다. */
-export const MIN_SCALE = 90, MAX_SCALE = 120, SCALE_STEP = 10;
+/* v3.3.3 소유자 지정: 배율 범위를 90~120% 로 좁혔다 — 80%/150% 는 레이아웃이
+   깨지거나(탭 줄바꿈) 쓸모가 적어 실사용 구간만 남겼다.
+   v3.7.3 소유자 지정: 상한을 140% 로 넓힌다(v3.7.1 글자 크기 통일 뒤 글자가 작다는 요구).
+   150% 는 여전히 막는다. 범위 밖 저장값은 normScale 이 잘라 주므로 150% 설정은 140% 가 된다.
+   ⚠️ Rust set_ui_scale 의 clamp(90, 140) 과 반드시 같아야 한다. */
+export const MIN_SCALE = 90, MAX_SCALE = 140, SCALE_STEP = 10;
+/* v3.7.3 소유자 지정: 기본 화면 크기 = 130%. 설정을 만진 적 없는 사용자(미설정)는 130% 로 시작한다. */
+export const DEFAULT_SCALE = 130;
 
 let saveTimer = null;
 
-/* 저장값 정규화 — 범위 밖은 자르고, 10% 격자에 맞추고, 손상값은 등배로.
-   미설정(undefined/null/'')은 반드시 100이어야 한다: Number(null)===0 이라
-   그냥 clamp 하면 하한 80%로 떨어져, 설정을 만진 적 없는 사용자의 화면이
-   제멋대로 작아진다. */
+/* 저장값 정규화 — 범위 밖은 자르고, 10% 격자에 맞추고, 손상값은 기본값으로.
+   미설정(undefined/null/'')은 반드시 기본값(DEFAULT_SCALE)이어야 한다: Number(null)===0 이라
+   그냥 clamp 하면 하한으로 떨어져, 설정을 만진 적 없는 사용자의 화면이 제멋대로 작아진다. */
 export function normScale(v){
-  if(v === undefined || v === null || v === '') return 100;
+  if(v === undefined || v === null || v === '') return DEFAULT_SCALE;
   const n = Number(v);
-  if(!Number.isFinite(n)) return 100;
+  if(!Number.isFinite(n)) return DEFAULT_SCALE;
   const snapped = Math.round(n / SCALE_STEP) * SCALE_STEP;
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, snapped));
 }
@@ -55,6 +58,17 @@ export function applyUiScale(v){
   const n = normScale(v);
   STORE.setUiScale(n);
   return n;
+}
+
+/* v3.7.3 한 번만 하는 기본값 전환 — 예전 기본(100%) 그대로 쓰던 사람도 130% 로 옮긴다(소유자 지정:
+   "현재가 100%라면 130%로"). 그 뒤 사용자가 Ctrl+휠로 100% 를 다시 고르면 그대로 둔다 —
+   uiScaleV373 표시가 있으면 다시 바꾸지 않기 때문이다. 바꿨으면 true(호출부가 저장한다). */
+export function adoptDefaultScale(settings){
+  if(!settings || settings.uiScaleV373) return false;
+  settings.uiScaleV373 = true;
+  if(settings.uiScale === undefined || settings.uiScale === null || settings.uiScale === '' || normScale(settings.uiScale) === 100)
+    settings.uiScale = DEFAULT_SCALE;
+  return true;
 }
 
 /* 휠은 연속으로 쏟아지므로 저장은 묶어서 한 번만 (DB 쓰기 폭주 방지). */
