@@ -9,7 +9,7 @@ mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
 const {S} = await import('../../src/state.js');
 const {normScale, stepScale, applyUiScale, initUiScale,
-       MIN_SCALE, MAX_SCALE, SCALE_STEP} = await import('../../src/ui-scale.js');
+       MIN_SCALE, MAX_SCALE, SCALE_STEP, DEFAULT_SCALE, adoptDefaultScale} = await import('../../src/ui-scale.js');
 
 initUiScale();
 const doc = env.document;
@@ -26,9 +26,12 @@ test('normScale: 범위 밖은 자르고, 10% 격자에 맞추고, 손상값은 
   assert.equal(normScale(100), 100);
   assert.equal(normScale(123), 120, '10% 격자로 반올림');
   assert.equal(normScale(1000), MAX_SCALE, '상한으로 자름');
+  assert.equal(MAX_SCALE, 140, 'v3.7.3 상한 140%');
+  assert.equal(normScale(150), 140, '예전 150% 설정은 140% 로');
   assert.equal(normScale(10), MIN_SCALE, '하한으로 자름');
+  assert.equal(DEFAULT_SCALE, 130, 'v3.7.3 기본 130%');
   for(const bad of [undefined, null, 'abc', NaN, Infinity])
-    assert.equal(normScale(bad), 100, `${String(bad)} → 100`);
+    assert.equal(normScale(bad), DEFAULT_SCALE, `${String(bad)} → 기본값`);
 });
 
 test('stepScale: 한 칸씩 오르내리고 끝에서 멈춘다', () => {
@@ -54,7 +57,7 @@ test('배율 적용은 F1 로드 게이트에 막히지 않는다 (저장이 아
 });
 
 test('Ctrl+휠: 위로 굴리면 커지고 아래로 굴리면 작아진다 + settings 저장', async () => {
-  await env.resetS(); S.loaded = true;
+  await env.resetS(); S.loaded = true; S.settings.uiScale = 100;
 
   wheel({up:true});
   assert.equal(S.settings.uiScale, 110);
@@ -64,13 +67,31 @@ test('Ctrl+휠: 위로 굴리면 커지고 아래로 굴리면 작아진다 + se
   wheel({up:true});
   assert.equal(S.settings.uiScale, 120);
 
+  wheel({up:true});
+  assert.equal(S.settings.uiScale, 130, 'v3.7.3: 120% 위로도 올라간다');
+
+  wheel({up:true});
+  assert.equal(S.settings.uiScale, 140);
+
+  wheel({up:true});
+  assert.equal(S.settings.uiScale, 140, '140% 가 상한');
+
   wheel({up:false});
-  assert.equal(S.settings.uiScale, 110);
+  assert.equal(S.settings.uiScale, 130);
 
   // 저장은 묶여서 한 번만 (휠은 연속으로 쏟아진다)
   assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_settings').length, 0, '아직 디바운스 중');
   mock.timers.tick(500);
   assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_settings').length, 1);
+});
+
+test('adoptDefaultScale: 미설정·100% 는 한 번만 130% 로, 다른 값과 이미 옮긴 설정은 그대로', () => {
+  const a = {}; assert.equal(adoptDefaultScale(a), true); assert.equal(a.uiScale, 130);
+  const b = {uiScale:100}; adoptDefaultScale(b); assert.equal(b.uiScale, 130, '예전 기본 100% → 130%');
+  const c = {uiScale:120}; adoptDefaultScale(c); assert.equal(c.uiScale, 120, '직접 고른 값은 유지');
+  const d = {uiScale:100, uiScaleV373:true};
+  assert.equal(adoptDefaultScale(d), false); assert.equal(d.uiScale, 100, '전환 뒤 다시 고른 100% 는 유지');
+  assert.equal(adoptDefaultScale(a), false, '두 번째부터는 아무것도 안 한다');
 });
 
 test('맨 휠은 가로채지 않는다 — 보드·목록 스크롤 보존', async () => {

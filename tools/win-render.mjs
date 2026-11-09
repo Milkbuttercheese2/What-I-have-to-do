@@ -207,6 +207,8 @@ const ZOOM_WIDTHS = [
   {w: 1138, why: '1366 @120%'},
   {w: 1108, why: '1440 @130% — 사각지대 의심'},
   {w: 1090, why: '1080 경계 바로 위(최악)'},
+  {w: 1029, why: '1440 @140% (v3.7.3 상한)'},
+  {w: 976,  why: '1366 @140% (v3.7.3 상한)'},
 ];
 for (const {w, why} of ZOOM_WIDTHS) {
   const vp = {width: w, height: 900};

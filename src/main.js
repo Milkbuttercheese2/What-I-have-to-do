@@ -24,7 +24,7 @@ import {showView} from './views.js';
 import {openModal, closeModal, closeTop, topSave} from './modals.js';
 import {makeItem} from './state.js';
 import {setPlaceMode} from './placement.js';
-import {initUiScale, applyUiScale} from './ui-scale.js';
+import {initUiScale, applyUiScale, adoptDefaultScale} from './ui-scale.js';
 import {applyTheme} from './theme.js';
 import {initQuit} from './quit.js';
 
@@ -131,7 +131,10 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
        전체가 catch 로 떨어져, 데이터는 멀쩡한데 "불러오지 못했습니다" 경고가 뜨고 S.loaded 가
        false 로 남아 저장까지 막히는(=앱이 죽은 것처럼 보이는) 사고가 된다. 화면 꾸미기 실패가
        데이터 로드를 무너뜨리면 안 된다. */
-    try{ applyUiScale(S.settings.uiScale); }catch(e){ console.warn('화면 크기 복원 실패',e); }
+    try{
+      if(adoptDefaultScale(S.settings)) STORE.saveSettings(S.settings);   // v3.7.3 기본 130% 로 한 번 전환
+      applyUiScale(S.settings.uiScale);
+    }catch(e){ console.warn('화면 크기 복원 실패',e); }
     try{ applyTheme(S.settings); syncSettings(); }catch(e){ console.warn('테마 복원 실패',e); }
     try{ sendCaptureConfig(); }catch(e){ console.warn('미니 창 구성 전달 실패',e); }
     /* v3.7.0 자동 실행: 매 실행마다 설정값(기본 켬)에 레지스트리를 맞춘다(켜는 쪽은 exe 경로 자가 치유).
