@@ -992,21 +992,25 @@
   /* ── 메모 2쪽 보기 v3.7.1 — 쪽(종이) 두 장씩, 세로 스크롤, 그 자리에서 편집 ──
      쪽 크기·글꼴은 .book-ta 하나가 정한다 — 측정 칸(#book-measure)도 같은 클래스를 써서 나누는 기준과
      보이는 쪽이 어긋나지 않는다(크기를 바꾸면 둘이 함께 바뀐다). */
-  #bookModal{z-index:75}                                   /* 양식(60) 위 */
-  .book-modal{max-width:min(1060px,calc(100vw - 40px));display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 96px)}
+  /* v3.7.4 소유자 지정: 쪽을 A4 비율(1 : 1.414)로, 창이 허락하는 만큼 크게(최대 794px = 화면에서 A4 실제 폭).
+     --bw(쪽 폭) 하나로 쪽·여백·글 칸을 모두 정한다. 측정 칸도 같은 변수를 받으므로 나누는 기준이 어긋나지 않는다.
+     여백은 한글 기본(위 20·아래 15·좌우 30mm / 210mm)에 가깝게 폭의 비율로 둔다. */
+  #bookModal{z-index:75;--bw:clamp(320px,calc((100vw - 170px) / 2),794px)}   /* 양식(60) 위 */
+  .book-modal{width:calc(100vw - 32px);max-width:calc(var(--bw) * 2 + 120px);display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 96px)}
   .book-head{display:flex;align-items:center;gap:10px}
   .book-head h3{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .book-pos{margin-left:auto;font-size:12px;color:var(--ink-soft)}
   .book-view{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:22px}
   .book-pages{display:grid;grid-template-columns:repeat(2,max-content);justify-content:center;gap:22px 26px}
-  .book-page{position:relative;background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:0 1px 2px rgba(19,26,36,.06),0 6px 18px rgba(19,26,36,.08);padding:34px 36px 40px}
-  .book-ta{display:block;width:380px;height:560px;border:0;outline:0;resize:none;overflow:hidden;background:transparent;color:var(--ink);
+  .book-page{position:relative;background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:0 1px 2px rgba(19,26,36,.06),0 6px 18px rgba(19,26,36,.08);padding:calc(var(--bw) * .095) calc(var(--bw) * .12) calc(var(--bw) * .11)}
+  .book-ta{display:block;width:calc(var(--bw) * .76);height:calc(var(--bw) * 1.2);border:0;outline:0;resize:none;overflow:hidden;background:transparent;color:var(--ink);
     font-family:inherit;font-size:14px;line-height:1.75;padding:0;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word}
   .book-ta:focus{outline:none}
   .book-page:focus-within{border-color:var(--focus)}
   .book-no{position:absolute;left:0;right:0;bottom:12px;text-align:center;font-size:11px;color:var(--ink-soft)}
   .book-measure{position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none}
-  @media(max-width:1080px){ .book-pages{grid-template-columns:max-content} .book-ta{width:min(380px,calc(100vw - 150px))} }
+  .book-no{bottom:calc(var(--bw) * .04)}
+  @media(max-width:1080px){ #bookModal{--bw:clamp(300px,calc(100vw - 150px),794px)} .book-pages{grid-template-columns:max-content} }
 
   /* ── 전화번호부 일괄 바꾸기 ── */
   #pbSwapModal{z-index:72}

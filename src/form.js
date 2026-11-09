@@ -555,71 +555,151 @@ async function commitForm(opts){
    쪽 나누기: 같은 글꼴·폭의 숨은 측정 칸에 글을 넣어 '이 쪽에 넘치지 않는 최대 길이'를 이분 탐색으로
    찾고, 가능하면 줄바꿈·띄어쓰기에서 끊는다. 쪽 조각을 그대로 이어 붙이면 원문이 된다(글자 추가 없음).
    ⚠️ 한글 조합 중(isComposing)에는 다시 나누지 않는다 — 조합 중에 textarea 값을 바꾸면 글자가 깨진다. */
-let bookTas=[], bookRO=false, bookBusy=false;
+let bookTas=[], bookRO=false, bookFlowTimer=null, bookMemoTimer=null, bookDirty=Infinity, bookJob=0;
 const bookFull=()=>bookTas.map(t=>t.value).join('');
+const bookOver=t=>t.scrollHeight>t.clientHeight+1;
 function bookFits(m, str){ m.value=str; return m.scrollHeight <= m.clientHeight+1; }
+/* text 의 s 위치에서 시작하는 한 쪽의 끝 — 넘치지 않는 최대 길이를 이분 탐색, 가능하면 줄바꿈·띄어쓰기에서 끊는다 */
+function bookPageEnd(m, text, s){
+  if(bookFits(m, text.slice(s))) return text.length;
+  let lo=s+1, hi=text.length;                         // fits(s..lo) 는 참이라고 보고 최대 끝을 찾는다
+  while(lo<hi){ const mid=Math.ceil((lo+hi)/2); if(bookFits(m, text.slice(s,mid))) lo=mid; else hi=mid-1; }
+  let e=Math.max(lo, s+1);
+  const piece=text.slice(s,e);
+  const nl=piece.lastIndexOf('\n'), sp=piece.lastIndexOf(' ');
+  const soft = nl>piece.length*0.6 ? nl+1 : (sp>piece.length*0.8 ? sp+1 : 0);
+  if(soft>0 && e<text.length) e=s+soft;
+  return e;
+}
 function paginate(text){
   const m=$('book-measure'); const pages=[]; let s=0;
   if(!m || !text) return [text||''];
-  while(s<text.length){
-    if(bookFits(m, text.slice(s))){ pages.push(text.slice(s)); break; }
-    let lo=s+1, hi=text.length;                       // fits(s..lo) 는 참이라고 보고 최대 끝을 찾는다
-    while(lo<hi){ const mid=Math.ceil((lo+hi)/2); if(bookFits(m, text.slice(s,mid))) lo=mid; else hi=mid-1; }
-    let e=Math.max(lo, s+1);
-    const piece=text.slice(s,e);
-    const nl=piece.lastIndexOf('\n'), sp=piece.lastIndexOf(' ');
-    const soft = nl>piece.length*0.6 ? nl+1 : (sp>piece.length*0.8 ? sp+1 : 0);
-    if(soft>0 && e<text.length) e=s+soft;
-    pages.push(text.slice(s,e)); s=e;
-  }
+  while(s<text.length){ const e=bookPageEnd(m, text, s); pages.push(text.slice(s,e)); s=e; }
   return pages;
 }
-/* 쪽을 다시 나누고 화면에 반영 — 바뀐 쪽만 값을 고치고, 쪽 수가 달라질 때만 쪽을 새로 만든다.
-   caret: 전체 글에서의 커서 위치(있으면 그 위치가 들어 있는 쪽으로 커서를 옮긴다) */
-function renderBook(text, caret){
-  const pages=paginate(text);
+const bookPageHtml=i=>`<div class="book-page"><textarea class="book-ta" spellcheck="false" maxlength="50000" aria-label="${i+1}쪽"></textarea><span class="book-no num">${i+1}</span></div>`;
+/* 쪽 i 의 시작 위치(전체 글 기준) */
+const pageStart=i=>bookTas.slice(0,i).reduce((a,t)=>a+t.value.length,0);
+/* 지금 커서의 전체 글 기준 위치(쪽 밖에 있으면 null) */
+function bookCaret(){ const a=document.activeElement, i=bookTas.indexOf(a); return i<0 ? null : pageStart(i)+a.selectionStart; }
+/* 전체 글 위치 caret 에 커서를 둔다 */
+function bookPlace(caret){
+  if(caret==null || !bookTas.length) return;
+  let start=0, idx=bookTas.length-1;
+  for(let i=0;i<bookTas.length;i++){ const L=bookTas[i].value.length; if(caret<start+L || (caret===start+L && i===bookTas.length-1)){ idx=i; break; } start+=L; }
+  if(idx===bookTas.length-1) start=pageStart(idx);
+  const t=bookTas[idx];
+  if(document.activeElement!==t) t.focus({preventScroll:false});
+  const off=Math.max(0, Math.min(t.value.length, caret-start)); t.setSelectionRange(off,off);
+}
+/* 쪽 배열을 화면에 반영 — 바뀐 쪽만 값을 고치고, 쪽 수가 달라질 때만 쪽을 새로 만든다 */
+function setPages(pages, caret){
   const box=$('book-pages');
   if(pages.length!==bookTas.length){
-    box.innerHTML=pages.map((_,i)=>`<div class="book-page"><textarea class="book-ta" spellcheck="false" maxlength="50000" aria-label="${i+1}쪽"></textarea><span class="book-no num">${i+1}</span></div>`).join('');
+    box.innerHTML=pages.map((_,i)=>bookPageHtml(i)).join('');
     bookTas=[...box.querySelectorAll('.book-ta')];
     bookTas.forEach(t=>{ t.readOnly=bookRO; });
   }
   pages.forEach((p,i)=>{ if(bookTas[i].value!==p) bookTas[i].value=p; });
   $('book-pos').textContent=`${pages.length}쪽`;
-  if(caret!=null){
-    let start=0, idx=pages.length-1;
-    for(let i=0;i<pages.length;i++){ if(caret<=start+pages[i].length && (caret<start+pages[i].length || i===pages.length-1)){ idx=i; break; } start+=pages[i].length; }
-    if(idx===pages.length-1){ start=pages.slice(0,idx).reduce((a,p)=>a+p.length,0); }
-    const t=bookTas[idx];
-    if(t && document.activeElement!==t) t.focus({preventScroll:false});
-    if(t){ const off=Math.max(0, Math.min(t.value.length, caret-start)); t.setSelectionRange(off,off); }
-  }
+  bookPlace(caret);
 }
-/* 쪽 i 의 시작 위치(전체 글 기준) */
-const pageStart=i=>bookTas.slice(0,i).reduce((a,t)=>a+t.value.length,0);
-function bookChanged(t){
-  if(bookRO || bookBusy) return;
-  const i=bookTas.indexOf(t); if(i<0) return;
-  const caret=pageStart(i)+t.selectionStart;
+function renderBook(text, caret){ setPages(paginate(text), caret); }
+
+/* ── 입력 지연 해결 (v3.7.4) ───────────────────────────────────────────────────────────
+   예전엔 글자 하나마다 글 전체를 처음부터 다시 쪽 나누기(쪽마다 측정 열 번 남짓 = 레이아웃 강제)했고,
+   양식 메모의 하이라이트·임시저장까지 매번 돌려 24쪽 메모에서 키 하나에 0.2초씩 걸렸다(실측).
+   이제는 ① 고친 쪽에 아직 자리가 있으면 측정 없이 끝, ② 넘치면 넘친 꼬리만 다음 쪽 앞으로 밀고
+   (그 쪽도 넘치면 또 밀고) 멈춘다, ③ 지워서 빈 자리가 생긴 쪽을 앞으로 당겨 채우는 정리는 입력이
+   멈췄을 때 뒤에서 조금씩(8ms 단위) 하고, 그 사이 다시 입력하면 버린다, ④ 양식 메모 값은 바로 맞추되
+   하이라이트·임시저장을 깨우는 input 이벤트는 입력이 멈춘 뒤 한 번만 보낸다(닫을 때 반드시 보낸다). */
+function bookPush(i){
+  const m=$('book-measure'), caret=bookCaret();
+  let k=i, grew=false;
+  /* 바로 밀어 주는 건 고친 쪽과 다음 쪽까지(지금 보이는 곳). 그 뒤 쪽이 넘치면 잠깐 가려진 채로 두고
+     입력이 멈춘 뒤 정리(bookReflow)가 맞춘다 — 꽉 찬 쪽이 줄줄이 이어지면 끝까지 연쇄로 밀려 키 하나에
+     0.1초가 걸렸다(실측). 글은 쪽 칸 안에 그대로 있으므로 잃는 것은 없다. */
+  while(k<bookTas.length && k<=i+1 && bookOver(bookTas[k])){
+    const v=bookTas[k].value, e=bookPageEnd(m, v, 0);
+    bookTas[k].value=v.slice(0,e);
+    if(k+1>=bookTas.length){                          // 마지막 쪽이 넘쳤으면 새 쪽을 붙인다
+      $('book-pages').insertAdjacentHTML('beforeend', bookPageHtml(bookTas.length));
+      const t=$('book-pages').lastElementChild.querySelector('.book-ta'); t.readOnly=bookRO; bookTas.push(t); grew=true;
+    }
+    bookTas[k+1].value=v.slice(e)+bookTas[k+1].value;
+    k++;
+  }
+  if(grew) $('book-pos').textContent=`${bookTas.length}쪽`;
+  bookPlace(caret);
+}
+function bookSyncMemo(now){
+  const m=$('fm-memo'); if(!m) return;
   const full=bookFull();
-  bookBusy=true;
-  try{ renderBook(full, caret); }finally{ bookBusy=false; }
-  const m=$('fm-memo');
-  if(m && m.value!==full){ m.value=full; m.dispatchEvent(new Event('input',{bubbles:true})); }   // 양식 메모에 즉시 반영(임시저장·하이라이트)
+  if(m.value!==full) m.value=full;                    // 값은 바로(저장·되돌리기가 언제 읽어도 맞게)
+  clearTimeout(bookMemoTimer);
+  const fire=()=>{ bookMemoTimer=null; m.dispatchEvent(new Event('input',{bubbles:true})); };   // 하이라이트·임시저장
+  if(now) fire(); else bookMemoTimer=setTimeout(fire, 300);
+}
+function bookFlushMemo(){ if(bookMemoTimer){ clearTimeout(bookMemoTimer); bookSyncMemo(true); } }
+function bookMarkDirty(i){
+  bookDirty=Math.min(bookDirty, i); bookJob++;        // 돌던 정리는 버린다
+  clearTimeout(bookFlowTimer); bookFlowTimer=setTimeout(bookReflow, 600);
+}
+/* 입력이 멈춘 뒤 — 더러워진 쪽부터 다시 나눈다. 기존 쪽 경계와 다시 맞으면 나머지는 그대로 쓴다 */
+function bookReflow(){
+  if(!isOpen('bookModal') || !bookTas.length) return;
+  const job=++bookJob, text=bookFull(), from=Math.max(0, Math.min(bookDirty, bookTas.length-1));
+  bookDirty=Infinity;
+  const vals=bookTas.map(t=>t.value), bounds=new Map(); let acc=0;
+  vals.forEach((v,k)=>{ bounds.set(acc,k); acc+=v.length; });
+  /* 그대로 다시 쓸 수 있는 꼬리 = 그 쪽부터 끝까지 넘친 쪽이 하나도 없을 때만(넘친 쪽은 반드시 다시 나눈다) */
+  const tailOk=new Array(vals.length+1).fill(true);
+  for(let k=vals.length-1;k>=0;k--) tailOk[k]=tailOk[k+1] && !bookOver(bookTas[k]);
+  const pages=vals.slice(0,from), m=$('book-measure');
+  let s=pages.reduce((a,v)=>a+v.length,0);
+  const step=()=>{
+    if(job!==bookJob || !isOpen('bookModal') || bookFull()!==text){ bookDirty=Math.min(bookDirty, from); return; }
+    const t0=performance.now();
+    while(s<text.length && performance.now()-t0<8){
+      if(pages.length>from && bounds.has(s) && tailOk[bounds.get(s)]){ pages.push(...vals.slice(bounds.get(s))); s=text.length; break; }
+      const e=bookPageEnd(m, text, s); pages.push(text.slice(s,e)); s=e;
+    }
+    if(s<text.length){ setTimeout(step, 0); return; }
+    if(!pages.length) pages.push('');
+    if(pages.length===vals.length && pages.every((p,k)=>p===vals[k])) return;
+    setPages(pages, bookCaret());
+  };
+  step();
+}
+function bookChanged(t){
+  if(bookRO) return;
+  const i=bookTas.indexOf(t); if(i<0) return;
+  if(bookOver(t)) bookPush(i);                        // 자리가 남으면 측정 없이 끝
+  bookSyncMemo(false);
+  bookMarkDirty(i);
+}
+function closeBook(){
+  bookFlushMemo(); bookJob++; clearTimeout(bookFlowTimer);
+  closeModal('bookModal');
 }
 export function openBook(){
   const text=String($('fm-memo').value||'');
-  bookRO=formReadonly();
+  bookRO=formReadonly(); bookDirty=Infinity; bookJob++;
   $('book-title').textContent=(text.split('\n')[0]||'메모').slice(0,60);
   bookTas=[]; $('book-pages').innerHTML='';
-  openModal('bookModal');
-  requestAnimationFrame(()=>{ renderBook(text, null); $('book-view').scrollTop=0; if(!bookRO&&bookTas[0]) bookTas[0].focus(); });  // 레이아웃이 잡힌 뒤 쪽을 나눈다
+  openModal('bookModal', {close:closeBook});
+  requestAnimationFrame(()=>{                       // 레이아웃이 잡힌 뒤 쪽을 나눈다
+    renderBook(text, null);
+    /* 커서는 1쪽 맨 앞 — 그냥 focus 하면 커서가 1쪽 끝에 놓이며 보기 칸이 그쪽으로 스크롤돼 첫머리가 가려졌다 */
+    if(!bookRO&&bookTas[0]){ bookTas[0].focus({preventScroll:true}); bookTas[0].setSelectionRange(0,0); }
+    $('book-view').scrollTop=0;
+  });
 }
 function initBook(){
   if(!$('bookModal')) return;
   document.body.appendChild($('bookModal'));          // 양식 위에서도 뜨도록 body 직속
-  $('bookClose').addEventListener('click',()=>closeModal('bookModal'));
-  $('bookDone').addEventListener('click',()=>closeModal('bookModal'));
+  $('bookClose').addEventListener('click',closeBook);
+  $('bookDone').addEventListener('click',closeBook);
   const box=$('book-pages');
   box.addEventListener('input',e=>{ if(e.target.classList.contains('book-ta') && !e.isComposing) bookChanged(e.target); });
   box.addEventListener('compositionend',e=>{ if(e.target.classList.contains('book-ta')) bookChanged(e.target); });
@@ -633,19 +713,17 @@ function initBook(){
     if((e.key==='ArrowRight'||e.key==='ArrowDown') && a===len && i<bookTas.length-1) go(i+1,'start');
     else if((e.key==='ArrowLeft'||e.key==='ArrowUp') && a===0 && i>0) go(i-1,'end');
     else if(!bookRO && e.key==='Backspace' && a===0 && i>0){
-      e.preventDefault(); const p=bookTas[i-1]; const g=pageStart(i)-1; p.value=p.value.slice(0,-1); bookChangedAt(g);
+      e.preventDefault(); const p=bookTas[i-1]; const g=pageStart(i)-1; p.value=p.value.slice(0,-1); bookChangedAt(g, i-1);
     }
     else if(!bookRO && e.key==='Delete' && a===len && i<bookTas.length-1){
-      e.preventDefault(); const n=bookTas[i+1]; const g=pageStart(i)+len; n.value=n.value.slice(1); bookChangedAt(g);
+      e.preventDefault(); const n=bookTas[i+1]; const g=pageStart(i)+len; n.value=n.value.slice(1); bookChangedAt(g, i);
     }
   });
-  window.addEventListener('resize',()=>{ if(isOpen('bookModal')) renderBook(bookFull(), null); });
+  window.addEventListener('resize',()=>{ if(isOpen('bookModal')) renderBook(bookFull(), bookCaret()); });
 }
-/* 전체 글 위치 기준으로 다시 나누고 커서를 둔다(쪽 경계 Backspace/Delete 용) */
-function bookChangedAt(caret){
-  const full=bookFull();
-  bookBusy=true;
-  try{ renderBook(full, caret); }finally{ bookBusy=false; }
-  const m=$('fm-memo');
-  if(m && m.value!==full){ m.value=full; m.dispatchEvent(new Event('input',{bubbles:true})); }
+/* 쪽 경계 Backspace/Delete — 커서를 두고, 메모를 맞추고, 정리는 입력이 멈춘 뒤에 */
+function bookChangedAt(caret, dirty){
+  bookPlace(caret);
+  bookSyncMemo(false);
+  bookMarkDirty(dirty);
 }
