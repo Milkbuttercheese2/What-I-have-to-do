@@ -9,7 +9,7 @@ import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
 import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
-import {openModal, closeModal, isOpen} from './modals.js';
+import {openModal, closeModal, isOpen, topSave} from './modals.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -678,6 +678,11 @@ function bookChanged(t){
   bookSyncMemo(false);
   bookMarkDirty(i);
 }
+function bookSave(){
+  if(bookRO){ closeBook(); return; }                  // 완료 업무(읽기 전용)는 저장할 것이 없다 — 닫기만
+  closeBook();                                        // 고친 글을 양식 메모에 맞추고(input 이벤트까지) 닫는다
+  const save=topSave(); if(save) save();              // 이제 맨 위는 양식 — 양식 [저장]과 같은 길(저장 후 양식 닫힘)
+}
 function closeBook(){
   bookFlushMemo(); bookJob++; clearTimeout(bookFlowTimer);
   closeModal('bookModal');
@@ -687,7 +692,10 @@ export function openBook(){
   bookRO=formReadonly(); bookDirty=Infinity; bookJob++;
   $('book-title').textContent=(text.split('\n')[0]||'메모').slice(0,60);
   bookTas=[]; $('book-pages').innerHTML='';
-  openModal('bookModal', {close:closeBook});
+  /* v3.7.5 소유자 지정: ESC = 2쪽 보기만 닫고 양식으로(고친 글은 양식에 남는다, 저장 전),
+     Ctrl+S·Ctrl+Enter = 2쪽 보기를 닫고 양식을 그대로 저장해 메인 화면으로.
+     예전엔 2쪽 보기에 저장 동작이 없어 밑의 양식 저장이 불려, 양식은 닫히는데 2쪽 보기만 메인 화면 위에 남았다. */
+  openModal('bookModal', {close:closeBook, save:bookSave});
   requestAnimationFrame(()=>{                       // 레이아웃이 잡힌 뒤 쪽을 나눈다
     renderBook(text, null);
     /* 커서는 1쪽 맨 앞 — 그냥 focus 하면 커서가 1쪽 끝에 놓이며 보기 칸이 그쪽으로 스크롤돼 첫머리가 가려졌다 */
