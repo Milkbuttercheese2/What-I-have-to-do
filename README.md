@@ -114,8 +114,8 @@
 | 화면 가로 넘침 검사 (실제 Edge) | `node tools/win-render.mjs` |
 | 릴리즈 빌드 | `npm run tauri build` |
 
-위 README 카드는 `카드뉴스-도구` 로 굽습니다 — 원본 갈무리는 `tools/cardnews-shots.mjs`(앱 실행 없이
-예시 데이터로 촬영), 카드 조판은 `카드뉴스-도구/뭐하려했더라-readme.mjs` 설정을 씁니다.
+위 README 카드는 `milkbuttercheese-shared/tools/cardnews` 로 굽습니다 — 원본 갈무리는 `tools/cardnews-shots.mjs`(앱 실행 없이
+예시 데이터로 촬영), 카드 조판은 `milkbuttercheese-shared/tools/cardnews/뭐하려했더라-readme.mjs` 설정을 씁니다.
 
 * * *
 

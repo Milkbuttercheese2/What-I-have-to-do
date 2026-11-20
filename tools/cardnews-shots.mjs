@@ -2,12 +2,12 @@
    카드뉴스용 갈무리 — 실제 앱 실행 없이 guide-shots.mjs 방식으로 찍는다.
    -------------------------------------------------------------------------
    src/ 를 정적 서버로 띄우고 __TAURI__ 스텁 + 예시 데이터를 주입한다
-   (공개 게시물이므로 실데이터가 아니라 예시 데이터 — 카드뉴스-도구/README 규칙 여덟).
+   (공개 게시물이므로 실데이터가 아니라 예시 데이터 — milkbuttercheese-shared/tools/cardnews/README 규칙 여덟).
    viewport 1920×1080 · deviceScaleFactor 2 → 3840×2160 원본. 장면마다 주요
    요소의 물리 픽셀 사각형을 찍어 주므로, 그 수치를 카드 설정의 crops 에 옮긴다.
 
    실행:  node tools/cardnews-shots.mjs
-   출력:  ../발표자료/뭐하려했더라/갈무리원본/*.png
+   출력:  ../_문서/발표자료/뭐하려했더라/갈무리원본/*.png
    ========================================================================= */
 import http from 'http';
 import fs from 'fs';
@@ -18,11 +18,11 @@ import {createRequire} from 'node:module';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
 const ROOT = path.join(REPO, 'src');
-const OUT  = path.resolve(REPO, '..', '발표자료', '뭐하려했더라', '갈무리원본');
+const OUT  = path.resolve(REPO, '..', '_문서', '발표자료', '뭐하려했더라', '갈무리원본');
 fs.mkdirSync(OUT, {recursive: true});
 
 /* playwright 는 Which-article-was-is 것을 빌린다 — 브라우저가 이미 설치돼 있다 */
-const require2 = createRequire(path.resolve(REPO, '..', 'Which-article-was-is', 'package.json'));
+const require2 = createRequire(path.resolve(REPO, '..', 'Which-article-was-is-PPS', 'package.json'));
 const {chromium} = require2('playwright');
 
 const MIME = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.woff2':'font/woff2','.png':'image/png','.svg':'image/svg+xml'};
