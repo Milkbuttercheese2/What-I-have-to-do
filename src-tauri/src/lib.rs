@@ -449,6 +449,7 @@ pub fn run() {
             docs::doc_trash,
             docs::doc_copy,
             docs::doc_search,
+            docs::doc_search_warm,
             docs::key_shift_down,
             docs::doc_rename,
             preview::doc_preview_open,

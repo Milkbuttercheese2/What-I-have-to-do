@@ -983,6 +983,11 @@ export function initDocs(){
   initSplit();
   $('dn-add2').addEventListener('click', addNote);     // 메모가 없어 오른쪽 칸이 사라졌을 때 쓰는 같은 단추(위 도구줄)
   $('dc-search').addEventListener('input', onSearchInput);
+  /* 찾기 칸을 누르면 색인을 미리(기다리지 않는다) — 공유 폴더는 처음 훑는 데 오래 걸려, 글자를 치는 동안 만들어 둔다 */
+  document.addEventListener('focusin', e=>{
+    if(!e.target || e.target.id!=='g-search' || !$('view-docs') || !$('view-docs').classList.contains('on')) return;
+    roots.forEach((r,i)=>{ if(r&&r.ok) invoke('doc_search_warm', {root:i}).catch(()=>{}); });
+  });
   $('dc-search').addEventListener('keydown', e=>{ if(e.key==='Escape' && $('dc-search').value){ e.preventDefault(); e.stopPropagation(); clearSearch(); } });
   /* 오른쪽 칸의 카드 클릭 — 양식 팝업(render.js 의 data-open 위임)보다 먼저 받아 옆 칸 양식으로 연다. 체크·삭제 단추는 그대로 둔다 */
   $('dn-list').addEventListener('click', e=>{

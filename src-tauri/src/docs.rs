@@ -562,7 +562,7 @@ fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
 
 /// 찾기 색인(v3.8.4) — 폴더를 한 번 훑어 이름과 작은 글자 파일의 내용을 메모리에 둔다.
 /// 예전엔 글자를 칠 때마다 디스크를 처음부터 다시 훑고 파일을 다시 읽어(최대 64MB) 느렸다.
-/// 색인은 SEARCH_CACHE_SECS 동안 다시 쓰고, 앱이 문서를 바꾸면(만들기·이름·옮기기·저장·휴지통) 바로 버린다.
+/// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·저장·휴지통) 바로 버린다.
 struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<String> }
 struct SearchIndex { base: PathBuf, built: std::time::Instant, ents: Vec<IdxEntry> }
 static SEARCH_CACHE: Mutex<Vec<std::sync::Arc<SearchIndex>>> = Mutex::new(Vec::new());
@@ -644,21 +644,46 @@ pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
 pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
     if query.trim().is_empty() { return Ok(vec![]) }
     let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let hit = {
+    let have = {
         let c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        c.iter().find(|x| x.base == base && x.built.elapsed().as_secs() < SEARCH_CACHE_SECS).cloned()
+        c.iter().find(|x| x.base == base).cloned()
     };
-    let ix = match hit {
-        Some(ix) => ix,
+    let ix = match have {
+        /* 오래된 색인이라도 바로 답하고, 새 색인은 뒤에서 만든다 — 공유 폴더는 한 번 훑는 데 10초가 넘을 수 있어
+           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search 가 색인을 지워 다음 찾기가 새로 만든다 */
+        Some(ix) => {
+            if ix.built.elapsed().as_secs() >= SEARCH_CACHE_SECS { refresh_later(base.clone()); }
+            ix
+        }
         None => {
             let ix = std::sync::Arc::new(build_index(&base));
-            let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-            c.retain(|x| x.base != base);
-            c.push(ix.clone());
+            store_index(ix.clone());
             ix
         }
     };
     Ok(query_index(&ix, query))
+}
+
+fn store_index(ix: std::sync::Arc<SearchIndex>) {
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    c.retain(|x| x.base != ix.base);
+    c.push(ix);
+}
+
+static REFRESHING: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+fn refresh_later(base: PathBuf) {
+    {
+        let mut r = REFRESHING.lock().unwrap_or_else(|e| e.into_inner());
+        if r.contains(&base) { return }                    // 이미 만드는 중
+        r.push(base.clone());
+    }
+    std::thread::spawn(move || {
+        let ix = std::sync::Arc::new(build_index(&base));
+        /* 만드는 사이 앱이 문서를 바꿔 색인이 지워졌다면(invalidate) 다음 찾기가 새로 만든다 — 그 자리에 낡은 것을 넣지 않는다 */
+        let still = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == base);
+        if still { store_index(ix); }
+        REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
+    });
 }
 
 /* ── 글자 파일 (v3.8.1) — 읽기·쓰기, 인코딩 보존 ─────────────────────────── */
@@ -920,6 +945,31 @@ pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
 pub async fn doc_search(root: usize, query: String) -> Result<Vec<SearchHit>, String> {
     let r = self::root(root)?;
     tauri::async_runtime::spawn_blocking(move || search_cached(&r, &query)).await.map_err(|e| e.to_string())?
+}
+
+/// 찾기 칸을 누르면 미리 색인을 만들어 둔다(공유 폴더는 처음 훑는 데 오래 걸린다) — 이미 있으면 아무것도 안 한다
+#[tauri::command]
+pub async fn doc_search_warm(root: usize) -> Result<(), String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        let base = std::fs::canonicalize(&r).unwrap_or(r);
+        let have = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == base);
+        if !have { refresh_later_now(base); }
+        Ok(())
+    }).await
+}
+/// 색인이 아직 없을 때 뒤에서 만든다(refresh_later 는 '있던 색인이 지워졌으면 넣지 않는다' 규칙이라 따로)
+fn refresh_later_now(base: PathBuf) {
+    {
+        let mut r = REFRESHING.lock().unwrap_or_else(|e| e.into_inner());
+        if r.contains(&base) { return }
+        r.push(base.clone());
+    }
+    std::thread::spawn(move || {
+        let ix = std::sync::Arc::new(build_index(&base));
+        store_index(ix);
+        REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
+    });
 }
 
 #[tauri::command]
