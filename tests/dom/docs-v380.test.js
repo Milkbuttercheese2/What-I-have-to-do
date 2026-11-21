@@ -2,6 +2,7 @@
    핵심 불변식: (1) 화면은 상대 경로만 넘기고 파일을 쓰는 명령은 부르지 않는다. (2) 오른쪽 메모는 보드와 같은 업무 데이터다(따로 저장하지 않는다). */
 import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {setupEnv} from '../helpers/env.js';
 
@@ -213,12 +214,12 @@ test('v3.8.7 한글은 rhwp 로 쪽 모양 그대로 — 쪽마다 <img>(SVG 는
 test('탐색기 미리 보기: 처리기가 있으면 자리(물리 px)를 넘겨 띄우고, 다른 파일로 가면 앞 창을 닫는다', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.docRoots=['H:\\오피스'];
-  fakeFs(()=>({'0:':[{name:'a.pptx',rel:'a.pptx',dir:false,size:1,mtime:1},{name:'b.docx',rel:'b.docx',dir:false,size:1,mtime:1}]}));
+  fakeFs(()=>({'0:':[{name:'a.xlsx',rel:'a.xlsx',dir:false,size:1,mtime:1},{name:'b.docx',rel:'b.docx',dir:false,size:1,mtime:1}]}));
   env.onInvoke('doc_preview_open', ()=>true);
   env.onInvoke('doc_preview_show', ()=>null);
   env.onInvoke('doc_preview_place', ()=>null);
   await openDocs();
-  click(row('0:a.pptx')); await env.flush(10);
+  click(row('0:a.xlsx')); await env.flush(10);
   const call=env.invokeCalls.filter(c=>c.cmd==='doc_preview_open').at(-1).args;
   assert.deepEqual(Object.keys(call).sort(), ['h','rel','root','w','x','y']);
   assert.ok($('dv-native'), '자리표시');
@@ -766,4 +767,25 @@ test('v3.8.5 초록 [+ 입력] 은 보드 탭에서만 보인다', async () => {
   await env.resetS(); S.loaded = true;
   for(const v of ['cal','docs','done','phone']){ showView(v); assert.equal($('blankForm').style.display, 'none', v); }
   showView('board'); assert.equal($('blankForm').style.display, 'inline-block');
+});
+
+test('v3.8.8 문서 탭 메모 칸: 카드는 줄어들지 않는다(넘치면 목록이 스크롤) — .card 의 overflow:hidden 때문에 세로 flex 에서 눌려 잘렸다', () => {
+  const css = fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.dn-list\{[^}]*overflow:auto/);
+  assert.match(css, /\.dn-list>\*\{flex-shrink:0\}/);
+});
+
+test('v3.8.8 파워포인트(PPT·PPTX)는 읽지 않고 [파워포인트에서 열기] 만 안내 — 탐색기 미리 보기·파일 읽기를 부르지 않는다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['P:\\발표'];
+  fakeFs(()=>({'0:':[{name:'보고.pptx',rel:'보고.pptx',dir:false,size:1,mtime:1},{name:'옛.ppt',rel:'옛.ppt',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_preview_open', ()=>true);
+  await openDocs();
+  for(const f of ['보고.pptx','옛.ppt']){
+    const n0=env.invokeCalls.filter(c=>c.cmd==='doc_preview_open'||c.cmd==='doc_read').length;
+    click(row('0:'+f)); await env.flush(10);
+    assert.equal(env.invokeCalls.filter(c=>c.cmd==='doc_preview_open'||c.cmd==='doc_read').length, n0, f+': 미리 보기·읽기 없음');
+    assert.match($('dv-body').textContent, /파워포인트에서 열어 보세요/);
+    assert.ok($('dv-body').querySelector('.dv-info [data-dopen]'), f+': [파워포인트에서 열기]');
+  }
 });

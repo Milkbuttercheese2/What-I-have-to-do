@@ -180,6 +180,9 @@ async function doRenderViewer(){
     /* 한글(HWP·HWPX)은 늘 앱이 직접 그린다 — v3.8.7 부터 rhwp 로 쪽 모양 그대로, 실패하면 글자·표 보기(v3.8.5).
        한컴 탐색기 미리 보기 처리기는 판마다 다르게 굴고(2022 는 '열렸다'고 답하고도 빈 화면) 그렸는지 알 수 없어 쓰지 않는다. */
     if(kind==='hwpx' || kind==='hwp') return await showHwp(i, rel, kind, seq);
+    /* 파워포인트(PPT·PPTX)는 읽어 보여 주지 않는다 — v3.8.8 소유자 결정: 글자만 뽑아 낸 보기는 슬라이드를 제대로 못 보여 줘서
+       오히려 헷갈렸다. [파워포인트에서 열기] 만 안내한다(탐색기 미리 보기도 쓰지 않는다). */
+    if(kind==='pptx'){ box().innerHTML=infoHtml(kind, rel, e, '파워포인트에서 열어 보세요'); return; }
     /* 그 밖: 탐색기 미리 보기 → 대체본 → 글자로 읽히면 편집 → 정보 */
     if(await tryNative(i, rel, seq)) return;
     if(!alive()) return;
