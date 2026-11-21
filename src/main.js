@@ -21,6 +21,7 @@ import {initRecurBox, runRecurSpawn} from './recur-box.js';
 import {initPhonebook} from './phonebook.js';
 import {initAtComplete} from './at-complete.js';
 import {initDocs} from './docs.js';
+import {initGSearch, focusGSearch} from './gsearch.js';
 import {showView} from './views.js';
 import {openModal, closeModal, closeTop, topSave, initBackdropGuard} from './modals.js';
 import {makeItem} from './state.js';
@@ -37,7 +38,7 @@ window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 initBackdropGuard(); initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
 initSettingsMenu(); initRecurBox(); initUiScale();
-initPhonebook(); initAtComplete(); initQuit(); initFileDrop(); initDocs();
+initPhonebook(); initAtComplete(); initQuit(); initFileDrop(); initDocs(); initGSearch();
 renderPresets();
 
 /* 탭 — 어떤 화면이 있는지는 여기서 알지 못한다. 각 모듈이 init*() 에서
@@ -101,10 +102,12 @@ document.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='n'){ e.preventDefault(); openForm({}); }
   else if(k==='f'){
+    /* v3.8.4 검색은 탭 줄 옆 한 곳 — 지금 탭을 찾는다. 검색이 없는 탭(캘린더)에선 보드로 가서 찾는다 */
     e.preventDefault();
+    if(focusGSearch()) return;
     const boardTab=document.querySelector('.tab[data-view="board"]');
-    if(boardTab && !boardTab.classList.contains('on')) boardTab.click();
-    $('search').focus(); $('search').select();
+    if(boardTab) boardTab.click();
+    setTimeout(focusGSearch, 0);
   }
 });
 

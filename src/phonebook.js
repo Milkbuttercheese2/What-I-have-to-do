@@ -52,6 +52,7 @@ function matches(e){
 }
 
 export function renderPhonebook(){
+  renderPbSide();                                            // 오른쪽 칸도 같은 데이터로 다시(업무가 바뀌었을 수 있다)
   const w=$('pb-list'); if(!w) return;
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
@@ -66,7 +67,7 @@ export function renderPhonebook(){
   groups.sort((a,b)=>(b.n-a.n)||a.org.localeCompare(b.org,'ko'));
   groups.forEach(g=>g.rows.sort((a,b)=>(b.n-a.n)||(a.e.who||'').localeCompare(b.e.who||'','ko')));
   const initial=e=>esc((String(e.who||e.org||'?').trim()[0])||'?');
-  const row=({e,n})=>`<div class="pb-item" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
+  const row=({e,n})=>`<div class="pb-item${e.id===pbSel?' sel':''}" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
     <span class="pb-org">${esc(e.org||'')}</span>
     <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span>${esc(e.who||'')}</span>
     <span class="pb-phone num">${esc(e.phone||'')}</span>
@@ -269,6 +270,30 @@ export function openRelated(name, extraEntries){
 }
 export function closeRelated(){ closeModal('relModal'); }
 
+/* ── 오른쪽 칸: 고른 사람과 엮인 업무 (v3.8.4 소유자 지정 — 전화번호부에서는 팝업 대신) ──
+   기준은 팝업과 같다(전화번호부 3칸 완전 일치 — relatedItems). 진행 먼저, 그다음 완료(최근 것 먼저).
+   줄은 data-open 이라 render.js 의 위임이 양식을 연다(칸은 그대로 열려 있다). 고른 사람(pbSel)은 화면 상태일 뿐 저장하지 않는다. */
+let pbSel=null;
+export function renderPbSide(){
+  const el=$('pb-side'); if(!el) return;
+  const en=pbSel!=null ? S.phonebook.find(x=>x.id===pbSel) : null;
+  const lay=el.parentElement;
+  if(!en){ pbSel=null; el.classList.remove('on'); el.innerHTML=''; if(lay) lay.classList.remove('has-side'); return; }
+  const list=relatedItems(S.items, {entries:[en]}).slice().sort((a,b)=>((a.done?1:0)-(b.done?1:0)) || ((b.doneAt||b.id)-(a.doneAt||a.id)));
+  const live=list.filter(it=>!it.done).length;
+  el.classList.add('on'); if(lay) lay.classList.add('has-side');
+  el.innerHTML=`<div class="pbs-head"><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}</div>`
+    +`<button type="button" class="fm-x side-x" id="pb-side-x" aria-label="칸 닫기" title="칸 닫기">⇥</button></div>`
+    +`<div class="pbs-info num">${[en.phone, en.email].filter(Boolean).map(esc).join(' · ')}</div>`
+    +`<div class="pbs-count">진행 ${live} · 완료 ${list.length-live}</div>`
+    +`<div class="rel-list pbs-list">${list.length ? list.map(it=>{
+      const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
+      const dv=it.done&&it.doneAt!=null?new Date(it.doneAt):null;
+      const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
+      return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
+    }).join('') : '<div class="empty" style="padding:14px">엮인 업무 없음</div>'}</div>`;
+}
+
 /* ── 인물 일괄 바꾸기 (v3.7.0, 소유자 요청) ──────────────────────────────────
    전화번호부의 A 행 [바꾸기] → B 를 고르면 **모든 업무(완료 포함)** 의 관련인 A 를 B 로,
    A 가 엮인 업무의 메모 @A 를 @B 로 바꾼다(규칙은 phonebook-core.swapPersonIn).
@@ -374,6 +399,7 @@ export function initPhonebook(){
   $('pbsw-cancel').addEventListener('click',closeSwap);
   $('pbsw-go').addEventListener('click',applySwap);
   $('pbSwapModal').addEventListener('click',e=>{ if(e.target.id==='pbSwapModal') closeSwap(); });
+  $('pb-side').addEventListener('click',e=>{ if(e.target.closest('#pb-side-x')){ pbSel=null; renderPhonebook(); } });
   $('pb-list').addEventListener('click',async e=>{
     const ed=e.target.closest('[data-pbedit]');
     if(ed){ openPbEdit(Number(ed.dataset.pbedit)); return; }
@@ -384,7 +410,7 @@ export function initPhonebook(){
       /* 행의 빈 곳 클릭 = 이 사람과 엮인 업무 보기 (카드 @태그 클릭과 같은 팝업) */
       const rowEl=e.target.closest('.pb-item');
       if(rowEl){ const en=S.phonebook.find(x=>x.id===Number(rowEl.dataset.pbid));
-        if(en) openRelated(en.who||en.org||en.phone, [en]); }
+        if(en){ pbSel=en.id; renderPhonebook(); } }          // v3.8.4 팝업 대신 오른쪽 칸
       return;
     }
     const id=Number(del.dataset.pbdel), entry=S.phonebook.find(x=>x.id===id);

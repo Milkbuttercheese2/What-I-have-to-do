@@ -271,8 +271,8 @@
   .ffile-link:hover{text-decoration:underline}
   .ffile-browse{flex:none;font-size:13px;padding:7px 11px;border:none;border-radius:10px;background:var(--chip-bg);color:var(--ink-soft);cursor:pointer}
   .ffile-browse:hover{background:var(--line);color:var(--ink)}
-  .ffile-doc{flex:none;font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--focus);cursor:pointer;font-weight:600}
-  .ffile-doc:hover{border-color:var(--focus);background:var(--slate-bg)}
+  .ffile-doc{flex:none;font-family:inherit;font-size:13px;padding:7px 11px;border:none;border-radius:10px;background:var(--chip-bg);color:var(--ink-soft);cursor:pointer}
+  .ffile-doc:hover{background:var(--line);color:var(--ink)}
   /* 파일 경로는 본문 텍스트 — 폰트 정책(v2.5.2)에 따라 앱 서체 13px (모노는 숫자 전용) */
   .ffile-row input[type=text]{flex:1;min-width:0;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
   .ffile-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
@@ -1203,6 +1203,29 @@
   .tl-hover-t{position:absolute;right:4px;top:-17px;font-size:11px;font-weight:600;color:var(--ink-soft)}
 
   /* ── v3.8.0 완료 묶음 접기·펼치기 ── */
+  /* v3.8.4 완료 탭 오른쪽 달력 띠 */
+  .done-layout{display:grid;grid-template-columns:minmax(0,1fr) 264px;gap:14px;align-items:start}
+  .done-cal{position:sticky;top:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+  .dcal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .dcal-head b{font-size:13.5px}
+  .dcal-total{margin-left:auto;font-size:12px;color:var(--ink-soft)}
+  .dcal-nav{flex:none;width:26px;height:26px;border:0;border-radius:8px;background:var(--chip-bg);color:var(--ink-soft);font:inherit;font-size:15px;line-height:1;cursor:pointer}
+  .dcal-nav:hover{background:var(--line);color:var(--ink)}
+  .dcal-dow,.dcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .dcal-dow span{font-size:11px;color:var(--ink-soft);text-align:center;padding-bottom:3px}
+  .dcal-d{position:relative;aspect-ratio:1;border:0;border-radius:8px;background:var(--sunk);color:var(--ink-soft);font:inherit;font-size:11px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;line-height:1.15;cursor:pointer}
+  .dcal-d:disabled{cursor:default}
+  .dcal-x{background:transparent}
+  .dcal-d b{font-size:12px;font-weight:700}
+  .dcal-l1{background:var(--slate-bg);color:var(--focus)}
+  .dcal-l2{background:color-mix(in srgb, var(--focus) 38%, var(--card));color:var(--ink)}
+  .dcal-l3{background:var(--focus);color:var(--on-accent)}
+  .dcal-today{box-shadow:inset 0 0 0 1.5px var(--ink-soft)}
+  .dcal-d.on{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--focus)}
+  .dcal-d:not(:disabled):hover{filter:brightness(.96)}
+  .dcal-clear{margin-top:10px;width:100%;height:30px;border:0;border-radius:10px;background:var(--chip-bg);color:var(--ink-soft);font:inherit;font-size:12.5px;cursor:pointer}
+  .dcal-clear:hover{background:var(--line);color:var(--ink)}
+  @media(max-width:1080px){ .done-layout{grid-template-columns:minmax(0,1fr)} .done-cal{position:static;order:-1;max-width:320px} }
   .dg-head[data-dgtoggle]{cursor:pointer;user-select:none}
   .dg-head:hover .dg-label{color:var(--focus)}
   .dg-caret{width:12px;flex:none;font-size:11px;color:var(--ink-soft)}
@@ -1414,7 +1437,19 @@
   .dv-save.dv-bad{color:var(--red);font-weight:600}
   .dv-seg{display:inline-flex;gap:2px;background:var(--sunk);border-radius:999px;padding:2px}
   .dv-seg .seg-btn{height:28px;padding:0 12px;font-size:12.5px}
-  .dv-img{display:flex;justify-content:center;align-items:flex-start}
+  .dv-img{display:flex;justify-content:center;align-items:flex-start;cursor:zoom-in}
+  .dv-img.dv-actual{display:block;cursor:zoom-out;overflow:auto}
+  .dv-img.dv-actual img{max-width:none}
+  .dv-thumb{display:flex;flex-direction:column;align-items:center;gap:6px;margin:0 0 16px}
+  .dv-thumb img{max-width:min(100%,520px);height:auto;border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow)}
+  .dv-zrow{cursor:default;grid-template-columns:18px minmax(0,1fr) auto}
+  .dv-csv td{min-width:60px;white-space:pre;outline:none;cursor:text}
+  .dv-csv td:focus{box-shadow:inset 0 0 0 2px var(--focus);background:var(--surface)}
+  .dv-csvbar{display:flex;gap:6px;margin-top:10px}
+  .dv-csvbar .btn{height:30px;font-size:12.5px;padding:0 12px}
+  .dv-info .btn{margin-top:8px;height:34px;padding:0 16px;font-size:13px}
+  .dt-ico.ico-html{background:var(--stage-today)} .dt-ico.ico-html::before{content:"<>";font-size:8px}
+  .dt-ico.ico-zip{background:var(--amber)} .dt-ico.ico-zip::before{content:"Z"}
   .dv-img img{max-width:100%;height:auto;border-radius:6px;box-shadow:var(--shadow)}
   .dv-media{width:100%;max-height:100%}
   .dv-pdf-bar{position:sticky;top:-14px;z-index:1;display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:-14px -18px 10px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--ink-soft)}
@@ -1463,3 +1498,194 @@
     .dc-note{min-height:220px}
   }
 
+  /* =====================================================================
+     v3.8.4 다듬기 (소유자 지정)
+     ===================================================================== */
+  /* 카드의 단계 색 표시는 예전 그대로(왼쪽 가장자리의 짧은 토막 — .card::before). v3.8.4 에서 세로 줄·동그라미 테두리를 해 봤으나 소유자 지정으로 되돌렸다. */
+  /* 보드의 빈 칸: 상자 대신 한 줄 */
+  main .cards > .empty,#view-board5 .cards > .empty{border:0;background:transparent;padding:10px 4px;font-size:12px;text-align:left}
+  /* 양식: [＋ 추가]는 묶음 제목 줄 오른쪽 끝, [2쪽 보기]와 같은 모양 */
+  .fm-inner .fm-subs,.fm-inner .fm-ids,.fm-inner .fm-contacts,.fm-inner .fm-files-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8px}
+  .fm-inner .fm-subs > .t-head,.fm-inner .fm-ids > .t-head,.fm-inner .fm-contacts > .t-head,.fm-inner .fm-files-wrap > .t-head{grid-column:1;grid-row:1;margin-bottom:0}
+  .fm-inner .fm-subs > .fsub-add,.fm-inner .fm-ids > .fsub-add,.fm-inner .fm-contacts > .fsub-add,.fm-inner .fm-files-wrap > .linkmenu-wrap{grid-column:2;grid-row:1;margin-top:0}
+  #fm-subs,#fm-ids,#fm-contacts,#fm-files{grid-column:1 / -1;grid-row:2;margin-top:7px;min-width:0}
+  #fm-subs:empty,#fm-ids:empty,#fm-contacts:empty,#fm-files:empty{margin-top:0}
+  .fm-inner .fsub-add{margin-top:0;border:1px solid var(--line);background:var(--card);color:var(--ink-2);font-weight:600}
+  .fm-inner .fsub-add:hover{border-color:var(--focus);background:var(--slate-bg);color:var(--focus)}
+  #fm-linkmenu{left:auto;right:0}
+  /* 한곳 검색칸 */
+  .head-right{display:flex;align-items:center;gap:8px}
+  #g-search{width:200px;height:32px}
+  body.gsearch #search,body.gsearch #dc-search,body.gsearch #done-search,body.gsearch #pb-search{display:none}
+  @media(max-width:900px){ #g-search{width:130px} }
+  /* 완료 탭: 주 머리줄 요약 · 한 줄 목록 */
+  .dg-sum{font-size:12px;color:var(--ink-soft);margin-left:6px}
+  .dg-head .count{margin-left:auto}
+  .dg-rows{display:flex;flex-direction:column}
+  .drow{display:grid;grid-template-columns:84px minmax(140px,1fr) minmax(0,130px) 84px 84px minmax(0,150px) minmax(0,130px);gap:12px;align-items:center;padding:8px 14px;font-size:13px;border-top:1px solid var(--line-soft);cursor:pointer}
+  .drow:hover{background:var(--sunk)}
+  .drow-c{font-size:12px;color:var(--ink-soft);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .drow-memo{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .drow-none{color:var(--ink-soft)}
+  .drow-h{border-top:0;cursor:default;padding-top:7px;padding-bottom:6px;background:transparent}
+  .drow-h:hover{background:transparent}
+  .drow-h .drow-c,.drow-h .drow-memo{font-size:11.5px;font-weight:600;color:var(--ink-soft)}
+  #view-done{max-width:1460px}
+  @media(max-width:1280px){ .drow{grid-template-columns:84px minmax(120px,1fr) minmax(0,110px) 84px minmax(0,120px)} .drow > :nth-child(5),.drow > :nth-child(7){display:none} }
+  @media(max-width:1080px){ .drow{grid-template-columns:84px minmax(0,1fr)} .drow > :nth-child(n+3){display:none} }
+  /* 문서 탭: 그 폴더의 메모가 없으면 오른쪽 칸을 아예 없애고(가운데가 넓어진다) [＋ 메모]는 위 도구줄에 */
+  #dn-add2{display:none}
+  @media(min-width:1081px){
+    #view-docs.no-note .dc-layout{grid-template-columns:260px minmax(0,1fr)}
+    #view-docs.no-note .dc-note{display:none}
+    #view-docs.has-root.no-note #dn-add2{display:inline-flex}
+  }
+  /* 양식 묶음 사이 가로선은 팝업 **양 끝까지**(소유자 지정) — 묶음을 안쪽 여백(22px)만큼 밖으로 넓히고 같은 만큼 안쪽 여백을 준다.
+     머리줄·아래 단추줄의 선과 같은 색·같은 길이라 묶음마다 한 칸씩 나뉘어 보인다. */
+  .fm-inner .fm-subs,.fm-inner .fm-ids,.fm-inner .fm-contacts,.fm-inner .fm-files-wrap,.fm-inner .fm-grid{
+    border-top:1px solid var(--line-soft);margin:14px -22px 0;padding:14px 22px 0}
+  .fm-inner .fm-files-wrap{padding-bottom:14px}
+  .fm-inner .fm-actions{margin-top:0}
+  /* 단추 모양 통일(v3.8.4 소유자 지정 — 양식의 [＋ 추가] 모양을 기준으로): 보조 단추는 전부
+     **흰 면(--card) · 가는 테두리(--line) · 10px(아이콘 단추 8px)**. hover = 테두리·글자가 강조색.
+     주 단추(초록 [저장]·[＋ 입력])와 탭·세그먼트(알약)는 그대로. 새 보조 단추는 이 목록에 넣을 것. */
+  .btn-tool,.btn-cancel,.btn-form,.btn-snooze,.fsub-add,.fm-inner .fsub-add,.fm-mini,.ffile-browse,.ffile-doc,.preset,
+  .cal-nav button,.dcal-nav,.dcal-clear,.dv-pdf-bar .seg-btn,.dv-sheets .seg-btn{
+    background:var(--card);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;font-family:inherit;font-weight:600;cursor:pointer;box-shadow:none}
+  .btn-tool:hover,.btn-cancel:hover,.btn-form:hover,.btn-snooze:hover,.fsub-add:hover,.fm-inner .fsub-add:hover,.fm-mini:hover,.ffile-browse:hover,.ffile-doc:hover,.preset:hover,
+  .cal-nav button:hover,.dcal-nav:hover,.dcal-clear:hover,.dv-pdf-bar .seg-btn:hover,.dv-sheets .seg-btn:hover{
+    background:var(--card);border-color:var(--focus);color:var(--focus)}
+  .fsub-add,.fm-inner .fsub-add,.fm-mini{height:28px;padding:0 12px;font-size:12.5px;display:inline-flex;align-items:center}
+  .dcal-nav,.dv-pdf-bar .seg-btn,.dt-unroot,.dt-caret{border-radius:8px}
+  .dv-sheets .seg-btn.on{border-color:var(--focus);color:var(--focus);background:var(--slate-bg)}
+  .btn-tool:disabled,.btn-cancel:disabled{opacity:.5;cursor:default}
+  /* ── v3.8.4 보드 위쪽 한 줄: 입력부 상자 폐지 — [＋ 입력]은 탭 줄, 프리셋은 요약 줄 오른쪽 ── */
+  .head-right .btn-new{order:0;height:32px;padding:0 14px;font-size:13px;border-radius:10px;flex:none}
+  .strip{align-items:center}
+  .strip .presets{order:0;margin:0 0 0 auto;flex:0 1 auto;min-width:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+  .strip .presets:empty{display:none}
+  /* ── 문서 트리 폭 조절 손잡이 ── */
+  .dc-layout{grid-template-columns:var(--dc-tree-w,260px) 6px minmax(0,1fr) 300px;column-gap:3px}
+  .dc-split{cursor:col-resize;border-radius:3px;align-self:stretch;position:relative}
+  .dc-split::after{content:"";position:absolute;left:2px;top:50%;width:2px;height:36px;margin-top:-18px;border-radius:2px;background:var(--line)}
+  .dc-split:hover::after,body.dc-resizing .dc-split::after{background:var(--focus);height:64px;margin-top:-32px}
+  body.dc-resizing,body.dc-resizing *{cursor:col-resize !important;user-select:none}
+  @media(min-width:1081px){ #view-docs.no-note .dc-layout{grid-template-columns:var(--dc-tree-w,260px) 6px minmax(0,1fr)} }
+  @media(max-width:1080px){ .dc-layout{grid-template-columns:minmax(0,1fr);column-gap:0;row-gap:12px} .dc-split{display:none} }
+  /* ── v3.8.4 전화번호부 오른쪽 칸(고른 사람과 엮인 업무) ── */
+  .pb-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+  .pb-layout.has-side{grid-template-columns:minmax(0,1fr) 360px}
+  #view-phone{max-width:1460px}
+  .pb-side{display:none;position:sticky;top:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;max-height:calc(100vh - 150px);overflow:auto}
+  .pb-side.on{display:block}
+  .pbs-head{display:flex;align-items:flex-start;gap:8px}
+  .pbs-name{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .pbs-name b{font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pbs-name span,.pbs-info,.pbs-count{font-size:12.5px;color:var(--ink-soft)}
+  .pbs-info{margin-top:6px;word-break:break-all}
+  .pbs-count{margin:10px 0 8px;font-weight:600}
+  .pbs-list{max-height:none}
+  .pb-item.sel{border-color:var(--focus);background:var(--slate-bg)}
+  @media(max-width:1080px){ .pb-layout.has-side{grid-template-columns:minmax(0,1fr)} .pb-side{position:static;order:-1;max-height:340px} }
+  /* ── 좁은 화면(≤560): 머리줄 오른쪽 묶음은 한 줄을 통째로 쓰고 검색칸이 남는 폭을 채운다 · 양식 아래 단추는 접힌다 ── */
+  @media(max-width:700px){
+    .head-right{width:100%;flex-wrap:nowrap;min-width:0}
+    #g-search{flex:1 1 0;width:auto;min-width:0}
+    .fm-actions{flex-wrap:wrap;row-gap:6px}
+    .fm-actions .btn{flex:0 1 auto;min-width:0}
+    .fm-actions .fm-draft{flex:1 1 100%}
+  }
+  /* HTML 보기 프레임 — 가운데 칸을 꽉 채운다(문서 자체의 흰 바탕) */
+  .dv-md:has(> .dv-frame){padding:0;overflow:hidden;display:flex}
+  .dv-frame{flex:1;width:100%;height:100%;border:0;background:#fff}
+  /* [＋ 추가]·[2쪽 보기]: 좌우 여백을 줄인다(소유자 지정) */
+  .fsub-add,.fm-inner .fsub-add,.fm-mini{padding:0 9px;height:26px;font-size:12px}
+  /* ── 좁은 화면 머리줄: 탭은 윗줄 전체(넘치면 옆으로 민다), [＋ 입력]·검색·[설정]은 아랫줄 — 탭이 눌려 사라지지 않게 ── */
+  @media(max-width:900px){
+    .header-inner{grid-template-columns:minmax(0,1fr);row-gap:8px}
+    nav.tabs{justify-self:center;max-width:100%}
+    .head-right{justify-self:stretch;width:100%;min-width:0}
+    #g-search{flex:1 1 0;width:auto;min-width:0}
+  }
+  @media(max-width:700px){
+    .fm-actions .btn{padding-left:12px;padding-right:12px}
+    .fid-row{flex-wrap:wrap}
+    .fid-row select{flex:1 1 110px;width:auto;min-width:0}
+    .fid-row input[type=text]{flex:2 1 120px;min-width:0}
+  }
+  @media(max-width:1080px){ .dcal-d{aspect-ratio:auto;height:32px} .done-cal{max-width:none} }
+  /* 문서 파일 머리줄: 좁으면 단추들이 다음 줄로 접힌다(보기|편집 이 잘리지 않게) */
+  .dv-acts{flex-wrap:wrap;justify-content:flex-end;min-width:0}
+  .dv-seg{flex:none}
+  .dv-seg .seg-btn{flex:none}
+  @media(max-width:700px){ .dv-head{flex-direction:column;align-items:stretch} .dv-acts{justify-content:flex-start} }
+  /* 옆 칸 닫기(⇥) — 팝업의 × 와 구분: 칸을 옆으로 접는다는 뜻 */
+  .side-x{font-size:17px;line-height:1}
+  /* ── 코드·쿼리 색 강조: 입력칸(#dv-ta) 뒤에 같은 글꼴·같은 줄바꿈의 색 층(#dv-hl). ⚠️ 두 층의 글꼴·크기·줄높이·여백·줄바꿈 규칙이
+     하나라도 다르면 글자가 어긋난다 — 색 층의 낱말에 굵기·기울임을 주지 말 것(폭이 달라진다). 색은 토큰만. ── */
+  .dv-code{position:relative;flex:1;min-height:0;display:flex}
+  .dv-code .dv-ta,.dv-hl{margin:0;border:0;padding:16px 18px;font-family:inherit;font-size:14px;line-height:1.7;letter-spacing:0;tab-size:4;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;box-sizing:border-box;scrollbar-gutter:stable}
+  .dv-code .dv-ta{position:relative;z-index:1;flex:1;width:100%;height:100%;background:transparent}
+  .dv-hl{position:absolute;inset:0;overflow:hidden;color:var(--ink);background:var(--card);pointer-events:none}
+  .dv-ta.dv-ta-hl{color:transparent;caret-color:var(--ink)}
+  .dv-ta.dv-ta-hl::selection{background:color-mix(in srgb, var(--focus) 28%, transparent);color:transparent}
+  .hljs-comment,.hljs-quote,.hljs-meta{color:var(--ink-soft)}
+  .hljs-keyword,.hljs-selector-tag,.hljs-built_in,.hljs-literal,.hljs-type,.hljs-operator{color:var(--cal-mid)}
+  .hljs-string,.hljs-regexp,.hljs-addition,.hljs-attr-value,.hljs-template-string{color:var(--green)}
+  .hljs-number,.hljs-symbol,.hljs-bullet,.hljs-variable,.hljs-template-variable{color:var(--cal-due)}
+  .hljs-title,.hljs-section,.hljs-name,.hljs-function .hljs-title,.hljs-attr,.hljs-attribute,.hljs-selector-class,.hljs-selector-id{color:var(--focus)}
+  .hljs-deletion{color:var(--red)}
+  .dv-mdv pre code.hljs{background:none;padding:0}
+  /* 양식 파일 링크의 [문서]·[찾기] — [＋ 추가]와 같은 크기 */
+  .ffile-doc,.ffile-browse{height:26px;padding:0 9px;font-size:12px;display:inline-flex;align-items:center}
+  /* ── 옆 칸 양식(#formPanel.fm-dock, v3.8.4) — 문서 탭에서는 양식이 팝업이 아니라 오른쪽 칸에 놓인다.
+     어둡게 덮지 않고(가운데 문서를 계속 보고 고를 수 있게) 세 칸 줄의 오른쪽 자리를 차지한다. 양식 안의 것은 그대로. ── */
+  .form-panel.fm-dock{inset:var(--dock-top,150px) 28px var(--dock-bottom,16px) auto;width:480px;padding:0;background:transparent;overflow:visible}
+  .form-panel.fm-dock .fm-inner{max-width:none;height:100%;overflow-y:auto;overscroll-behavior:contain;border-radius:14px;box-shadow:var(--shadow)}
+  .form-panel.fm-dock .fm-head{top:0}
+  .form-panel.fm-dock .fm-actions{bottom:0}
+  .form-panel.fm-dock .fm-memo{min-height:150px}
+  /* 그동안 문서 탭은 오른쪽 자리를 비운다(메모 목록 칸은 숨김) */
+  body:has(#formPanel.on.fm-dock) #view-docs .dc-layout,body:has(#formPanel.on.fm-dock) #view-docs.no-note .dc-layout{grid-template-columns:var(--dc-tree-w,260px) 6px minmax(0,1fr) 480px}
+  body:has(#formPanel.on.fm-dock) #view-docs .dc-note{visibility:hidden;display:flex}
+  body:has(#formPanel.on.fm-dock) #dn-add2{display:none}
+  /* 옆 칸 양식은 폭이 480px 이라 좁은 창(컴팩트)과 같은 줄 접기를 쓴다 — 위 '좁은 창(560px 컴팩트)' 규칙을 그대로 옮긴 것.
+     그 규칙을 고치면 여기도 함께 고칠 것(세부: 제목 / 담당 / 날짜·시각 · 관련인: 소속·이름 / 연락처 / 이메일 · 접수·마감 세로). */
+  .fm-dock .fm-inner{overflow-x:hidden}
+  .fm-dock .fm-grid{grid-template-columns:1fr}
+  .fm-dock .fsub-row{flex-wrap:wrap;row-gap:0}
+  .fm-dock .fsub-row::after{content:"";flex:0 0 100%;height:0;order:0}
+  .fm-dock .fsub-row .fsub-title{flex:1 1 auto;min-width:0}
+  .fm-dock .fsub-row input.sub-owner{order:1;flex:0 1 auto;width:112px;margin-left:43px;margin-top:5px}
+  .fm-dock .fsub-row .fsub-dt{order:2;flex:1 1 100%;min-width:0;margin-left:43px;margin-top:5px}
+  .fm-dock .fsub-row + .fsub-row{margin-top:10px}
+  .fm-dock .fsub-row .fsub-dt .dt-date{flex:0 1 auto;width:112px}
+  .fm-dock .fsub-row .fsub-dt .dt-time{flex:0 1 auto;width:64px}
+  .fm-dock .contact-row{flex-wrap:wrap;row-gap:5px}
+  .fm-dock .contact-row .c-org,.fm-dock .contact-row .c-who{flex:1 1 0;min-width:0}
+  .fm-dock .contact-row .c-phone{order:1;flex:1 1 100%;min-width:0;margin-left:43px}
+  .fm-dock .contact-row .c-email{order:2;flex:1 1 100%;min-width:0;margin-left:43px}
+  .fm-dock .contact-row + .contact-row{margin-top:8px}
+  .fm-dock .fm-grid .dt-inp{margin-left:43px;min-width:0}
+  .fm-dock .dt-dow{display:none}
+  .fm-dock .fid-row .drag-handle,.fm-dock .contact-row .drag-handle{margin-right:25px}
+  .fm-dock .fid-row{flex-wrap:wrap}
+  .fm-dock .fid-row select{flex:1 1 110px;width:auto;min-width:0}
+  .fm-dock .fid-row input[type=text]{flex:2 1 120px;min-width:0}
+  .fm-dock .fm-actions{flex-wrap:wrap;row-gap:6px}
+  /* 다크 테마 점검(v3.8.4): ⠿ 끌기 손잡이가 선 색(--line)이라 다크에서 거의 안 보였다(대비 1.2:1) — × 와 같은 아이콘 색으로 */
+  .drag-handle{color:var(--icon-muted)}
+  .drag-handle:hover{color:var(--ink-soft)}
+  /* 양식 묶음 사이 가로선 — 옅은 선(--line-soft)은 다크에서 거의 안 보여 본선(--line)으로 */
+  .fm-inner .fm-subs,.fm-inner .fm-ids,.fm-inner .fm-contacts,.fm-inner .fm-files-wrap,.fm-inner .fm-grid{border-top-color:var(--line)}
+  /* 메모칸 높이 조절 손잡이(소유자 지정 — 글자 없이): 오른쪽 아래 모서리의 사선 두 줄. 끌면 늘고 줄며, 두 번 누르면 원래 높이.
+     브라우저 기본 모서리 손잡이는 너무 작고 흐려 있는지 몰랐다 — 그래서 끄고(resize:none) 이 손잡이 하나만 둔다. */
+  .fm-memo{resize:none}
+  .fm-memo-grip{position:absolute;right:3px;bottom:3px;z-index:2;width:16px;height:16px;border-radius:4px;cursor:ns-resize;
+    background:
+      linear-gradient(135deg, transparent 0 47%, var(--ink-soft) 47% 57%, transparent 57% 100%) 2px 2px/12px 12px no-repeat,
+      linear-gradient(135deg, transparent 0 44%, var(--ink-soft) 44% 58%, transparent 58% 100%) 8px 8px/6px 6px no-repeat}
+  .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--slate-bg);
+    background-image:linear-gradient(135deg, transparent 0 47%, var(--focus) 47% 57%, transparent 57% 100%), linear-gradient(135deg, transparent 0 44%, var(--focus) 44% 58%, transparent 58% 100%)}
+  body.memo-resizing,body.memo-resizing *{cursor:ns-resize !important;user-select:none}
+  .fm-ro .fm-memo-grip{display:none}

@@ -13,12 +13,15 @@
    여기서는 어떤 실패도 종료를 막지 않게 짠다(전부 try/catch 후 진행).
    ========================================================================= */
 import {STORE, invoke} from './store.js';
+import {flushEdit as flushDocEdit} from './docs.js';
 
 let quitting=false;
 
 async function onQuitRequest(){
   if(quitting) return;                       // 연타 방지 — 첫 요청의 플러시가 진행 중
   quitting=true;
+  /* v3.8.4 문서 탭에서 고치던 글자 파일도 저장하고 끈다(2초 안에 — 그 뒤엔 Rust 감시 타이머가 어차피 끈다) */
+  try{ await Promise.race([flushDocEdit(), new Promise(r=>setTimeout(r,2000))]); }catch(e){ console.warn('종료 전 문서 저장 실패',e); }
   try{ await STORE.flush(); }catch(e){ console.warn('종료 전 저장 플러시 실패',e); }
   try{ await invoke('quit_now'); }catch(e){ console.warn('종료 요청 실패',e); }
 }

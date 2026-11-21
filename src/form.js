@@ -153,6 +153,9 @@ export async function openForm(pre, opts){
   saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
   pre=pre||{};
   const readonly=!!(opts&&opts.readonly);
+  /* v3.8.4 옆 칸 양식(opts.dock) — 문서 탭에서는 양식을 팝업이 아니라 오른쪽 칸으로 연다(가운데 문서를 보면서 쓰게).
+     같은 양식·같은 저장 길이고 놓이는 자리만 다르다(#formPanel.fm-dock — CSS). 창이 좁으면 평소처럼 팝업. */
+  $('formPanel').classList.toggle('fm-dock', !!(opts&&opts.dock) && window.innerWidth>=1081);
   editingId=pre.id||null;
   subFromMemo=!readonly && !editingId && !!(opts&&opts.subFromMemo);
   draftKey = readonly ? null : (editingId ? String(editingId) : 'new');   // 읽기 전용은 초안을 만들지 않는다
@@ -237,8 +240,8 @@ function fillForm(pre){
 
   // 관련인 세트
   const cw=$('fm-contacts'); cw.innerHTML='';
-  const contacts = pre.contacts && pre.contacts.length ? pre.contacts : [{who:'',org:'',phone:'',email:''}];
-  contacts.forEach(c=>addContactRow(c));
+  /* v3.8.4 비어 있으면 줄을 만들지 않는다 — 묶음 제목 줄의 [＋ 추가]로 연다(양식이 한 화면에 들어오게) */
+  (pre.contacts||[]).forEach(c=>addContactRow(c));
 
   // 식별번호
   const iw=$('fm-ids'); iw.innerHTML='';
@@ -247,7 +250,6 @@ function fillForm(pre){
   // 세부 할일
   const sw=$('fm-subs'); sw.innerHTML='';
   (pre.subs||[]).forEach(s=>addFormSubRow(s.title,s.mid,false,s));
-  if(!(pre.subs||[]).length) addFormSubRow('','');
 
   // 파일 링크
   const fw=$('fm-files'); fw.innerHTML='';
@@ -259,6 +261,7 @@ function fillForm(pre){
 export function closeForm(){
   saveDraftNow();
   closeModal('formPanel'); editingId=null; draftKey=null; baseline=null; markDraft(0);
+  $('formPanel').classList.remove('fm-dock');
 }
 
 /* 관련인 행 — v3.2.0(소유자 지정)부터 연락처는 저장 시 표준 하이픈 표기로 정규화한다
@@ -444,7 +447,22 @@ function collectForm(){
   return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs, files};
 }
 
+/* 메모칸 높이 조절 손잡이(v3.8.4 소유자 지정 — 늘릴 수 있다는 표시를 글자 없이). 브라우저 기본 모서리 손잡이는
+   작고 흐려 보이지 않아 직접 만든다. 높이는 이 양식을 닫을 때까지만 유지(저장하지 않음). 두 번 누르면 기본 높이. */
+function initMemoGrip(){
+  const g=$('fm-memo-grip'), m=$('fm-memo'); if(!g||!m) return;
+  let from=null;
+  g.addEventListener('mousedown', e=>{ if(e.button!==0) return; e.preventDefault(); from={y:e.clientY, h:m.offsetHeight}; document.body.classList.add('memo-resizing'); });
+  document.addEventListener('mousemove', e=>{
+    if(!from) return;
+    if(e.buttons===0){ from=null; document.body.classList.remove('memo-resizing'); return; }
+    m.style.height=Math.max(120, Math.min(1600, from.h+(e.clientY-from.y)))+'px';
+  });
+  document.addEventListener('mouseup', ()=>{ if(!from) return; from=null; document.body.classList.remove('memo-resizing'); });
+  g.addEventListener('dblclick', ()=>{ m.style.height=''; });
+}
 export function initForm(){
+  initMemoGrip();
   // 팝업이 어느 탭에서든 뜨도록 formPanel을 body 직속으로 이동
   document.body.appendChild($('formPanel'));
   wireTagHover($('fm-memo'), 'fm-memo-hl');

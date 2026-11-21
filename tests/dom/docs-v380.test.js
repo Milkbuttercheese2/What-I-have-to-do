@@ -26,8 +26,8 @@ const p = t => `<hp:p><hp:run><hp:t>${t}</hp:t></hp:run></hp:p>`;
 const cell = t => `<hp:tc><hp:subList>${p(t)}</hp:subList></hp:tc>`;
 
 test('docKind · openLabel: 확장자별 종류와 열기 단추 이름', () => {
-  assert.deepEqual(['a.HWPX','b.hwp','c.pptx','d.xlsx','e.csv','f.pdf','g.PNG','h.md','i.txt','j.json','k.mp4','l.docx','m.zip','noext'].map(docKind),
-    ['hwpx','hwp','pptx','xlsx','csv','pdf','img','md','text','text','media','docx','other','other']);
+  assert.deepEqual(['a.HWPX','b.hwp','c.pptx','d.xlsx','e.csv','f.pdf','g.PNG','h.md','i.txt','j.json','k.mp4','l.docx','m.zip','n.html','o.7z','noext'].map(docKind),
+    ['hwpx','hwp','pptx','xlsx','csv','pdf','img','md','text','text','media','docx','zip','html','other','other']);
   assert.deepEqual(['hwpx','xlsx','pptx','docx','other'].map(openLabel), ['한글에서 열기','엑셀에서 열기','파워포인트에서 열기','워드에서 열기','열기']);
 });
 
@@ -252,10 +252,10 @@ test('MD: [보기|편집] — 보기는 안전한 HTML(스크립트 제거)이�
   assert.equal(v.querySelector('h1').textContent, '제목');
   assert.equal(v.querySelector('strong').textContent, '굵게');
   assert.ok(!v.querySelector('script') && !v.innerHTML.includes('onerror'), '스크립트·이벤트 속성 제거');
-  assert.equal($('dv-ta').style.display, 'none');
+  assert.equal($('dv-code').style.display, 'none');
   click(doc.querySelector('[data-tmode="edit"]')); await env.flush(6);
   assert.equal(S.settings.docMdMode, 'edit');
-  assert.equal($('dv-ta').style.display, '');
+  assert.equal($('dv-code').style.display, '');
   click(row('0:t.csv')); await env.flush(10);
   assert.deepEqual([...$('dv-md').querySelectorAll('tr')].map(r=>[...r.children].map(c=>c.textContent).slice(1)), [['이름','수량'],['펜','3']]);
 });
@@ -287,14 +287,38 @@ test('[＋ 메모] = 그 폴더 링크가 든 새 양식 · 저장하면 오른�
   env.onInvoke('doc_read_text', ()=>{ throw '글자 파일이 아닙니다'; });
   await openDocs();
   click(row('0:가 폴더')); await env.flush(6);
+  /* v3.8.4: 문서 탭에서는 같은 양식이 팝업이 아니라 오른쪽 칸(fm-dock)으로 열린다 — 세부·마감·관련인 등 모든 칸 그대로 */
+  env.window.innerWidth=1500;
   click($('dn-add')); await env.flush(6);
-  assert.ok(isOpen('formPanel'));
-  assert.equal(doc.querySelector('#fm-files .ffile-path').value, 'D:\\공유\\가 폴더');
+  assert.ok(isOpen('formPanel') && $('formPanel').classList.contains('fm-dock'), '옆 칸 양식');
+  assert.equal(doc.querySelector('#fm-files .ffile-path').value, 'D:\\공유\\가 폴더', '그 폴더 링크가 들어 있다');
+  assert.ok($('fm-subadd') && $('fm-contactadd') && $('fm-grid'), '양식의 칸이 모두 있다');
   $('fm-memo').value='회신 기한 11.28';
   click($('fm-save')); await env.flush(6);
+  assert.ok(!$('formPanel').classList.contains('fm-dock'), '닫히면 옆 칸 표시도 풀린다');
   assert.equal(S.items.length, 1);
   assert.deepEqual(S.items[0].files, ['D:\\공유\\가 폴더']);
   assert.deepEqual(memos(), ['회신 기한 11.28']);
+  /* 오른쪽 칸의 카드를 눌러도 옆 칸 양식 — 끝난 업무는 읽기 전용 */
+  click(doc.querySelector('#dn-list .card .card-memo')); await env.flush(4);
+  assert.ok(isOpen('formPanel') && $('formPanel').classList.contains('fm-dock'));
+  assert.equal($('fm-memo').value, '회신 기한 11.28');
+  /* 옆 칸 양식을 연 채 다른 탭으로 가면 평소 팝업으로 바뀐다(쓰던 글은 그대로) */
+  $('fm-memo').value='고치는 중';
+  click(doc.querySelector('.tab[data-view="board"]')); await env.flush(4);
+  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-dock'));
+  assert.equal($('fm-memo').value, '고치는 중');
+  closeForm();
+  doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='docs')); showView('docs'); await env.flush(6);
+  /* 다른 곳(보드 등)에서 여는 양식은 평소처럼 팝업 */
+  openForm(S.items[0]); await env.flush(4);
+  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-dock'));
+  closeForm();
+  /* 창이 좁으면 문서 탭에서도 팝업 */
+  env.window.innerWidth=700;
+  click($('dn-add')); await env.flush(4);
+  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-dock'));
+  closeForm(); env.window.innerWidth=1500;
   openForm({files:['D:\\공유\\가 폴더\\보고.zip', 'C:\\밖\\x.txt']}); await env.flush(4);
   const btns=[...doc.querySelectorAll('#fm-files .ffile-doc')];
   assert.deepEqual(btns.map(b=>b.style.display), ['', 'none'], '문서 폴더 안 링크에만 [문서]');
@@ -302,6 +326,7 @@ test('[＋ 메모] = 그 폴더 링크가 든 새 양식 · 저장하면 오른�
   click(btns[0]); await env.flush(14);
   assert.ok(!isOpen('formPanel'), '양식을 닫고');
   assert.ok($('view-docs').classList.contains('on'), '문서 탭으로');
+  assert.deepEqual([...doc.querySelectorAll('.tab.on')].map(x=>x.dataset.view), ['docs'], '탭 줄 표시도 문서로(보드에 남지 않는다)');
   assert.ok(row('0:가 폴더/보고.zip').classList.contains('on'), '그 파일을 고른다');
   openForm({id:77, done:true, files:['D:\\공유\\가 폴더']}, {readonly:true}); await env.flush(4);
   assert.equal(doc.querySelector('#fm-files .ffile-doc').disabled, false, '완료 업무(읽기 전용)에서도 [문서]는 눌린다');
@@ -467,6 +492,12 @@ test('v3.8.3 휴지통으로: 확인 → doc_trash · 고른 것은 위 폴더�
   /* 문서 폴더 자체 메뉴엔 휴지통이 없다 */
   row('0:').dispatchEvent(new env.window.MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:20, clientY:20}));
   assert.ok(!doc.querySelector('.dt-menu [data-mtrash]'));
+  /* 대신 [문서 폴더 해지] — 목록에서만 뺀다 */
+  assert.ok(!trashed.some(x=>x.rel===''));
+  env.answerConfirm(true);
+  click(doc.querySelector('.dt-menu [data-munroot]')); await env.flush(10);
+  assert.deepEqual(S.settings.docRoots, [], '문서 폴더 목록에서 빠진다');
+  assert.ok(!$('view-docs').classList.contains('has-root'));
 });
 
 test('v3.8.3 문서 찾기: 모든 문서 폴더에서 · 결과는 트리 자리 · 누르면 그 파일(위 폴더 펼침) · ESC 로 트리로', async () => {
@@ -514,4 +545,155 @@ test('v3.8.3 탐색기에서 끌어 오기: Shift 를 누른 채 놓으면 옮�
   await handleDragDrop({type:'drop', paths:['D:\\d.txt'], position:{x:1,y:1}}); await env.flush(8);
   doc.elementFromPoint=orig;
   assert.deepEqual(calls.slice(2).map(c=>[c.paths[0], c.mv]), [['D:\\c.txt', true], ['D:\\d.txt', false]]);
+});
+
+/* ───────────── v3.8.4 ───────────── */
+test('v3.8.4 CSV 규칙: 따옴표·쉼표·줄바꿈이 든 칸을 잃지 않고 왕복', async () => {
+  const {parseCsv, toCsv, csvEditHtml, docxHtml, hwpText, docThumb, zipList} = await import('../../src/docs-view.js');
+  const src='이름,메모\r\n"김, 철수","그는 ""네""라고\n했다"\r\n빈,\r\n';
+  const rows=parseCsv(src);
+  assert.deepEqual(rows, [['이름','메모'],['김, 철수','그는 "네"라고\n했다'],['빈','']]);
+  assert.deepEqual(parseCsv(toCsv(rows)), rows, '다시 읽어도 같다');
+  assert.deepEqual(parseCsv('a\tb\n1\t2', '\t'), [['a','b'],['1','2']]);
+  assert.equal(csvEditHtml(Array.from({length:2001},()=>['x'])), null, '너무 큰 표는 읽기 전용');
+  /* DOCX: 문단과 표 */
+  const W='xmlns:w="urn:w"';
+  const dx=unzip(zip({'word/document.xml':`<w:document ${W}><w:body><w:p><w:r><w:t>제목</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>칸</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>`}));
+  const box=doc.createElement('div'); box.innerHTML=docxHtml(dx);
+  assert.equal(box.querySelector('section > p').textContent, '제목');
+  assert.equal(box.querySelector('td').textContent, '칸');
+  /* HWP 미리 보기 글자(UTF-16LE) · 첫 쪽 그림 판별 · ZIP 목록 */
+  assert.equal(hwpText({PrvText:new Uint8Array(Buffer.from('한글 문서\r\n둘째','utf16le'))}), '한글 문서\r\n둘째');
+  const png=new Uint8Array(200); png.set([0x89,0x50,0x4E,0x47]);
+  assert.equal(docThumb({'Preview/PrvImage.png':png}).mime, 'image/png');
+  assert.equal(docThumb({'x.xml':png}), null);
+  /* 진짜 zip(Windows 로 만든 것, 이름이 UTF-8 바이트) — 한글 이름을 되살린다 */
+  const realZip=new Uint8Array(Buffer.from('UEsDBBQAAAgIAMRrdV1T/FFnBAAAAAIAAAASAAAA7JWIXOqwgCDrrLjshJwudHh0M+QCAFBLAwQUAAAICADEa3Vdg1UL1QUAAAADAAAACAAAAOuCmC5od3B4MzLiAgBQSwECFAAUAAAICADEa3VdU/xRZwQAAAACAAAAEgAAAAAAAAAAAAAAAAAAAAAA7JWIXOqwgCDrrLjshJwudHh0UEsBAhQAFAAACAgAxGt1XYNVC9UFAAAAAwAAAAgAAAAAAAAAAAAAAAAANAAAAOuCmC5od3B4UEsFBgAAAAACAAIAdgAAAF8AAAAAAA==','base64'));
+  assert.deepEqual(zipList(realZip).map(f=>[f.name,f.size]), [['나.hwpx',3],['안/가 문서.txt',2]]);
+});
+
+test('v3.8.4 CSV 표에서 칸을 고치면 글자로 되돌려 저장 · [＋ 행]', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['Y:\\표'];
+  fakeFs(()=>({'0:':[{name:'명단.csv',rel:'명단.csv',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_read_text', ()=>({text:'이름,수량\r\n펜,3\r\n', encoding:'utf-8-bom', mtime:1}));
+  const writes=[]; env.onInvoke('doc_write_text', a=>{ writes.push(a); return a.baseMtime+1; });
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:명단.csv')); await env.flush(10);
+  const td=doc.querySelector('.dv-csv td[data-r="1"][data-c="1"]');
+  assert.equal(td.textContent, '3');
+  td.textContent='12, 급함'; td.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(1300); await env.flush(8);
+  assert.equal(writes[0].text, '이름,수량\r\n펜,"12, 급함"\r\n', '쉼표가 든 칸은 따옴표 · 줄바꿈·인코딩은 원래대로');
+  assert.equal(writes[0].encoding, 'utf-8-bom');
+  click(doc.querySelector('[data-csvadd="row"]')); await env.flush(6);
+  assert.equal(doc.querySelectorAll('.dv-csv tr').length, 3);
+  mock.timers.tick(1300); await env.flush(8);
+  assert.equal(writes.at(-1).text, '이름,수량\r\n펜,"12, 급함"\r\n,\r\n');
+});
+
+test('v3.8.4 저장 대상 고정: 저장이 도는 중에 다른 파일로 가도 고친 글자는 원래 파일에 끝까지 쓴다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['Z:\\경합'];
+  fakeFs(()=>({'0:':[{name:'a.txt',rel:'a.txt',dir:false,size:1,mtime:1},{name:'b.txt',rel:'b.txt',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_read_text', a=>({text:a.rel, encoding:'utf-8', mtime:1}));
+  const writes=[]; let release;
+  env.onInvoke('doc_write_text', a=>{ writes.push({rel:a.rel, text:a.text}); return writes.length===1 ? new Promise(r=>{ release=()=>r(2); }) : 3; });
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:a.txt')); await env.flush(10);
+  typeIn($('dv-ta'), '첫 고침');
+  mock.timers.tick(1300); await env.flush(4);           // 첫 저장이 멈춰 있다
+  typeIn($('dv-ta'), '둘째 고침');                      // 그 사이 더 고치고
+  click(row('0:b.txt')); await env.flush(6);            // 다른 파일로
+  assert.equal(writes.length, 1);
+  release(); await env.flush(14);
+  assert.deepEqual(writes, [{rel:'a.txt', text:'첫 고침'}, {rel:'a.txt', text:'둘째 고침'}], '나중 고침도 a.txt 에');
+  assert.equal($('dv-ta').value, 'b.txt', '그 뒤에 b 가 열린다');
+});
+
+test('v3.8.4 HTML [보기|편집] · ZIP 목록 · 큰 파일은 오류 대신 안내와 [열기] · 복제 · F2/Delete', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['X:\\여러'];
+  const F=(n,d)=>({name:n,rel:n,dir:!!d,size:5,mtime:1});
+  let lists={'0:':[F('p.html'),F('묶음.zip'),F('큰.pdf'),F('k.txt')]};
+  fakeFs(()=>lists);
+  env.onInvoke('doc_read_text', a=>({text:a.rel==='p.html'?'<html><head><title>t</title><style>p{color:red}</style></head><body><h2>공지</h2><script>x()</script><p onclick="y()">본문</p></body></html>':'k', encoding:'utf-8', mtime:1}));
+  env.onInvoke('doc_read', a=>{ if(a.rel==='큰.pdf') throw '미리보기 상한(30MB) 초과'; return zip({'in/a.txt':'1','b.hwpx':'22'}).buffer; });
+  const opened=[]; env.onInvoke('open_file_path', a=>{ opened.push(a.path); return null; });
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:p.html')); await env.flush(40);
+  const fr=$('dv-md').querySelector('iframe.dv-frame');
+  assert.ok(fr, 'HTML 은 모래상자 프레임에');
+  assert.ok(!/allow-same-origin|allow-top-navigation/.test(fr.getAttribute('sandbox')), '앱 화면에 닿는 권한은 주지 않는다');
+  assert.match(fr.getAttribute('src'), /^http:\/\/wmhhdoc\.localhost\/0\/p\.html\?t=/, '문서 폴더 전용 주소(폴더 번호 + 상대 경로)');
+  const {docUrl} = await import('../../src/docs.js');
+  assert.equal(docUrl(1, '가 폴더/a+b #1.html'), 'http://wmhhdoc.localhost/1/%EA%B0%80%20%ED%8F%B4%EB%8D%94/a%2Bb%20%231.html');
+  click(row('0:묶음.zip')); await env.flush(12);
+  assert.deepEqual([...doc.querySelectorAll('.dv-zrow .dv-fname')].map(x=>x.textContent), ['b.hwpx','in/a.txt']);
+  click(row('0:큰.pdf')); await env.flush(12);
+  assert.ok(!$('dv-body').querySelector('.dv-err'), '큰 파일은 오류가 아니다');
+  click($('dv-body').querySelector('.dv-info [data-dopen]')); await env.flush(6);
+  assert.equal(opened.at(-1), 'X:\\여러\\큰.pdf');
+  /* 복제 */
+  env.onInvoke('doc_copy', a=>{ lists={'0:':[...lists['0:'], F('k (2).txt')]}; return 'k (2).txt'; });
+  row('0:k.txt').dispatchEvent(new env.window.MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:9, clientY:9}));
+  click(doc.querySelector('.dt-menu [data-mcopy]')); await env.flush(14);
+  assert.ok(row('0:k (2).txt').classList.contains('on'), '복제본을 고른다');
+  /* F2 = 이름 칸 · Delete = 휴지통 확인 */
+  doc.body.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'F2', bubbles:true, cancelable:true})); await env.flush(4);
+  assert.ok(doc.querySelector('#dt-tree .dt-rename'));
+  doc.querySelector('#dt-tree .dt-rename').dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Escape', bubbles:true, cancelable:true})); await env.flush(4);
+  const tr=[]; env.onInvoke('doc_trash', a=>{ tr.push(a.rel); lists={'0:':lists['0:'].filter(e=>e.rel!==a.rel)}; return null; });
+  env.answerConfirm(true);
+  doc.body.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Delete', bubbles:true, cancelable:true})); await env.flush(14);
+  assert.deepEqual(tr, ['k (2).txt']);
+  /* 두 번 누르면 그 프로그램으로 */
+  row('0:k.txt').dispatchEvent(new env.window.MouseEvent('dblclick', {bubbles:true})); await env.flush(6);
+  assert.equal(opened.at(-1), 'X:\\여러\\k.txt');
+});
+
+test('v3.8.4 트리 폭: 180~560 으로 묶고, 손잡이를 끌면 settings.docTreeW 에 기억 · 두 번 누르면 기본', async () => {
+  const {clampTreeW} = await import('../../src/docs.js');
+  assert.deepEqual([50, 300, 9999, 'x', undefined].map(clampTreeW), [180, 300, 560, 260, 260]);
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['U:\폭']; fakeFs(()=>({'0:':[]}));
+  await openDocs();
+  const sp=$('dc-split'), ms=(el,type,x,b)=>el.dispatchEvent(new env.window.MouseEvent(type,{bubbles:true,cancelable:true,button:0,buttons:b,clientX:x,clientY:5}));
+  ms(sp,'mousedown',260,1); ms(doc.body,'mousemove',340,1);
+  assert.equal(S.settings.docTreeW, 340);
+  assert.equal(doc.querySelector('#view-docs .dc-layout').style.getPropertyValue('--dc-tree-w'), '340px');
+  ms(doc.body,'mouseup',340,0);
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_settings'), '놓으면 저장');
+  sp.dispatchEvent(new env.window.MouseEvent('dblclick',{bubbles:true}));
+  assert.equal(S.settings.docTreeW, 260);
+});
+
+test('v3.8.4 코드·쿼리 색 강조: SQL 파일은 색 층이 깔리고 입력을 따라 다시 칠한다 · txt 는 색 없음 · MD 코드 블록', async () => {
+  const {codeLang, codeHtml} = await import('../../src/docs-view.js');
+  assert.deepEqual(['q.SQL','a.py','b.json','c.txt','d.csv','e.yml'].map(codeLang), ['sql','python','json',null,null,'yaml']);
+  const h=await codeHtml("SELECT name FROM t WHERE id = 3 -- 주석 <b>", 'sql');
+  assert.match(h, /hljs-keyword">SELECT</); assert.match(h, /hljs-number">3</); assert.match(h, /hljs-comment/);
+  assert.ok(!h.includes('<b>'), '글자는 이스케이프된다');
+  assert.equal(await codeHtml('x', 'nope-lang'), null);
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['L:\\색']; S.settings.docMdMode='view';
+  fakeFs(()=>({'0:':[{name:'q.sql',rel:'q.sql',dir:false,size:1,mtime:1},{name:'n.txt',rel:'n.txt',dir:false,size:1,mtime:1},{name:'m.md',rel:'m.md',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_read_text', a=>({text:a.rel==='q.sql'?'SELECT 1':a.rel==='m.md'?'```sql\nSELECT 2\n```\n':'그냥 글', encoding:'utf-8', mtime:1}));
+  env.onInvoke('doc_write_text', a=>a.baseMtime+1);
+  env.onInvoke('doc_read', ()=>{ throw '없음'; });
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:q.sql')); await env.flush(30);
+  assert.ok($('dv-ta').classList.contains('dv-ta-hl'), '색 층이 켜지면 입력칸 글자는 투명');
+  assert.match($('dv-hl').innerHTML, /hljs-keyword">SELECT</);
+  typeIn($('dv-ta'), 'UPDATE t SET a = 1'); await env.flush(30);
+  assert.match($('dv-hl').innerHTML, /hljs-keyword">UPDATE</, '고치면 다시 칠한다');
+  assert.equal($('dv-hl').textContent, 'UPDATE t SET a = 1\n', '색 층의 글자는 입력칸과 같다');
+  click(row('0:n.txt')); await env.flush(30);
+  assert.ok(!$('dv-ta').classList.contains('dv-ta-hl') && $('dv-hl').innerHTML==='', 'txt 는 색 없음');
+  click(row('0:m.md')); await env.flush(60);
+  assert.ok($('dv-md').querySelector('pre code .hljs-keyword'), 'MD 코드 블록에 색');
 });

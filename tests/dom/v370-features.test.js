@@ -110,7 +110,7 @@ test('카드 위에 놓으면 그 업무에 링크가 붙고 저장된다 · 실
 test('완료 업무 카드·읽기 전용 양식에는 붙이지 않는다 (증분 저장 보호)', async () => {
   await fresh();
   const it = mk({memo:'끝', done:true}); S.items.push(it); render(); renderDone();
-  const card = doc.querySelector(`#col-done .card[data-open="${it.id}"]`);
+  const card = doc.querySelector(`#col-done .drow[data-open="${it.id}"]`);
   assert.equal(dropTarget(card).kind, 'blocked');
   assert.equal(applyDrop(dropTarget(card), ['C:\\a.txt']), false);
   assert.deepEqual(S.items[0].files, []);
@@ -334,11 +334,11 @@ test('완료 탭: 주별 묶음은 기본 펼침(v3.8.1)이고 머리줄로 접�
   renderDone();
   const grp = () => doc.querySelectorAll('#col-done .done-group')[1];
   assert.ok(!grp().classList.contains('dg-closed'), '지난 주도 펼친 채');
-  assert.equal(grp().querySelectorAll('.card').length, 1);
+  assert.equal(grp().querySelectorAll('.drow:not(.drow-h)').length, 1);
   assert.match(grp().querySelector('.dg-label').textContent, /^\d+\.\d+\(월\)~\d+\.\d+\(일\)$|^\d{4}년 /);
   click(grp().querySelector('.dg-label'));
   assert.ok(grp().classList.contains('dg-closed'));
-  assert.equal(grp().querySelectorAll('.card').length, 0, '접힌 묶음은 카드를 만들지 않는다');
+  assert.equal(grp().querySelectorAll('.drow:not(.drow-h)').length, 0, '접힌 묶음은 카드를 만들지 않는다');
   click(grp().querySelector('.dg-head'));
   assert.ok(!grp().classList.contains('dg-closed'), '다시 누르면 펼친다');
   click(grp().querySelector('.dg-head'));
@@ -356,7 +356,7 @@ test('완료 탭: 묶음 머리와 카드가 그려지고, 카드를 누르면 �
   const heads=[...doc.querySelectorAll('#col-done .dg-label')].map(x=>x.textContent);
   assert.equal(heads[0], '오늘');
   assert.equal(heads.length, 2);
-  click(doc.querySelector('#col-done .card .card-memo'));
+  click(doc.querySelector('#col-done .drow:not(.drow-h) .drow-memo'));
   assert.ok(isOpen('formPanel'));
   assert.ok($('formPanel').classList.contains('fm-ro'));
   closeForm();
@@ -428,4 +428,70 @@ test('v3.7.0 속도: persist 는 저장이 끝나기 전에 화면부터 그린�
   assert.ok(doc.querySelector(`#view-board .card[data-open="${it.id}"]`), '저장 완료 전인데 카드가 이미 보인다');
   release({kind:'Saved', version:1}); await p;
   env.onInvoke('save_all', () => undefined);
+});
+
+test('v3.8.4 완료 탭 달력 띠: 날마다 끝낸 건수 · 누르면 그날 것만 · 다시 누르면 풀림 · 달 넘기기', async () => {
+  const {doneCalHtml} = await import('../../src/render.js');
+  await fresh();
+  const now=new Date(); now.setHours(12,0,0,0);
+  const t0=now.getTime(), y=new Date(t0-86400e3*40);
+  S.items.push(mk({memo:'오늘 하나', done:true, doneAt:t0}), mk({memo:'오늘 둘', done:true, doneAt:t0-3600e3}), mk({memo:'지난달', done:true, doneAt:y.getTime()}));
+  renderDone();
+  const cal=$('done-cal');
+  assert.match(cal.querySelector('.dcal-head b').textContent, new RegExp(`${now.getFullYear()}년 ${now.getMonth()+1}월`));
+  const todayCell=cal.querySelector('.dcal-today');
+  assert.equal(todayCell.querySelector('b').textContent, '2');
+  assert.ok(todayCell.classList.contains('dcal-l2'));
+  assert.equal(doc.querySelectorAll('#col-done .drow:not(.drow-h)').length, 3);
+  click($('done-cal').querySelector('.dcal-today'));
+  assert.deepEqual([...doc.querySelectorAll('#col-done .drow:not(.drow-h) .drow-memo')].map(x=>x.textContent).sort(), ['오늘 둘','오늘 하나']);
+  assert.ok($('done-cal').querySelector('.dcal-clear'));
+  click($('done-cal').querySelector('.dcal-clear'));
+  assert.equal(doc.querySelectorAll('#col-done .drow:not(.drow-h)').length, 3);
+  /* 달 넘기기: 40일 전 달에 1건 */
+  for(let i=0;i<3 && !new RegExp(`${y.getFullYear()}년 ${y.getMonth()+1}월`).test($('done-cal').querySelector('.dcal-head b').textContent);i++) click($('done-cal').querySelector('[data-dcalnav="-1"]'));
+  assert.equal($('done-cal').querySelector('.dcal-total').textContent, '1건');
+  /* 순수 규칙: 월요일 시작 — 2026년 11월 1일은 일요일 → 앞 빈 칸 6개 */
+  const box=doc.createElement('div'); box.innerHTML=doneCalHtml([], 2026, 10, null, t0);
+  assert.equal(box.querySelectorAll('.dcal-x').length, 6);
+  assert.equal(box.querySelectorAll('[data-dcalday]').length, 30);
+  for(let i=0;i<3;i++) click($('done-cal').querySelector('[data-dcalnav="1"]'));
+});
+
+test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마감·관련인·파일) · 한곳 검색칸', async () => {
+  const {initGSearch} = await import('../../src/gsearch.js');
+  await fresh();
+  const now=Date.now();
+  const a=mk({memo:'내 일\n둘째 줄', done:true, doneAt:now, f:{received:new Date(now-86400e3*2).toISOString()}, contacts:[{who:'김철수',org:'행정과',phone:'010-1'}], files:['C:/docs/a.txt'], ids:[{kind:'SR',val:'7'}]});
+  const b=mk({memo:'남의 일', done:true, doneAt:now-1000, f:{received:new Date(now-3600e3).toISOString()}, subs:[{id:9001,title:'확인',owner:'박대리',mid:'',done:true}]});
+  S.items.push(a,b);
+  a.f.due=new Date(now+86400e3).toISOString();
+  renderDone();
+  const rows=()=>[...doc.querySelectorAll('#col-done .drow:not(.drow-h)')];
+  assert.equal(rows().length, 2);
+  assert.deepEqual([...doc.querySelector('#col-done .drow-h').children].map(x=>x.textContent), ['종료','메모','식별정보','접수','마감','관련인','파일']);
+  const cells=[...rows()[0].children].map(x=>x.textContent);
+  assert.equal(cells[1], '내 일', '메모 첫 줄만');
+  assert.equal(cells[2], 'SR 7'); assert.equal(cells[5], '행정과 김철수'); assert.equal(cells[6], 'a.txt');
+  assert.match(cells[0], /^\d+\.\d+ \d\d:\d\d$/); assert.match(cells[3], /^\d+\.\d+ \d\d:\d\d$/); assert.match(cells[4], /^\d+\.\d+ \d\d:\d\d$/);
+  assert.equal([...rows()[1].children][4].textContent, '', '마감이 없으면 빈 칸');
+  assert.ok(!doc.querySelector('[data-downer],[data-dview],#done-files'), '거르기·보기 단추는 없다');
+  /* 줄을 누르면 읽기 전용 양식 */
+  click(rows()[0]); await env.flush(4);
+  assert.ok($('formPanel').classList.contains('fm-ro'));
+  assert.ok(!$('fm-clone'), '[새 업무로 복사]는 없다');
+  closeForm();
+  /* 한곳 검색칸: 지금 탭의 검색칸으로 전달 */
+  initGSearch();
+  doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='done'));
+  const g=$('g-search'); g.dispatchEvent(new env.window.Event('focus'));
+  assert.equal(g.placeholder, '완료 업무 검색');
+  g.value='남의'; g.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  assert.equal($('done-search').value, '남의');
+  assert.deepEqual(rows().map(r=>r.dataset.open), [String(b.id)]);
+  g.value=''; g.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='cal'));
+  g.dispatchEvent(new env.window.Event('focus'));
+  assert.equal(g.style.visibility, 'hidden', '캘린더엔 검색이 없다');
+  doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='board'));
 });

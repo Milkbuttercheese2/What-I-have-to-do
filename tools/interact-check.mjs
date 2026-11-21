@@ -138,7 +138,7 @@ await page.evaluate(() => [...document.querySelectorAll('.tab')].find(t => t.tex
 await page.waitForTimeout(400);
 chk('전화번호부 목록이 그려진다', (await page.$$('#pb-list .pb-item')).length === 15);
 
-const nth = n => page.evaluate(i => { const el = document.querySelectorAll('#rel-list .rel-hit')[i];
+const nth = n => page.evaluate(i => { const el = document.querySelectorAll('#pb-side .rel-hit')[i];
   return el ? el.querySelector('.rel-txt').textContent.trim() : null; }, n);
 
 /* 세 줄(미완료 2 + 완료 1)을 각각 눌러 **누른 줄과 같은 업무**가 열리는지.
@@ -147,34 +147,34 @@ const nth = n => page.evaluate(i => { const el = document.querySelectorAll('#rel
 for (const i of [0, 1, 2]) {
   await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(300);
   if (i === 0) {
-    const st = await page.evaluate(() => ({on: document.getElementById('relModal').classList.contains('on'),
-      hits: document.querySelectorAll('#rel-list .rel-hit').length}));
-    chk('행을 누르면 팝업이 열리고 엮인 업무 3건이 나온다', st.on && st.hits === 3, JSON.stringify(st));
+    const st = await page.evaluate(() => ({on: document.getElementById('pb-side').classList.contains('on'),
+      hits: document.querySelectorAll('#pb-side .rel-hit').length}));
+    chk('행을 누르면 오른쪽 칸이 열리고 엮인 업무 3건이 나온다', st.on && st.hits === 3, JSON.stringify(st));
   }
   const want = await nth(i);
-  await page.click(`#rel-list .rel-hit:nth-child(${i+1})`); await page.waitForTimeout(350);
-  const a = await page.evaluate(() => ({modalOn: document.getElementById('relModal').classList.contains('on'),
+  await page.click(`#pb-side .rel-hit:nth-child(${i+1})`); await page.waitForTimeout(350);
+  const a = await page.evaluate(() => ({modalOn: document.getElementById('pb-side').classList.contains('on'),
     formOn: document.getElementById('formPanel').classList.contains('on'),
     memo: (document.getElementById('fm-memo')||{}).value || ''}));
-  chk(`${i+1}번째 줄: 팝업이 닫히고 그 업무의 양식이 열린다`,
-    a.modalOn === false && a.formOn === true && a.memo.trim() === want, `기대="${want}" 실제="${a.memo.slice(0,24)}"`);
+  chk(`${i+1}번째 줄: 그 업무의 양식이 열린다`,
+    a.formOn === true && a.memo.trim() === want, `기대="${want}" 실제="${a.memo.slice(0,24)}"`);
   await page.keyboard.press('Escape'); await page.waitForTimeout(250);
 }
 
 /* 배경 클릭으로 닫은 뒤 다시 열기 */
 await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(250);
-await page.evaluate(() => document.getElementById('relModal').click());
+await page.evaluate(() => document.getElementById('pb-side-x').click());
 await page.waitForTimeout(200);
 await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(250);
-chk('배경 클릭으로 닫은 뒤 다시 열린다', await page.evaluate(() => document.getElementById('relModal').classList.contains('on')));
-await page.evaluate(() => document.getElementById('relClose').click()); await page.waitForTimeout(200);
+chk('×로 닫은 뒤 다시 열린다', await page.evaluate(() => document.getElementById('pb-side').classList.contains('on')));
+await page.evaluate(() => document.getElementById('pb-side-x').click()); await page.waitForTimeout(200);
 
 let flaky = 0;
 for (let i = 0; i < 10; i++) {
   await page.click('#pb-list .pb-item .pb-who'); await page.waitForTimeout(110);
-  if (!await page.evaluate(() => document.getElementById('relModal').classList.contains('on')
-      && document.querySelectorAll('#rel-list .rel-hit').length === 3)) flaky++;
-  await page.evaluate(() => document.getElementById('relClose').click()); await page.waitForTimeout(70);
+  if (!await page.evaluate(() => document.getElementById('pb-side').classList.contains('on')
+      && document.querySelectorAll('#pb-side .rel-hit').length === 3)) flaky++;
+  await page.evaluate(() => document.getElementById('pb-side-x').click()); await page.waitForTimeout(70);
 }
 chk('10회 연속 열고 닫아도 매번 정상', flaky === 0, `실패 ${flaky}/10`);
 
@@ -191,9 +191,9 @@ for (const wait of [0, 60, 150]) {
     await p2.evaluate(() => [...document.querySelectorAll('.tab')].find(t => t.textContent.includes('전화번호부')).click());
     await p2.waitForSelector('#pb-list .pb-item', {timeout:4000});
     await p2.click('#pb-list .pb-item .pb-who'); await p2.waitForTimeout(250);
-    res.modalOn = await p2.evaluate(() => document.getElementById('relModal').classList.contains('on'));
-    res.hits = await p2.evaluate(() => document.querySelectorAll('#rel-list .rel-hit').length);
-    if (res.hits) { await p2.click('#rel-list .rel-hit:first-child'); await p2.waitForTimeout(300);
+    res.modalOn = await p2.evaluate(() => document.getElementById('pb-side').classList.contains('on'));
+    res.hits = await p2.evaluate(() => document.querySelectorAll('#pb-side .rel-hit').length);
+    if (res.hits) { await p2.click('#pb-side .rel-hit:first-child'); await p2.waitForTimeout(300);
       res.formOn = await p2.evaluate(() => document.getElementById('formPanel').classList.contains('on')); }
   } catch (err) { res.err = String(err).split('\n')[0].slice(0,90); }
   chk(`대기 ${wait}ms: 전화번호부 → 행 → 업무가 한 번에 된다`,

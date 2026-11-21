@@ -431,6 +431,71 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
     if errs.is_empty() { Ok(out) } else { Err(format!("{}개를 넣지 못했습니다\n{}", errs.len(), errs.join("\n"))) }
 }
 
+/* ── HTML 보기용 전용 주소 `wmhhdoc` (v3.8.4) ─────────────────────────────
+   `http://wmhhdoc.localhost/<폴더번호>/<상대경로>` → 그 파일의 바이트. 앱 화면(tauri.localhost)과 **다른 출처**라
+   앱의 보안 정책(스크립트 금지)을 물려받지 않는다 — 그래서 HTML 문서가 자기 스크립트·CSS·그림(상대 경로)까지 그대로 돈다.
+   안전장치: ① 경로는 여기서도 resolve 로 문서 폴더 안인지 확인 ② 화면은 모래상자 프레임(allow-scripts 만)에 넣어
+   앱 화면·앱 기능(IPC)에 닿지 못한다 ③ 응답에 보안 정책을 실어 바깥(인터넷)으로 나가지 못하게 한다. 읽기 전용. */
+pub fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let (Some(h), Some(l)) = ((b[i + 1] as char).to_digit(16), (b[i + 2] as char).to_digit(16)) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+pub fn mime_of(path: &Path) -> &'static str {
+    match path.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
+        Some("html") | Some("htm") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") | Some("jfif") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
+        Some("ico") => "image/x-icon",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
+        Some("txt") | Some("csv") | Some("md") => "text/plain; charset=utf-8",
+        Some("xml") => "application/xml; charset=utf-8",
+        Some("pdf") => "application/pdf",
+        Some("mp4") => "video/mp4",
+        Some("mp3") => "audio/mpeg",
+        _ => "application/octet-stream",
+    }
+}
+/// 주소의 경로 부분("/0/가 폴더/a.html", 퍼센트 부호화) → (바이트, MIME). 폴더 밖·없는 파일·너무 큰 파일은 Err.
+pub fn serve_path(uri_path: &str) -> Result<(Vec<u8>, &'static str), String> {
+    let p = uri_path.trim_start_matches('/');
+    let (idx, rest) = p.split_once('/').ok_or_else(|| "주소가 잘못됐습니다".to_string())?;
+    let i: usize = idx.parse().map_err(|_| "주소가 잘못됐습니다".to_string())?;
+    let rel = percent_decode(rest);
+    let full = resolve(&self::root(i)?, &rel)?;
+    let md = std::fs::metadata(&full).map_err(|e| e.to_string())?;
+    if md.is_dir() {
+        return Err("폴더입니다".into());
+    }
+    if md.len() > 100 * 1024 * 1024 {
+        return Err("너무 큽니다".into());
+    }
+    let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
+    Ok((bytes, mime_of(&full)))
+}
+
 /* ── 휴지통 (v3.8.3) ─────────────────────────────────────────────────── */
 pub fn trash_in(root: &Path, rel: &str) -> Result<(), String> {
     if rel.trim_matches('/').is_empty() {
@@ -743,6 +808,25 @@ pub fn key_shift_down() -> bool {
     false
 }
 
+/// 복제 — 같은 폴더에 '이름 (2)' 로(폴더는 통째로). 새 rel.
+pub fn copy_in(root: &Path, rel: &str) -> Result<String, String> {
+    if rel.trim_matches('/').is_empty() {
+        return Err("문서 폴더 자체는 복제할 수 없습니다".into());
+    }
+    let src = resolve(root, rel)?;
+    let dir = src.parent().ok_or_else(|| "복제할 수 없습니다".to_string())?.to_path_buf();
+    let name = src.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_os_string();
+    let dest = free_dest(&dir, &name);
+    let mut budget: u32 = 20_000;
+    copy_tree(&src, &dest, &mut budget).map_err(|e| format!("복제하지 못했습니다: {e}"))?;
+    Ok(rel_of(root, &dest))
+}
+
+#[tauri::command]
+pub fn doc_copy(root: usize, rel: String) -> Result<String, String> {
+    copy_in(&self::root(root)?, &rel)
+}
+
 /// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
 #[tauri::command]
 pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
@@ -982,5 +1066,28 @@ mod tests {
         trash_in(&root, "가 폴더/버릴.txt").unwrap();
         assert!(!r.join("가 폴더/버릴.txt").exists());
         let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn copy_makes_numbered_sibling() {
+        let r = tmp("copy");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert_eq!(copy_in(&root, "가 폴더/보고서.hwpx").unwrap(), "가 폴더/보고서 (2).hwpx");
+        assert_eq!(copy_in(&root, "가 폴더/보고서.hwpx").unwrap(), "가 폴더/보고서 (3).hwpx");
+        assert_eq!(copy_in(&root, "가 폴더").unwrap(), "가 폴더 (2)");
+        assert!(r.join("가 폴더 (2)/보고서 (3).hwpx").exists(), "폴더는 통째로");
+        assert!(copy_in(&root, "").is_err());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn doc_protocol_serves_only_inside_roots() {
+        assert_eq!(percent_decode("%EA%B0%80%20a%2Bb.html"), "가 a+b.html");
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(mime_of(Path::new("x.HTML")), "text/html; charset=utf-8");
+        assert_eq!(mime_of(Path::new("x.zzz")), "application/octet-stream");
+        assert!(serve_path("/x/a.html").is_err(), "폴더 번호가 숫자가 아니면 거부");
+        assert!(serve_path("/999/a.html").is_err(), "없는 폴더 번호");
+        assert!(serve_path("nopath").is_err());
     }
 }

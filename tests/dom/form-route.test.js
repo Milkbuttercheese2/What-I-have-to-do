@@ -50,6 +50,7 @@ test('세부 할 일 하나를 완료 표시하면 → 진행 중', async () => 
   await env.resetS(); S.loaded = true;
   env.fireEvent('wmhh://open-blank-form', {}); await env.flush();
   $('fm-memo').value = '착수한 건'; input($('fm-memo'));
+  $('fm-subadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const row = $('fm-subs').querySelector('.fsub-row');
   row.querySelector('.fsub-title').value = '자료 수집';
   row.querySelector('.fsub-chk').dispatchEvent(new env.window.MouseEvent('click', {bubbles:true}));

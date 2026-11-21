@@ -35,23 +35,17 @@
     <button class="tab" data-view="phone">전화번호부</button>
   </nav>
   <div class="head-right">
+    <!-- v3.8.4 검색은 여기 한 곳 — 지금 탭의 검색칸으로 그대로 전달한다(gsearch.js). 탭마다 있던 검색칸은 감춘다 -->
+    <button class="btn btn-ok btn-new" id="blankForm" title="새 업무 양식 · Ctrl+N (빠른 메모는 Ctrl+Alt+Space)">＋ 입력</button>
+    <input class="s-search" id="g-search" placeholder="업무 검색" autocomplete="off" spellcheck="false" maxlength="100" title="Ctrl+F">
     <button class="btn btn-tool" id="settingsBtn" title="화면 테마·미니 창·백업·저장 위치·프리셋 설정">설정</button>
     <!-- v3.7.0 소유자 지정: 시계·날짜 표기는 뺐다(작업 표시줄에 이미 있다). 버전은 설정 맨 아래로. -->
   </div>
  </div>
 </header>
 
-<section class="capture" id="capture">
-  <div class="cap-box">
-    <!-- v3.7.0(소유자 지정): 메인 화면의 '바로 입력' 칸을 없앴다. 입력은 [입력](= 빈 양식, Ctrl+N)
-         또는 Ctrl+Alt+Space 빠른 메모. 프리셋은 같은 줄에서 양식을 미리 채워 연다. -->
-    <div class="cap-row">
-      <button class="btn btn-ok btn-new" id="blankForm" title="새 업무 양식 열기 · Ctrl+N">＋ 입력</button>
-      <span class="cap-hint">빠른 메모 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd></span>
-    </div>
-    <div class="presets" id="presets"></div>
-    <div class="hint" style="display:none"></div>
 
+<!-- 양식 패널 — initForm 이 body 직속으로 옮긴다(어느 탭에서든 뜨게). v3.8.4: 입력부 상자를 없애 여기 홀로 둔다 -->
     <!-- 양식 패널 -->
     <div class="form-panel" id="formPanel">
      <div class="fm-inner">
@@ -75,6 +69,7 @@
         <div class="fm-memo-stack">
           <div id="fm-memo-hl" aria-hidden="true"></div>
           <textarea id="fm-memo" class="fm-memo" maxlength="50000" placeholder="업무 내용을 자유롭게 적으세요"></textarea>
+          <span class="fm-memo-grip" id="fm-memo-grip" aria-hidden="true" title="끌어서 높이 조절 · 두 번 누르면 원래대로"></span>
         </div>
       </div>
 
@@ -82,7 +77,7 @@
       <div class="fm-subs">
         <div class="t-head">세부 할 일</div><!-- (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가) — 명칭 간결화 v2.5.13, 설명은 주석 보존 -->
         <div id="fm-subs"></div>
-        <button class="btn fsub-add" id="fm-subadd">＋ 세부 항목</button>
+        <button class="btn fsub-add" id="fm-subadd" title="세부 항목 추가">＋ 추가</button>
       </div>
 
       <div class="fm-grid" id="fm-grid"></div>
@@ -91,13 +86,13 @@
       <div class="fm-ids">
         <div class="t-head">식별정보</div>
         <div id="fm-ids"></div>
-        <button class="btn fsub-add" id="fm-idadd">＋ 식별정보</button>
+        <button class="btn fsub-add" id="fm-idadd" title="식별정보 추가">＋ 추가</button>
       </div>
 
       <div class="fm-contacts">
         <div class="t-head">관련소속 · 관련인 · 연락처 · 이메일(선택)</div><!-- (여러 명 추가 가능 · Enter로 다음 줄 추가) — 명칭 간결화 v2.5.13, 이메일 v3.5.0 -->
         <div id="fm-contacts"></div>
-        <button class="btn fsub-add" id="fm-contactadd">＋ 관련인</button>
+        <button class="btn fsub-add" id="fm-contactadd" title="관련인 추가">＋ 추가</button>
       </div>
 
       <div class="fm-files-wrap">
@@ -107,7 +102,7 @@
              제자리에서 버튼이 쪼개지던 v2.11.0 방식 철회 — @ 자동완성 드롭다운과 같은
              시각 언어. (네이티브 선택창은 파일용·폴더용이 분리라 대화상자는 못 합침) -->
         <span class="linkmenu-wrap">
-          <button class="btn fsub-add" id="fm-linkadd">＋ 파일·폴더 찾아보기</button>
+          <button class="btn fsub-add" id="fm-linkadd" title="파일·폴더 찾아보기">＋ 추가</button>
           <div id="fm-linkmenu" style="display:none">
             <button type="button" class="lm-item" id="fm-pickfile">파일 선택…</button>
             <button type="button" class="lm-item" id="fm-pickfolder">폴더 선택…</button>
@@ -126,12 +121,12 @@
       </div>
      </div>
     </div>
-  </div>
-</section>
 
 <div class="strip" id="strip">
   <!-- v3.7.0 한눈 요약(흐름도의 '9 단계 · 27 절차' 줄과 같은 결) — render.js renderMetrics -->
   <div class="metrics" id="metrics" aria-live="polite"></div>
+  <!-- v3.8.4 프리셋은 요약 줄 오른쪽(입력부 상자 폐지 — 보드가 한 줄 반 올라온다). 없으면 자리를 차지하지 않는다 -->
+  <div class="presets" id="presets"></div>
   <input class="s-search" id="search" placeholder="업무 검색 · Ctrl+F" autocomplete="off">
 </div>
 
@@ -223,7 +218,11 @@
       <input class="s-search" id="done-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
-  <div class="cards" id="col-done"></div>
+  <!-- v3.8.4 왼쪽 = 주별 묶음, 오른쪽 = 한 달 달력 띠(날마다 끝낸 건수의 농도 — 누르면 그날만) -->
+  <div class="done-layout">
+    <div class="cards" id="col-done"></div>
+    <aside class="done-cal" id="done-cal"></aside>
+  </div>
 </section>
 
 <!-- 문서 (v3.8.0) — 왼쪽 폴더 트리 · 가운데 읽기 전용 미리보기 · 오른쪽 그 폴더의 업무 메모(보드와 같은 업무 데이터) (docs.js). 문서 폴더 안만 읽고 쓰지 않는다 -->
@@ -231,7 +230,7 @@
   <div class="done-head">
     <h2>문서</h2>
     <span class="dc-path" id="dc-path"></span>
-    <div class="done-tools"><input class="s-search" id="dc-search" placeholder="문서 찾기" autocomplete="off" spellcheck="false" maxlength="100"><button type="button" class="btn btn-tool" id="dc-root">＋ 폴더 추가</button></div>
+    <div class="done-tools"><input class="s-search" id="dc-search" placeholder="문서 찾기" autocomplete="off" spellcheck="false" maxlength="100"><button type="button" class="btn btn-tool" id="dn-add2" title="이 폴더 링크가 든 새 업무">＋ 메모</button><button type="button" class="btn btn-tool" id="dc-root">＋ 폴더 추가</button></div>
   </div>
   <div class="dc-none">
     <div class="dc-none-t">문서 폴더 미지정</div>
@@ -239,6 +238,7 @@
   </div>
   <div class="dc-layout">
     <aside class="dc-tree" id="dt-tree"></aside>
+    <div class="dc-split" id="dc-split" role="separator" aria-orientation="vertical" title="끌어서 폭 조절"></div>
     <div class="dc-view" id="dv-body"></div>
     <aside class="dc-note">
       <div class="dn-head"><span class="dt-ico ico-dir"></span><b id="dn-title"></b><span class="dn-at num" id="dn-count"></span>
@@ -259,7 +259,11 @@
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
-  <div class="pb-list" id="pb-list"></div>
+  <!-- v3.8.4 왼쪽 = 목록, 오른쪽 = 고른 사람과 엮인 업무(팝업 대신 — 소유자 지정). 고르기 전엔 오른쪽 칸이 없다 -->
+  <div class="pb-layout">
+    <div class="pb-list" id="pb-list"></div>
+    <aside class="pb-side" id="pb-side"></aside>
+  </div>
   <input type="file" id="pb-file" accept=".xlsx,.xls" style="display:none">
 </section>
 
