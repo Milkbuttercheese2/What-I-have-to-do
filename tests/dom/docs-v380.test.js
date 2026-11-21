@@ -865,3 +865,10 @@ test('v3.8.10 한글 글자 층 — 줄마다 <br>(복사 때 줄바꿈), 끌어
   assert.ok(!d.classList.contains('selecting'));
   d.remove();
 });
+
+test('v3.8.11 한글 글자 층은 글자 하나 단위 — 글자마다 자기 자리, 띄어쓰기·줄바꿈은 복사 글에 살린다', async () => {
+  const {hwpTextRuns} = await import('../../src/docs-view.js');
+  const T=(x,y,c,sz=10)=>`<text x="${x}" y="${y}" font-size="${sz}">${c}</text>`;
+  const r=hwpTextRuns(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">${T(10,20,'전')}${T(20,20,'자')}${T(33,20,'입')}</svg>`);
+  assert.deepEqual(r.runs[0].cs.map(c=>[c.x,c.s]), [[10,'전'],[20,'자'],[33,'입']]);
+});
