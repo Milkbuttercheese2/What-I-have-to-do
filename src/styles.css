@@ -1492,6 +1492,8 @@
   .dn-at{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap}
   .dn-add{margin-left:6px;flex:none}
   .dn-list{flex:1;min-height:0;overflow:auto;padding:10px;display:flex !important;flex-direction:column;gap:8px}
+  /* v3.8.8: 카드는 줄어들지 않는다 — .card 의 overflow:hidden 때문에 세로 flex 에서 카드가 26px 로 눌려 잘렸다(메모가 많을 때). 넘치면 목록이 세로로 스크롤된다 */
+  .dn-list>*{flex-shrink:0}
   @media(max-width:1080px){
     #view-docs{max-width:560px;padding:14px 16px 32px}
     .dc-layout{grid-template-columns:minmax(0,1fr);height:auto}

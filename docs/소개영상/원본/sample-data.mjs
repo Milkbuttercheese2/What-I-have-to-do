@@ -1,124 +1,98 @@
-// 소개영상 갈무리용 예시 데이터. 시나리오 "서비스계약과 박조달 주무관의 하루"(script.mjs).
-// 사람·부서는 조달청 직제(「조달청과 그 소속기관 직제 시행규칙」)에 맞췄다.
-//   서비스계약과(기술서비스국)   = 일반용역(학술연구·폐기물처리·운송 등) 총액계약·다수공급자계약 → 주인공
-//   디지털조달관리과(디지털공정조달국) = 조달정보화시스템(나라장터)의 개발·운영·관리 → 장애 문의 상대
-// 사람 이름·수요기관(한빛시·한빛세무서)·번호는 전부 가상의 예시다(실제 업무 아님).
-// makeInit(gs) 는 사용 설명서 갈무리(tools/guide-shots.mjs)의 가짜 Tauri 부분만 빌려 쓴다.
-
-/* 2쪽 보기에서 펼치는 긴 메모 — 기술평가위원회 회의 메모(im-not-ai light 경로 통과, 변경 0%) */
-export const BOOK_MEMO = `청사관리 통합용역 기술평가위원회 회의 메모
-
-1. 개요
-- 일시: 11월 6일(목) 14:00~17:20
-- 장소: 정부대전청사 조달청 평가실
-- 대상: 한빛세무서 청사관리 통합용역(시설관리·청소·경비), 협상에 의한 계약
-- 평가 방식: 기술능력 80점, 입찰가격 20점
-- 제안사: 4개사 참여, 제출 순서대로 발표(업체별 발표 20분, 질의응답 15분)
-
-2. 위원 구성
-- 위원 7명(외부 5명, 내부 2명), 위원장은 위원 간 호선으로 선출
-- 제척·기피 대상 여부 서약서 7부 받음
-- 평가 전 보안 서약서와 청렴 서약서 함께 받음
-
-3. 진행 순서
-- 14:00 개회, 평가 방법과 배점표 설명
-- 14:20 제안사 발표 시작(가사, 나사, 다사, 라사 순)
-- 16:40 위원별 채점표 작성
-- 17:00 채점표 회수, 점수 합산
-- 17:20 폐회
-
-4. 위원 질의 요지
-- 가사: 현재 근무 중인 미화원 고용승계 계획이 구체적인지 질의
-  답변은 전원 승계, 다만 정년 도래자 2명은 별도 협의
-- 나사: 야간 경비 인원을 2명에서 1명으로 줄인 근거 질의
-  무인경비 시스템 도입으로 보완한다고 답변했으나 위원 3명이 미흡하다고 판단
-- 다사: 승강기·전기설비 법정 점검 일정표가 제안서에 빠져 있음
-  협상 단계에서 보완하기로 함
-- 라사: 노임단가를 시중노임단가보다 낮게 적은 항목이 있음
-  용역근로자 근로조건 보호지침 위반 소지, 협상 때 반드시 확인
-
-5. 평가 결과(기술능력, 80점 만점)
-- 가사 71.4점
-- 나사 63.2점
-- 다사 69.8점
-- 라사 66.1점
-- 협상적격자 기준은 기술능력 배점의 85%(68점) 이상
-- 기술점수만으로는 가사, 다사가 기준을 넘음
-- 가격점수를 합산한 종합점수 순으로 협상 순위를 정함
-
-6. 협상 때 확인할 것
-- 고용승계 대상자 명단과 승계 조건을 서면으로 받기
-- 법정 점검 일정표를 과업내용서에 맞춰 다시 받기
-- 노임단가 산출 근거 다시 확인
-- 가격 개찰은 11월 7일 10:00, 개찰 후 바로 종합점수 산정
-- 착수일은 12월 1일, 인수인계 기간 1주 반영 여부 확인
-
-7. 후속 조치
-- 평가 결과 나라장터 게시(평가위원 명단은 계약 후 공개)
-- 우선협상대상자에게 협상 일정 통보
-- 협상 결과 보고 후 계약 체결
-- 한빛세무서 운영지원과에 진행 상황 공유
-- 개찰이 늦어지면 제안사에 지연 사유와 새 개찰 일시 안내
-
-8. 기타
-- 위원 수당 지급 서류는 회계 담당에 넘김
-- 채점표 원본은 봉투에 봉인해 문서고에 보관
-- 다음 평가위원회는 폐기물 수집·운반 용역 재공고 건`;
+// 소개영상 갈무리용 예시 데이터. 시나리오 "디지털조달관리과 김정보 주무관의 하루"(script.mjs — 전자입찰 장애 대응).
+// 부서는 「조달청과 그 소속기관 직제 시행규칙」에 맞췄다: 디지털조달관리과(디지털공정조달국) = 나라장터 등 조달정보화시스템 운영.
+// 사람·업체·번호는 전부 가상의 예시다(실제 업무 아님).
+// makeInit(gs) 는 사용 설명서 갈무리(tools/guide-shots.mjs)의 가짜 Tauri 를 빌리고, 문서 탭 커맨드(doc_*)를 덧붙인다 —
+// 문서 파일은 갈무리 서버가 /__demo/ 로 내주는 demo-docs/ 의 실제 파일(한글 쪽 보기는 진짜 rhwp 가 그린다).
+export const DOC_ROOT = "Z:\\디지털조달관리과";
+export const DOCS = {
+  "": [
+    { name: "2026 나라장터 운영", rel: "2026 나라장터 운영", dir: true },
+    { name: "참고 자료", rel: "참고 자료", dir: true },
+  ],
+  "2026 나라장터 운영": [
+    { name: "회신 문서", rel: "2026 나라장터 운영/회신 문서", dir: true },
+    { name: "센터 지정 회의 메모.md", rel: "2026 나라장터 운영/센터 지정 회의 메모.md" },
+    { name: "장애 시간대 투찰 기록 조회.sql", rel: "2026 나라장터 운영/장애 시간대 투찰 기록 조회.sql" },
+    { name: "장애 접수 목록.csv", rel: "2026 나라장터 운영/장애 접수 목록.csv" },
+    { name: "장애 조치 결과 보고.hwpx", rel: "2026 나라장터 운영/장애 조치 결과 보고.hwpx" },
+  ],
+  "2026 나라장터 운영/회신 문서": [{ name: "세종시 질의 회신 초안.txt", rel: "2026 나라장터 운영/회신 문서/세종시 질의 회신 초안.txt" }],
+  "참고 자료": [{ name: "이용자 등록 처리 기준.md", rel: "참고 자료/이용자 등록 처리 기준.md" }],
+};
 
 const P = {
-  jeongbo: "{who:'김정보 주무관',org:'디지털조달관리과',phone:'042-000-1201',email:'j.info@example.go.kr'}",
-  yongyeok: "{who:'정용역 주무관',org:'서비스계약과',phone:'042-000-1202',email:''}",
-  jawon: "{who:'최자원 주무관',org:'한빛시 자원순환과',phone:'042-000-1203',email:'c.recycle@example.go.kr'}",
-  semu: "{who:'오세무 주무관',org:'한빛세무서 운영지원과',phone:'042-000-1205',email:''}",
+  minjun: "{who:'김민준',org:'㈜한빛정보',phone:'010-2841-5530',email:''}",
+  seoyeon: "{who:'박서연',org:'디지털조달관리과',phone:'042-724-7031',email:''}",
+  jiwoo: "{who:'한지우',org:'나라장터 운영지원팀',phone:'1588-0800',email:''}",
+  seojun: "{who:'윤서준',org:'조달청 감사담당관',phone:'042-724-7105',email:''}",
+  jihoon: "{who:'최지훈',org:'부산전자조달지원센터',phone:'051-860-7714',email:''}",
+  doyoon: "{who:'정도윤',org:'세종시 회계과',phone:'044-300-3912',email:''}",
 };
-const GONGGO = "{kind:'입찰공고번호',val:'R26BK01170042'}";      // 청사관리 통합용역
-const GYEYAK_W = "{kind:'계약번호',val:'2026-서비스-0314'}";      // 폐기물 수집·운반 용역
-const GYEYAK_C = "{kind:'계약번호',val:'2026-서비스-0402'}";      // 청사관리 통합용역(계약 후)
+const GONGGO = "{kind:'입찰공고번호',val:'R26BK01234567'}";
+const JANGAE = "{kind:'장애번호',val:'장애-26-1121'}";
 
 export function makeInit(gs) {
   const tauri = gs.slice(gs.indexOf("  const noop=async()=>{};"), gs.indexOf("})()`;"));
+  const root = DOC_ROOT.replace(/\\/g, "\\\\");
   return `(()=>{
   const now=new Date();
   const at=(dd,hh,mm)=>{const d=new Date(now);d.setDate(d.getDate()+dd);d.setHours(hh,mm,0,0);return d.toISOString();};
   const iso=now.toISOString(); const D=86400e3;
+  const doneAt=(dd,hh)=>{const d=new Date(now);d.setDate(d.getDate()+dd);d.setHours(hh,0,0,0);return d.getTime();};
   const mk=o=>Object.assign({id:1,memo:'',owner:'',f:{received:iso,due:''},contacts:[],ids:[],subs:[],files:[],done:false,staged:false,al:{},recur:null,recurId:null},o);
+  const OP='${root}\\\\2026 나라장터 운영\\\\';
   const items=[
-    mk({id:1,memo:'한빛세무서 요청, 청사관리 통합용역 과업내용서 변경안 검토',staged:true}),
-    mk({id:2,memo:'폐기물 수집·운반 용역 계약변경 검토 후 수요기관에 회신\\n수거 대상 공동주택 3개 단지 추가, 차량 1대 증차 요청',f:{received:iso,due:at(0,17,0)},
-      contacts:[${P.jawon}],ids:[${GYEYAK_W}],
-      files:['C:\\\\서비스계약\\\\2026\\\\폐기물 수집운반 용역_계약변경_검토서.xlsx'],
-      subs:[{id:21,title:'변경 사유서와 산출내역서 대조',mid:at(0,16,0),done:false,al:null,owner:''}]}),
-    mk({id:3,memo:'청사관리 통합용역 기술평가위원회 결과 정리',f:{received:iso,due:at(4,10,0)},ids:[${GONGGO}],
-      subs:[{id:30,title:'평가위원 위촉 공문 발송',mid:at(-1,10,0),done:true,al:null,owner:''},
-            {id:31,title:'우선협상대상자에 협상 일정 통보',mid:at(1,9,30),done:false,al:null,owner:'정용역 주무관'}]}),
-    mk({id:4,memo:'교통량 조사 학술연구용역 수의계약 견적서 검토 결과 보고',f:{received:iso,due:at(6,15,0)}}),
-    mk({id:5,memo:'청사관리 통합용역 입찰공고 정정 요청사항 확인',f:{received:iso,due:at(0,14,0)},ids:[${GONGGO}],
-      subs:[{id:51,title:'공고문 정정 사유 확인',mid:at(0,13,0),done:false,al:null,owner:'정용역 주무관'}]}),
-    mk({id:6,memo:'청사 복합기 임차용역 종료 정산',done:true,doneAt:Date.now()-3600e3,f:{received:iso,due:at(-1,10,0)}}),
-    mk({id:7,memo:'매주 월요일 일반용역 계약현황 보고자료 취합',recur:{type:'dow',dow:[1],time:'09:00',next:at(3,9,0),paused:false}}),
-    mk({id:8,memo:'청사관리 통합용역 입찰공고 게시',done:true,doneAt:Date.now()-D*12,ids:[${GONGGO}]}),
-    mk({id:9,memo:'폐기물 수집·운반 용역 1차 기성금 지급 확인',done:true,doneAt:Date.now()-D*5,contacts:[${P.jawon}],ids:[${GYEYAK_W}]}),
-    mk({id:10,memo:'나라장터 제안서 파일 업로드 오류 문의, 원인 회신 받음',done:true,doneAt:Date.now()-D*9,contacts:[${P.jeongbo}]}),
-    mk({id:11,memo:'전자입찰 장애 발생 시 처리 절차 디지털조달관리과와 확인',contacts:[${P.jeongbo}]}),
-    mk({id:12,memo:'청사관리 통합용역 입찰공고 정정 공고',done:true,doneAt:Date.now()-D*3,ids:[${GONGGO}]}),
-    mk({id:13,memo:'청사관리 통합용역 가격 개찰 및 종합점수 산정',contacts:[${P.yongyeok}],ids:[${GONGGO}]}),
-    mk({id:14,memo:'청사관리 통합용역 계약체결 및 보증서 접수',contacts:[${P.semu}],ids:[${GYEYAK_C}]}),
-    mk({id:15,memo:'청사관리 통합용역 선금 지급 요청 검토',contacts:[${P.semu}],ids:[${GYEYAK_C}]}),
-    mk({id:16,memo:'용역근로자 근로조건 보호 확약서 접수',done:true,doneAt:Date.now()-D*8,ids:[${GYEYAK_W}]}),
-    mk({id:17,memo:'폐기물 수집·운반 용역 2차 기성 검사',contacts:[${P.jawon}],ids:[${GYEYAK_W}]}),
-    mk({id:18,memo:'주간 계약현황 보고 (11/2)',recurId:7,done:true,doneAt:Date.now()-D*5}),
-    mk({id:19,memo:'주간 계약현황 보고 (11/9)',recurId:7}),
-    mk({id:20,memo:'나라장터 다수공급자계약 2단계경쟁 화면 개선 요청 회신',done:true,doneAt:Date.now()-D*20,contacts:[${P.jeongbo}]}),
+    mk({id:1,memo:'장애 조치 결과 보고서 정리',staged:true,files:[OP+'장애 조치 결과 보고.hwpx']}),
+    mk({id:2,memo:'전자입찰 장애 — 투찰 화면 멈춤 (공고 R26BK01234567)\\n마감 30분 전 여러 업체 투찰 화면 멈춤. 원인 확인 → 장애 공지 → 마감 연기 검토',f:{received:at(0,15,32),due:at(0,18,0)},
+      contacts:[${P.jiwoo}],ids:[${GONGGO},${JANGAE}],files:[OP+'장애 접수 목록.csv'],
+      subs:[{id:21,title:'장애 접수·서버 로그 확인',mid:at(0,15,50),done:true,al:null,owner:''},{id:22,title:'장애 공지 게시',mid:at(0,16,30),done:false,al:null,owner:''},{id:23,title:'입찰 마감 연기 검토',mid:at(0,17,0),done:false,al:null,owner:''}]}),
+    mk({id:3,memo:'입찰 연기 공고 게시 — R26BK01234567',ids:[${GONGGO}],contacts:[${P.seoyeon}],subs:[{id:31,title:'연기 공고 게시',mid:at(0,17,30),done:false,al:null,owner:'박서연'}]}),
+    mk({id:4,memo:'이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신',f:{received:at(0,9,30),due:at(0,17,40)},contacts:[${P.minjun}]}),
+    mk({id:5,memo:'부정 전자조달행위 신고 — 같은 IP 투찰 의심 3개사',contacts:[${P.seojun}],subs:[{id:51,title:'투찰 이력 쿼리',mid:at(0,18,20),done:false,al:null,owner:''}]}),
+    mk({id:6,memo:'전자조달지원센터 지정 신청 서류 검토 (부산)',f:{received:iso,due:at(3,17,0)},contacts:[${P.jihoon}],files:[OP+'센터 지정 회의 메모.md']}),
+    mk({id:7,memo:'정보공개 청구 — 2026 전자입찰 장애 현황',f:{received:iso,due:at(6,18,0)},ids:[{kind:'접수번호',val:'정공-26-3307'}]}),
+    mk({id:8,memo:'혁신제품 시범사용 기관 매칭 회의',subs:[{id:81,title:'매칭 회의',mid:at(4,14,0),done:false,al:null,owner:''}]}),
+    mk({id:9,memo:'상용SW 직접구매 대상 확인 — 세종시 질의 회신',contacts:[${P.doyoon},${P.seoyeon}],subs:[{id:91,title:'회신 초안',mid:at(2,10,0),done:false,al:null,owner:'박서연'}]}),
+    mk({id:10,memo:'투찰 지연 업체 회신 목록 정리',staged:true}),
+    mk({id:11,memo:'나라장터 이용자 문의 일괄 회신',done:true,doneAt:doneAt(0,11),contacts:[${P.minjun}]}),
+    mk({id:12,memo:'이용자 인증서 일괄 갱신 안내 발송',done:true,doneAt:doneAt(-1,16)}),
+    mk({id:13,memo:'불공정조달 거래정지 통보 3건',done:true,doneAt:doneAt(-2,15),contacts:[${P.seojun}],ids:[{kind:'통보번호',val:'거래정지-26-071'}]}),
+    mk({id:14,memo:'평가위원 사전접촉 신고 처리',done:true,doneAt:doneAt(-3,14)}),
+    mk({id:15,memo:'직접생산 확인 시스템 연계 점검',done:true,doneAt:doneAt(-4,17)}),
+    mk({id:16,memo:'입찰참가자격 등록 매뉴얼 개정',done:true,doneAt:doneAt(-8,16),contacts:[${P.seoyeon}]}),
+    mk({id:17,memo:'나라장터 장애 대응 모의훈련 결과 보고',done:true,doneAt:doneAt(-9,15)}),
+    mk({id:18,memo:'인증서 오류 문의 처리 — 공고 R26BK01198830',done:true,doneAt:doneAt(-11,11),contacts:[${P.minjun}],ids:[{kind:'입찰공고번호',val:'R26BK01198830'}]}),
+    mk({id:19,memo:'투찰 마감 지연 장애 공지 — 공고 R26BK01187702',done:true,doneAt:doneAt(-15,10),ids:[{kind:'입찰공고번호',val:'R26BK01187702'}]}),
   ];
-  const phonebook=[{id:901,who:'김정보 주무관',org:'디지털조달관리과',phone:'042-000-1201',email:'j.info@example.go.kr'},
-                   {id:902,who:'이시스 주무관',org:'디지털조달관리과',phone:'042-000-1204',email:''},
-                   {id:903,who:'정용역 주무관',org:'서비스계약과',phone:'042-000-1202',email:''},
-                   {id:904,who:'최자원 주무관',org:'한빛시 자원순환과',phone:'042-000-1203',email:'c.recycle@example.go.kr'},
-                   {id:905,who:'오세무 주무관',org:'한빛세무서 운영지원과',phone:'042-000-1205',email:''}];
-  let store={items,phonebook,fields:null,
-    presets:[{label:'용역 계약변경 검토',memo:'○○ 용역 계약변경 요청 접수, 변경 사유와 산출내역 검토',subs:[]},
-             {label:'입찰공고 정정 확인',memo:'나라장터 입찰공고 정정 사유와 변경사항 확인',subs:[]}],
-    idKinds:['계약번호','입찰공고번호'],settings:{alarmOn:false,boardMode:'time',captureDraft:''},recurDefs:[]};
-${tauri}})()`.replace("getVersion:async()=>'3.6.1'", "getVersion:async()=>'3.7.1'")
-   .replace("'C:\\\\\\\\조달계약\\\\\\\\2026\\\\\\\\입찰공고_정정사유서.hwp'", "'C:\\\\서비스계약\\\\2026\\\\과업내용서_변경대비표.hwp'");
+  const phonebook=[{id:901,who:'김민준',org:'㈜한빛정보',phone:'010-2841-5530',email:''},
+                   {id:902,who:'박서연',org:'디지털조달관리과',phone:'042-724-7031',email:''},
+                   {id:903,who:'한지우',org:'나라장터 운영지원팀',phone:'1588-0800',email:''},
+                   {id:904,who:'윤서준',org:'조달청 감사담당관',phone:'042-724-7105',email:''},
+                   {id:905,who:'최지훈',org:'부산전자조달지원센터',phone:'051-860-7714',email:''},
+                   {id:906,who:'정도윤',org:'세종시 회계과',phone:'044-300-3912',email:''},
+                   {id:907,who:'이시스',org:'디지털조달관리과',phone:'042-724-7044',email:''},
+                   {id:908,who:'김민서',org:'정보화담당관',phone:'042-724-7210',email:''}];
+  let store={items,phonebook,fields:null,presets:[],idKinds:['입찰공고번호','장애번호','접수번호'],
+    settings:{alarmOn:false,boardMode:'owner',captureDraft:'',docRoots:['${root}'],docOpen:['0:','0:2026 나라장터 운영'],docSeen:['${root}'],docTreeW:270,docLast:''},recurDefs:[]};
+${tauri}
+  /* 문서 탭 — 폴더 목록은 고정, 파일 내용은 갈무리 서버의 /__demo/ 에서 */
+  const DOCS=${JSON.stringify(DOCS)};
+  const mt=new Date(now).setHours(17,52,0,0);
+  const url=rel=>'/__demo/'+rel.split('/').map(encodeURIComponent).join('/');
+  const inv0=window.__TAURI__.core.invoke;
+  window.__TAURI__.core.invoke=async(c,a)=>{
+    if(c==='doc_set_roots')return (a.paths||[]).map(p=>({ok:true,path:p,error:''}));
+    if(c==='doc_list')return (DOCS[a.rel]||[]).map(e=>({name:e.name,rel:e.rel,dir:!!e.dir,size:e.dir?0:2048,mtime:mt}));
+    if(c==='doc_read_text'){const r=await fetch(url(a.rel));if(!r.ok)throw '읽을 수 없습니다';return {text:await r.text(),encoding:'utf-8',mtime:mt};}
+    if(c==='doc_read'){const r=await fetch(url(a.rel));if(!r.ok)throw '읽을 수 없습니다';return await r.arrayBuffer();}
+    if(c==='doc_search'){const q=(a.query||'');const out=[];for(const k of Object.keys(DOCS))for(const e of DOCS[k]){if(e.name.includes(q))out.push({rel:e.rel,name:e.name,dir:!!e.dir,hit:'name',snippet:''});
+        else if(!e.dir&&/\\.(csv|sql|md|txt)$/.test(e.name)){const t=await (await fetch(url(e.rel))).text();const ln=t.split(/\\r?\\n/).find(l=>l.includes(q));if(ln)out.push({rel:e.rel,name:e.name,dir:false,hit:'text',snippet:ln.trim().slice(0,60)});}}return out;}
+    if(c==='doc_search_warm')return null;
+    if(c==='doc_abs')return '${root}\\\\'+String(a.rel).replace(/\\//g,'\\\\');
+    if(c==='doc_preview_open')return false;
+    if(c==='doc_preview_close'||c==='doc_preview_show'||c==='doc_preview_place')return null;
+    if(c==='doc_write_text')return mt;
+    return inv0(c,a);
+  };
+})()`.replace("getVersion:async()=>'3.7.5'", "getVersion:async()=>'3.8.7'");
 }

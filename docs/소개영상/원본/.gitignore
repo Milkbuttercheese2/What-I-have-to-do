@@ -9,3 +9,6 @@ grid.json
 stills/
 PretendardVariable.woff2
 shots/*.jpg
+render-all.log
+shotlist.txt
+st.txt
