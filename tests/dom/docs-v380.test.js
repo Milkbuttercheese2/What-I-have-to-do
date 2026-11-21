@@ -244,6 +244,28 @@ test('탐색기 미리 보기: 처리기가 있으면 자리(물리 px)를 넘�
   assert.ok(env.invokeCalls.filter(c=>c.cmd==='doc_preview_close').length>n0, '다른 파일로 가면 앞 창을 닫는다');
 });
 
+/* 글자를 칠 때마다 저장 표시('고치는 중')를 같은 글자로 다시 쓰면 그때마다 화면 전체의 스타일을 다시 계산한다 —
+   파일이 많은 폴더를 펼쳐 둔 채 쓰면 그만큼 입력이 느려졌다(Edge 실측: 2만 줄 트리에서 글자 190개에 스타일 계산 1.5초).
+   표시가 바뀔 때만 쓴다. */
+test('글자 파일: 고치는 동안 저장 표시는 바뀔 때만 다시 쓴다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['T:\\표시'];
+  fakeFs(()=>({'0:':[{name:'표시.txt',rel:'표시.txt',dir:false,size:6,mtime:100}]}));
+  env.onInvoke('doc_read_text', ()=>({text:'첫 줄', encoding:'utf-8', mtime:100}));
+  env.onInvoke('doc_write_text', a=>a.baseMtime+1);
+  await openDocs();
+  click(row('0:표시.txt')); await env.flush(10);
+  let writes=0;
+  const mo=new env.window.MutationObserver(l=>{ writes+=l.length; });
+  mo.observe($('dv-save'), {childList:true, characterData:true, subtree:true});
+  for(const v of ['첫 줄a','첫 줄ab','첫 줄abc','첫 줄abcd']) typeIn($('dv-ta'), v);
+  await env.flush(2);
+  mo.disconnect();
+  assert.match($('dv-save').textContent, /고치는 중/);
+  assert.ok(writes<=2, `글자 네 번에 표시를 ${writes}번 다시 썼다(한 번이면 충분)`);
+  mock.timers.tick(1300); await env.flush(8);
+});
+
 test('글자 파일: 보는 즉시 고침 → 잠깐 쉬면 원래 인코딩·고친 시각과 함께 저장 · 충돌이면 알리고 글자는 그대로', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.docRoots=['T:\\글'];

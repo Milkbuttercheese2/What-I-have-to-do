@@ -1733,3 +1733,7 @@
   .dn-rail-a{font-size:16px;line-height:1}
   .dn-rail-n{font-size:11.5px;font-weight:700;color:var(--focus)}
   .dn-rail-t{writing-mode:vertical-rl;font-size:12px;letter-spacing:2px;color:var(--ink-soft)}
+  /* 문서 트리 칸 격리 — 파일이 많은 폴더를 펼쳐 둔 채 가운데 글자를 고치면, 트리 줄 수만큼 그리기 비용이 글자마다 붙었다
+     (Edge 실측: 2만 줄에서 글자당 23ms → 6~7ms). 크기 격리(size)는 넣지 않는다 — 좁은 화면에서 트리 높이가 내용으로 정해진다.
+     메뉴(.dt-menu)·끌기 유령(.dt-ghost)은 body 에 붙으므로 잘리지 않는다 */
+  .dc-tree{contain:content}
