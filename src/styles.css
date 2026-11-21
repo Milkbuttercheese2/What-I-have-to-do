@@ -1676,14 +1676,14 @@
   .drag-handle:hover{color:var(--ink-soft)}
   /* 양식 묶음 사이 가로선 — 옅은 선(--line-soft)은 다크에서 거의 안 보여 본선(--line)으로 */
   .fm-inner .fm-subs,.fm-inner .fm-ids,.fm-inner .fm-contacts,.fm-inner .fm-files-wrap,.fm-inner .fm-grid{border-top-color:var(--line)}
-  /* 메모칸 높이 조절 손잡이(소유자 지정 — 글자 없이): 오른쪽 아래 모서리의 사선 두 줄. 끌면 늘고 줄며, 두 번 누르면 원래 높이.
-     브라우저 기본 모서리 손잡이는 너무 작고 흐려 있는지 몰랐다 — 그래서 끄고(resize:none) 이 손잡이 하나만 둔다. */
+  /* 메모칸 높이 조절 손잡이(소유자 지정 — 글자 없이): 오른쪽 아래의 작은 위아래 화살표 하나(v3.8.5 — 사선 두 줄은 조잡해 보였다).
+     끌면 늘고 줄며, 두 번 누르면 원래 높이. 브라우저 기본 모서리 손잡이는 너무 작고 흐려 끄고(resize:none) 이것만 둔다.
+     모양은 SVG 마스크, 색은 배경색(토큰)이라 다크 테마도 그대로 따라간다. */
   .fm-memo{resize:none}
-  .fm-memo-grip{position:absolute;right:3px;bottom:3px;z-index:2;width:16px;height:16px;border-radius:4px;cursor:ns-resize;
-    background:
-      linear-gradient(135deg, transparent 0 47%, var(--ink-soft) 47% 57%, transparent 57% 100%) 2px 2px/12px 12px no-repeat,
-      linear-gradient(135deg, transparent 0 44%, var(--ink-soft) 44% 58%, transparent 58% 100%) 8px 8px/6px 6px no-repeat}
-  .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--slate-bg);
-    background-image:linear-gradient(135deg, transparent 0 47%, var(--focus) 47% 57%, transparent 57% 100%), linear-gradient(135deg, transparent 0 44%, var(--focus) 44% 58%, transparent 58% 100%)}
+  .fm-memo-grip{position:absolute;right:4px;bottom:4px;z-index:2;width:14px;height:14px;cursor:ns-resize;
+    background-color:var(--ink-soft);
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/14px 14px no-repeat;
+            mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/14px 14px no-repeat}
+  .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--focus)}
   body.memo-resizing,body.memo-resizing *{cursor:ns-resize !important;user-select:none}
   .fm-ro .fm-memo-grip{display:none}

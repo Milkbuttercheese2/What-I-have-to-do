@@ -163,15 +163,30 @@ test('문서 탭: 폴더 미지정 → 안내 · 지정되면 트리 · XLSX(처
   assert.deepEqual(memos(), [], '폴더 바로 안만 — 깊은 곳 업무는 그 폴더에서');
 });
 
-test('탐색기 미리 보기: 처리기가 있으면 자리(물리 px)를 넘겨 띄우고, 다른 파일로 가면 앞 창을 닫는다', async () => {
+test('v3.8.5 한글(HWP·HWPX)은 늘 앱이 읽어 보여 준다 — 한컴 탐색기 미리 보기 처리기가 있어도 부르지 않는다', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.docRoots=['H:\\한글'];
-  fakeFs(()=>({'0:':[{name:'a.hwpx',rel:'a.hwpx',dir:false,size:1,mtime:1},{name:'b.hwp',rel:'b.hwp',dir:false,size:1,mtime:1}]}));
+  fakeFs(()=>({'0:':[{name:'a.hwpx',rel:'a.hwpx',dir:false,size:1,mtime:1}]}));
+  const bytes=zip({'Contents/section0.xml': `<hs:sec ${HP}>${p('한글 본문')}</hs:sec>`});
+  env.onInvoke('doc_read', ()=>bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength));
+  env.onInvoke('doc_preview_open', ()=>true);       // 처리기가 '있다'고 답하는 PC(한컴 2022 등)
+  await openDocs();
+  const n0=env.invokeCalls.filter(c=>c.cmd==='doc_preview_open').length;
+  click(row('0:a.hwpx')); await env.flush(12);
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='doc_preview_open').length, n0, '탐색기 미리 보기를 부르지 않는다');
+  assert.match($('dv-body').textContent, /한글 본문/);
+  assert.ok($('dv-body').querySelector('[data-dopen]'), '[한글에서 열기] 는 그대로');
+});
+
+test('탐색기 미리 보기: 처리기가 있으면 자리(물리 px)를 넘겨 띄우고, 다른 파일로 가면 앞 창을 닫는다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['H:\\오피스'];
+  fakeFs(()=>({'0:':[{name:'a.pptx',rel:'a.pptx',dir:false,size:1,mtime:1},{name:'b.docx',rel:'b.docx',dir:false,size:1,mtime:1}]}));
   env.onInvoke('doc_preview_open', ()=>true);
   env.onInvoke('doc_preview_show', ()=>null);
   env.onInvoke('doc_preview_place', ()=>null);
   await openDocs();
-  click(row('0:a.hwpx')); await env.flush(10);
+  click(row('0:a.pptx')); await env.flush(10);
   const call=env.invokeCalls.filter(c=>c.cmd==='doc_preview_open').at(-1).args;
   assert.deepEqual(Object.keys(call).sort(), ['h','rel','root','w','x','y']);
   assert.ok($('dv-native'), '자리표시');
@@ -188,7 +203,7 @@ test('탐색기 미리 보기: 처리기가 있으면 자리(물리 px)를 넘�
   showView('docs'); await tick();
   assert.equal(shows().at(-1), true);
   const n0=env.invokeCalls.filter(c=>c.cmd==='doc_preview_close').length;
-  click(row('0:b.hwp')); await env.flush(10);
+  click(row('0:b.docx')); await env.flush(10);
   assert.ok(env.invokeCalls.filter(c=>c.cmd==='doc_preview_close').length>n0, '다른 파일로 가면 앞 창을 닫는다');
 });
 
@@ -713,4 +728,10 @@ test('v3.8.4 코드·쿼리 색 강조: SQL 파일은 색 층이 깔리고 입�
   assert.ok(!$('dv-ta').classList.contains('dv-ta-hl') && $('dv-hl').innerHTML==='', 'txt 는 색 없음');
   click(row('0:m.md')); await env.flush(60);
   assert.ok($('dv-md').querySelector('pre code .hljs-keyword'), 'MD 코드 블록에 색');
+});
+
+test('v3.8.5 초록 [+ 입력] 은 보드 탭에서만 보인다', async () => {
+  await env.resetS(); S.loaded = true;
+  for(const v of ['cal','docs','done','phone']){ showView(v); assert.equal($('blankForm').style.display, 'none', v); }
+  showView('board'); assert.equal($('blankForm').style.display, 'inline-block');
 });

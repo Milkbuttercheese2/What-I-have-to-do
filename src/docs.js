@@ -177,6 +177,10 @@ async function doRenderViewer(){
       box().innerHTML=`<div class="dv-ro">압축 파일 안 ${list.length}개</div><div class="dv-flist">${list.slice(0,2000).map(f=>`<div class="dv-frow dv-zrow"><span class="dt-ico ico-${docKind(f.name)}"></span><span class="dv-fname" title="${escAttr(f.name)}">${esc(f.name)}</span><span class="dv-meta num">${fmtSize(f.size)}</span></div>`).join('')}</div>`+(list.length>2000?'<div class="dv-cap">2,000개까지만</div>':'');
       return;
     }
+    /* 한글(HWP·HWPX)은 늘 앱이 직접 읽어 보여 준다(글자·표 + 문서에 든 첫 쪽 그림) — v3.8.5 소유자 결정.
+       한컴 탐색기 미리 보기 처리기는 한컴 판마다 다르게 굴고(2022 는 '열렸다'고 답하고도 아무것도 그리지 않아 빈 화면),
+       그렸는지 앱이 알 수 없어 일관되게 쓸 수 없다. 원래 모양 그대로는 [한글에서 열기]. */
+    if(kind==='hwpx' || kind==='hwp') return await showFallback(i, rel, kind, seq);
     /* 그 밖: 탐색기 미리 보기 → 대체본 → 글자로 읽히면 편집 → 정보 */
     if(await tryNative(i, rel, seq)) return;
     if(!alive()) return;
