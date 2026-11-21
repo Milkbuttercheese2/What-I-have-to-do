@@ -1111,12 +1111,16 @@ pub async fn doc_copy(root: usize, rel: String) -> Result<String, String> {
 }
 
 /// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
+/// 큰 폴더·공유 폴더에서는 오래 걸리므로 화면 스레드 밖에서(P7). SHFileOperation 은 다른 스레드에서도 된다 —
+/// 실제 휴지통 시험(trash_inside_root_only)이 시험 스레드(메인 아님)에서 통과한다.
 #[tauri::command]
-pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
+pub async fn doc_trash(root: usize, rel: String) -> Result<(), String> {
     let r = self::root(root)?;
-    let out = trash_in(&r, &rel);
-    invalidate_search_root(&r);
-    out
+    off_main(move || {
+        let out = trash_in(&r, &rel);
+        invalidate_search_root(&r);
+        out
+    }).await
 }
 
 /// 문서 폴더 안 찾기 — 이름(폴더·파일)과 작은 글자 파일의 내용. 무거운 일이라 별도 스레드에서.
@@ -1183,9 +1187,11 @@ pub async fn doc_rename(root: usize, rel: String, name: String) -> Result<String
 }
 
 /// 열기·폴더에서 보기(이미 있는 open_file_path / reveal_file_path)에 넘길 절대 경로 — 역시 문서 폴더 안만.
+/// canonicalize 두 번 — 끊긴 공유 폴더에서는 수 초 걸릴 수 있어 화면 스레드 밖에서(P7)
 #[tauri::command]
-pub fn doc_abs(root: usize, rel: String) -> Result<String, String> {
-    Ok(display(&resolve(&self::root(root)?, &rel)?))
+pub async fn doc_abs(root: usize, rel: String) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || Ok(display(&resolve(&r, &rel)?))).await
 }
 
 /// 탐색기 미리 보기(preview.rs)용 — 문서 폴더 안의 실제 경로
