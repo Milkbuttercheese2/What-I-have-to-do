@@ -370,6 +370,7 @@ export function initRender(){
     {id:'view-board',  display:'grid', when:()=>placeMode()==='time'},
     {id:'view-board5', display:'grid', when:()=>placeMode()==='owner'},
     {id:'strip',       display:'flex'},
+    {id:'blankForm',   display:'inline-block'},   // v3.8.5 소유자 지정: 초록 [＋ 입력] 은 보드에만(다른 탭엔 그 탭의 단추가 있다). Ctrl+N 은 어디서나 그대로
   ]});
   registerView({key:'done', els:[{id:'view-done'}], render:renderDone});
   /* 카드 상호작용 */
