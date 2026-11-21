@@ -1709,10 +1709,12 @@
      끌면 늘고 줄며, 두 번 누르면 원래 높이. 브라우저 기본 모서리 손잡이는 너무 작고 흐려 끄고(resize:none) 이것만 둔다.
      모양은 SVG 마스크, 색은 배경색(토큰)이라 다크 테마도 그대로 따라간다. */
   .fm-memo{resize:none}
-  .fm-memo-grip{position:absolute;right:4px;bottom:4px;z-index:2;width:14px;height:14px;cursor:ns-resize;
+  /* v3.8.12(소유자 지정): 메모칸 **밖** 오른쪽 옆, 아래 끝에 살짝 붙인다 — 안쪽 모서리에 두면 둥근 테두리·스크롤바와 겹쳐 답답했다.
+     양식 안쪽 여백(22px) 안에 들어가 잘리지 않는다 */
+  .fm-memo-grip{position:absolute;right:-17px;bottom:0;z-index:2;width:14px;height:20px;cursor:ns-resize;
     background-color:var(--ink-soft);
-    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/14px 14px no-repeat;
-            mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/14px 14px no-repeat}
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/12px 12px no-repeat;
+            mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/12px 12px no-repeat}
   .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--focus)}
   body.memo-resizing,body.memo-resizing *{cursor:ns-resize !important;user-select:none}
   .fm-ro .fm-memo-grip{display:none}

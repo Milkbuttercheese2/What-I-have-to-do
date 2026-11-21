@@ -246,6 +246,30 @@ const HWP_MAX_PAGES=300;
 /* v3.8.9 한글 쪽 글자 층 — rhwp SVG 의 <text>(글자마다 x·y·크기)를 줄로 묶는다(순수). 같은 높이·같은 크기로 이어지면 한 줄,
    글자 사이가 크게 벌어지면(표의 다른 칸) 새 덩어리. 사이가 조금 벌어지면 띄어쓰기를 넣는다.
    반환: {w, h, runs:[{x, y, size, text, end}]} — end = 마지막 글자의 오른쪽 끝(추정) */
+/* 글자(와 그 위 묶음)의 transform 을 모아 [a,b,c,d,e,f] 로. 돌리기·기울이기(b·c ≠ 0)가 있으면 null — 자리를 맞출 수 없다 */
+function parseTransform(str){
+  let m=[1,0,0,1,0,0];
+  const mul=(p,q)=>[p[0]*q[0]+p[2]*q[1], p[1]*q[0]+p[3]*q[1], p[0]*q[2]+p[2]*q[3], p[1]*q[2]+p[3]*q[3], p[0]*q[4]+p[2]*q[5]+p[4], p[1]*q[4]+p[3]*q[5]+p[5]];
+  const re=/(\w+)\s*\(([^)]*)\)/g; let k;
+  while((k=re.exec(String(str||'')))){
+    const v=k[2].split(/[\s,]+/).filter(Boolean).map(Number); if(v.some(n=>!isFinite(n))) return null;
+    let q;
+    if(k[1]==='translate') q=[1,0,0,1,v[0]||0,v[1]||0];
+    else if(k[1]==='scale') q=[v[0]??1,0,0,v.length>1?v[1]:(v[0]??1),0,0];
+    else if(k[1]==='matrix' && v.length===6) q=v;
+    else if(k[1]==='rotate' && !(v[0]%360)) q=[1,0,0,1,0,0];
+    else return null;
+    m=mul(m,q);
+  }
+  return m;
+}
+function svgMatrix(el, root){
+  const chain=[]; for(let a=el; a && a!==root; a=a.parentNode) if(a.getAttribute && a.getAttribute('transform')) chain.unshift(a.getAttribute('transform'));
+  let m=[1,0,0,1,0,0];
+  for(const t of chain){ const q=parseTransform(t); if(!q) return null;
+    m=[m[0]*q[0]+m[2]*q[1], m[1]*q[0]+m[3]*q[1], m[0]*q[2]+m[2]*q[3], m[1]*q[2]+m[3]*q[3], m[0]*q[4]+m[2]*q[5]+m[4], m[1]*q[4]+m[3]*q[5]+m[5]]; }
+  return (Math.abs(m[1])>1e-6 || Math.abs(m[2])>1e-6 || !(m[0]>0) || !(m[3]>0)) ? null : m;
+}
 export function hwpTextRuns(svg){
   const d=new DOMParser().parseFromString(String(svg||''), 'image/svg+xml');
   const root=d.documentElement; if(!root || root.localName!=='svg') return {w:0, h:0, runs:[]};
@@ -253,12 +277,16 @@ export function hwpTextRuns(svg){
   const W=vb.length===4&&vb[2]>0 ? vb[2] : Number(root.getAttribute('width'))||0, H=vb.length===4&&vb[3]>0 ? vb[3] : Number(root.getAttribute('height'))||0;
   const runs=[]; let cur=null;
   for(const t of root.getElementsByTagName('text')){
-    let skip=false; for(let a=t; a && a!==root; a=a.parentNode) if(a.getAttribute && a.getAttribute('transform')) { skip=true; break; }
-    if(skip) continue;                                   // 돌리거나 기울인 글자는 자리를 맞출 수 없어 뺀다
+    /* v3.8.12: 장평(글자 폭 줄이기·늘이기)이 든 글자는 rhwp 가 transform="translate(..) scale(..)" 로 그린다 — 예전엔 transform 이
+       붙은 글자를 통째로 빼서 그 글자들이 끌어 고를 때 건너뛰어졌다. 옮기기·늘이기만 있으면 자리를 계산해 넣고, 돌리거나 기울인 글자만 뺀다 */
+    const m=svgMatrix(t, root); if(!m) continue;
     const s=t.textContent; if(!s) continue;
-    const x=Number(t.getAttribute('x')), y=Number(t.getAttribute('y')), size=Number(t.getAttribute('font-size'))||10;
-    if(!isFinite(x)||!isFinite(y)) continue;
-    const cw=size*[...s].reduce((n,ch)=>n+(ch.charCodeAt(0)>0x2e80?1:0.55),0);
+    const x0=Number(t.getAttribute('x')||0), y0=Number(t.getAttribute('y')||0), fs=Number(t.getAttribute('font-size'))||10;
+    if(!isFinite(x0)||!isFinite(y0)) continue;
+    const x=m[0]*x0+m[4], y=m[3]*y0+m[5], size=fs*m[3];
+    if(!isFinite(x)||!isFinite(y)||!(size>0)) continue;
+    const tl=Number(t.getAttribute('textLength'));
+    const cw=(tl>0 ? tl : fs*[...s].reduce((n,ch)=>n+(ch.charCodeAt(0)>0x2e80?1:0.55),0))*m[0];
     if(cur && Math.abs(cur.y-y)<0.5 && Math.abs(cur.size-size)<0.5 && x>=cur.end-size*0.3 && x-cur.end<size*2){
       if(x-cur.end>size*0.25) cur.text+=' ';
       cur.text+=s; cur.end=Math.max(cur.end, x+cw); cur.cs.push({x, s, w:cw});
