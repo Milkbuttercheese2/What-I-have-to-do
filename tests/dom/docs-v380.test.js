@@ -872,3 +872,13 @@ test('v3.8.11 한글 글자 층은 글자 하나 단위 — 글자마다 자기 
   const r=hwpTextRuns(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">${T(10,20,'전')}${T(20,20,'자')}${T(33,20,'입')}</svg>`);
   assert.deepEqual(r.runs[0].cs.map(c=>[c.x,c.s]), [[10,'전'],[20,'자'],[33,'입']]);
 });
+
+test('v3.8.12 장평 글자(transform="translate() scale()")도 글자 층에 들어간다 — 예전엔 빠져서 끌어 고를 때 건너뛰었다', async () => {
+  const {hwpTextRuns} = await import('../../src/docs-view.js');
+  const P=(tx,c)=>`<text transform="translate(${tx},50) scale(0.95,1)" font-size="20">${c}</text>`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><text x="10" y="20" font-size="10">가</text>${P(100,'2')}${P(109.5,'0')}${P(119,'년')}<g transform="translate(5,5)"><text x="10" y="100" font-size="10">나</text></g><text transform="rotate(30)" x="1" y="1" font-size="10">돌</text></svg>`;
+  const r=hwpTextRuns(svg);
+  assert.deepEqual(r.runs.map(x=>x.text), ['가','20년','나'], '돌린 글자만 빠진다');
+  assert.equal(r.runs[1].x, 100); assert.equal(r.runs[1].y, 50);
+  assert.deepEqual([r.runs[2].x, r.runs[2].y], [15, 105], '묶음(g)의 옮기기도 더한다');
+});
