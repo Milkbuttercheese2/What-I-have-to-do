@@ -52,10 +52,34 @@ pub struct RootInfo {
     pub error: String,
 }
 
-/// `\\?\` 접두를 뗀 보기용 경로
+/// `\\?\` 접두를 뗀 보기용 경로. 공유 폴더는 `canonicalize` 가 `\\?\UNC\서버\공유\…` 로 돌려주므로
+/// `\\서버\공유\…` 로 되돌린다 — `\\?\` 만 떼면 `UNC\서버\…` 라는 상대 경로가 되어 열기·휴지통이 실패했다.
 fn display(p: &Path) -> String {
     let s = p.to_string_lossy().into_owned();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
     s.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(s)
+}
+
+/// 휴지통으로 보내도 **되살릴 수 있는 자리인가**. Windows 는 휴지통이 없는 곳(공유 폴더·USB 같은 이동식
+/// 드라이브·네트워크 드라이브)에서 '휴지통으로'를 받으면 경고 없이 **영구 삭제**한다(`FOF_NOCONFIRMATION`).
+/// 화면은 "휴지통에서 되살릴 수 있습니다"라고 안내하므로, 그런 자리에서는 지우지 않고 거부한다.
+/// `drive_type` 은 `GetDriveTypeW` 값(3 = 고정 디스크) — 시험에서 바꿔 끼울 수 있게 밖에서 받는다.
+fn trash_place_ok(shown: &str, drive_type: impl FnOnce(&str) -> u32) -> Result<(), String> {
+    const NO_BIN: &str = "이 위치(공유 폴더·네트워크·이동식 드라이브)에는 휴지통이 없어, 지우면 되살릴 수 없습니다.\n지우려면 탐색기에서 직접 지워 주세요.";
+    if shown.starts_with(r"\\") {
+        return Err(NO_BIN.into());
+    }
+    let b = shown.as_bytes();
+    if b.len() < 2 || b[1] != b':' {
+        return Err(NO_BIN.into());
+    }
+    const DRIVE_FIXED: u32 = 3;
+    if drive_type(&format!("{}\\", &shown[..2])) != DRIVE_FIXED {
+        return Err(NO_BIN.into());
+    }
+    Ok(())
 }
 
 /// 상대 경로 → 루트 안의 실제 경로. 루트 밖이면 Err.
@@ -526,13 +550,21 @@ pub fn trash_in(root: &Path, rel: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
         use windows::core::PCWSTR;
-        use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
-        let mut from: Vec<u16> = display(&p).encode_utf16().collect();
+        use windows::Win32::Storage::FileSystem::GetDriveTypeW;
+        use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FOF_WANTNUKEWARNING, FO_DELETE, SHFILEOPSTRUCTW};
+        let shown = display(&p);
+        trash_place_ok(&shown, |vol| {
+            let w: Vec<u16> = vol.encode_utf16().chain([0]).collect();
+            unsafe { GetDriveTypeW(PCWSTR(w.as_ptr())) }
+        })?;
+        let mut from: Vec<u16> = shown.encode_utf16().collect();
         from.extend([0, 0]); // 이중 NUL 끝
         let mut op = SHFILEOPSTRUCTW {
             wFunc: FO_DELETE,
             pFrom: PCWSTR(from.as_ptr()),
-            fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT).0 as u16,
+            /* FOF_WANTNUKEWARNING: 고정 디스크라도 휴지통이 꺼져 있거나 휴지통보다 큰 항목이면 Windows 가
+               영구 삭제 전에 한 번 묻는다(FOF_NOCONFIRMATION 을 그 경우에만 덮는다). 아니오 → 중단 → 아래 오류. */
+            fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING).0 as u16,
             ..Default::default()
         };
         let r = unsafe { SHFileOperationW(&mut op) };
@@ -1098,6 +1130,28 @@ mod tests {
         assert!(!r.parent().unwrap().join(format!("{} (2)", r.file_name().unwrap().to_string_lossy())).exists(), "폴더 밖에 복제본이 생기지 않는다");
         assert!(resolve_item(&root, "./가 폴더/보고서.hwpx").is_ok(), "평범한 항목은 그대로 된다");
         let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 공유 폴더 경로는 `\\?\UNC\…` 로 정규화되는데, 보기용 경로는 `\\서버\공유\…` 여야 열기·휴지통이 된다
+    #[test]
+    fn display_turns_unc_back_into_a_share_path() {
+        assert_eq!(display(Path::new(r"\\?\UNC\srv\공유\가 폴더\a.hwpx")), r"\\srv\공유\가 폴더\a.hwpx");
+        assert_eq!(display(Path::new(r"\\?\C:\문서\a.txt")), r"C:\문서\a.txt");
+        assert_eq!(display(Path::new(r"C:\문서")), r"C:\문서");
+    }
+
+    /// 휴지통이 없는 자리(공유 폴더·이동식·네트워크 드라이브)에서는 Windows 가 경고 없이 영구 삭제하므로 거부한다
+    #[test]
+    fn trash_refuses_places_without_a_recycle_bin() {
+        let fixed = |_: &str| 3u32;
+        assert!(trash_place_ok(r"C:\문서\a.txt", fixed).is_ok());
+        assert!(trash_place_ok(r"\\srv\공유\a.txt", fixed).is_err(), "공유 폴더");
+        assert!(trash_place_ok(r"E:\a.txt", |_| 2).is_err(), "이동식(USB)");
+        assert!(trash_place_ok(r"Z:\a.txt", |_| 4).is_err(), "네트워크 드라이브");
+        assert!(trash_place_ok(r"R:\a.txt", |_| 6).is_err(), "램 디스크");
+        let mut asked = String::new();
+        let _ = trash_place_ok(r"D:\깊은\곳\a.txt", |v| { asked = v.to_string(); 3 });
+        assert_eq!(asked, r"D:\", "드라이브 뿌리로 묻는다");
     }
 
     /// 정션(링크)을 따라가 **진짜 폴더**를 바꾸지 않는다 — 문서 폴더 자신을 가리키는 정션이면 폴더 전체가 걸린다.

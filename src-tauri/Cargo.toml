@@ -32,4 +32,5 @@ thiserror = "1"
 
 [target.'cfg(windows)'.dependencies]
 # v3.8.1 문서 탭 — EUC-KR 글자 파일(Win32_Globalization) · 탐색기 미리 보기 창(COM·Shell·창). 이미 의존성 트리에 있는 windows 크레이트.
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Environment", "Win32_UI_Input_KeyboardAndMouse"] }
+# Win32_Storage_FileSystem: 휴지통 보내기 전 드라이브 종류(GetDriveTypeW) — 휴지통 없는 곳의 영구 삭제 막기.
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Environment", "Win32_UI_Input_KeyboardAndMouse", "Win32_Storage_FileSystem"] }
