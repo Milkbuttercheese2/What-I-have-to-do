@@ -4,6 +4,7 @@
 import {S, toggleDone, markDoneRemoved} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
+import {doneGroupOf, groupOpenByDefault} from './done-weeks.js';
 import {fmtDue, fmtT} from './datetime.js';
 import {placeOf, placeMode} from './placement.js';
 import {textMatch} from './filters.js';
@@ -12,6 +13,7 @@ import {linkifyAt} from './phonebook-core.js';
 import {mergeItems} from './merge.js';
 import {openForm} from './form.js';
 import {renderCal} from './calendar.js';
+import {renderNote as renderDocNotes} from './docs.js';
 import {registerView, refreshView} from './views.js';
 
 /* 부모(주기 정의)는 보드 밖 — 화면 어디에도 카드로 그리지 않는다 */
@@ -191,23 +193,14 @@ function renderHidden(){
   const on=id=>{ const el=$(id); return !!el && el.classList.contains('on'); };
   if(on('view-cal')) renderCal();
   if(on('view-done')) renderDone();
+  if(on('view-docs')) renderDocNotes();            // v3.8.0 문서 탭 오른쪽 업무 메모(카드 체크·삭제·양식 저장 뒤)
 }
-/* v3.7.0 완료 업무를 '언제 끝냈나'로 묶는다 — 오늘 / 어제 / 이번 주 / 지난주 / 그 이전은 월별.
-   완료 시각(doneAt)이 없는 옛 데이터는 '날짜 모름' 묶음. 묶음 키는 표시용 파생값(저장 안 함). */
-export function doneGroupOf(doneAt, now){
-  if(!doneAt) return {key:'nodate', label:'완료 날짜 모름', order:-1};
-  now=now||Date.now();
-  const d0=new Date(now); d0.setHours(0,0,0,0); const today=d0.getTime();
-  const wk=new Date(d0); wk.setDate(wk.getDate()-((wk.getDay()+6)%7)); const week=wk.getTime();   // 이번 주 월요일
-  /* v3.7.1 소유자 지정: 오늘 · 이번 주 · 이번 달, 그 이전은 달별(어제·지난주 묶음 폐지).
-     이번 주가 지난달에 걸쳐 시작해도(월요일이 지난달) 이번 주로 본다 — 주가 달보다 먼저. */
-  const m1=new Date(d0); m1.setDate(1); const month=m1.getTime();                                       // 이번 달 1일
-  if(doneAt>=today) return {key:'today', label:'오늘', order:1e15};
-  if(doneAt>=week) return {key:'week', label:'이번 주', order:1e15-1};
-  if(doneAt>=month) return {key:'month', label:'이번 달', order:1e15-2};
-  const d=new Date(doneAt);
-  return {key:`m${d.getFullYear()}-${d.getMonth()}`, label:`${d.getFullYear()}년 ${d.getMonth()+1}월`, order:d.getFullYear()*12+d.getMonth()};
-}
+/* v3.8.0 완료 업무 묶음 = 오늘 / 이번 주 / 그 이전은 주별(규칙은 done-weeks.js — 순수 모듈).
+   지난 주 묶음은 접힌 채로 그리고(카드도 만들지 않는다 — 쌓일수록 느려지지 않게), 머리줄을 누르면 펼친다.
+   접기 상태는 이 모듈 안에만 둔다(저장하지 않음 — 앱을 다시 켜면 기본값으로). 검색어가 있으면 맞는 묶음을 모두 펼친다. */
+export {doneGroupOf};
+const dgToggled=new Set();             // 기본값과 반대로 바꾼 묶음 키
+function groupOpen(key){ return groupOpenByDefault(key) !== dgToggled.has(key); }
 export function renderDone(){
   const all=S.items.filter(onBoard).filter(it=>it.done);
   const list=all.filter(it=>textMatch(it, dq)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
@@ -217,11 +210,8 @@ export function renderDone(){
   if(dm){
     const g=all.map(it=>doneGroupOf(it.doneAt, now).key);
     const n=k=>g.filter(x=>x===k).length;
-    /* 요약 숫자는 '그 기간에 끝낸 건수'(누적) — 이번 주 = 오늘 + 이번 주, 이번 달 = 오늘 + 이번 주 + 이번 달.
-       단 이번 주가 지난달에서 시작했으면 지난달 날짜분은 이번 달에 넣지 않는다(달력 기준). */
-    const mStart=new Date(now); mStart.setHours(0,0,0,0); mStart.setDate(1);
-    const inMonth=all.filter(it=>it.doneAt && it.doneAt>=mStart.getTime()).length;
-    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span><span><b>${inMonth}</b>이번 달</span>`;
+    /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
+    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
   if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[];
@@ -232,10 +222,13 @@ export function renderDone(){
     grp.items.push(it);
   }
   groups.sort((a,b)=>b.order-a.order);
-  $('col-done').innerHTML=groups.map(g=>`<section class="done-group" data-group="${g.key}">
-      <div class="dg-head"><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span></div>
-      <div class="cards dg-cards">${g.items.map(it=>cardHtml(it,'done')).join('')}</div>
-    </section>`).join('');
+  $('col-done').innerHTML=groups.map(g=>{
+    const open = dq ? true : groupOpen(g.key);
+    return `<section class="done-group${open?'':' dg-closed'}" data-group="${g.key}">
+      <div class="dg-head" data-dgtoggle="${g.key}" role="button" aria-expanded="${open}"><span class="dg-caret">${open?'▾':'▸'}</span><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span></div>
+      ${open?`<div class="cards dg-cards">${g.items.map(it=>cardHtml(it,'done')).join('')}</div>`:''}
+    </section>`;
+  }).join('');
 }
 /* v3.7.0 속도: 화면을 **먼저** 그리고 저장은 뒤에서 한다(소유자 지적 — 메모 저장 뒤 살짝 멈칫).
    예전엔 `await saveAll` 뒤에 render 해서, 디스크 쓰기(진행 중인 앞 저장 + 백업 회전까지)가 끝날 때까지
@@ -352,6 +345,17 @@ export function initRender(){
         S.items.splice(idx,1); persist();
         showToast('업무 삭제함',()=>{ S.items.splice(Math.min(idx,S.items.length),0,removed); markDoneRemoved(removed); persist(); });
       } return; }
+    /* v3.8.0 캘린더 '점검' 이름표의 × — 그 세부 줄만 지운다(업무는 남김). 양식에서 세부 줄을 지우고 저장한 것과
+       같은 결과: 세부 배열에서 빠지고, 남은 세부·업무의 알람 상태는 그대로. 진행 중 업무에만 있는 단추다
+       (완료 업무는 캘린더 현행 보기에 안 나온다) — 완료 업무 행은 고치지 않는다(증분 저장 규칙). */
+    const ds=e.target.closest('[data-delsub]');
+    if(ds){ e.stopPropagation(); const it=S.items.find(x=>x.id==ds.dataset.item);
+      const i=it ? (it.subs||[]).findIndex(s=>s.id==ds.dataset.delsub) : -1;
+      if(i<0||it.done) return;
+      const removed=it.subs[i]; it.subs.splice(i,1); persist();
+      showToast('세부 할 일 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
+        cur.subs.splice(Math.min(i,cur.subs.length),0,removed); persist(); });
+      return; }
     /* v3.6.0: 완료 업무는 읽기 전용으로 연다 — 저장이 완료 업무 행을 다시 쓰지 않으므로
        여기서 고치면 그 변경이 조용히 사라진다. 고치려면 [되살려서 수정]으로 먼저 되살린다. */
     const open=e.target.closest('[data-open]');
@@ -366,4 +370,9 @@ export function initRender(){
   /* 검색 */
   $('search').addEventListener('input',e=>{q=e.target.value.trim().toLowerCase();render();});
   $('done-search').addEventListener('input',e=>{dq=e.target.value.trim().toLowerCase();renderDone();});
+  /* v3.8.0 완료 묶음: 머리줄 = 접기·펼치기 */
+  $('col-done').addEventListener('click',e=>{
+    const hd=e.target.closest('[data-dgtoggle]'); if(!hd) return;
+    const k=hd.dataset.dgtoggle; dgToggled.has(k)?dgToggled.delete(k):dgToggled.add(k); renderDone();
+  });
 }

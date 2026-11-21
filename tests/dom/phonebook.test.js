@@ -53,25 +53,6 @@ test('수정·삭제: 수정 저장이 항목을 갱신하고 삭제가 목록·
   assert.ok(!$('pb-list').textContent.includes('이영희'));
 });
 
-test('새로고침: 3칸 완비 관련인만 확인 팝업(표준 모달)에 모아 [모두 추가]', async () => {
-  await env.resetS(); S.loaded = true;
-  adoptPhonebook([{id:11, who:'이영희', org:'세무과', phone:'010-2'}]);
-  S.items=[{id:1, contacts:[{who:'김철수', org:'행정과', phone:'010-1'}, {who:'박이름만', org:'', phone:''}]},
-           {id:2, contacts:[{who:'김철수', org:'행정과', phone:'010-1'}, {who:'이영희', org:'세무과', phone:'010-2'}]}];
-  $('pb-import').click();
-  const modal=env.document.getElementById('pbSyncModal');
-  assert.ok(modal.classList.contains('on'));                    // confirm 대신 앱 모달
-  assert.equal(modal.querySelectorAll('.pbs-row').length, 1);   // 김철수만 (이름만인 박이름만·이미 있는 이영희 제외)
-  env.document.getElementById('pbs-add').click();
-  assert.ok(!modal.classList.contains('on'));
-  assert.equal(S.phonebook.length, 2);
-  assert.ok(S.phonebook.some(e=>e.who==='김철수'&&e.id>0));
-  $('pb-import').click();                                       // 다시 눌러도 추가할 게 없음 → 토스트
-  assert.ok(!modal.classList.contains('on'));
-  assert.equal(S.phonebook.length, 2);
-  assert.ok(env.document.getElementById('toast-msg').textContent.includes('없습니다'));
-});
-
 test('양식 메모 @자동완성: @김철 → 드롭다운 → Enter 로 텍스트 삽입', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);

@@ -8,14 +8,15 @@
     --shadow:0 1px 2px rgba(19,26,36,.06),0 12px 32px rgba(19,26,36,.12);
     --seg-thumb:#ffffff;            /* 세그먼트·탭의 선택 손잡이(흰 면 + 그림자) */
     /* 업무 단계 색상 (컬럼 점 · 카드 좌측선 전용) */
-    /* v3.7.0 단계 색 = Okabe–Ito 색각 안전 팔레트(과학 시각화 표준, 적록 색약에서도 서로 구분됨).
-       본인/타인을 같은 '오늘'·'오늘 외'라도 다른 색상(hue)으로 갈라, 5열에서 열을 색만으로 구분할 수 있다. */
-    --stage-inbox:#8b95a3;    /* 분류 대기 — 무채 회색 */
-    --stage-today:#D55E00;    /* 오늘 처리 · 본인 오늘 — 주홍(vermillion) */
+    /* v3.8.0 단계 색(소유자 지정 B안) = **시간은 색상, 본인/타인은 진하기**.
+       오늘 = 주홍 계열, 오늘 외 = 청록 계열, 본인 = 진하게, 타인 = 옅게. 5칸이 두 계열로 묶여 덜 원색적이다.
+       (v3.7.0 은 Okabe–Ito 다섯 색상이었다 — 본인/타인을 색상으로 갈랐었다.) 4칸 보기의 '진행 중'은 그대로. */
+    --stage-inbox:#9AA3AE;    /* 분류 대기 — 무채 회색 */
+    --stage-today:#D9623A;    /* 오늘 처리 · 본인 오늘 — 진한 주홍 */
     --stage-doing:#E69F00;    /* 진행 중 — 주황(orange) */
-    --stage-planned:#009E73;  /* 예정·대기 · 본인 오늘 외 — 청록(bluish green) */
-    --stage-oth-today:#CC79A7;/* 타인 오늘 — 자주(reddish purple) */
-    --stage-oth-plan:#0072B2; /* 타인 오늘 외 — 파랑(blue) */
+    --stage-planned:#2F8F83;  /* 예정·대기 · 본인 오늘 외 — 진한 청록 */
+    --stage-oth-today:#F0A584;/* 타인 오늘 — 옅은 주홍 */
+    --stage-oth-plan:#86C3B9; /* 타인 오늘 외 — 옅은 청록 */
 
     /* UI 액센트 (태그 · 버튼 · 프리셋 등) — 기존 청록 유지 */
     --amber:#2a7c6e; --amber-bg:#edf4f2;
@@ -78,8 +79,8 @@
     --paper:#0c1016; --card:#141a22; --surface:#1a212b; --sunk:#10151c;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.5);
     --seg-thumb:#2a3340;
-    --stage-inbox:#9aa4b2; --stage-today:#F2834A; --stage-doing:#F2B544; --stage-planned:#2EC4A0;
-    --stage-oth-today:#E59BC9; --stage-oth-plan:#56B4E9;   /* 같은 Okabe–Ito 색상을 어두운 면에서 대비가 나도록 밝힘 */
+    --stage-inbox:#9aa4b2; --stage-today:#F07A52; --stage-doing:#F2B544; --stage-planned:#3FB3A4;
+    --stage-oth-today:#B9705A; --stage-oth-plan:#4F8A82;   /* B안 어두운 면: 본인 = 밝게, 타인 = 가라앉혀 같은 계열 안에서 진하기 차이 */
     --amber:#56bdab; --amber-bg:#15302b;
     --slate:#56bdab; --slate-bg:#15302b;
     --tag-hl-bg:#24443e;
@@ -270,6 +271,8 @@
   .ffile-link:hover{text-decoration:underline}
   .ffile-browse{flex:none;font-size:13px;padding:7px 11px;border:none;border-radius:10px;background:var(--chip-bg);color:var(--ink-soft);cursor:pointer}
   .ffile-browse:hover{background:var(--line);color:var(--ink)}
+  .ffile-doc{flex:none;font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--focus);cursor:pointer;font-weight:600}
+  .ffile-doc:hover{border-color:var(--focus);background:var(--slate-bg)}
   /* 파일 경로는 본문 텍스트 — 폰트 정책(v2.5.2)에 따라 앱 서체 13px (모노는 숫자 전용) */
   .ffile-row input[type=text]{flex:1;min-width:0;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:6px}
   .ffile-row .rm{font-size:15px;line-height:1;color:var(--icon-muted);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:8px;transition:color .12s,background .12s}
@@ -295,12 +298,9 @@
      액션 줄을 옅은 선으로 구분하고 위아래 숨 쉴 여백을 준다. */
   .fm-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;
     margin-top:18px;padding-top:14px;border-top:1px solid var(--line-soft)}
-  .fm-place{font-size:11px;color:var(--ink-soft);margin-right:auto}
   /* v3.6.0 읽기 전용(완료 업무) — 잠겼다는 것이 한눈에 보이되 내용은 또렷하게 읽히도록.
      입력칸을 흐리게 하지 않는다: 여기 오는 이유의 대부분이 '내용 확인'이기 때문이다. */
   .fm-ro input,.fm-ro textarea,.fm-ro select{background:var(--chip-bg);cursor:default}
-  .fm-ro .fm-place{color:var(--slate);font-weight:600}
-  .fm-place b{color:var(--focus)}
   /* v2.5.22 임시저장 표시 — 저장 버튼 왼쪽의 조용한 상태 문구 */
   .fm-draft{font-size:11px;color:var(--ink-soft);margin-right:4px}
   .btn-ok{font-size:14px;padding:8px 22px;background:var(--focus);color:var(--on-accent)}
@@ -958,8 +958,7 @@
   .fm-head{position:sticky;top:-28px;z-index:4;display:flex;align-items:center;gap:10px;
     background:var(--surface);margin:0 -22px 12px;padding:16px 16px 12px 22px;border-bottom:1px solid var(--line-soft);border-radius:16px 16px 0 0}
   .fm-head h3{margin:0;font-size:16px;color:var(--ink);letter-spacing:-.01em;white-space:nowrap}
-  .fm-head .fm-place{margin-right:0;margin-left:auto;padding:3px 10px;border-radius:999px;background:var(--sunk);border:1px solid var(--line-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .fm-ro .fm-head .fm-place{background:var(--slate-bg);border-color:transparent}
+  .fm-head .fm-x{margin-left:auto}
   .fm-x{flex:none;width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:var(--ink-soft);font-size:20px;line-height:1;cursor:pointer}
   .fm-x:hover{background:var(--chip-bg);color:var(--ink)}
   .fm-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
@@ -1186,6 +1185,29 @@
   /* 옛 규칙 .cal-detail.on{display:block} 이 flex 를 덮어 시간표 칸이 늘어나기만 하고 스크롤되지 않았다 */
   .cal-detail.on{display:flex}
 
+  /* ── v3.8.0 캘린더 현행 | 종료 · 시간대 누르기 · 종료 이름표 ── */
+  .cal-head{flex-wrap:wrap}
+  .cal-head .cal-mode{width:auto;flex:none}
+  .cal-head .cal-mode .seg-btn{flex:none;padding:5px 14px}
+  .pill.p-fin{background:var(--gray-bg);color:var(--gray-fg)}
+  .tl-line.tl-fin{border-top:1px dashed var(--gray-fg);opacity:.6}
+  .tl-line.tl-fin::before{border-color:var(--gray-fg)}
+  .tl-chip.tl-fin{background:var(--gray-bg);color:var(--gray-fg);border-color:var(--line);opacity:.85}
+  .tl-chip.tl-fin .tl-what{color:var(--ink-soft)}
+  .tl-pickable .tl-canvas{cursor:copy}
+  .tl-pickable .tl-chip{cursor:pointer}
+  /* v3.8.0 이름표 × — 카드의 .del 그대로(늘 보임), 이름표 높이(26px)에 맞춰 여백만 줄인다 */
+  .tl-chip .tl-del{margin-left:auto;flex:none;padding:1px 5px;font-size:15px}
+  .tl-hover{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--ink-soft);opacity:0;pointer-events:none;z-index:1;transition:opacity .08s}
+  .tl-hover.on{opacity:.55}
+  .tl-hover-t{position:absolute;right:4px;top:-17px;font-size:11px;font-weight:600;color:var(--ink-soft)}
+
+  /* ── v3.8.0 완료 묶음 접기·펼치기 ── */
+  .dg-head[data-dgtoggle]{cursor:pointer;user-select:none}
+  .dg-head:hover .dg-label{color:var(--focus)}
+  .dg-caret{width:12px;flex:none;font-size:11px;color:var(--ink-soft)}
+  .done-group.dg-closed .dg-head{border-bottom:0}
+
 
   .fm-mini-row{display:inline-flex;gap:6px}
 
@@ -1270,7 +1292,7 @@
   .done-tools .btn,.head-right .btn-tool{height:32px;font-size:13px;padding:0 13px;display:inline-flex;align-items:center}
   .ps-new-head,.rc-list-head{font-size:13px;font-weight:700;color:var(--ink)}
   .cal-detail h3,.dg-label,.pb-ghead,.col-head h2{font-size:13.5px;font-weight:700}
-  .fm-head .fm-place,.cal-legend{font-size:12px}
+  .cal-legend{font-size:12px}
   .rel-done,.rel-tag{font-size:11px}
 
   /* v3.7.1 글자 뜸 수정(소유자 지적 — "심각한 문제") — 크기가 다른 글자를 한 줄에 둘 때 줄 높이(line-height)가
@@ -1299,3 +1321,145 @@
   /* v3.7.1 소유자 지정 — 알림의 점검·마감 표시는 캘린더와 같은 색(점검 = --cal-mid 파랑, 마감 = --cal-due 버건디) */
   .alarm .a-item.a-mid b{color:var(--cal-mid);background:var(--cal-mid-bg)}
   .alarm .a-item.a-due b{color:var(--cal-due);background:var(--cal-due-bg)}
+
+
+
+  /* =====================================================================
+     v3.8.0 문서 탭 — 왼쪽 트리 · 가운데 미리보기 · 오른쪽 폴더 메모 (docs.js). 색은 모두 토큰.
+     ===================================================================== */
+  #view-docs{display:none;max-width:1600px;margin:0 auto;padding:18px 28px 32px}
+  #view-docs.on{display:block}
+  #view-docs .done-head{display:flex;align-items:center;gap:12px}
+  .dc-path{font-size:12px;color:var(--ink-soft);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #view-docs .done-tools{margin-left:auto}
+  .dc-none{display:flex;flex-direction:column;align-items:center;gap:12px;padding:70px 20px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .dc-none-t{font-size:13.5px;font-weight:700;color:var(--ink-2)}
+  .dc-layout{display:none;grid-template-columns:260px minmax(0,1fr) 300px;gap:12px;height:calc(100vh - 190px);min-height:420px}
+  #view-docs.has-root .dc-none{display:none}
+  #view-docs.has-root .dc-layout{display:grid}
+  #view-docs.has-root .done-tools{display:block}
+  #view-docs:not(.has-root) .done-tools{display:none}
+  .dc-tree,.dc-view,.dc-note{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
+  .dc-tree{overflow:auto;padding:6px 4px}
+  .dt-row{display:flex;align-items:center;gap:6px;height:28px;padding-right:8px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--ink);user-select:none}
+  .dt-row:hover{background:var(--sunk)}
+  .dt-row.on{background:var(--slate-bg);color:var(--focus);font-weight:600}
+  .dt-root{font-weight:700}
+  /* v3.8.1 접기 ▸ — 크게, 누름 자리 넓게(줄 높이 전체 · 26px 폭) */
+  .dt-caret{flex:none;width:26px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-soft);border-radius:6px;margin-right:-4px}
+  .dt-caret[data-caret]:hover{background:var(--chip-bg);color:var(--ink)}
+  /* v3.8.1 트리 오른쪽 클릭 메뉴 · 이름 바꾸기 입력칸 */
+  .dt-menu{position:fixed;z-index:9000;min-width:170px;padding:5px;border-radius:10px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .dt-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;font:inherit;font-size:13px;color:var(--ink);padding:7px 10px;border-radius:7px;cursor:pointer}
+  .dt-menu button:hover,.dt-menu button:focus-visible{background:var(--slate-bg);color:var(--focus);outline:none}
+  .dt-menu hr{border:0;border-top:1px solid var(--line-soft);margin:4px 2px}
+  .dt-hit{height:auto;min-height:28px;align-items:flex-start;padding:5px 8px 5px 10px}
+  .dt-hit .dt-ico{margin-top:2px}
+  .dt-hitbox{display:flex;flex-direction:column;min-width:0;gap:1px}
+  .dt-where,.dt-snip{font-size:11.5px;color:var(--ink-soft);font-weight:400;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dt-snip{color:var(--ink-2)}
+  #dc-search{width:180px}
+  .dt-rename{flex:1;min-width:0;font:inherit;font-size:13px;padding:2px 6px;border:1px solid var(--focus);border-radius:5px;background:var(--surface);color:var(--ink);outline:none}
+  .dt-unroot{margin-left:auto;flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--ink-soft);font-size:15px;line-height:1;cursor:pointer;opacity:0}
+  .dt-root:hover .dt-unroot,.dt-unroot:focus-visible{opacity:1}
+  .dt-unroot:hover{background:var(--chip-bg);color:var(--red)}
+  .dt-root + .dt-row.dt-root,.dt-note + .dt-row.dt-root,.dt-row:not(.dt-root) + .dt-row.dt-root{margin-top:6px}
+  .dt-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dt-note{height:26px;display:flex;align-items:center;font-size:12px;color:var(--ink-soft)}
+  .dt-err{color:var(--red)}
+  /* v3.8.0 트리 끌어 옮기기 */
+  .dt-row.drop-on{outline:2px solid var(--focus);outline-offset:-2px;background:var(--slate-bg)}
+  .dt-ghost{position:fixed;z-index:9999;pointer-events:none;padding:4px 10px;border-radius:7px;font-size:12.5px;
+    background:var(--card);border:1px solid var(--focus);color:var(--ink);box-shadow:0 4px 14px var(--overlay)}
+  body.dt-dragging,body.dt-dragging *{cursor:grabbing !important;user-select:none}
+  /* 종류 표시 — 작은 네모에 글자 하나(그림 파일 없이) */
+  .dt-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;font-size:9.5px;font-weight:700;color:var(--on-accent);background:var(--icon-muted)}
+  .dt-ico::before{content:"·"}
+  .dt-ico.ico-dir{background:none;width:16px;height:12px;border-radius:2px 3px 3px 3px;border:1.6px solid var(--amber);position:relative}
+  .dt-ico.ico-dir::before{content:"";position:absolute;left:-1.6px;top:-4px;width:7px;height:3px;border:1.6px solid var(--amber);border-bottom:0;border-radius:2px 2px 0 0}
+  .dt-ico.ico-hwpx,.dt-ico.ico-hwp{background:var(--cal-mid)} .dt-ico.ico-hwpx::before,.dt-ico.ico-hwp::before{content:"H"}
+  .dt-ico.ico-xlsx{background:var(--green)} .dt-ico.ico-xlsx::before{content:"X"}
+  .dt-ico.ico-pptx{background:var(--cal-due)} .dt-ico.ico-pptx::before{content:"P"}
+  .dt-ico.ico-docx{background:var(--focus)} .dt-ico.ico-docx::before{content:"W"}
+  .dt-ico.ico-pdf{background:var(--red)} .dt-ico.ico-pdf::before{content:"P"}
+  .dt-ico.ico-img{background:var(--stage-planned)} .dt-ico.ico-img::before{content:"▣"}
+  .dt-ico.ico-media{background:var(--stage-today)} .dt-ico.ico-media::before{content:"▶"}
+  .dt-ico.ico-md{background:var(--ink-2)} .dt-ico.ico-md::before{content:"M"}
+  .dt-ico.ico-csv{background:var(--green)} .dt-ico.ico-csv::before{content:"C"}
+  .dt-ico.ico-text{background:var(--ink-soft)} .dt-ico.ico-text::before{content:"T"}
+  .dc-view{display:flex;flex-direction:column;overflow:hidden}
+  #dv-body{overflow:auto}
+  .dv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line-soft);background:var(--sunk);position:sticky;top:0;z-index:1}
+  .dv-title{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+  .dv-title b{font-size:13.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dv-meta{font-size:12px;color:var(--ink-soft);white-space:nowrap}
+  .dv-acts{display:flex;gap:6px}
+  .dv-acts .btn{height:32px;font-size:13px;padding:0 13px;display:inline-flex;align-items:center}
+  .dv-content{padding:14px 18px 24px;flex:1;min-height:0;overflow:auto}
+  .dv-content.dv-text,.dv-content.dv-native-box{padding:0;overflow:hidden;display:flex;flex-direction:column}
+  .dv-native{flex:1;min-height:0;background:var(--card)}
+  .dv-ta{flex:1;min-height:0;width:100%;border:0;resize:none;padding:16px 18px;font-family:inherit;font-size:14px;line-height:1.7;letter-spacing:0;color:var(--ink);background:var(--card);outline:none;tab-size:4;white-space:pre-wrap;overflow-wrap:anywhere}
+  .dv-md{flex:1;min-height:0;overflow:auto;padding:16px 22px 28px}
+  .dv-mdv{font-size:14px;line-height:1.75;color:var(--ink);word-break:break-word}
+  .dv-mdv h1,.dv-mdv h2,.dv-mdv h3,.dv-mdv h4{margin:1.1em 0 .45em;line-height:1.35;color:var(--ink)}
+  .dv-mdv h1{font-size:21px;border-bottom:1px solid var(--line-soft);padding-bottom:.3em} .dv-mdv h2{font-size:18px} .dv-mdv h3{font-size:15.5px}
+  .dv-mdv p,.dv-mdv ul,.dv-mdv ol,.dv-mdv blockquote,.dv-mdv pre,.dv-mdv table{margin:0 0 .8em}
+  .dv-mdv ul,.dv-mdv ol{padding-left:1.5em}
+  .dv-mdv code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;background:var(--sunk);padding:1px 5px;border-radius:4px}
+  .dv-mdv pre{background:var(--sunk);padding:10px 12px;border-radius:8px;overflow:auto} .dv-mdv pre code{background:none;padding:0}
+  .dv-mdv blockquote{border-left:3px solid var(--line);padding-left:12px;color:var(--ink-soft)}
+  .dv-mdv table{border-collapse:collapse} .dv-mdv th,.dv-mdv td{border:1px solid var(--line);padding:4px 8px}
+  .dv-mdv img{max-width:100%} .dv-mdv a{color:var(--focus)}
+  .dv-save{font-size:12px;color:var(--ink-soft);white-space:nowrap;align-self:center}
+  .dv-save.dv-bad{color:var(--red);font-weight:600}
+  .dv-seg{display:inline-flex;gap:2px;background:var(--sunk);border-radius:999px;padding:2px}
+  .dv-seg .seg-btn{height:28px;padding:0 12px;font-size:12.5px}
+  .dv-img{display:flex;justify-content:center;align-items:flex-start}
+  .dv-img img{max-width:100%;height:auto;border-radius:6px;box-shadow:var(--shadow)}
+  .dv-media{width:100%;max-height:100%}
+  .dv-pdf-bar{position:sticky;top:-14px;z-index:1;display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:-14px -18px 10px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--ink-soft)}
+  .dv-pdf-bar .seg-btn{height:26px;width:28px;padding:0;border:1px solid var(--line);background:var(--card)}
+  .dv-pdf{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .dv-pdf-pg{box-shadow:var(--shadow);border-radius:2px}
+  .dv-info{display:flex;flex-direction:column;align-items:center;gap:8px;padding:50px 0;font-size:13.5px;color:var(--ink-2)}
+  .dv-info .dt-ico{width:34px;height:34px;font-size:15px;border-radius:8px}
+  .dv-ro{font-size:12px;color:var(--ink-soft);margin-bottom:10px}
+  .dv-empty{padding:30px 0;text-align:center;font-size:13px;color:var(--ink-soft)}
+  .dv-err{color:var(--red)}
+  .dv-doc{font-size:13.5px;line-height:1.7;color:var(--ink)}
+  .dv-doc p{margin:0 0 2px;white-space:pre-wrap;word-break:break-word}
+  .dv-doc .dv-blank{height:.8em}
+  .dv-sec + .dv-sec{border-top:1px dashed var(--line);margin-top:14px;padding-top:14px}
+  .dv-slide{border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:12px;background:var(--card)}
+  .dv-slide-no{font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px}
+  .dv-table{border-collapse:collapse;margin:8px 0;font-size:12.5px;line-height:1.5}
+  .dv-table td,.dv-table th{border:1px solid var(--line);padding:4px 8px;vertical-align:top;text-align:left}
+  .dv-table td p{margin:0}
+  .dv-sheet th{background:var(--sunk);color:var(--ink-soft);font-weight:500;text-align:right;position:sticky;left:0}
+  .dv-sheet td{white-space:nowrap}
+  .dv-sheets{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+  .dv-sheets .seg-btn{border:1px solid var(--line);background:var(--card);height:26px;padding:0 10px;font-size:12px}
+  .dv-sheets .seg-btn.on{border-color:var(--focus);color:var(--focus)}
+  .dv-scroll{overflow:auto}
+  .dv-cap{font-size:12px;color:var(--ink-soft);margin-top:6px}
+  .dv-folder{padding:14px 18px}
+  .dv-ftitle{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:10px}
+  .dv-flist{border:1px solid var(--line-soft);border-radius:10px;overflow:hidden}
+  .dv-frow{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:7px 12px;font-size:13px;cursor:pointer;border-top:1px solid var(--line-soft)}
+  .dv-frow:first-child{border-top:0}
+  .dv-frow:hover{background:var(--sunk)}
+  .dv-fname{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dc-note{display:flex;flex-direction:column;overflow:hidden}
+  .dn-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-soft);background:var(--sunk)}
+  .dn-head b{font-size:13.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dn-at{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap}
+  .dn-add{margin-left:6px;flex:none}
+  .dn-list{flex:1;min-height:0;overflow:auto;padding:10px;display:flex !important;flex-direction:column;gap:8px}
+  @media(max-width:1080px){
+    #view-docs{max-width:560px;padding:14px 16px 32px}
+    .dc-layout{grid-template-columns:minmax(0,1fr);height:auto}
+    .dc-tree{max-height:300px}
+    .dc-view{min-height:360px}
+    .dc-note{min-height:220px}
+  }
+

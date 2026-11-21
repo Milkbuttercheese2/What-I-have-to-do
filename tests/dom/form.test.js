@@ -410,7 +410,6 @@ test('완료 업무는 읽기 전용으로 열린다 (저장 버튼 없음 · �
   assert.equal($('fm-memo').disabled, true, '내용을 고칠 수 없어야 한다');
   assert.equal($('fm-save').style.display, 'none', '저장 버튼은 감춘다');
   assert.equal($('fm-revert').style.display, 'none', '되돌리기도 감춘다(고칠 게 없으므로)');
-  assert.match($('fm-place').textContent, /다시 진행/, '고치는 방법을 알려준다');
   assert.equal($('fm-reopen').style.display, '', 'v3.7.0 [다시 진행] 버튼이 보인다');
   assert.equal($('fm-reopen').disabled, false, '읽기 전용이어도 [다시 진행]은 눌린다');
   assert.equal($('fm-finish').style.display, 'none', '완료 업무엔 [업무 종료]가 없다');

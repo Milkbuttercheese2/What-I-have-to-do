@@ -9,7 +9,7 @@ import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
 import {fmtT} from './datetime.js';
-import {normEntry, entryKey, isComplete, entriesForTag, gatherFromItems, mapSheetRows, phoneDigits, relatedItems, absorbContacts, swapPersonIn} from './phonebook-core.js';
+import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, absorbContacts, swapPersonIn} from './phonebook-core.js';
 /* v3.7.0: 인물 일괄 바꾸기가 업무를 고친 뒤 저장·재렌더해야 해서 persist 를 쓴다.
    render→form→phonebook→render 순환이지만 함수 호출만 오가므로(최상위 사용 없음) 안전하다 —
    CLAUDE.md 규칙 1(기능 모듈은 hoisted 함수 + init*() 만)이 지켜지는 동안. */
@@ -56,7 +56,7 @@ export function renderPhonebook(){
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
   if(!list.length){
-    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. 위에서 직접 추가하거나, [새로고침]·[엑셀 불러오기]를 쓰세요.'}</div>`;
+    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. [＋ 추가]나 [엑셀 불러오기]를 쓰세요.'}</div>`;
     return;
   }
   /* v3.7.0 소속별 묶음(소유자 선택): 묶음 = 엮인 업무 합이 많은 소속 먼저 → 소속명,
@@ -127,7 +127,7 @@ async function submitPbForm(){
   savePb(); closePbEdit(); renderPhonebook();
 }
 
-/* ── 새로고침·엑셀 공용 확인 팝업 (v2.9.0 — 네이티브 confirm 대신 앱 표준 모달) ──
+/* ── 엑셀 불러오기 확인 팝업 (v2.9.0 — 네이티브 confirm 대신 앱 표준 모달) ──
    찾은 관련인을 목록으로 보여주고 [모두 추가]로 확정한다. */
 let pendingSync=[];                 // 팝업에 떠 있는 후보 (id 없는 {who,org,phone})
 function openPbSync(title, sub, found){
@@ -147,16 +147,6 @@ function applyPbSync(){
   pendingSync.forEach(e=>{ S.phonebook.push({id:newId(), who:e.who, org:e.org, phone:e.phone, email:e.email||''}); });
   closePbSync();
   if(n){ savePb(); renderPhonebook(); showToast(`관련인 ${n}명을 추가했습니다`); }
-}
-
-/* [새로고침] — 아이템 관련인 중 전화번호부에 없는 3칸 완비 관련인을 다시 훑어
-   추가한다(양식 저장 시 자동 연동을 놓친 과거 데이터·복원분 회수용). */
-function refreshFromItems(){
-  const found=gatherFromItems(S.items, S.phonebook);
-  if(!found.length){ showToast('추가할 새 관련인이 없습니다'); return; }
-  openPbSync('전화번호부 새로고침',
-    `아이템의 관련인 중 전화번호부에 없는 ${found.length}명을 찾았습니다. (소속·이름·연락처가 모두 있는 관련인만)`,
-    found);
 }
 
 /* 엑셀(.xlsx/.xls) 불러오기 — vendored SheetJS(XLSX 전역)로 첫 시트를 읽고
@@ -266,7 +256,7 @@ export function openRelated(name, extraEntries){
      메모 @태그 경로 모두 폐지: 동명이인이 걸리던 문제) */
   const entries=entriesForTag(S.phonebook, name).concat(extraEntries||[]);
   const matched=relatedItems(S.items, {entries});
-  $('rel-title').textContent=`@${name} 관련 업무`;
+  $('rel-title').textContent=`${name} 관련 업무`;
   $('rel-sub').textContent=`전화번호부 정보(관련소속·관련인·연락처)가 모두 일치하는 업무 ${matched.length}건입니다. 누르면 양식이 열립니다.`;
   $('rel-list').innerHTML=matched.length?matched.map(it=>{
     const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
@@ -366,7 +356,6 @@ export function initPhonebook(){
     if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); submitPbForm(); }
   }));
   $('pb-search').addEventListener('input',()=>{ q=$('pb-search').value.trim().toLowerCase(); renderPhonebook(); });
-  $('pb-import').addEventListener('click',refreshFromItems);
   $('pb-tmpl').addEventListener('click',saveXlsxTemplate);
   $('pb-xlsx').addEventListener('click',()=>$('pb-file').click());
   $('pb-file').addEventListener('change',()=>{

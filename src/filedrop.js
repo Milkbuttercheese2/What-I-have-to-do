@@ -6,6 +6,7 @@
      · 양식이 열려 있으면      → 그 양식의 파일·폴더 링크 칸에 행 추가 (저장은 사용자 몫)
      · 보드·달력의 카드 위면   → 그 업무에 바로 연결 + [실행 취소] 토스트
      · 그 밖의 빈 곳이면       → 그 링크를 담은 새 양식을 연다
+     · 문서 탭의 폴더 위면     → 그 폴더 안으로 **복사** (v3.8.1 — 원본은 그대로)
      · 다른 팝업이 위에 있거나 완료 업무면 → 아무것도 바꾸지 않고 이유만 알린다
        (완료 업무는 읽기 전용 — 증분 저장이 완료 업무를 다시 쓰지 않으므로, 여기서
         고치면 그 변경이 조용히 사라진다. form.js setReadonly 주석 참조)
@@ -22,6 +23,8 @@ import {$, showToast} from './dom-utils.js';
 import {topId} from './modals.js';
 import {persist} from './render.js';
 import {openForm, addLinkPaths, formReadonly} from './form.js';
+import {dropFolderAt, importInto} from './docs.js';
+import {invoke} from './store.js';
 
 /* 경로 비교 키 — Windows 경로는 대소문자·구분자 차이를 같은 것으로 본다 */
 const pathKey = p => String(p||'').trim().replace(/\//g,'\\').replace(/\\+$/,'').toLowerCase();
@@ -44,6 +47,9 @@ export function dropTarget(el){
   const top=topId();
   if(top==='formPanel') return formReadonly() ? {kind:'blocked', why:'완료된 업무에는 연결할 수 없습니다. [다시 진행]으로 되돌린 뒤 놓으세요.'} : {kind:'form'};
   if(top) return {kind:'blocked', why:'열려 있는 창을 닫은 뒤 놓으세요.'};
+  /* v3.8.1 문서 탭의 폴더(트리의 폴더 줄 · 가운데 폴더 보기) 위 → 그 폴더 안으로 복사 */
+  const dk=dropFolderAt(el);
+  if(dk) return {kind:'docdir', key:dk.key, label:dk.label, row:dk.row};
   const card=el&&el.closest&&el.closest('.card[data-open]:not(.drag-ghost)');
   if(card){
     const it=S.items.find(x=>String(x.id)===card.dataset.open);
@@ -61,6 +67,7 @@ export function applyDrop(target, paths){
   paths=(paths||[]).filter(p=>String(p||'').trim());
   if(!paths.length) return false;
   if(target.kind==='blocked'){ showToast(target.why); return false; }
+  if(target.kind==='docdir'){ importInto(target.key, paths, !!target.mv); return true; }
   if(target.kind==='form'){ const n=addLinkPaths(paths); showToast(n?`링크 ${n}개를 양식에 추가했습니다. 저장해야 반영됩니다`:'이미 연결된 링크입니다'); return n>0; }
   if(target.kind==='card'){
     const it=S.items.find(x=>x.id===target.id); if(!it||it.done) return false;
@@ -92,6 +99,7 @@ function showHl(target, el){
   if(target.kind==='form'){ const w=document.querySelector('.fm-files-wrap'); if(w) w.classList.add('drop-on'); c.textContent='놓으면 이 양식의 링크 칸에 추가합니다'; }
   else if(target.kind==='card'){ const card=el&&el.closest('.card[data-open]'); if(card) card.classList.add('drop-on'); c.textContent='놓으면 이 업무에 링크로 연결합니다'; }
   else if(target.kind==='blocked'){ c.textContent=target.why; }
+  else if(target.kind==='docdir'){ if(target.row) target.row.classList.add('drop-on'); c.textContent=`놓으면 '${target.label}' 폴더로 ${shiftNow?'옮깁니다':'복사합니다 · Shift 를 누르면 옮기기'}`; }
   else c.textContent='놓으면 이 링크로 새 업무 양식을 엽니다';
 }
 /* 네이티브 좌표(물리 px, 웹뷰 기준) → CSS px. devicePixelRatio 에 DPI·화면 배율이 모두 들어 있다 */
@@ -101,13 +109,27 @@ function elAt(pos){
   return document.elementFromPoint(pos.x/r, pos.y/r);
 }
 
-export function handleDragDrop(payload){
+/* v3.8.3 문서 폴더로 끌어 올 때 Shift = 옮기기. 탐색기에서 끄는 동안 웹뷰는 키 입력을 못 받으므로
+   Windows 에 직접 묻는다(key_shift_down). 끄는 동안 0.15초마다 묻고, 놓을 때 한 번 더 묻는다. */
+let shiftNow=false, shiftAt=0;
+const askShift = () => invoke('key_shift_down').then(v=>!!v, ()=>false);
+export async function handleDragDrop(payload){
   const p=payload||{};
-  if(p.type==='leave'){ clearHl(); return; }
-  if(p.type==='enter'||p.type==='over'){ const el=elAt(p.position); showHl(dropTarget(el), el); return; }
+  if(p.type==='leave'){ clearHl(); shiftNow=false; return; }
+  if(p.type==='enter'||p.type==='over'){
+    const el=elAt(p.position), t=dropTarget(el); showHl(t, el);
+    if(t.kind==='docdir' && Date.now()-shiftAt>150){
+      shiftAt=Date.now();
+      const v=await askShift();
+      if(v!==shiftNow){ shiftNow=v; const el2=elAt(p.position); showHl(dropTarget(el2), el2); }
+    }
+    return;
+  }
   if(p.type==='drop'){
-    const el=elAt(p.position); clearHl();
-    applyDrop(dropTarget(el), p.paths||[]);
+    const el=elAt(p.position), t=dropTarget(el); clearHl();
+    if(t.kind==='docdir') t.mv = shiftNow || await askShift();
+    shiftNow=false;
+    applyDrop(t, p.paths||[]);
   }
 }
 

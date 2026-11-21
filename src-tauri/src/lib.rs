@@ -1,6 +1,8 @@
 mod commands;
 mod config;
 mod db;
+mod docs;
+mod preview;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -412,6 +414,24 @@ pub fn run() {
             commands::save_id_kinds,
             commands::save_settings,
             commands::save_phonebook,
+            docs::doc_set_roots,
+            docs::doc_read_text,
+            docs::doc_write_text,
+            docs::doc_list,
+            docs::doc_read,
+            docs::doc_abs,
+            docs::doc_move,
+            docs::doc_create,
+            docs::doc_create_doc,
+            docs::doc_import,
+            docs::doc_trash,
+            docs::doc_search,
+            docs::key_shift_down,
+            docs::doc_rename,
+            preview::doc_preview_open,
+            preview::doc_preview_place,
+            preview::doc_preview_show,
+            preview::doc_preview_close,
             commands::phonebook_search,
             commands::phonebook_list,
             commands::backup_export,

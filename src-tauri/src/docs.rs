@@ -1,0 +1,986 @@
+//! v3.8.0 문서 탭 — 사용자가 고른 **문서 폴더들**(v3.8.1: 여러 개) 안만 다룬다.
+//!
+//! - 화면은 (폴더 번호, 그 폴더 기준 **상대 경로**)만 넘긴다. 여기서 루트와 합쳐 정규화(canonicalize)한 뒤
+//!   루트 밖이면(`..`·절대 경로·바로가기 등) 거부한다 — `resolve` 하나가 모든 명령의 관문이다.
+//! - 파일 내용을 쓰는 길은 `doc_write_text` 하나(v3.8.1, 사용자 지정): **글자 파일만**(txt·md·csv·코드 등 — 내용으로 판정),
+//!   읽을 때의 인코딩 그대로(UTF-8·UTF-8 BOM·UTF-16LE·EUC-KR(CP949)), 읽은 뒤 다른 프로그램이 고쳤으면 거부(덮어쓰기 방지).
+//!   HWPX·XLSX·PPTX 같은 문서는 쓰지 않는다(편집은 그 프로그램에서). 내용은 진단 로그에 남기지 않는다.
+//! - 유일한 쓰기는 `doc_move`(트리에서 끌어 옮기기, 사용자 지정): 같은 문서 폴더 안에서 **이름 그대로 옮기기만** 한다.
+//!   같은 이름이 있으면 거부(덮어쓰지 않음), 폴더를 자기 안으로 옮기기 거부, 다른 드라이브로는 옮기지 않는다(복사 없음).
+//! - 목록은 한 단계씩만 읽는다(펼칠 때마다) — 공유 드라이브를 처음에 통째로 훑지 않는다.
+use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
+
+use serde::Serialize;
+
+/// 지금 문서 폴더들(정규화된 절대 경로, 화면의 settings.docRoots 순서). `doc_set_roots` 로 잡는다.
+static ROOTS: Mutex<Vec<Option<PathBuf>>> = Mutex::new(Vec::new());
+
+/// 글자 파일 편집 상한(바이트)
+pub const TEXT_MAX: u64 = 5 * 1024 * 1024;
+
+/// 미리보기로 읽는 파일 크기 상한(바이트). 넘으면 화면은 정보와 [열기]만 보여 준다.
+pub const READ_MAX: u64 = 30 * 1024 * 1024;
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct DocEntry {
+    pub name: String,
+    /// 루트 기준 상대 경로('/' 구분)
+    pub rel: String,
+    pub dir: bool,
+    pub size: u64,
+    /// 고친 시각(epoch ms) — 모르면 0
+    pub mtime: i64,
+}
+
+fn root(i: usize) -> Result<PathBuf, String> {
+    ROOTS.lock().unwrap_or_else(|e| e.into_inner()).get(i).cloned().flatten().ok_or_else(|| "문서 폴더가 지정되지 않았거나 열 수 없습니다".to_string())
+}
+
+fn canon_dir(path: &str) -> Result<PathBuf, String> {
+    let p = std::fs::canonicalize(path).map_err(|e| format!("폴더를 열 수 없습니다: {e}"))?;
+    if !p.is_dir() {
+        return Err("폴더가 아닙니다".into());
+    }
+    Ok(p)
+}
+
+#[derive(Debug, Serialize)]
+pub struct RootInfo {
+    pub ok: bool,
+    pub path: String,
+    pub error: String,
+}
+
+/// `\\?\` 접두를 뗀 보기용 경로
+fn display(p: &Path) -> String {
+    let s = p.to_string_lossy().into_owned();
+    s.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(s)
+}
+
+/// 상대 경로 → 루트 안의 실제 경로. 루트 밖이면 Err.
+/// 1차: 상대 경로 자체에 `..`·루트·드라이브 접두가 있으면 거부.
+/// 2차: 합친 경로를 정규화(바로가기·정션을 따라감)해 루트로 시작하는지 확인.
+pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let rel = rel.replace('\\', "/");
+    let rp = Path::new(rel.trim_start_matches("./"));
+    for c in rp.components() {
+        match c {
+            Component::Normal(_) | Component::CurDir => {}
+            _ => return Err("문서 폴더 밖의 경로입니다".into()),
+        }
+    }
+    let joined = root.join(rp);
+    let canon = std::fs::canonicalize(&joined).map_err(|e| format!("찾을 수 없습니다: {e}"))?;
+    let root_c = std::fs::canonicalize(root).map_err(|e| format!("문서 폴더를 열 수 없습니다: {e}"))?;
+    if !canon.starts_with(&root_c) {
+        return Err("문서 폴더 밖의 경로입니다".into());
+    }
+    Ok(canon)
+}
+
+fn rel_of(root: &Path, p: &Path) -> String {
+    let root_c = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    p.strip_prefix(&root_c).unwrap_or(p).to_string_lossy().replace('\\', "/")
+}
+
+fn mtime_ms(md: &std::fs::Metadata) -> i64 {
+    md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
+
+/// 숨김·시스템 파일, `.` 으로 시작하는 것, 오피스 임시 파일(`~$`)은 보이지 않는다.
+fn hidden(name: &str, md: &std::fs::Metadata) -> bool {
+    if name.starts_with('.') || name.starts_with("~$") {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN: u32 = 0x2;
+        const SYSTEM: u32 = 0x4;
+        if md.file_attributes() & (HIDDEN | SYSTEM) != 0 {
+            return true;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = md;
+    false
+}
+
+pub fn list_in(root: &Path, rel: &str) -> Result<Vec<DocEntry>, String> {
+    let dir = resolve(root, rel)?;
+    if !dir.is_dir() {
+        return Err("폴더가 아닙니다".into());
+    }
+    let mut out = Vec::new();
+    for ent in std::fs::read_dir(&dir).map_err(|e| format!("폴더를 읽을 수 없습니다: {e}"))?.flatten() {
+        let name = ent.file_name().to_string_lossy().into_owned();
+        let Ok(md) = ent.metadata() else { continue };
+        if hidden(&name, &md) {
+            continue;
+        }
+        let path = ent.path();
+        out.push(DocEntry { rel: rel_of(root, &path), name, dir: md.is_dir(), size: if md.is_dir() { 0 } else { md.len() }, mtime: mtime_ms(&md) });
+    }
+    out.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(out)
+}
+
+pub fn read_in(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
+    let p = resolve(root, rel)?;
+    let md = std::fs::metadata(&p).map_err(|e| format!("읽을 수 없습니다: {e}"))?;
+    if md.is_dir() {
+        return Err("폴더입니다".into());
+    }
+    if md.len() > READ_MAX {
+        return Err("미리보기 상한(30MB) 초과".into());
+    }
+    std::fs::read(&p).map_err(|e| format!("읽을 수 없습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))
+}
+
+/// 항목(파일·폴더) 하나를 같은 문서 폴더 안의 다른 폴더로 옮긴다. 새 상대 경로를 돌려준다.
+pub fn move_in(root: &Path, from: &str, to_dir: &str) -> Result<String, String> {
+    if from.trim_matches('/').is_empty() {
+        return Err("문서 폴더 자체는 옮길 수 없습니다".into());
+    }
+    let src = resolve(root, from)?;
+    let dir = resolve(root, to_dir)?;
+    if !dir.is_dir() {
+        return Err("폴더로만 옮길 수 있습니다".into());
+    }
+    if dir.starts_with(&src) {
+        return Err("폴더를 자기 안으로 옮길 수 없습니다".into());
+    }
+    let name = src.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?;
+    let dest = dir.join(name);
+    if src.parent() == Some(dir.as_path()) {
+        return Err("이미 그 폴더에 있습니다".into());
+    }
+    if dest.exists() {
+        return Err("같은 이름이 이미 있습니다".into());
+    }
+    std::fs::rename(&src, &dest).map_err(|e| format!("옮기지 못했습니다(다른 프로그램에서 사용 중이거나 다른 드라이브일 수 있음): {e}"))?;
+    Ok(rel_of(root, &dest))
+}
+
+/* ── 새로 만들기·이름 바꾸기 (v3.8.1 — 트리 오른쪽 클릭) ─────────────────── */
+
+/// 파일·폴더 이름 하나로 쓸 수 있는지(Windows 규칙). 경로 구분자·예약 글자·끝 점/공백·예약 이름 거부.
+pub fn check_name(name: &str) -> Result<String, String> {
+    let n = name.trim();
+    if n.is_empty() || n == "." || n == ".." {
+        return Err("이름을 입력해 주세요".into());
+    }
+    if n.chars().any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || (c as u32) < 32) {
+        return Err("이름에 쓸 수 없는 글자가 있습니다 ( \\ / : * ? \" < > | )".into());
+    }
+    if n.ends_with('.') {
+        return Err("이름 끝에 점을 쓸 수 없습니다".into());
+    }
+    let stem = n.split('.').next().unwrap_or("").to_ascii_uppercase();
+    let reserved = ["CON", "PRN", "AUX", "NUL"].contains(&stem.as_str())
+        || ((stem.starts_with("COM") || stem.starts_with("LPT")) && stem.len() == 4 && stem.as_bytes()[3].is_ascii_digit());
+    if reserved {
+        return Err("Windows 가 쓰는 이름이라 쓸 수 없습니다".into());
+    }
+    if n.chars().count() > 200 {
+        return Err("이름이 너무 깁니다".into());
+    }
+    Ok(n.to_string())
+}
+
+/// 폴더 dir 안에 새 파일(빈 파일)이나 새 폴더. 같은 이름이 있으면 거부(덮어쓰지 않는다). 새 항목의 rel.
+pub fn create_in(root: &Path, dir: &str, name: &str, is_dir: bool) -> Result<String, String> {
+    let name = check_name(name)?;
+    let d = resolve(root, dir)?;
+    if !d.is_dir() {
+        return Err("폴더 안에만 만들 수 있습니다".into());
+    }
+    let dest = d.join(&name);
+    if dest.exists() {
+        return Err("같은 이름이 이미 있습니다".into());
+    }
+    if is_dir {
+        std::fs::create_dir(&dest).map_err(|e| format!("폴더를 만들지 못했습니다: {e}"))?;
+    } else {
+        std::fs::OpenOptions::new().write(true).create_new(true).open(&dest).map_err(|e| format!("파일을 만들지 못했습니다: {e}"))?;
+    }
+    Ok(rel_of(root, &dest))
+}
+
+/// 이름 바꾸기 — 같은 폴더 안에서만. 대소문자만 바꾸는 것은 허용. 새 rel.
+pub fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<String, String> {
+    if rel.trim_matches('/').is_empty() {
+        return Err("문서 폴더 자체의 이름은 여기서 바꿀 수 없습니다".into());
+    }
+    let name = check_name(new_name)?;
+    let src = resolve(root, rel)?;
+    let parent = src.parent().ok_or_else(|| "이름을 바꿀 수 없습니다".to_string())?;
+    let dest = parent.join(&name);
+    let same_ci = src.file_name().map(|f| f.to_string_lossy().to_lowercase()) == Some(name.to_lowercase());
+    if dest.exists() && !same_ci {
+        return Err("같은 이름이 이미 있습니다".into());
+    }
+    std::fs::rename(&src, &dest).map_err(|e| format!("이름을 바꾸지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))?;
+    Ok(rel_of(root, &dest))
+}
+
+/* ── 새 한글·엑셀·파워포인트 문서 (v3.8.1 — 오른쪽 클릭) ─────────────────
+   먼저 Windows '새로 만들기'에 등록된 서식(설치된 한컴오피스·MS Office 가 만드는 그 파일)을 쓰고,
+   없으면 앱에 든 빈 문서(templates/blank.*)를 쓴다. 0바이트 파일은 한글·엑셀이 '손상된 파일'로 거부하므로 만들지 않는다. */
+const BLANK_HWPX: &[u8] = include_bytes!("../templates/blank.hwpx");
+const BLANK_XLSX: &[u8] = include_bytes!("../templates/blank.xlsx");
+const BLANK_PPTX: &[u8] = include_bytes!("../templates/blank.pptx");
+
+pub fn builtin_blank(ext: &str) -> Option<&'static [u8]> {
+    match ext {
+        "hwpx" => Some(BLANK_HWPX),
+        "xlsx" => Some(BLANK_XLSX),
+        "pptx" => Some(BLANK_PPTX),
+        _ => None,
+    }
+}
+
+#[cfg(windows)]
+mod shellnew {
+    use std::path::PathBuf;
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Environment::ExpandEnvironmentStringsW;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CLASSES_ROOT, REG_BINARY, REG_VALUE_TYPE, RRF_RT_ANY};
+
+    /// (종류, 바이트) — 값이 없으면 None
+    fn value(sub: &str, name: &str) -> Option<(REG_VALUE_TYPE, Vec<u8>)> {
+        let (k, n) = (HSTRING::from(sub), HSTRING::from(name));
+        let mut ty = REG_VALUE_TYPE(0);
+        let mut size = 0u32;
+        unsafe {
+            if RegGetValueW(HKEY_CLASSES_ROOT, PCWSTR(k.as_ptr()), PCWSTR(n.as_ptr()), RRF_RT_ANY, Some(&mut ty), None, Some(&mut size)) != ERROR_SUCCESS || size > 64 * 1024 * 1024 {
+                return None;
+            }
+            let mut buf = vec![0u8; size as usize];
+            if RegGetValueW(HKEY_CLASSES_ROOT, PCWSTR(k.as_ptr()), PCWSTR(n.as_ptr()), RRF_RT_ANY, Some(&mut ty), Some(buf.as_mut_ptr() as _), Some(&mut size)) != ERROR_SUCCESS {
+                return None;
+            }
+            buf.truncate(size as usize);
+            Some((ty, buf))
+        }
+    }
+    fn text(b: &[u8]) -> String {
+        let u: Vec<u16> = b.chunks(2).map(|c| u16::from_le_bytes([c[0], *c.get(1).unwrap_or(&0)])).collect();
+        String::from_utf16_lossy(&u).trim_end_matches('\0').to_string()
+    }
+    fn expand(s: &str) -> String {
+        let h = HSTRING::from(s);
+        let mut buf = vec![0u16; 4096];
+        let n = unsafe { ExpandEnvironmentStringsW(PCWSTR(h.as_ptr()), Some(&mut buf)) } as usize;
+        if n == 0 || n > buf.len() { return s.to_string(); }
+        String::from_utf16_lossy(&buf[..n.saturating_sub(1)])
+    }
+    fn template_file(name: &str) -> Option<PathBuf> {
+        let p = PathBuf::from(expand(name));
+        if p.is_absolute() {
+            return p.is_file().then_some(p);
+        }
+        let env = |k: &str| std::env::var_os(k).map(PathBuf::from);
+        [
+            env("SystemRoot").map(|r| r.join("ShellNew")),
+            env("APPDATA").map(|r| r.join("Microsoft\\Windows\\Templates")),
+            env("ProgramData").map(|r| r.join("Microsoft\\Windows\\Templates")),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|d| d.join(&p))
+        .find(|c| c.is_file())
+    }
+    /// 확장자(점 없이)에 등록된 '새로 만들기' 서식의 내용. FileName(서식 파일) 또는 Data(바이트)만 쓴다.
+    pub fn template(ext: &str) -> Option<Vec<u8>> {
+        let key = format!(".{ext}");
+        let progid = value(&key, "").map(|(_, b)| text(&b)).unwrap_or_default();
+        let mut keys = vec![format!("{key}\\ShellNew")];
+        if !progid.is_empty() {
+            keys.push(format!("{key}\\{progid}\\ShellNew"));
+        }
+        for k in keys {
+            if let Some((_, b)) = value(&k, "FileName") {
+                if let Some(f) = template_file(&text(&b)) {
+                    if let Ok(bytes) = std::fs::read(f) {
+                        if !bytes.is_empty() {
+                            return Some(bytes);
+                        }
+                    }
+                }
+            }
+            if let Some((ty, b)) = value(&k, "Data") {
+                if ty == REG_BINARY && !b.is_empty() {
+                    return Some(b);
+                }
+            }
+        }
+        None
+    }
+}
+
+/// 새 문서 내용 — 등록된 서식 → 앱에 든 빈 문서 순서
+pub fn new_doc_bytes(ext: &str) -> Option<Vec<u8>> {
+    let ext = ext.to_ascii_lowercase();
+    #[cfg(windows)]
+    if let Some(b) = shellnew::template(&ext) {
+        return Some(b);
+    }
+    builtin_blank(&ext).map(|b| b.to_vec())
+}
+
+/// dir 안에 새 문서(한글·엑셀·파워포인트). 같은 이름이면 거부. 새 rel.
+pub fn create_doc_in(root: &Path, dir: &str, name: &str) -> Result<String, String> {
+    use std::io::Write;
+    let name = check_name(name)?;
+    let ext = Path::new(&name).extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
+    let bytes = new_doc_bytes(&ext).ok_or_else(|| format!("'.{ext}' 새 문서는 만들 수 없습니다"))?;
+    let d = resolve(root, dir)?;
+    if !d.is_dir() {
+        return Err("폴더 안에만 만들 수 있습니다".into());
+    }
+    let dest = d.join(&name);
+    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&dest).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists { "같은 이름이 이미 있습니다".to_string() } else { format!("파일을 만들지 못했습니다: {e}") }
+    })?;
+    f.write_all(&bytes).map_err(|e| format!("파일을 만들지 못했습니다: {e}"))?;
+    Ok(rel_of(root, &dest))
+}
+
+/* ── 바깥(탐색기)에서 끌어 온 파일·폴더를 문서 폴더 안으로 복사 (v3.8.1) ──────
+   옮기지 않고 **복사**한다 — 원본은 그대로(실수로 놓아도 잃는 것이 없다). 같은 이름이 있으면 ' (2)' … 를 붙인다. */
+fn free_dest(dir: &Path, name: &std::ffi::OsStr) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let p = Path::new(name);
+    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    for n in 2..10000 {
+        let c = dir.join(format!("{stem} ({n}){ext}"));
+        if !c.exists() {
+            return c;
+        }
+    }
+    dir.join(format!("{stem} ({}){ext}", std::process::id()))
+}
+fn copy_tree(src: &Path, dest: &Path, budget: &mut u32) -> std::io::Result<()> {
+    let meta = std::fs::symlink_metadata(src)?;
+    if meta.file_type().is_symlink() {
+        return Ok(()); // 바로 가기(링크)는 따라가지 않는다
+    }
+    if *budget == 0 {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "파일이 너무 많습니다(2만 개 초과)"));
+    }
+    *budget -= 1;
+    if meta.is_dir() {
+        std::fs::create_dir(dest)?;
+        for e in std::fs::read_dir(src)? {
+            let e = e?;
+            copy_tree(&e.path(), &dest.join(e.file_name()), budget)?;
+        }
+        Ok(())
+    } else {
+        std::fs::copy(src, dest).map(|_| ())
+    }
+}
+/// 바깥 경로들을 dir 안으로 복사(mv=true 면 옮기기). 새로 생긴 항목들의 rel. 하나라도 실패하면 그 이유를 모아 Err(이미 한 것은 남긴다).
+/// 옮기기: 같은 드라이브면 이름만 바꾸고(rename), 다른 드라이브면 **복사가 끝난 뒤에만** 원본을 지운다.
+pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<Vec<String>, String> {
+    let d = resolve(root, dir)?;
+    if !d.is_dir() {
+        return Err("폴더 안에만 넣을 수 있습니다".into());
+    }
+    let mut out = Vec::new();
+    let mut errs = Vec::new();
+    let mut budget: u32 = 20_000;
+    for p in paths {
+        let src = match std::fs::canonicalize(p) {
+            Ok(s) => s,
+            Err(e) => { errs.push(format!("{p}: {e}")); continue; }
+        };
+        let Some(name) = src.file_name().map(|n| n.to_os_string()) else { errs.push(format!("{p}: 드라이브 전체는 넣을 수 없습니다")); continue; };
+        if d.starts_with(&src) {
+            errs.push(format!("{}: 폴더를 자기 안으로 넣을 수 없습니다", name.to_string_lossy()));
+            continue;
+        }
+        if src.parent() == Some(d.as_path()) {
+            continue; // 이미 그 폴더에 있다 — 복사본을 만들지 않는다
+        }
+        let dest = free_dest(&d, &name);
+        if mv && std::fs::rename(&src, &dest).is_ok() {
+            out.push(rel_of(root, &dest));
+            continue;
+        }
+        match copy_tree(&src, &dest, &mut budget) {
+            Ok(()) => {
+                if mv {
+                    let gone = if src.is_dir() { std::fs::remove_dir_all(&src) } else { std::fs::remove_file(&src) };
+                    if let Err(e) = gone {
+                        errs.push(format!("{}: 복사는 했지만 원본을 지우지 못했습니다({e})", name.to_string_lossy()));
+                    }
+                }
+                out.push(rel_of(root, &dest))
+            }
+            Err(e) => errs.push(format!("{}: {e}", name.to_string_lossy())),
+        }
+    }
+    if errs.is_empty() { Ok(out) } else { Err(format!("{}개를 넣지 못했습니다\n{}", errs.len(), errs.join("\n"))) }
+}
+
+/* ── 휴지통 (v3.8.3) ─────────────────────────────────────────────────── */
+pub fn trash_in(root: &Path, rel: &str) -> Result<(), String> {
+    if rel.trim_matches('/').is_empty() {
+        return Err("문서 폴더 자체는 지울 수 없습니다".into());
+    }
+    let p = resolve(root, rel)?;
+    if !p.exists() {
+        return Err("이미 없습니다".into());
+    }
+    #[cfg(windows)]
+    {
+        use windows::core::PCWSTR;
+        use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
+        let mut from: Vec<u16> = display(&p).encode_utf16().collect();
+        from.extend([0, 0]); // 이중 NUL 끝
+        let mut op = SHFILEOPSTRUCTW {
+            wFunc: FO_DELETE,
+            pFrom: PCWSTR(from.as_ptr()),
+            fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT).0 as u16,
+            ..Default::default()
+        };
+        let r = unsafe { SHFileOperationW(&mut op) };
+        if r != 0 || op.fAnyOperationsAborted.as_bool() {
+            return Err(format!("휴지통으로 보내지 못했습니다(다른 프로그램에서 사용 중일 수 있음, 코드 {r})"));
+        }
+        if p.exists() {
+            return Err("휴지통으로 보내지 못했습니다".into());
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("이 환경에선 휴지통을 쓸 수 없습니다".into())
+    }
+}
+
+/* ── 문서 찾기 (v3.8.3) ───────────────────────────────────────────────── */
+#[derive(Debug, Serialize, PartialEq)]
+pub struct SearchHit {
+    pub rel: String,
+    pub name: String,
+    pub dir: bool,
+    /// "name" | "text"
+    pub hit: String,
+    /// 내용으로 걸렸을 때 그 줄(앞뒤 조금)
+    pub snippet: String,
+}
+const SEARCH_MAX_HITS: usize = 200;
+const SEARCH_MAX_ENTRIES: usize = 60_000; // 이만큼 훑으면 멈춘다(공유 폴더가 클 때)
+const SEARCH_TEXT_MAX: u64 = 1024 * 1024; // 내용은 1MB 이하 글자 파일만
+const SEARCH_TEXT_BUDGET: u64 = 64 * 1024 * 1024; // 한 번 찾기에 읽는 총량
+const SEARCH_TEXT_EXT: &[&str] = &["txt", "md", "markdown", "csv", "tsv", "json", "xml", "log", "ini", "cfg", "conf", "yaml", "yml", "toml", "html", "htm", "sql"];
+
+fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let pre: usize = line[..at].chars().count();
+    let s = pre.saturating_sub(20);
+    let e = (pre + qlen + 40).min(chars.len());
+    let mut out: String = chars[s..e].iter().collect();
+    if s > 0 { out.insert(0, '…'); }
+    if e < chars.len() { out.push('…'); }
+    out.trim().to_string()
+}
+
+pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
+    let q = query.trim().to_lowercase();
+    if q.chars().count() < 1 {
+        return Ok(vec![]);
+    }
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let rel = |p: &Path| p.strip_prefix(&base).unwrap_or(p).to_string_lossy().replace('\\', "/");
+    let mut out = Vec::new();
+    let mut seen = 0usize;
+    let mut budget = SEARCH_TEXT_BUDGET;
+    let mut stack = vec![base.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut ents: Vec<_> = rd.flatten().collect();
+        ents.sort_by_key(|e| e.file_name());
+        for ent in ents {
+            seen += 1;
+            if seen > SEARCH_MAX_ENTRIES || out.len() >= SEARCH_MAX_HITS {
+                return Ok(out);
+            }
+            let name = ent.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = ent.file_type() else { continue };
+            if ft.is_symlink() { continue }
+            let Ok(md) = ent.metadata() else { continue };
+            if hidden(&name, &md) { continue }
+            let path = ent.path();
+            let is_dir = md.is_dir();
+            if is_dir { stack.push(path.clone()); }
+            if name.to_lowercase().contains(&q) {
+                out.push(SearchHit { rel: rel(&path), name, dir: is_dir, hit: "name".into(), snippet: String::new() });
+                continue;
+            }
+            if is_dir || md.len() > SEARCH_TEXT_MAX || md.len() > budget { continue }
+            let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if !SEARCH_TEXT_EXT.contains(&ext.as_str()) { continue }
+            let Ok(bytes) = std::fs::read(&path) else { continue };
+            budget = budget.saturating_sub(bytes.len() as u64);
+            let Some((text, _)) = decode_text(&bytes) else { continue };
+            for line in text.lines() {
+                let low = line.to_lowercase();
+                if let Some(at) = low.find(&q) {
+                    // 소문자 바꾸기로 바이트 위치가 어긋날 수 있어 원문 기준으로 다시 맞춘다
+                    let at = if line.is_char_boundary(at) && line.len() == low.len() { at } else { 0 };
+                    out.push(SearchHit { rel: rel(&path), name: name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, q.chars().count()) });
+                    break;
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/* ── 글자 파일 (v3.8.1) — 읽기·쓰기, 인코딩 보존 ─────────────────────────── */
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct TextFile {
+    pub text: String,
+    /// "utf-8" | "utf-8-bom" | "utf-16le" | "cp949"
+    pub encoding: String,
+    pub mtime: i64,
+}
+
+/// 바이트 → (글자, 인코딩). 글자 파일이 아니면 None(NUL 이 섞인 이진 파일 등).
+pub fn decode_text(b: &[u8]) -> Option<(String, &'static str)> {
+    if b.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        return std::str::from_utf8(&b[3..]).ok().map(|s| (s.to_string(), "utf-8-bom"));
+    }
+    if b.starts_with(&[0xFF, 0xFE]) && b.len() % 2 == 0 {
+        let u: Vec<u16> = b[2..].chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        return String::from_utf16(&u).ok().map(|s| (s, "utf-16le"));
+    }
+    if b.iter().take(8192).any(|&x| x == 0) {
+        return None;
+    }
+    if let Ok(s) = std::str::from_utf8(b) {
+        return Some((s.to_string(), "utf-8"));
+    }
+    cp949_decode(b).map(|s| (s, "cp949"))
+}
+
+pub fn encode_text(text: &str, enc: &str) -> Result<Vec<u8>, String> {
+    match enc {
+        "utf-8" => Ok(text.as_bytes().to_vec()),
+        "utf-8-bom" => Ok([&[0xEF, 0xBB, 0xBF][..], text.as_bytes()].concat()),
+        "utf-16le" => Ok([0xFFu8, 0xFE].into_iter().chain(text.encode_utf16().flat_map(|u| u.to_le_bytes())).collect()),
+        "cp949" => cp949_encode(text),
+        _ => Err("알 수 없는 인코딩".into()),
+    }
+}
+
+#[cfg(windows)]
+fn cp949_decode(b: &[u8]) -> Option<String> {
+    use windows::Win32::Globalization::{MultiByteToWideChar, MB_ERR_INVALID_CHARS};
+    if b.is_empty() {
+        return Some(String::new());
+    }
+    unsafe {
+        let n = MultiByteToWideChar(949, MB_ERR_INVALID_CHARS, b, None);
+        if n <= 0 {
+            return None;
+        }
+        let mut w = vec![0u16; n as usize];
+        let m = MultiByteToWideChar(949, MB_ERR_INVALID_CHARS, b, Some(&mut w));
+        if m <= 0 {
+            return None;
+        }
+        String::from_utf16(&w[..m as usize]).ok()
+    }
+}
+#[cfg(windows)]
+fn cp949_encode(text: &str) -> Result<Vec<u8>, String> {
+    use windows::core::BOOL;
+    use windows::Win32::Globalization::WideCharToMultiByte;
+    let w: Vec<u16> = text.encode_utf16().collect();
+    if w.is_empty() {
+        return Ok(Vec::new());
+    }
+    unsafe {
+        let mut used = BOOL(0);
+        let n = WideCharToMultiByte(949, 0, &w, None, None, Some(&mut used));
+        if n <= 0 {
+            return Err("EUC-KR 로 바꾸지 못했습니다".into());
+        }
+        let mut out = vec![0u8; n as usize];
+        used = BOOL(0);
+        let m = WideCharToMultiByte(949, 0, &w, Some(&mut out), None, Some(&mut used));
+        if m <= 0 {
+            return Err("EUC-KR 로 바꾸지 못했습니다".into());
+        }
+        if used.as_bool() {
+            return Err("이 파일의 인코딩(EUC-KR)으로 쓸 수 없는 글자가 있습니다".into());
+        }
+        out.truncate(m as usize);
+        Ok(out)
+    }
+}
+#[cfg(not(windows))]
+fn cp949_decode(_b: &[u8]) -> Option<String> {
+    None
+}
+#[cfg(not(windows))]
+fn cp949_encode(_t: &str) -> Result<Vec<u8>, String> {
+    Err("EUC-KR 은 Windows 에서만".into())
+}
+
+pub fn read_text_in(root: &Path, rel: &str) -> Result<TextFile, String> {
+    let p = resolve(root, rel)?;
+    let md = std::fs::metadata(&p).map_err(|e| format!("읽을 수 없습니다: {e}"))?;
+    if md.is_dir() {
+        return Err("폴더입니다".into());
+    }
+    if md.len() > TEXT_MAX {
+        return Err("글자 파일 상한(5MB) 초과".into());
+    }
+    let b = std::fs::read(&p).map_err(|e| format!("읽을 수 없습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))?;
+    let (text, encoding) = decode_text(&b).ok_or_else(|| "글자 파일이 아닙니다".to_string())?;
+    Ok(TextFile { text, encoding: encoding.into(), mtime: mtime_ms(&md) })
+}
+
+/// 글자 파일 저장 — base_mtime(읽을 때의 고친 시각)과 지금이 다르면 거부한다(다른 프로그램이 그 사이 고쳤음).
+/// 같은 폴더의 임시 파일(~$ 로 시작 — 트리에 안 보임)에 쓴 뒤 바꿔치기한다(쓰다 끊겨도 원본이 반쪽이 되지 않게).
+pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mtime: i64) -> Result<i64, String> {
+    let p = resolve(root, rel)?;
+    let md = std::fs::metadata(&p).map_err(|e| format!("찾을 수 없습니다: {e}"))?;
+    if md.is_dir() {
+        return Err("폴더입니다".into());
+    }
+    if mtime_ms(&md) != base_mtime {
+        return Err("다른 프로그램이 이 파일을 고쳤습니다. 다시 열어 주세요".into());
+    }
+    let cur = std::fs::read(&p).map_err(|e| format!("읽을 수 없습니다: {e}"))?;
+    if decode_text(&cur).is_none() {
+        return Err("글자 파일이 아닙니다".into());
+    }
+    let bytes = encode_text(text, encoding)?;
+    if bytes.len() as u64 > TEXT_MAX {
+        return Err("글자 파일 상한(5MB) 초과".into());
+    }
+    let name = p.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_string_lossy().into_owned();
+    let tmp = p.with_file_name(format!("~${name}.wmhh-tmp"));
+    std::fs::write(&tmp, &bytes).map_err(|e| format!("저장하지 못했습니다: {e}"))?;
+    if let Err(e) = std::fs::rename(&tmp, &p) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("저장하지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}"));
+    }
+    Ok(std::fs::metadata(&p).map(|m| mtime_ms(&m)).unwrap_or(0))
+}
+
+/* ── 명령 ───────────────────────────────────────────────────────────── */
+
+/// 문서 폴더들을 한꺼번에 잡는다(화면 순서 = 폴더 번호). 못 여는 폴더는 그 자리만 ok:false.
+#[tauri::command]
+pub fn doc_set_roots(paths: Vec<String>) -> Vec<RootInfo> {
+    let mut roots = Vec::new();
+    let mut out = Vec::new();
+    for p in &paths {
+        match canon_dir(p) {
+            Ok(c) => { out.push(RootInfo { ok: true, path: display(&c), error: String::new() }); roots.push(Some(c)); }
+            Err(e) => { out.push(RootInfo { ok: false, path: p.clone(), error: e }); roots.push(None); }
+        }
+    }
+    *ROOTS.lock().unwrap_or_else(|e| e.into_inner()) = roots;
+    out
+}
+
+#[tauri::command]
+pub fn doc_list(root: usize, rel: String) -> Result<Vec<DocEntry>, String> {
+    list_in(&self::root(root)?, &rel)
+}
+
+/// 파일 내용을 그대로(배열 버퍼로) 돌려준다 — JSON 숫자 배열로 보내면 큰 파일에서 몇 배로 커진다.
+#[tauri::command]
+pub fn doc_read(root: usize, rel: String) -> Result<tauri::ipc::Response, String> {
+    Ok(tauri::ipc::Response::new(read_in(&self::root(root)?, &rel)?))
+}
+
+#[tauri::command]
+pub fn doc_read_text(root: usize, rel: String) -> Result<TextFile, String> {
+    read_text_in(&self::root(root)?, &rel)
+}
+
+#[tauri::command]
+pub fn doc_write_text(root: usize, rel: String, text: String, encoding: String, base_mtime: i64) -> Result<i64, String> {
+    write_text_in(&self::root(root)?, &rel, &text, &encoding, base_mtime)
+}
+
+#[tauri::command]
+pub fn doc_move(root: usize, from: String, to_dir: String) -> Result<String, String> {
+    move_in(&self::root(root)?, &from, &to_dir)
+}
+
+#[tauri::command]
+pub fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
+    import_in(&self::root(root)?, &dir, &paths, mv.unwrap_or(false))
+}
+
+/// 지금 Shift 가 눌려 있나 — 탐색기에서 끌어 오는 동안 웹뷰는 키 입력을 못 받으므로 Windows 에 직접 묻는다
+#[tauri::command]
+pub fn key_shift_down() -> bool {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_SHIFT};
+        (GetAsyncKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+/// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
+#[tauri::command]
+pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
+    trash_in(&self::root(root)?, &rel)
+}
+
+/// 문서 폴더 안 찾기 — 이름(폴더·파일)과 작은 글자 파일의 내용. 무거운 일이라 별도 스레드에서.
+#[tauri::command]
+pub async fn doc_search(root: usize, query: String) -> Result<Vec<SearchHit>, String> {
+    let r = self::root(root)?;
+    tauri::async_runtime::spawn_blocking(move || search_in(&r, &query)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn doc_create_doc(root: usize, dir: String, name: String) -> Result<String, String> {
+    create_doc_in(&self::root(root)?, &dir, &name)
+}
+
+#[tauri::command]
+pub fn doc_create(root: usize, dir: String, name: String, is_dir: bool) -> Result<String, String> {
+    create_in(&self::root(root)?, &dir, &name, is_dir)
+}
+
+#[tauri::command]
+pub fn doc_rename(root: usize, rel: String, name: String) -> Result<String, String> {
+    rename_in(&self::root(root)?, &rel, &name)
+}
+
+/// 열기·폴더에서 보기(이미 있는 open_file_path / reveal_file_path)에 넘길 절대 경로 — 역시 문서 폴더 안만.
+#[tauri::command]
+pub fn doc_abs(root: usize, rel: String) -> Result<String, String> {
+    Ok(display(&resolve(&self::root(root)?, &rel)?))
+}
+
+/// 탐색기 미리 보기(preview.rs)용 — 문서 폴더 안의 실제 경로
+pub fn abs_path(root: usize, rel: &str) -> Result<PathBuf, String> {
+    resolve(&self::root(root)?, rel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("wmhh_docs_{name}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("가 폴더/안쪽")).unwrap();
+        std::fs::write(d.join("가 폴더/보고서.hwpx"), b"x").unwrap();
+        std::fs::write(d.join("~$임시.xlsx"), b"x").unwrap();
+        std::fs::write(d.join(".숨김"), b"x").unwrap();
+        std::fs::write(d.join("표.xlsx"), b"abc").unwrap();
+        d
+    }
+
+    #[test]
+    fn resolve_rejects_paths_outside_root() {
+        let d = tmp("outside");
+        let root = d.join("가 폴더");
+        assert!(resolve(&root, "").is_ok());
+        assert!(resolve(&root, "보고서.hwpx").is_ok());
+        assert!(resolve(&root, "안쪽").is_ok());
+        for bad in ["..", "../표.xlsx", "안쪽/../../표.xlsx", "..\\표.xlsx", "/etc", "C:/Windows", "C:\\Windows"] {
+            assert!(resolve(&root, bad).is_err(), "거부해야 함: {bad}");
+        }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn list_one_level_dirs_first_and_skip_hidden_temp() {
+        let d = tmp("list");
+        let got = list_in(&d, "").unwrap();
+        let names: Vec<_> = got.iter().map(|e| (e.name.as_str(), e.dir)).collect();
+        assert_eq!(names, vec![("가 폴더", true), ("표.xlsx", false)], "폴더 먼저 · 숨김·~$ 임시 파일 제외 · 한 단계만");
+        assert_eq!(got[1].size, 3);
+        assert!(got[1].mtime > 0);
+        let inner = list_in(&d, "가 폴더").unwrap();
+        assert_eq!(inner.iter().map(|e| e.rel.as_str()).collect::<Vec<_>>(), vec!["가 폴더/안쪽", "가 폴더/보고서.hwpx"]);
+        assert!(list_in(&d, "표.xlsx").is_err());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn move_inside_root_only_no_overwrite_no_self() {
+        let d = tmp("move");
+        std::fs::create_dir_all(d.join("다른")).unwrap();
+        assert_eq!(move_in(&d, "표.xlsx", "가 폴더").unwrap(), "가 폴더/표.xlsx");
+        assert!(d.join("가 폴더/표.xlsx").exists() && !d.join("표.xlsx").exists());
+        assert!(move_in(&d, "가 폴더/표.xlsx", "가 폴더").is_err(), "이미 그 폴더");
+        std::fs::write(d.join("다른/표.xlsx"), b"other").unwrap();
+        assert!(move_in(&d, "가 폴더/표.xlsx", "다른").is_err(), "같은 이름이 있으면 덮어쓰지 않는다");
+        assert_eq!(std::fs::read(d.join("다른/표.xlsx")).unwrap(), b"other");
+        assert!(move_in(&d, "가 폴더", "가 폴더/안쪽").is_err(), "자기 안으로");
+        assert!(move_in(&d, "", "다른").is_err(), "루트 자체");
+        assert!(move_in(&d.join("가 폴더"), "보고서.hwpx", "..").is_err(), "문서 폴더 밖으로");
+        assert!(move_in(&d, "가 폴더/보고서.hwpx", "가 폴더/보고서.hwpx").is_err(), "파일 안으로");
+        assert_eq!(move_in(&d, "가 폴더/안쪽", "다른").unwrap(), "다른/안쪽", "폴더도 옮긴다");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn text_encodings_round_trip_and_conflict_guard() {
+        let d = tmp("text");
+        std::fs::write(d.join("u8.txt"), "한글 UTF-8".as_bytes()).unwrap();
+        std::fs::write(d.join("bom.md"), [&[0xEF, 0xBB, 0xBF][..], "# 제목".as_bytes()].concat()).unwrap();
+        std::fs::write(d.join("bin.dat"), [1u8, 0, 2, 3]).unwrap();
+        let t = read_text_in(&d, "u8.txt").unwrap();
+        assert_eq!((t.text.as_str(), t.encoding.as_str()), ("한글 UTF-8", "utf-8"));
+        let b = read_text_in(&d, "bom.md").unwrap();
+        assert_eq!((b.text.as_str(), b.encoding.as_str()), ("# 제목", "utf-8-bom"));
+        assert!(read_text_in(&d, "bin.dat").is_err(), "이진 파일은 글자 파일이 아니다");
+        let m2 = write_text_in(&d, "bom.md", "# 바꾼 제목", "utf-8-bom", b.mtime).unwrap();
+        assert_eq!(std::fs::read(d.join("bom.md")).unwrap(), [&[0xEF, 0xBB, 0xBF][..], "# 바꾼 제목".as_bytes()].concat(), "BOM 유지");
+        assert!(write_text_in(&d, "bom.md", "x", "utf-8-bom", b.mtime).is_err() || m2 == b.mtime, "옛 시각으로는 덮어쓰지 않는다");
+        assert!(write_text_in(&d, "bin.dat", "x", "utf-8", read_text_in(&d, "u8.txt").unwrap().mtime).is_err());
+        assert!(!std::fs::read_dir(&d).unwrap().flatten().any(|e| e.file_name().to_string_lossy().contains("wmhh-tmp")), "임시 파일이 남지 않는다");
+        let u16b = encode_text("가A", "utf-16le").unwrap();
+        assert_eq!(decode_text(&u16b).unwrap(), ("가A".to_string(), "utf-16le"));
+        #[cfg(windows)]
+        {
+            let euc = [0xC7u8, 0xD1, 0xB1, 0xDB]; // "한글" EUC-KR
+            assert_eq!(decode_text(&euc).unwrap(), ("한글".to_string(), "cp949"));
+            assert_eq!(encode_text("한글", "cp949").unwrap(), euc);
+            assert!(encode_text("😀", "cp949").is_err(), "EUC-KR 로 못 쓰는 글자는 거부");
+        }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn read_inside_root_only() {
+        let d = tmp("read");
+        assert_eq!(read_in(&d, "표.xlsx").unwrap(), b"abc");
+        assert!(read_in(&d.join("가 폴더"), "../표.xlsx").is_err());
+        assert!(read_in(&d, "가 폴더").is_err(), "폴더는 읽지 않는다");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn create_and_rename_inside_root_no_overwrite() {
+        let r = tmp("create");
+        std::fs::create_dir_all(r.join("가")).unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert_eq!(create_in(&root, "가", "새 문서.txt", false).unwrap(), "가/새 문서.txt");
+        assert!(create_in(&root, "가", "새 문서.txt", false).is_err(), "같은 이름은 거부");
+        assert_eq!(create_in(&root, "", "새 폴더", true).unwrap(), "새 폴더");
+        for bad in ["a/b", "..", "a:b", "  ", "x.", "CON", "com1.txt", "a?b"] {
+            assert!(create_in(&root, "", bad, false).is_err(), "{bad}");
+        }
+        assert!(create_in(&root, "../", "x.txt", false).is_err(), "밖으로 못 나간다");
+        assert_eq!(rename_in(&root, "가/새 문서.txt", "회의.md").unwrap(), "가/회의.md");
+        assert!(r.join("가").join("회의.md").exists());
+        std::fs::write(r.join("가").join("b.txt"), "b").unwrap();
+        assert!(rename_in(&root, "가/b.txt", "회의.md").is_err(), "덮어쓰지 않는다");
+        assert_eq!(rename_in(&root, "가/회의.md", "회의.MD").unwrap(), "가/회의.MD", "대소문자만 바꾸기");
+        assert!(rename_in(&root, "", "x").is_err());
+        assert!(rename_in(&root, "가/b.txt", "../밖.txt").is_err());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn import_copies_in_keeps_original_and_numbers_duplicates() {
+        let r = tmp("import");
+        let outside = tmp("import_src");
+        std::fs::write(outside.join("회의.txt"), "a").unwrap();
+        std::fs::create_dir_all(outside.join("묶음/안")).unwrap();
+        std::fs::write(outside.join("묶음/안/b.txt"), "b").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let ps = vec![outside.join("회의.txt").to_string_lossy().to_string(), outside.join("묶음").to_string_lossy().to_string()];
+        assert_eq!(import_in(&root, "가 폴더", &ps, false).unwrap(), vec!["가 폴더/회의.txt", "가 폴더/묶음"]);
+        assert!(outside.join("회의.txt").exists(), "원본은 그대로(복사)");
+        assert_eq!(std::fs::read_to_string(r.join("가 폴더/묶음/안/b.txt")).unwrap(), "b", "폴더는 통째로");
+        assert_eq!(import_in(&root, "가 폴더", &ps[..1], false).unwrap(), vec!["가 폴더/회의 (2).txt"], "같은 이름은 (2)");
+        let me = vec![r.join("가 폴더").to_string_lossy().to_string()];
+        assert!(import_in(&root, "가 폴더/안쪽", &me, false).is_err(), "자기 안으로는 못 넣는다");
+        assert!(import_in(&root, "../", &ps, false).is_err());
+        let _ = std::fs::remove_dir_all(&r);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn new_office_docs_are_real_zip_files_not_empty() {
+        let r = tmp("newdoc");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        for (n, magic) in [("새 한글.hwpx", "PK"), ("새 표.xlsx", "PK"), ("새 발표.pptx", "PK")] {
+            let rel = create_doc_in(&root, "가 폴더", n).unwrap();
+            let b = std::fs::read(r.join(&rel)).unwrap();
+            assert!(b.len() > 1000 && b.starts_with(magic.as_bytes()), "{n}: {} 바이트", b.len());
+        }
+        assert!(create_doc_in(&root, "가 폴더", "새 한글.hwpx").is_err(), "덮어쓰지 않는다");
+        assert!(create_doc_in(&root, "", "x.zzz").is_err(), "모르는 형식은 거부");
+        assert!(builtin_blank("hwpx").is_some() && builtin_blank("txt").is_none());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn import_move_takes_original_away() {
+        let r = tmp("importmv");
+        let outside = tmp("importmv_src");
+        std::fs::write(outside.join("옮길.txt"), "m").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let ps = vec![outside.join("옮길.txt").to_string_lossy().to_string()];
+        assert_eq!(import_in(&root, "가 폴더", &ps, true).unwrap(), vec!["가 폴더/옮길.txt"]);
+        assert!(!outside.join("옮길.txt").exists(), "옮기면 원본은 없다");
+        assert_eq!(std::fs::read_to_string(r.join("가 폴더/옮길.txt")).unwrap(), "m");
+        let _ = std::fs::remove_dir_all(&r);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn search_names_and_small_text_contents_skip_hidden() {
+        let r = tmp("search");
+        std::fs::write(r.join("가 폴더/회의록 11월.txt"), "안건 없음").unwrap();
+        std::fs::write(r.join("가 폴더/안쪽/메모.md"), "첫 줄\n견적서 회신 기한은 11.28 까지\n").unwrap();
+        std::fs::write(r.join("가 폴더/안쪽/표.csv"), "이름,견적\n").unwrap();
+        std::fs::write(r.join(".숨김견적"), "견적").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let hits = search_in(&root, "견적").unwrap();
+        let mut got: Vec<(String, String)> = hits.iter().map(|h| (h.rel.clone(), h.hit.clone())).collect();
+        got.sort();
+        assert_eq!(got, vec![("가 폴더/안쪽/메모.md".into(), "text".into()), ("가 폴더/안쪽/표.csv".into(), "text".into())]);
+        assert!(hits.iter().find(|h| h.rel.ends_with("메모.md")).unwrap().snippet.contains("견적서 회신"));
+        assert_eq!(search_in(&root, "11월").unwrap()[0].hit, "name");
+        assert_eq!(search_in(&root, "안쪽").unwrap()[0].dir, true, "폴더 이름도 찾는다");
+        assert!(search_in(&root, "  ").unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 실제 Windows 휴지통에 시험 파일을 넣으므로 평소엔 건너뛴다: `cargo test --lib -- --ignored trash`
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn trash_inside_root_only() {
+        let r = tmp("trash");
+        std::fs::write(r.join("가 폴더/버릴.txt"), "x").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert!(trash_in(&root, "").is_err(), "문서 폴더 자체는 못 지운다");
+        assert!(trash_in(&root, "../밖").is_err());
+        trash_in(&root, "가 폴더/버릴.txt").unwrap();
+        assert!(!r.join("가 폴더/버릴.txt").exists());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+}

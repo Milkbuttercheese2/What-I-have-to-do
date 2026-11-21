@@ -5,11 +5,11 @@ import {S, newId, makeItem, toggleDone} from './state.js';
 import {invoke, STORE} from './store.js';
 import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm, showToast} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
-import {placeOf, PLACE_NAME} from './placement.js';
 import {persist} from './render.js';
 import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 import {openModal, closeModal, isOpen, topSave} from './modals.js';
+import {docTarget, showDoc} from './docs.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -38,6 +38,10 @@ export function captureMemo(t){
 
 /* (2) 양식 패널 */
 let editingId=null;
+/* v3.8.0 캘린더에서 시각을 미리 채워 연 새 양식(openForm opts.subFromMemo) — collectForm 은 제목이 빈
+   세부 줄을 버리므로, 그대로면 채워 둔 점검시각이 저장 때 사라진다. 이 양식에서만 시각이 있는 세부 줄의
+   빈 제목을 메모 첫 줄(그것도 없으면 '점검')로 채운다. openForm 마다 다시 정한다. */
+let subFromMemo=false;
 const enabled = () => S.fields.filter(f=>f.on);
 
 /* ── 임시저장 (v2.5.22) ───────────────────────────────────────────────────
@@ -131,7 +135,7 @@ function setReadonly(on){
   const p=$('formPanel');
   p.classList.toggle('fm-ro', on);
   p.querySelectorAll('input,textarea,select,button').forEach(el=>{
-    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book') return;   // 닫기·다시 진행·2쪽 보기는 살려 둔다
+    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·[문서]는 살려 둔다
     el.disabled=on;
   });
   $('fm-save').style.display=on?'none':'';
@@ -150,14 +154,13 @@ export async function openForm(pre, opts){
   pre=pre||{};
   const readonly=!!(opts&&opts.readonly);
   editingId=pre.id||null;
+  subFromMemo=!readonly && !editingId && !!(opts&&opts.subFromMemo);
   draftKey = readonly ? null : (editingId ? String(editingId) : 'new');   // 읽기 전용은 초안을 만들지 않는다
   lastWritten=null;
   fillForm(pre);
   if(readonly){
     setReadonly(true);
     baseline=null; markDraft(0);
-    updatePlacePreview();
-    $('fm-place').textContent='고치려면 [다시 진행]';
     showFormPanel();
     return;
   }
@@ -174,7 +177,7 @@ export async function openForm(pre, opts){
       markDraft(dr.at);
     } else { dropDraft(draftKey); draftKey='new'; markDraft(0); }
   } else { if(dr) dropDraft(draftKey); draftKey = editingId ? String(editingId) : 'new'; markDraft(0); }
-  updatePlacePreview();
+  if(subFromMemo) $('fm-subs').querySelectorAll('.fsub-title').forEach(t=>{ if(!t.value) t.placeholder='메모 첫 줄'; });
   showFormPanel();
   const m=$('fm-memo'); m.focus();
   const pos=m.value.indexOf('○○'); if(pos>=0)m.setSelectionRange(pos,pos+2);
@@ -218,7 +221,7 @@ function wireTagHover(ta, hlId){
 
 function fillForm(pre){
   pre=pre||{};
-  /* v3.7.0: 제목은 짧게 — '저장하면 자동 배치' 설명은 옆의 '저장 위치' 칩이 대신 말한다 */
+  /* v3.7.0: 제목은 짧게 */
   $('fm-title').textContent=editingId?'업무':'새 업무';
   $('fm-memo').value = pre.memo || '';
   renderMemoHl();
@@ -375,10 +378,13 @@ function addFormFileRow(path, active){
     <span class="ffile-link" title="열기" style="${active?'':'display:none'}">${esc(fileName(path)||'(경로 없음)')}</span>
     <input type="text" class="ffile-path" maxlength="1000" placeholder="파일 경로 (직접 붙여넣기 가능)" value="${escAttr(path||'')}" style="${active?'display:none':''}">
     <button type="button" class="ffile-browse" title="파일 찾기" style="${active?'display:none':''}">찾기</button>
+    <button type="button" class="ffile-doc" title="문서 탭에서 보기" style="display:none">문서</button>
     <button class="rm" title="삭제">×</button>`;
   const toggle=row.querySelector('.ffile-toggle'), link=row.querySelector('.ffile-link'),
-        input=row.querySelector('.ffile-path'), browse=row.querySelector('.ffile-browse');
-  const setMode=on=>{ link.style.display=on?'':'none'; input.style.display=on?'none':''; browse.style.display=on?'none':''; };
+        input=row.querySelector('.ffile-path'), browse=row.querySelector('.ffile-browse'), docBtn=row.querySelector('.ffile-doc');
+  /* v3.8.1 [문서] — 링크가 문서 탭의 폴더 안(그 폴더·하위 폴더·파일)이면 문서 탭으로 바로 간다 */
+  const syncDoc=on=>{ docBtn.style.display = on && docTarget(input.value.trim()) ? '' : 'none'; };
+  const setMode=on=>{ link.style.display=on?'':'none'; input.style.display=on?'none':''; browse.style.display=on?'none':''; syncDoc(on); };
   toggle.addEventListener('click',()=>{
     const on=toggle.classList.toggle('on');
     if(on){ const p=input.value.trim(); link.textContent=fileName(p)||'(경로 없음)'; link.title='열기: '+p; }  // 활성화: 이름 갱신
@@ -391,6 +397,8 @@ function addFormFileRow(path, active){
     let p=null; try{ p=await invoke('pick_file_path'); }catch(e){ await appAlert('파일 선택 실패: '+e); return; }
     if(p) input.value=p;
   });
+  docBtn.addEventListener('click',async()=>{ const p=input.value.trim(); if(!p) return; await closeForm(); showDoc(p); });
+  syncDoc(active);
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
   $('fm-files').appendChild(row);
 }
@@ -417,9 +425,12 @@ function collectForm(){
     const sel=r.querySelector('.fid-kind').value, etc=r.querySelector('.fid-etc').value.trim(), val=r.querySelector('.fid-val').value.trim();
     const kind=sel==='기타'?(etc||'기타'):sel; return val?{kind,val}:null;
   }).filter(Boolean);
+  const memo1=$('fm-memo').value.trim().split('\n')[0].trim();
   const subs=[...$('fm-subs').querySelectorAll('.fsub-row')].map(r=>{
-    const t=r.querySelector('.fsub-title').value.trim(); if(!t)return null;
     const dt=r.querySelector('.fsub-dt'); const raw=readDtInput(dt); const mid=(raw===null?'':raw);
+    let t=r.querySelector('.fsub-title').value.trim();
+    if(!t && subFromMemo && mid) t=(memo1||'점검').slice(0,500);     // v3.8.0 (위 subFromMemo 설명)
+    if(!t)return null;
     const id = r.dataset.subid!=null && r.dataset.subid!=='' ? Number(r.dataset.subid) : newId();
     const done = r.dataset.done==='1';
     // 기존 세부의 알람 확인 상태(al) 보존. 단 점검시각이 바뀌면 알람 재무장.
@@ -432,7 +443,6 @@ function collectForm(){
   // 항목 담당자 입력은 v2.5.2 제거 — 담당은 세부할일 전용. 기존 it.owner는 저장 시 건드리지 않아 보존된다.
   return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs, files};
 }
-function updatePlacePreview(){ try{ const d=collectForm(); const p=placeOf({staged:false,f:d.f,subs:d.subs}); $('fm-place').innerHTML=`저장 위치: <b>${PLACE_NAME[p]}</b>`; }catch{} }
 
 export function initForm(){
   // 팝업이 어느 탭에서든 뜨도록 formPanel을 body 직속으로 이동
@@ -485,7 +495,7 @@ export function initForm(){
   /* 백드롭 하이라이트 스크롤 동기 — 안 맞으면 하이라이트가 글자와 어긋난다 */
   $('fm-memo').addEventListener('scroll',()=>{ const hl=$('fm-memo-hl'); if(hl) hl.scrollTop=$('fm-memo').scrollTop; });
   /* 임시저장 트리거 — 입력·선택·행 추가/삭제 모두 (change 는 select·날짜 위젯용) */
-  $('formPanel').addEventListener('input',e=>{ if(e.target.closest('#fm-grid,#fm-subs')) updatePlacePreview(); if(e.target.id==='fm-memo') renderMemoHl(); scheduleDraft(); });
+  $('formPanel').addEventListener('input',e=>{ if(e.target.id==='fm-memo') renderMemoHl(); scheduleDraft(); });
   $('formPanel').addEventListener('change',scheduleDraft);
   $('formPanel').addEventListener('click',e=>{ if(e.target.closest('.rm,.fsub-chk,.fsub-add')) scheduleDraft(); });
   $('fm-save').addEventListener('click',()=>commitForm());

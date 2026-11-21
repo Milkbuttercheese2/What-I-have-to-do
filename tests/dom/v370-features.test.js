@@ -303,20 +303,50 @@ test('metricsOf: 오늘 할 일(오늘·지난 미완료) · 오늘 완료(오�
 });
 
 /* ── 완료 묶음 · 캘린더 상세 · 전화번호부 묶음 · 연결된 업무 ───────────── */
-test('doneGroupOf: 오늘 / 이번 주 / 이번 달 / 그 이전은 달별 / 날짜 모름 (v3.7.1)', async () => {
+test('doneGroupOf: 오늘 / 이번 주 / 그 이전은 주별 / 날짜 모름 (v3.8.0)', async () => {
   const {doneGroupOf} = await import('../../src/render.js');
   const now = new Date(2026, 10, 12, 15, 0).getTime();          // 2026-11-12 (목)
-  const at = (m,d,h=10) => new Date(2026, m, d, h, 0).getTime();
+  const at = (m,d,h=10,mi=0) => new Date(2026, m, d, h, mi).getTime();
   assert.equal(doneGroupOf(at(10,12), now).key, 'today');
   assert.equal(doneGroupOf(at(10,11), now).key, 'week');          // 어제도 이번 주
-  assert.equal(doneGroupOf(at(10,9), now).key, 'week');           // 월요일
-  assert.equal(doneGroupOf(at(10,8), now).key, 'month');          // 지난 일요일 = 이번 달
-  assert.equal(doneGroupOf(at(10,1), now).key, 'month');
-  assert.equal(doneGroupOf(at(9,31), now).label, '2026년 10월');
+  assert.equal(doneGroupOf(at(10,9,0,0), now).key, 'week', '월요일 0시 정각 = 이번 주');
+  const last = doneGroupOf(at(10,8,23,59), now);                  // 지난 일요일 23:59 = 지난 주
+  assert.equal(last.key, `w${new Date(2026,10,2).getTime()}`);
+  assert.equal(last.label, '11.2(월)~11.8(일)');
+  assert.equal(doneGroupOf(at(10,2,0,0), now).key, last.key, '그 주 월요일 0시도 같은 주');
+  assert.equal(doneGroupOf(at(10,1,23,0), now).label, '10.26(월)~11.1(일)', '달이 걸친 주');
   assert.equal(doneGroupOf(null, now).key, 'nodate');
   /* 이번 주가 지난달에 걸친 경우: 2026-12-02(수), 월요일은 11-30 → 11-30 은 이번 주 */
   const now2 = new Date(2026, 11, 2, 9, 0).getTime();
   assert.equal(doneGroupOf(new Date(2026, 10, 30, 10).getTime(), now2).key, 'week');
+  /* 해가 바뀌는 주: 2025-12-29(월)~2026-1-4(일). 지금이 2026 이면 월요일 해(2025)를 앞에 붙인다 */
+  const now3 = new Date(2026, 0, 14, 9).getTime();
+  assert.equal(doneGroupOf(new Date(2026, 0, 2, 9).getTime(), now3).label, '2025년 12.29(월)~1.4(일)');
+  assert.equal(doneGroupOf(new Date(2026, 0, 6, 9).getTime(), now3).label, '1.5(월)~1.11(일)');
+  /* 정렬 순서: 최근 주가 위 */
+  assert.ok(doneGroupOf(at(10,8), now).order > doneGroupOf(at(10,1), now).order);
+});
+
+test('완료 탭: 주별 묶음은 기본 펼침(v3.8.1)이고 머리줄로 접으며, 검색어가 있으면 모두 펼친다 · 요약은 오늘·이번 주', async () => {
+  await fresh();
+  const now=Date.now();
+  S.items.push(mk({memo:'오늘 끝', done:true, doneAt:now}), mk({memo:'옛날 끝', done:true, doneAt:now-86400e3*60}));
+  renderDone();
+  const grp = () => doc.querySelectorAll('#col-done .done-group')[1];
+  assert.ok(!grp().classList.contains('dg-closed'), '지난 주도 펼친 채');
+  assert.equal(grp().querySelectorAll('.card').length, 1);
+  assert.match(grp().querySelector('.dg-label').textContent, /^\d+\.\d+\(월\)~\d+\.\d+\(일\)$|^\d{4}년 /);
+  click(grp().querySelector('.dg-label'));
+  assert.ok(grp().classList.contains('dg-closed'));
+  assert.equal(grp().querySelectorAll('.card').length, 0, '접힌 묶음은 카드를 만들지 않는다');
+  click(grp().querySelector('.dg-head'));
+  assert.ok(!grp().classList.contains('dg-closed'), '다시 누르면 펼친다');
+  click(grp().querySelector('.dg-head'));
+  $('done-search').value='옛날'; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  assert.equal(doc.querySelectorAll('#col-done .done-group').length, 1);
+  assert.ok(!doc.querySelector('#col-done .done-group').classList.contains('dg-closed'), '검색 중엔 펼친다');
+  $('done-search').value=''; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  assert.deepEqual([...doc.querySelectorAll('#done-metrics span')].map(s=>s.textContent), ['1오늘','1이번 주']);
 });
 
 test('완료 탭: 묶음 머리와 카드가 그려지고, 카드를 누르면 읽기 전용 양식이 열린다', async () => {
