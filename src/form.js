@@ -38,6 +38,10 @@ export function captureMemo(t){
 
 /* (2) 양식 패널 */
 let editingId=null;
+/* v3.8.0 캘린더에서 시각을 미리 채워 연 새 양식(openForm opts.subFromMemo) — collectForm 은 제목이 빈
+   세부 줄을 버리므로, 그대로면 채워 둔 점검시각이 저장 때 사라진다. 이 양식에서만 시각이 있는 세부 줄의
+   빈 제목을 메모 첫 줄(그것도 없으면 '점검')로 채운다. openForm 마다 다시 정한다. */
+let subFromMemo=false;
 const enabled = () => S.fields.filter(f=>f.on);
 
 /* ── 임시저장 (v2.5.22) ───────────────────────────────────────────────────
@@ -150,6 +154,7 @@ export async function openForm(pre, opts){
   pre=pre||{};
   const readonly=!!(opts&&opts.readonly);
   editingId=pre.id||null;
+  subFromMemo=!readonly && !editingId && !!(opts&&opts.subFromMemo);
   draftKey = readonly ? null : (editingId ? String(editingId) : 'new');   // 읽기 전용은 초안을 만들지 않는다
   lastWritten=null;
   fillForm(pre);
@@ -174,6 +179,7 @@ export async function openForm(pre, opts){
       markDraft(dr.at);
     } else { dropDraft(draftKey); draftKey='new'; markDraft(0); }
   } else { if(dr) dropDraft(draftKey); draftKey = editingId ? String(editingId) : 'new'; markDraft(0); }
+  if(subFromMemo) $('fm-subs').querySelectorAll('.fsub-title').forEach(t=>{ if(!t.value) t.placeholder='비우면 메모 첫 줄'; });
   updatePlacePreview();
   showFormPanel();
   const m=$('fm-memo'); m.focus();
@@ -417,9 +423,12 @@ function collectForm(){
     const sel=r.querySelector('.fid-kind').value, etc=r.querySelector('.fid-etc').value.trim(), val=r.querySelector('.fid-val').value.trim();
     const kind=sel==='기타'?(etc||'기타'):sel; return val?{kind,val}:null;
   }).filter(Boolean);
+  const memo1=$('fm-memo').value.trim().split('\n')[0].trim();
   const subs=[...$('fm-subs').querySelectorAll('.fsub-row')].map(r=>{
-    const t=r.querySelector('.fsub-title').value.trim(); if(!t)return null;
     const dt=r.querySelector('.fsub-dt'); const raw=readDtInput(dt); const mid=(raw===null?'':raw);
+    let t=r.querySelector('.fsub-title').value.trim();
+    if(!t && subFromMemo && mid) t=(memo1||'점검').slice(0,500);     // v3.8.0 (위 subFromMemo 설명)
+    if(!t)return null;
     const id = r.dataset.subid!=null && r.dataset.subid!=='' ? Number(r.dataset.subid) : newId();
     const done = r.dataset.done==='1';
     // 기존 세부의 알람 확인 상태(al) 보존. 단 점검시각이 바뀌면 알람 재무장.

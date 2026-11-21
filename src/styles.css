@@ -1186,6 +1186,30 @@
   /* 옛 규칙 .cal-detail.on{display:block} 이 flex 를 덮어 시간표 칸이 늘어나기만 하고 스크롤되지 않았다 */
   .cal-detail.on{display:flex}
 
+  /* ── v3.8.0 캘린더 현행 | 종료 · 시간대 누르기 · 종료 이름표 ── */
+  .cal-head{flex-wrap:wrap}
+  .cal-head .cal-mode{width:auto;flex:none}
+  .cal-head .cal-mode .seg-btn{flex:none;padding:5px 14px}
+  .pill.p-fin{background:var(--gray-bg);color:var(--gray-fg)}
+  .tl-line.tl-fin{border-top:1px dashed var(--gray-fg);opacity:.6}
+  .tl-line.tl-fin::before{border-color:var(--gray-fg)}
+  .tl-chip.tl-fin{background:var(--gray-bg);color:var(--gray-fg);border-color:var(--line);opacity:.85}
+  .tl-chip.tl-fin .tl-what{color:var(--ink-soft)}
+  .tl-pickable .tl-canvas{cursor:copy}
+  .tl-pickable .tl-chip{cursor:pointer}
+  .tl-hover{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--ink-soft);opacity:0;pointer-events:none;z-index:1;transition:opacity .08s}
+  .tl-hover.on{opacity:.55}
+  .tl-hover-t{position:absolute;right:4px;top:-17px;font-size:11px;font-weight:600;color:var(--ink-soft)}
+
+  /* ── v3.8.0 완료 묶음 접기·펼치기 + 주간 복사 ── */
+  .dg-head[data-dgtoggle]{cursor:pointer;user-select:none}
+  .dg-head:hover .dg-label{color:var(--focus)}
+  .dg-caret{width:12px;flex:none;font-size:11px;color:var(--ink-soft)}
+  .done-group.dg-closed .dg-head{border-bottom:0}
+  .dg-copy{font-family:inherit;font-size:12px;font-weight:600;padding:3px 10px;border-radius:8px;cursor:pointer;
+    background:var(--card);border:1px solid var(--line);color:var(--ink-2)}
+  .dg-copy:hover{border-color:var(--focus);color:var(--focus)}
+
 
   .fm-mini-row{display:inline-flex;gap:6px}
 

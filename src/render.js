@@ -3,7 +3,8 @@
    ========================================================================= */
 import {S, toggleDone, markDoneRemoved} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
+import {$, esc, escAttr, showToast, askNotify, appAlert, copyText} from './dom-utils.js';
+import {doneGroupOf, groupOpenByDefault, weekReportText} from './done-weeks.js';
 import {fmtDue, fmtT} from './datetime.js';
 import {placeOf, placeMode} from './placement.js';
 import {textMatch} from './filters.js';
@@ -192,22 +193,12 @@ function renderHidden(){
   if(on('view-cal')) renderCal();
   if(on('view-done')) renderDone();
 }
-/* v3.7.0 완료 업무를 '언제 끝냈나'로 묶는다 — 오늘 / 어제 / 이번 주 / 지난주 / 그 이전은 월별.
-   완료 시각(doneAt)이 없는 옛 데이터는 '날짜 모름' 묶음. 묶음 키는 표시용 파생값(저장 안 함). */
-export function doneGroupOf(doneAt, now){
-  if(!doneAt) return {key:'nodate', label:'완료 날짜 모름', order:-1};
-  now=now||Date.now();
-  const d0=new Date(now); d0.setHours(0,0,0,0); const today=d0.getTime();
-  const wk=new Date(d0); wk.setDate(wk.getDate()-((wk.getDay()+6)%7)); const week=wk.getTime();   // 이번 주 월요일
-  /* v3.7.1 소유자 지정: 오늘 · 이번 주 · 이번 달, 그 이전은 달별(어제·지난주 묶음 폐지).
-     이번 주가 지난달에 걸쳐 시작해도(월요일이 지난달) 이번 주로 본다 — 주가 달보다 먼저. */
-  const m1=new Date(d0); m1.setDate(1); const month=m1.getTime();                                       // 이번 달 1일
-  if(doneAt>=today) return {key:'today', label:'오늘', order:1e15};
-  if(doneAt>=week) return {key:'week', label:'이번 주', order:1e15-1};
-  if(doneAt>=month) return {key:'month', label:'이번 달', order:1e15-2};
-  const d=new Date(doneAt);
-  return {key:`m${d.getFullYear()}-${d.getMonth()}`, label:`${d.getFullYear()}년 ${d.getMonth()+1}월`, order:d.getFullYear()*12+d.getMonth()};
-}
+/* v3.8.0 완료 업무 묶음 = 오늘 / 이번 주 / 그 이전은 주별(규칙은 done-weeks.js — 순수 모듈).
+   지난 주 묶음은 접힌 채로 그리고(카드도 만들지 않는다 — 쌓일수록 느려지지 않게), 머리줄을 누르면 펼친다.
+   접기 상태는 이 모듈 안에만 둔다(저장하지 않음 — 앱을 다시 켜면 기본값으로). 검색어가 있으면 맞는 묶음을 모두 펼친다. */
+export {doneGroupOf};
+const dgToggled=new Set();             // 기본값과 반대로 바꾼 묶음 키
+function groupOpen(key){ return groupOpenByDefault(key) !== dgToggled.has(key); }
 export function renderDone(){
   const all=S.items.filter(onBoard).filter(it=>it.done);
   const list=all.filter(it=>textMatch(it, dq)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
@@ -217,11 +208,8 @@ export function renderDone(){
   if(dm){
     const g=all.map(it=>doneGroupOf(it.doneAt, now).key);
     const n=k=>g.filter(x=>x===k).length;
-    /* 요약 숫자는 '그 기간에 끝낸 건수'(누적) — 이번 주 = 오늘 + 이번 주, 이번 달 = 오늘 + 이번 주 + 이번 달.
-       단 이번 주가 지난달에서 시작했으면 지난달 날짜분은 이번 달에 넣지 않는다(달력 기준). */
-    const mStart=new Date(now); mStart.setHours(0,0,0,0); mStart.setDate(1);
-    const inMonth=all.filter(it=>it.doneAt && it.doneAt>=mStart.getTime()).length;
-    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span><span><b>${inMonth}</b>이번 달</span>`;
+    /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
+    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
   if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[];
@@ -232,10 +220,28 @@ export function renderDone(){
     grp.items.push(it);
   }
   groups.sort((a,b)=>b.order-a.order);
-  $('col-done').innerHTML=groups.map(g=>`<section class="done-group" data-group="${g.key}">
-      <div class="dg-head"><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span></div>
-      <div class="cards dg-cards">${g.items.map(it=>cardHtml(it,'done')).join('')}</div>
-    </section>`).join('');
+  /* [복사]는 주 묶음에 — 이번 주 묶음이 없고 오늘 묶음만 있으면 오늘 묶음에 '이번 주 복사'로 단다
+     (이번 주 한 일 = 월요일부터 오늘까지라서 오늘 끝낸 일도 들어간다) */
+  const hasWeek=groups.some(g=>g.key==='week');
+  const copyBtn=g=>{
+    if(g.key==='week' || g.key.startsWith('w')) return `<button type="button" class="dg-copy" data-dgcopy="${g.mon}" title="이 주에 끝낸 일을 목록으로 복사">복사</button>`;
+    if(g.key==='today' && !hasWeek) return `<button type="button" class="dg-copy" data-dgcopy="${g.mon}" title="이번 주에 끝낸 일을 목록으로 복사">이번 주 복사</button>`;
+    return '';
+  };
+  $('col-done').innerHTML=groups.map(g=>{
+    const open = dq ? true : groupOpen(g.key);
+    return `<section class="done-group${open?'':' dg-closed'}" data-group="${g.key}">
+      <div class="dg-head" data-dgtoggle="${g.key}" role="button" aria-expanded="${open}"><span class="dg-caret">${open?'▾':'▸'}</span><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span>${copyBtn(g)}</div>
+      ${open?`<div class="cards dg-cards">${g.items.map(it=>cardHtml(it,'done')).join('')}</div>`:''}
+    </section>`;
+  }).join('');
+}
+/* 주간 한 일 복사 — 그 주(월요일 0시부터 7일)에 끝낸 일 전부(검색어와 무관) */
+async function copyWeek(mon){
+  const txt=weekReportText(S.items, mon);
+  if(!txt){ showToast('이 주에 끝낸 일이 없습니다'); return; }
+  const n=txt.split('\n').length;
+  showToast(await copyText(txt) ? `${n}건을 복사했습니다` : '복사하지 못했습니다');
 }
 /* v3.7.0 속도: 화면을 **먼저** 그리고 저장은 뒤에서 한다(소유자 지적 — 메모 저장 뒤 살짝 멈칫).
    예전엔 `await saveAll` 뒤에 render 해서, 디스크 쓰기(진행 중인 앞 저장 + 백업 회전까지)가 끝날 때까지
@@ -366,4 +372,11 @@ export function initRender(){
   /* 검색 */
   $('search').addEventListener('input',e=>{q=e.target.value.trim().toLowerCase();render();});
   $('done-search').addEventListener('input',e=>{dq=e.target.value.trim().toLowerCase();renderDone();});
+  /* v3.8.0 완료 묶음: [복사] / 머리줄 = 접기·펼치기 */
+  $('col-done').addEventListener('click',e=>{
+    const cp=e.target.closest('[data-dgcopy]');
+    if(cp){ e.stopPropagation(); copyWeek(Number(cp.dataset.dgcopy)); return; }
+    const hd=e.target.closest('[data-dgtoggle]'); if(!hd) return;
+    const k=hd.dataset.dgtoggle; dgToggled.has(k)?dgToggled.delete(k):dgToggled.add(k); renderDone();
+  });
 }

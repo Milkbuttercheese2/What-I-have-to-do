@@ -193,9 +193,14 @@
     <div class="cal-nav">
       <button id="cal-prev">◀</button><button id="cal-today">오늘</button><button id="cal-next">▶</button>
     </div>
-    <div class="cal-legend">
+    <!-- v3.8.0 현행 | 종료 — 고른 값은 settings.calView (calendar.js) -->
+    <div class="seg cal-mode" id="cal-mode" role="group" aria-label="캘린더 보기">
+      <button type="button" class="seg-btn on" data-v="live" title="진행 중인 업무의 마감·점검">현행</button>
+      <button type="button" class="seg-btn" data-v="done" title="끝낸 업무를 끝낸 날에">종료</button>
+    </div>
+    <div class="cal-legend" id="cal-legend">
       <!-- 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17: --slate/--red 직접 참조라
-           pill 색만 바꿨을 때 범례가 옛 색으로 남아 어긋났다) -->
+           pill 색만 바꿨을 때 범례가 옛 색으로 남아 어긋났다). v3.8.0: 보기에 따라 calendar.js renderCal 이 다시 쓴다 -->
       <span><i class="lg" style="background:var(--cal-mid)"></i>세부할일 점검일</span>
       <span><i class="lg" style="background:var(--cal-due)"></i>업무 마감일</span>
     </div>
