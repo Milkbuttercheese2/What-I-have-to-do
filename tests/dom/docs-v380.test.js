@@ -934,3 +934,31 @@ test('양식 [문서] 로 넘어오면 그 줄을 초록 강조(reveal)·트리 
     window.HTMLElement.prototype.getBoundingClientRect=origGB; delete window.HTMLElement.prototype.offsetHeight; delete tree.clientHeight;
   }
 });
+
+test('v3.8.14 MD 편집 색 층: 제목 줄(# ~ ######, 앞 공백 3칸까지)은 위쪽 내용과 상관없이 제목 색 · 코드 울타리 안은 그대로', async () => {
+  const {codeHtml} = await import('../../src/docs-view.js');
+  const sections = async text => {
+    const d=env.window.document.createElement('div'); d.innerHTML=await codeHtml(text, 'markdown');
+    assert.equal(d.textContent, text, '색 층의 글자는 입력칸과 같다(글자 추가·빠짐 없음)');
+    return [...d.querySelectorAll('.hljs-section')].map(s=>s.textContent.trim());
+  };
+  // 1) 앞 공백이 있는 제목
+  assert.deepEqual(await sections('- 목록\n   ## 들여쓴 제목\n본문'), ['## 들여쓴 제목']);
+  // 2) 위쪽의 닫지 않은 ** · * · _ 가 아래 제목까지 번지지 않는다
+  for(const open of ['**굵게 시작', '*기울임 시작', '_밑줄 시작']){
+    const s=await sections(`${open} 안 닫음\n\n## 제목 하나\n\n본문\n### 제목 둘`);
+    assert.deepEqual(s, ['## 제목 하나','### 제목 둘'], open);
+  }
+  // 3) 닫지 않은 ``` 아래는 코드라 제목 색이 아니다 · 닫힌 울타리 안의 # 도 코드
+  assert.deepEqual(await sections('# 위 제목\n```\n## 코드 속\n'), ['# 위 제목']);
+  assert.deepEqual(await sections('~~~sh\n# 주석\n~~~\n## 뒤 제목'), ['## 뒤 제목']);
+  assert.deepEqual(await sections('````\n```\n# 안쪽\n````\n# 밖'), ['# 밖'], '짧은 울타리로는 닫히지 않는다');
+  // 제목이 아닌 것: 4칸 들여쓰기 · #뒤 공백 없음 · 7개
+  assert.deepEqual(await sections('    ## 코드\n#해시태그\n####### 일곱'), []);
+  // 줄 끝의 # 하나도 제목(빈 제목)
+  assert.deepEqual(await sections('본문\n#\n끝'), ['#']);
+  // 강조 색은 그대로 나온다(같은 문단 안)
+  assert.match(await codeHtml('**굵게** 글', 'markdown'), /hljs-strong/);
+  // md 가 아닌 언어는 예전 그대로
+  const sql=await codeHtml('SELECT 1', 'sql'); assert.match(sql, /hljs-keyword">SELECT</);
+});

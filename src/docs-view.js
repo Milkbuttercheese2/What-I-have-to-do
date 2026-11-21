@@ -69,7 +69,33 @@ async function hl(){ if(!hlLib) hlLib=(await import('./vendor/highlight.min.js')
 export async function codeHtml(text, lang){
   const h=await hl();
   if(!lang || !h.getLanguage(lang)) return null;
-  try{ return h.highlight(String(text||''), {language:lang, ignoreIllegals:true}).value; }catch{ return null; }
+  try{ return lang==='markdown' ? mdCodeHtml(h, String(text||'')) : h.highlight(String(text||''), {language:lang, ignoreIllegals:true}).value; }catch{ return null; }
+}
+/* MD 편집 색 층(v3.8.14) — highlight.js 는 글 전체를 한 번에 읽어, 위쪽에 닫지 않은 ** · * · _ 가 아래 제목까지 먹거나
+   앞 공백이 있는 제목(`   ## 제목`)을 제목으로 보지 않아, 어떤 ## 은 제목 색이고 어떤 ## 은 검정이었다.
+   그래서 울타리(``` · ~~~) 밖은 빈 줄·제목 줄에서 끊어 조각마다 따로 칠하고(강조가 다음 문단·제목으로 번지지 않는다),
+   제목 줄(앞 공백 3칸까지 + #~###### + 공백/줄 끝)은 직접 제목 색을 입힌다. 울타리 안은 코드라 한 조각으로 그대로 둔다.
+   ⚠️ 색만 바꾼다 — 글자를 더하거나 빼지 않는다(입력칸과 글자가 어긋난다). */
+const MD_HEAD=/^ {0,3}#{1,6}(?:[ \t]|$)/, MD_FENCE=/^ {0,3}(`{3,}|~{3,})/;
+const escHl = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+function mdCodeHtml(h, text){
+  const lines=text.split('\n'), out=[]; let buf=[], fence=null;
+  const flush=()=>{ if(buf.length){ out.push(h.highlight(buf.join('\n'), {language:'markdown', ignoreIllegals:true}).value); buf=[]; } };
+  for(const ln of lines){
+    if(fence){                                         // 울타리 안: 같은 글자로 같거나 긴 울타리가 와야 닫힌다
+      buf.push(ln);
+      const m=MD_FENCE.exec(ln);
+      if(m && m[1][0]===fence[0] && m[1].length>=fence.length && !ln.slice(m[0].length).trim()){ flush(); fence=null; }
+      continue;
+    }
+    const f=MD_FENCE.exec(ln);
+    if(f && !(f[1][0]==='`' && ln.slice(f[0].length).includes('`'))){ flush(); fence=f[1]; buf.push(ln); continue; }
+    if(MD_HEAD.test(ln)){ flush(); out.push(`<span class="hljs-section">${escHl(ln)}</span>`); continue; }
+    if(!ln.trim()){ flush(); out.push(escHl(ln)); continue; }
+    buf.push(ln);
+  }
+  flush();
+  return out.join('\n');
 }
 /* MD 보기 안의 코드 블록(```sql 처럼 언어를 적은 것)에 색 */
 export async function highlightBlocks(root){
