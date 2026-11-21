@@ -174,7 +174,18 @@ export function initBackup(){
     // result.kind === 'Db' — 검증·대기 등록까지만 된 상태. JSON 쪽과 같은
     // 문구·같은 확인 절차를 거치고, 거절하면 대기 등록을 실제로 취소한다.
     if(!await appConfirm(`백업 파일에 업무 ${result.items}건이 들어 있습니다.\n현재 데이터를 덮어쓰고 복원할까요?\n(DB 파일 복원은 재시작할 때 적용됩니다)`)){
-      try{ await invoke('cancel_pending_import'); }catch{}
+      /* 취소 = 대기 파일 지우기. 실패를 삼키면 '취소했습니다'라고 보여 놓고 다음 실행 때 사용자가 거절한
+         복원이 그대로 적용된다 — 잠깐 쥔 파일(백신 등)일 수 있으니 한 번 더 해 보고, 그래도 안 되면 알린다. */
+      let err=null;
+      for(let i=0;i<2;i++){
+        try{ await invoke('cancel_pending_import'); err=null; break; }
+        catch(e){ err=e; await new Promise(r=>setTimeout(r,400)); }
+      }
+      if(err){
+        await appAlert('복원 취소에 실패했습니다: '+err+'\n\n이대로 두면 다음에 앱을 다시 시작할 때 이 복원이 적용됩니다.\n'+
+          '앱을 끄기 전에 데이터 폴더의 data\\wmhh.sqlite.pending-import 파일을 지워 주세요.\n([설정] → [저장 위치 확인·변경]에서 데이터 폴더 위치를 볼 수 있습니다)');
+        return;
+      }
       showToast('복원을 취소했습니다');
       return;
     }
