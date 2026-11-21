@@ -1737,3 +1737,7 @@
      (Edge 실측: 2만 줄에서 글자당 23ms → 6~7ms). 크기 격리(size)는 넣지 않는다 — 좁은 화면에서 트리 높이가 내용으로 정해진다.
      메뉴(.dt-menu)·끌기 유령(.dt-ghost)은 body 에 붙으므로 잘리지 않는다 */
   .dc-tree{contain:content}
+  /* 완료 탭 줄 — 화면 밖 줄은 배치·그리기를 미룬다(내용·찾기(Ctrl+F)는 그대로). render.js 의 나눠 그리기와 함께 완료 1만 건 탭 열기 1033ms → 62ms(Edge 실측).
+     19.5px = .drow 한 줄의 내용 높이(Edge 실측 36.5px − 위아래 여백 16 − 윗줄 1). 이 값은 여백을 뺀 내용 높이라야 한다 —
+     여백 포함 값을 넣으면 화면 밖 줄마다 17px씩 커져 스크롤 위치가 밀린다. auto 라 한 번 그린 뒤엔 실제 높이를 기억 */
+  .drow:not(.drow-h){content-visibility:auto;contain-intrinsic-size:auto 19.5px}
