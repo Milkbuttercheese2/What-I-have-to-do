@@ -13,6 +13,8 @@
        보여 주는 방식만 다르다(사용자 지정). [＋ 메모]는 그 폴더 링크가 들어간 새 양식을 연다. 따로 저장하는 메모는 없다.
    트리 항목의 열쇠는 `폴더번호:상대경로`(nodeKey). 펼친 폴더(docOpen)·마지막 파일(docLast)은 이 열쇠로 settings 에.
    모든 파일 접근은 Rust docs.rs 가 그 폴더 안인지 확인한다(화면은 폴더 번호와 상대 경로만 넘긴다).
+   오른쪽 클릭 [휴지통으로](영구 삭제 아님) · 위 [문서 찾기](이름 + 작은 글자 파일 내용, 트리 자리에 결과) — v3.8.3.
+   탐색기에서 끌어 온 파일은 복사, Shift 를 누른 채 놓으면 옮기기(filedrop.js 가 Windows 에 Shift 상태를 묻는다).
    트리에서 항목을 같은 문서 폴더 안의 폴더로 끌어 놓으면 옮긴다(doc_move — 덮어쓰기 없음, 확인 후 [실행 취소]).
    옮긴 경로를 가리키던 업무 파일 링크는 새 경로로 고친다(종료 업무는 S.doneDirty 표시 — 증분 저장 규칙).
    ⚠️ 탐색기 미리 보기는 웹뷰 위에 뜬 별도 창이다 — 팝업·양식이 열리거나 다른 탭으로 가면 반드시 숨긴다(syncNative).
@@ -101,6 +103,7 @@ function listHtml(i, rel, depth){
 }
 function renderTree(){
   const el=$('dt-tree'); if(!el) return;
+  if(searchHits){ renderHits(); return; }                     // 찾는 중이면 결과 목록을 그대로
   el.innerHTML=docRoots().map((p,i)=>{
     const k=nodeKey(i,''), isOpen=open.has(k);
     return `<div class="dt-row dt-root dir${isSel(i,'')?' on':''}" data-dkey="${escAttr(k)}" data-ddir="1" title="${escAttr(p)}">`
@@ -520,7 +523,7 @@ function openMenu(x, y, key, dir){
   const m=document.createElement('div'); m.className='dt-menu'; m.setAttribute('role','menu');
   const item=([k,label,ext])=>`<button type="button" data-mnew="${k}">${label}${ext?` (${ext})`:''}</button>`;
   m.innerHTML=(dir ? NEW_KINDS.filter(x=>!x[3]).map(item).join('')+'<hr>'+NEW_KINDS.filter(x=>x[3]).map(item).join('') : '')
-    +(rel ? `${dir?'<hr>':''}<button type="button" data-mren="1">이름 바꾸기</button>` : '')
+    +(rel ? `${dir?'<hr>':''}<button type="button" data-mren="1">이름 바꾸기</button><button type="button" data-mtrash="1">휴지통으로</button>` : '')
     +(!dir ? `<button type="button" data-mopen="1">열기</button>` : '')
     +`<button type="button" data-mreveal="1">폴더에서 보기</button>`;
   document.body.appendChild(m);
@@ -533,6 +536,7 @@ function openMenu(x, y, key, dir){
     const p=parseKey(key);
     if(b.dataset.mnew) return createItem(p.i, p.rel, b.dataset.mnew);
     if(b.dataset.mren) return startRename(key);
+    if(b.dataset.mtrash) return trashItem(key, dir);
     if(b.dataset.mopen || b.dataset.mreveal){
       if(b.dataset.mopen) await flushEdit();
       try{ await invoke(b.dataset.mopen?'open_file_path':'reveal_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }
@@ -603,18 +607,89 @@ export function dropFolderAt(el){
   if(el.closest('#dv-body .dv-folder') && sel && sel.dir) return {key:nodeKey(sel.i, sel.rel), label:sel.rel ? nameOf(sel.rel) : rootName(sel.i), row:el.closest('.dv-folder')};
   return null;
 }
-export async function importInto(key, paths){
+export async function importInto(key, paths, mv){
   const {i, rel}=parseKey(key);
   let made=[], err='';
-  try{ made=await invoke('doc_import', {root:i, dir:rel, paths}); }
+  try{ made=await invoke('doc_import', {root:i, dir:rel, paths, mv:!!mv}); }
   catch(e){ err=String(e); }
   await load(i, rel);
   open.add(key); keepOpen(); saveSettings();
   if(made && made.length===1){ await leaveViewer(); const e=entryOf(i, made[0]); sel={i, rel:made[0], dir:!!(e&&e.dir)}; }
   renderTree(); renderNote(); await renderViewer();
   if(err) appAlert(err);
-  else if(made && made.length) showToast(`${made.length===1 ? `'${nameOf(made[0])}'` : `${made.length}개`} 복사함`);
+  else if(made && made.length) showToast(`${made.length===1 ? `'${nameOf(made[0])}'` : `${made.length}개`} ${mv?'옮김':'복사함'}`);
   else showToast('이미 그 폴더에 있습니다');
+}
+
+/* ── 휴지통으로 (v3.8.3) — 영구 삭제가 아니다. 그 경로를 가리키던 업무 링크는 남겨 둔다(되살리면 다시 맞는다) ── */
+export function linkedCount(items, paths){
+  const set=new Set(paths);
+  return (items||[]).filter(it=>(it.files||[]).some(f=>{ const n=norm(f); for(const c of set) if(n===c || n.startsWith(c+'/')) return true; return false; })).length;
+}
+async function trashItem(key, dir){
+  const {i, rel}=parseKey(key);
+  const n=linkedCount(S.items, folderPaths(i, rel));
+  if(!await appConfirm(`'${nameOf(rel)}'${dir?' 폴더(안의 것 모두)':''}를 휴지통으로 보냅니다.${n?`\n이 ${dir?'폴더':'파일'}를 링크한 업무 ${n}건의 링크는 그대로 남습니다.`:''}\n(휴지통에서 되살릴 수 있습니다)`)) return;
+  const inside = x => x && x.i===i && (x.rel===rel || x.rel.startsWith(rel+'/'));
+  if(inside(ed)) await flushEdit();
+  if(inside(shown) || (native && inside(shown))) await leaveViewer();
+  try{ await invoke('doc_trash', {root:i, rel}); }
+  catch(e){ await appAlert('휴지통으로 보내지 못했습니다\n'+e); return; }
+  for(const k of [...kids.keys()]){ const p=parseKey(k); if(p.i===i && (p.rel===rel || p.rel.startsWith(rel+'/'))) kids.delete(k); }
+  open=new Set([...open].filter(k=>{ const p=parseKey(k); return !(p.i===i && (p.rel===rel || p.rel.startsWith(rel+'/'))); })); keepOpen();
+  if(S.settings.docLast && inside(parseKey(S.settings.docLast))) S.settings.docLast='';
+  saveSettings();
+  if(inside(sel)) sel={i, rel:parentOf(rel), dir:true};
+  await load(i, parentOf(rel));
+  if(searchQ) runSearch(); else renderTree();
+  renderNote(); await renderViewer();
+  showToast(`'${nameOf(rel)}' 휴지통으로 보냄`);
+}
+
+/* ── 문서 찾기 (v3.8.3) — 이름(모든 폴더·파일)과 작은 글자 파일의 내용. 찾는 동안 트리 자리에 결과 목록 ── */
+let searchQ='', searchSeq=0, searchTimer=0, searchHits=null;
+function onSearchInput(){
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(()=>{ searchQ=$('dc-search').value.trim(); if(searchQ) runSearch(); else { searchHits=null; renderTree(); } }, 300);
+}
+async function runSearch(){
+  const q=searchQ, seq=++searchSeq;
+  const el=$('dt-tree'); if(!el) return;
+  el.innerHTML='<div class="dt-note" style="padding-left:12px">찾는 중</div>';
+  const all=[];
+  for(let i=0;i<roots.length;i++){
+    if(!(roots[i]&&roots[i].ok)) continue;
+    try{ for(const h of await invoke('doc_search', {root:i, query:q})) all.push({...h, i}); }
+    catch(e){ all.push({i, rel:'', name:rootName(i), dir:true, hit:'err', snippet:String(e)}); }
+    if(seq!==searchSeq) return;                                  // 그새 글자를 바꿨다
+  }
+  searchHits=all;
+  renderHits();
+}
+function renderHits(){
+  const el=$('dt-tree'); if(!el || !searchHits) return;
+  if(!searchHits.length){ el.innerHTML='<div class="dt-note" style="padding-left:12px">찾은 것 없음</div>'; return; }
+  const many=roots.length>1;
+  el.innerHTML=searchHits.map(h=>{
+    if(h.hit==='err') return `<div class="dt-note dt-err" style="padding-left:12px">${esc(h.name)} — ${esc(h.snippet)}</div>`;
+    const k=nodeKey(h.i, h.rel), where=(many?rootName(h.i)+(parentOf(h.rel)?' / ':''):'')+parentOf(h.rel).replace(/\//g,' / ');
+    const kind=h.dir ? '' : docKind(h.name);
+    return `<div class="dt-row dt-hit${isSel(h.i,h.rel)?' on':''}${h.dir?' dir':''}" data-dkey="${escAttr(k)}" data-ddir="${h.dir?1:0}" data-dhit="1" title="${escAttr(h.rel)}">`
+      +`<span class="dt-ico ${h.dir?'ico-dir':'ico-'+kind}"></span><span class="dt-hitbox"><span class="dt-name">${esc(h.name)}</span>`
+      +(where?`<span class="dt-where">${esc(where)}</span>`:'')
+      +(h.snippet?`<span class="dt-snip">${esc(h.snippet)}</span>`:'')+`</span></div>`;
+  }).join('')+(searchHits.length>=200?'<div class="dt-note" style="padding-left:12px">200개까지만</div>':'');
+}
+async function pickHit(key, dir){
+  const {i, rel}=parseKey(key);
+  const r=await revealPath(i, rel);
+  await leaveViewer();
+  sel={i, rel:r.rel, dir:r.dir};
+  renderHits(); renderNote(); await renderViewer();
+}
+function clearSearch(){
+  const s=$('dc-search'); if(s) s.value='';
+  searchQ=''; searchHits=null; searchSeq++; renderTree();
 }
 
 /* [＋ 메모] — 이 폴더 링크가 든 새 양식(저장해야 업무가 생긴다) */
@@ -703,6 +778,15 @@ async function recheck(){
 export async function showDoc(path){
   await ensureRoots();
   const t=docTarget(path); if(!t){ appAlert('문서 폴더 안의 파일이 아닙니다'); return; }
+  const r=await revealPath(t.i, t.rel);
+  await leaveViewer();
+  sel={i:t.i, rel:r.rel, dir:r.dir};
+  showView('docs');
+  await renderDocs();
+}
+/* 그 항목까지 위 폴더들을 펼친다(트리에 보이게). 실제 이름(대소문자)과 폴더 여부를 돌려준다 */
+async function revealPath(i, rel){
+  const t={i, rel};
   if(!open || openFor!==S.settings.docOpen){ open=new Set((S.settings.docOpen||[]).map(String)); openFor=S.settings.docOpen; }
   const parts=t.rel ? t.rel.split('/') : [];
   let cur=''; open.add(nodeKey(t.i,''));
@@ -719,10 +803,7 @@ export async function showDoc(path){
   keepOpen();
   if(!dir) S.settings.docLast=nodeKey(t.i, cur);
   saveSettings();
-  await leaveViewer();
-  sel={i:t.i, rel:cur, dir};
-  showView('docs');
-  await renderDocs();
+  return {rel:cur, dir};
 }
 
 export function initDocs(){
@@ -731,6 +812,8 @@ export function initDocs(){
   $('dc-root-empty').addEventListener('click', addRoot);
   initTreeDrag();
   $('dn-add').addEventListener('click', addNote);
+  $('dc-search').addEventListener('input', onSearchInput);
+  $('dc-search').addEventListener('keydown', e=>{ if(e.key==='Escape' && $('dc-search').value){ e.preventDefault(); e.stopPropagation(); clearSearch(); } });
   $('dt-tree').addEventListener('contextmenu', e=>{
     const row=e.target.closest('.dt-row'); if(!row) return;
     e.preventDefault();
@@ -770,6 +853,7 @@ export function initDocs(){
       return;
     }
     const row=e.target.closest('[data-dkey]');
+    if(row && row.dataset.dhit) return pickHit(row.dataset.dkey, row.dataset.ddir==='1');
     if(row) pick(row.dataset.dkey, row.dataset.ddir==='1', !!e.target.closest('[data-caret]'));
   });
   $('view-docs').addEventListener('input', e=>{ if(e.target.id==='dv-ta') onEdit(); });

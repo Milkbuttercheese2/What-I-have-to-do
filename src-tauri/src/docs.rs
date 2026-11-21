@@ -387,8 +387,9 @@ fn copy_tree(src: &Path, dest: &Path, budget: &mut u32) -> std::io::Result<()> {
         std::fs::copy(src, dest).map(|_| ())
     }
 }
-/// 바깥 경로들을 dir 안으로 복사. 새로 생긴 항목들의 rel. 하나라도 실패하면 그 이유를 모아 Err(이미 복사한 것은 남긴다).
-pub fn import_in(root: &Path, dir: &str, paths: &[String]) -> Result<Vec<String>, String> {
+/// 바깥 경로들을 dir 안으로 복사(mv=true 면 옮기기). 새로 생긴 항목들의 rel. 하나라도 실패하면 그 이유를 모아 Err(이미 한 것은 남긴다).
+/// 옮기기: 같은 드라이브면 이름만 바꾸고(rename), 다른 드라이브면 **복사가 끝난 뒤에만** 원본을 지운다.
+pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<Vec<String>, String> {
     let d = resolve(root, dir)?;
     if !d.is_dir() {
         return Err("폴더 안에만 넣을 수 있습니다".into());
@@ -410,12 +411,140 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String]) -> Result<Vec<String>
             continue; // 이미 그 폴더에 있다 — 복사본을 만들지 않는다
         }
         let dest = free_dest(&d, &name);
+        if mv && std::fs::rename(&src, &dest).is_ok() {
+            out.push(rel_of(root, &dest));
+            continue;
+        }
         match copy_tree(&src, &dest, &mut budget) {
-            Ok(()) => out.push(rel_of(root, &dest)),
+            Ok(()) => {
+                if mv {
+                    let gone = if src.is_dir() { std::fs::remove_dir_all(&src) } else { std::fs::remove_file(&src) };
+                    if let Err(e) = gone {
+                        errs.push(format!("{}: 복사는 했지만 원본을 지우지 못했습니다({e})", name.to_string_lossy()));
+                    }
+                }
+                out.push(rel_of(root, &dest))
+            }
             Err(e) => errs.push(format!("{}: {e}", name.to_string_lossy())),
         }
     }
     if errs.is_empty() { Ok(out) } else { Err(format!("{}개를 넣지 못했습니다\n{}", errs.len(), errs.join("\n"))) }
+}
+
+/* ── 휴지통 (v3.8.3) ─────────────────────────────────────────────────── */
+pub fn trash_in(root: &Path, rel: &str) -> Result<(), String> {
+    if rel.trim_matches('/').is_empty() {
+        return Err("문서 폴더 자체는 지울 수 없습니다".into());
+    }
+    let p = resolve(root, rel)?;
+    if !p.exists() {
+        return Err("이미 없습니다".into());
+    }
+    #[cfg(windows)]
+    {
+        use windows::core::PCWSTR;
+        use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
+        let mut from: Vec<u16> = display(&p).encode_utf16().collect();
+        from.extend([0, 0]); // 이중 NUL 끝
+        let mut op = SHFILEOPSTRUCTW {
+            wFunc: FO_DELETE,
+            pFrom: PCWSTR(from.as_ptr()),
+            fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT).0 as u16,
+            ..Default::default()
+        };
+        let r = unsafe { SHFileOperationW(&mut op) };
+        if r != 0 || op.fAnyOperationsAborted.as_bool() {
+            return Err(format!("휴지통으로 보내지 못했습니다(다른 프로그램에서 사용 중일 수 있음, 코드 {r})"));
+        }
+        if p.exists() {
+            return Err("휴지통으로 보내지 못했습니다".into());
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("이 환경에선 휴지통을 쓸 수 없습니다".into())
+    }
+}
+
+/* ── 문서 찾기 (v3.8.3) ───────────────────────────────────────────────── */
+#[derive(Debug, Serialize, PartialEq)]
+pub struct SearchHit {
+    pub rel: String,
+    pub name: String,
+    pub dir: bool,
+    /// "name" | "text"
+    pub hit: String,
+    /// 내용으로 걸렸을 때 그 줄(앞뒤 조금)
+    pub snippet: String,
+}
+const SEARCH_MAX_HITS: usize = 200;
+const SEARCH_MAX_ENTRIES: usize = 60_000; // 이만큼 훑으면 멈춘다(공유 폴더가 클 때)
+const SEARCH_TEXT_MAX: u64 = 1024 * 1024; // 내용은 1MB 이하 글자 파일만
+const SEARCH_TEXT_BUDGET: u64 = 64 * 1024 * 1024; // 한 번 찾기에 읽는 총량
+const SEARCH_TEXT_EXT: &[&str] = &["txt", "md", "markdown", "csv", "tsv", "json", "xml", "log", "ini", "cfg", "conf", "yaml", "yml", "toml", "html", "htm", "sql"];
+
+fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let pre: usize = line[..at].chars().count();
+    let s = pre.saturating_sub(20);
+    let e = (pre + qlen + 40).min(chars.len());
+    let mut out: String = chars[s..e].iter().collect();
+    if s > 0 { out.insert(0, '…'); }
+    if e < chars.len() { out.push('…'); }
+    out.trim().to_string()
+}
+
+pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
+    let q = query.trim().to_lowercase();
+    if q.chars().count() < 1 {
+        return Ok(vec![]);
+    }
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let rel = |p: &Path| p.strip_prefix(&base).unwrap_or(p).to_string_lossy().replace('\\', "/");
+    let mut out = Vec::new();
+    let mut seen = 0usize;
+    let mut budget = SEARCH_TEXT_BUDGET;
+    let mut stack = vec![base.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut ents: Vec<_> = rd.flatten().collect();
+        ents.sort_by_key(|e| e.file_name());
+        for ent in ents {
+            seen += 1;
+            if seen > SEARCH_MAX_ENTRIES || out.len() >= SEARCH_MAX_HITS {
+                return Ok(out);
+            }
+            let name = ent.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = ent.file_type() else { continue };
+            if ft.is_symlink() { continue }
+            let Ok(md) = ent.metadata() else { continue };
+            if hidden(&name, &md) { continue }
+            let path = ent.path();
+            let is_dir = md.is_dir();
+            if is_dir { stack.push(path.clone()); }
+            if name.to_lowercase().contains(&q) {
+                out.push(SearchHit { rel: rel(&path), name, dir: is_dir, hit: "name".into(), snippet: String::new() });
+                continue;
+            }
+            if is_dir || md.len() > SEARCH_TEXT_MAX || md.len() > budget { continue }
+            let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if !SEARCH_TEXT_EXT.contains(&ext.as_str()) { continue }
+            let Ok(bytes) = std::fs::read(&path) else { continue };
+            budget = budget.saturating_sub(bytes.len() as u64);
+            let Some((text, _)) = decode_text(&bytes) else { continue };
+            for line in text.lines() {
+                let low = line.to_lowercase();
+                if let Some(at) = low.find(&q) {
+                    // 소문자 바꾸기로 바이트 위치가 어긋날 수 있어 원문 기준으로 다시 맞춘다
+                    let at = if line.is_char_boundary(at) && line.len() == low.len() { at } else { 0 };
+                    out.push(SearchHit { rel: rel(&path), name: name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, q.chars().count()) });
+                    break;
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 /* ── 글자 파일 (v3.8.1) — 읽기·쓰기, 인코딩 보존 ─────────────────────────── */
@@ -598,8 +727,33 @@ pub fn doc_move(root: usize, from: String, to_dir: String) -> Result<String, Str
 }
 
 #[tauri::command]
-pub fn doc_import(root: usize, dir: String, paths: Vec<String>) -> Result<Vec<String>, String> {
-    import_in(&self::root(root)?, &dir, &paths)
+pub fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
+    import_in(&self::root(root)?, &dir, &paths, mv.unwrap_or(false))
+}
+
+/// 지금 Shift 가 눌려 있나 — 탐색기에서 끌어 오는 동안 웹뷰는 키 입력을 못 받으므로 Windows 에 직접 묻는다
+#[tauri::command]
+pub fn key_shift_down() -> bool {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_SHIFT};
+        (GetAsyncKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+/// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
+#[tauri::command]
+pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
+    trash_in(&self::root(root)?, &rel)
+}
+
+/// 문서 폴더 안 찾기 — 이름(폴더·파일)과 작은 글자 파일의 내용. 무거운 일이라 별도 스레드에서.
+#[tauri::command]
+pub async fn doc_search(root: usize, query: String) -> Result<Vec<SearchHit>, String> {
+    let r = self::root(root)?;
+    tauri::async_runtime::spawn_blocking(move || search_in(&r, &query)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -756,13 +910,13 @@ mod tests {
         std::fs::write(outside.join("묶음/안/b.txt"), "b").unwrap();
         let root = canon_dir(&r.to_string_lossy()).unwrap();
         let ps = vec![outside.join("회의.txt").to_string_lossy().to_string(), outside.join("묶음").to_string_lossy().to_string()];
-        assert_eq!(import_in(&root, "가 폴더", &ps).unwrap(), vec!["가 폴더/회의.txt", "가 폴더/묶음"]);
+        assert_eq!(import_in(&root, "가 폴더", &ps, false).unwrap(), vec!["가 폴더/회의.txt", "가 폴더/묶음"]);
         assert!(outside.join("회의.txt").exists(), "원본은 그대로(복사)");
         assert_eq!(std::fs::read_to_string(r.join("가 폴더/묶음/안/b.txt")).unwrap(), "b", "폴더는 통째로");
-        assert_eq!(import_in(&root, "가 폴더", &ps[..1]).unwrap(), vec!["가 폴더/회의 (2).txt"], "같은 이름은 (2)");
+        assert_eq!(import_in(&root, "가 폴더", &ps[..1], false).unwrap(), vec!["가 폴더/회의 (2).txt"], "같은 이름은 (2)");
         let me = vec![r.join("가 폴더").to_string_lossy().to_string()];
-        assert!(import_in(&root, "가 폴더/안쪽", &me).is_err(), "자기 안으로는 못 넣는다");
-        assert!(import_in(&root, "../", &ps).is_err());
+        assert!(import_in(&root, "가 폴더/안쪽", &me, false).is_err(), "자기 안으로는 못 넣는다");
+        assert!(import_in(&root, "../", &ps, false).is_err());
         let _ = std::fs::remove_dir_all(&r);
         let _ = std::fs::remove_dir_all(&outside);
     }
@@ -779,6 +933,54 @@ mod tests {
         assert!(create_doc_in(&root, "가 폴더", "새 한글.hwpx").is_err(), "덮어쓰지 않는다");
         assert!(create_doc_in(&root, "", "x.zzz").is_err(), "모르는 형식은 거부");
         assert!(builtin_blank("hwpx").is_some() && builtin_blank("txt").is_none());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn import_move_takes_original_away() {
+        let r = tmp("importmv");
+        let outside = tmp("importmv_src");
+        std::fs::write(outside.join("옮길.txt"), "m").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let ps = vec![outside.join("옮길.txt").to_string_lossy().to_string()];
+        assert_eq!(import_in(&root, "가 폴더", &ps, true).unwrap(), vec!["가 폴더/옮길.txt"]);
+        assert!(!outside.join("옮길.txt").exists(), "옮기면 원본은 없다");
+        assert_eq!(std::fs::read_to_string(r.join("가 폴더/옮길.txt")).unwrap(), "m");
+        let _ = std::fs::remove_dir_all(&r);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn search_names_and_small_text_contents_skip_hidden() {
+        let r = tmp("search");
+        std::fs::write(r.join("가 폴더/회의록 11월.txt"), "안건 없음").unwrap();
+        std::fs::write(r.join("가 폴더/안쪽/메모.md"), "첫 줄\n견적서 회신 기한은 11.28 까지\n").unwrap();
+        std::fs::write(r.join("가 폴더/안쪽/표.csv"), "이름,견적\n").unwrap();
+        std::fs::write(r.join(".숨김견적"), "견적").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let hits = search_in(&root, "견적").unwrap();
+        let mut got: Vec<(String, String)> = hits.iter().map(|h| (h.rel.clone(), h.hit.clone())).collect();
+        got.sort();
+        assert_eq!(got, vec![("가 폴더/안쪽/메모.md".into(), "text".into()), ("가 폴더/안쪽/표.csv".into(), "text".into())]);
+        assert!(hits.iter().find(|h| h.rel.ends_with("메모.md")).unwrap().snippet.contains("견적서 회신"));
+        assert_eq!(search_in(&root, "11월").unwrap()[0].hit, "name");
+        assert_eq!(search_in(&root, "안쪽").unwrap()[0].dir, true, "폴더 이름도 찾는다");
+        assert!(search_in(&root, "  ").unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 실제 Windows 휴지통에 시험 파일을 넣으므로 평소엔 건너뛴다: `cargo test --lib -- --ignored trash`
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn trash_inside_root_only() {
+        let r = tmp("trash");
+        std::fs::write(r.join("가 폴더/버릴.txt"), "x").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert!(trash_in(&root, "").is_err(), "문서 폴더 자체는 못 지운다");
+        assert!(trash_in(&root, "../밖").is_err());
+        trash_in(&root, "가 폴더/버릴.txt").unwrap();
+        assert!(!r.join("가 폴더/버릴.txt").exists());
         let _ = std::fs::remove_dir_all(&r);
     }
 }

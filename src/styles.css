@@ -1353,6 +1353,12 @@
   .dt-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;font:inherit;font-size:13px;color:var(--ink);padding:7px 10px;border-radius:7px;cursor:pointer}
   .dt-menu button:hover,.dt-menu button:focus-visible{background:var(--slate-bg);color:var(--focus);outline:none}
   .dt-menu hr{border:0;border-top:1px solid var(--line-soft);margin:4px 2px}
+  .dt-hit{height:auto;min-height:28px;align-items:flex-start;padding:5px 8px 5px 10px}
+  .dt-hit .dt-ico{margin-top:2px}
+  .dt-hitbox{display:flex;flex-direction:column;min-width:0;gap:1px}
+  .dt-where,.dt-snip{font-size:11.5px;color:var(--ink-soft);font-weight:400;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dt-snip{color:var(--ink-2)}
+  #dc-search{width:180px}
   .dt-rename{flex:1;min-width:0;font:inherit;font-size:13px;padding:2px 6px;border:1px solid var(--focus);border-radius:5px;background:var(--surface);color:var(--ink);outline:none}
   .dt-unroot{margin-left:auto;flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--ink-soft);font-size:15px;line-height:1;cursor:pointer;opacity:0}
   .dt-root:hover .dt-unroot,.dt-unroot:focus-visible{opacity:1}

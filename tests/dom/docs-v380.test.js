@@ -440,3 +440,78 @@ test('오른쪽 클릭: 새 한글·엑셀·파워포인트 → doc_create_doc �
   doc.querySelector('#dt-tree .dt-rename').dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Escape', bubbles:true, cancelable:true})); await env.flush(10);
   assert.equal(opened.at(-1), 'Q:\\오피스\\새 엑셀 문서.xlsx');
 });
+
+test('v3.8.3 휴지통으로: 확인 → doc_trash · 고른 것은 위 폴더로 · 업무 링크는 남김(건수 안내)', async () => {
+  const {linkedCount} = await import('../../src/docs.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['V:\\버림'];
+  let lists={'0:':[{name:'가',rel:'가',dir:true,size:0,mtime:1}], '0:가':[{name:'x.zip',rel:'가/x.zip',dir:false,size:1,mtime:1}]};
+  fakeFs(()=>lists);
+  const trashed=[]; env.onInvoke('doc_trash', a=>{ trashed.push(a); lists['0:가']=[]; return null; });
+  env.onInvoke('doc_read_text', ()=>{ throw '글자 파일이 아닙니다'; });
+  const it=mk({files:['V:\\버림\\가\\x.zip']}); S.items.push(it);
+  assert.equal(linkedCount(S.items, ['v:/버림/가']), 1, '폴더 안 파일 링크도 센다');
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:가')); await env.flush(6);
+  click(row('0:가/x.zip')); await env.flush(8);
+  const confirms=[]; const oc=env.window.confirm; env.window.confirm=m=>{ confirms.push(m); return true; };
+  row('0:가/x.zip').dispatchEvent(new env.window.MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:20, clientY:20}));
+  click(doc.querySelector('.dt-menu [data-mtrash]')); await env.flush(14);
+  env.window.confirm=oc;
+  assert.match(confirms[0], /휴지통/); assert.match(confirms[0], /업무 1건/);
+  assert.deepEqual({root:trashed[0].root, rel:trashed[0].rel}, {root:0, rel:'가/x.zip'});
+  assert.ok(!row('0:가/x.zip'), '트리에서 사라짐');
+  assert.ok(row('0:가').classList.contains('on'), '고른 것은 위 폴더로');
+  assert.deepEqual(it.files, ['V:\\버림\\가\\x.zip'], '링크는 남긴다');
+  /* 문서 폴더 자체 메뉴엔 휴지통이 없다 */
+  row('0:').dispatchEvent(new env.window.MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:20, clientY:20}));
+  assert.ok(!doc.querySelector('.dt-menu [data-mtrash]'));
+});
+
+test('v3.8.3 문서 찾기: 모든 문서 폴더에서 · 결과는 트리 자리 · 누르면 그 파일(위 폴더 펼침) · ESC 로 트리로', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\\하나','B:\\둘'];
+  fakeFs(()=>({'0:':[{name:'깊은',rel:'깊은',dir:true,size:0,mtime:1}], '0:깊은':[{name:'견적 회신.txt',rel:'깊은/견적 회신.txt',dir:false,size:1,mtime:1}], '1:':[]}));
+  const asked=[];
+  env.onInvoke('doc_search', a=>{ asked.push(a); return a.root===0 ? [{rel:'깊은/견적 회신.txt', name:'견적 회신.txt', dir:false, hit:'name', snippet:''}] : [{rel:'메모.md', name:'메모.md', dir:false, hit:'text', snippet:'…견적 기한 11.28…'}]; });
+  env.onInvoke('doc_read_text', a=>({text:'본문', encoding:'utf-8', mtime:1}));
+  await openDocs();
+  doc.body.dispatchEvent(new env.window.MouseEvent('mousedown',{bubbles:true}));   // 앞 시험의 오른쪽 클릭 메뉴 닫기
+  const s=$('dc-search'); s.value='견적'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(350); await env.flush(12);
+  assert.deepEqual(asked.map(a=>[a.root,a.query]), [[0,'견적'],[1,'견적']]);
+  const hits=[...doc.querySelectorAll('#dt-tree .dt-hit')];
+  assert.equal(hits.length, 2);
+  assert.match(hits[1].textContent, /둘/, '폴더가 여럿이면 어느 폴더인지');
+  assert.match(hits[1].textContent, /견적 기한 11\.28/, '내용으로 걸린 줄');
+  click(hits[0]); await env.flush(12);
+  assert.equal($('dv-ta').value, '본문');
+  assert.ok(S.settings.docOpen.includes('0:깊은'), '위 폴더를 펼쳐 둔다');
+  s.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape', bubbles:true, cancelable:true}));
+  await env.flush(4);
+  assert.equal(s.value, '');
+  assert.ok(row('0:깊은/견적 회신.txt').classList.contains('on'), '트리로 돌아오면 그 파일이 보이고 골라져 있다');
+});
+
+test('v3.8.3 탐색기에서 끌어 오기: Shift 를 누른 채 놓으면 옮기기(mv) · 아니면 복사', async () => {
+  const {handleDragDrop, dropTarget, applyDrop} = await import('../../src/filedrop.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['C:\\받기'];
+  fakeFs(()=>({'0:':[{name:'모음',rel:'모음',dir:true,size:0,mtime:1}], '0:모음':[]}));
+  const calls=[]; env.onInvoke('doc_import', a=>{ calls.push(a); return []; });
+  let shift=true; env.onInvoke('key_shift_down', ()=>shift);
+  await openDocs();
+  const t=dropTarget(row('0:모음'));
+  t.mv=true; applyDrop(t, ['D:\\a.txt']); await env.flush(8);
+  assert.equal(calls[0].mv, true);
+  const t2=dropTarget(row('0:모음')); applyDrop(t2, ['D:\\b.txt']); await env.flush(8);
+  assert.equal(calls[1].mv, false, 'Shift 없으면 복사');
+  /* 진짜 놓기 경로: 놓는 순간 Windows 에 Shift 를 묻는다 */
+  const orig=doc.elementFromPoint; doc.elementFromPoint=()=>row('0:모음');
+  await handleDragDrop({type:'drop', paths:['D:\\c.txt'], position:{x:1,y:1}}); await env.flush(8);
+  shift=false;
+  await handleDragDrop({type:'drop', paths:['D:\\d.txt'], position:{x:1,y:1}}); await env.flush(8);
+  doc.elementFromPoint=orig;
+  assert.deepEqual(calls.slice(2).map(c=>[c.paths[0], c.mv]), [['D:\\c.txt', true], ['D:\\d.txt', false]]);
+});

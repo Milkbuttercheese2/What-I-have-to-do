@@ -24,6 +24,7 @@ import {topId} from './modals.js';
 import {persist} from './render.js';
 import {openForm, addLinkPaths, formReadonly} from './form.js';
 import {dropFolderAt, importInto} from './docs.js';
+import {invoke} from './store.js';
 
 /* 경로 비교 키 — Windows 경로는 대소문자·구분자 차이를 같은 것으로 본다 */
 const pathKey = p => String(p||'').trim().replace(/\//g,'\\').replace(/\\+$/,'').toLowerCase();
@@ -66,7 +67,7 @@ export function applyDrop(target, paths){
   paths=(paths||[]).filter(p=>String(p||'').trim());
   if(!paths.length) return false;
   if(target.kind==='blocked'){ showToast(target.why); return false; }
-  if(target.kind==='docdir'){ importInto(target.key, paths); return true; }
+  if(target.kind==='docdir'){ importInto(target.key, paths, !!target.mv); return true; }
   if(target.kind==='form'){ const n=addLinkPaths(paths); showToast(n?`링크 ${n}개를 양식에 추가했습니다. 저장해야 반영됩니다`:'이미 연결된 링크입니다'); return n>0; }
   if(target.kind==='card'){
     const it=S.items.find(x=>x.id===target.id); if(!it||it.done) return false;
@@ -98,7 +99,7 @@ function showHl(target, el){
   if(target.kind==='form'){ const w=document.querySelector('.fm-files-wrap'); if(w) w.classList.add('drop-on'); c.textContent='놓으면 이 양식의 링크 칸에 추가합니다'; }
   else if(target.kind==='card'){ const card=el&&el.closest('.card[data-open]'); if(card) card.classList.add('drop-on'); c.textContent='놓으면 이 업무에 링크로 연결합니다'; }
   else if(target.kind==='blocked'){ c.textContent=target.why; }
-  else if(target.kind==='docdir'){ if(target.row) target.row.classList.add('drop-on'); c.textContent=`놓으면 '${target.label}' 폴더에 복사합니다`; }
+  else if(target.kind==='docdir'){ if(target.row) target.row.classList.add('drop-on'); c.textContent=`놓으면 '${target.label}' 폴더로 ${shiftNow?'옮깁니다':'복사합니다 · Shift 를 누르면 옮기기'}`; }
   else c.textContent='놓으면 이 링크로 새 업무 양식을 엽니다';
 }
 /* 네이티브 좌표(물리 px, 웹뷰 기준) → CSS px. devicePixelRatio 에 DPI·화면 배율이 모두 들어 있다 */
@@ -108,13 +109,27 @@ function elAt(pos){
   return document.elementFromPoint(pos.x/r, pos.y/r);
 }
 
-export function handleDragDrop(payload){
+/* v3.8.3 문서 폴더로 끌어 올 때 Shift = 옮기기. 탐색기에서 끄는 동안 웹뷰는 키 입력을 못 받으므로
+   Windows 에 직접 묻는다(key_shift_down). 끄는 동안 0.15초마다 묻고, 놓을 때 한 번 더 묻는다. */
+let shiftNow=false, shiftAt=0;
+const askShift = () => invoke('key_shift_down').then(v=>!!v, ()=>false);
+export async function handleDragDrop(payload){
   const p=payload||{};
-  if(p.type==='leave'){ clearHl(); return; }
-  if(p.type==='enter'||p.type==='over'){ const el=elAt(p.position); showHl(dropTarget(el), el); return; }
+  if(p.type==='leave'){ clearHl(); shiftNow=false; return; }
+  if(p.type==='enter'||p.type==='over'){
+    const el=elAt(p.position), t=dropTarget(el); showHl(t, el);
+    if(t.kind==='docdir' && Date.now()-shiftAt>150){
+      shiftAt=Date.now();
+      const v=await askShift();
+      if(v!==shiftNow){ shiftNow=v; const el2=elAt(p.position); showHl(dropTarget(el2), el2); }
+    }
+    return;
+  }
   if(p.type==='drop'){
-    const el=elAt(p.position); clearHl();
-    applyDrop(dropTarget(el), p.paths||[]);
+    const el=elAt(p.position), t=dropTarget(el); clearHl();
+    if(t.kind==='docdir') t.mv = shiftNow || await askShift();
+    shiftNow=false;
+    applyDrop(t, p.paths||[]);
   }
 }
 
