@@ -79,6 +79,24 @@ pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(canon)
 }
 
+/// 옮기기·이름 바꾸기·복제·휴지통처럼 **항목 하나를 바꾸는** 명령의 대상. `resolve` 에 두 가지를 더 본다.
+/// 1. 결과가 문서 폴더 자체면 거부 — `""` 만 막던 문자열 검사는 `"."`·`"./"` 를 그대로 통과시켰다.
+/// 2. 대상이 링크·정션이면 거부 — `resolve` 는 링크를 따라가므로 그대로 두면 링크가 아니라
+///    **링크가 가리키는 진짜 폴더**를 지우거나 이름을 바꾼다(루트를 가리키는 정션이면 문서 폴더 전체).
+pub fn resolve_item(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let canon = resolve(root, rel)?;
+    let root_c = std::fs::canonicalize(root).map_err(|e| format!("문서 폴더를 열 수 없습니다: {e}"))?;
+    if canon == root_c {
+        return Err("문서 폴더 자체는 여기서 바꿀 수 없습니다".into());
+    }
+    let rel = rel.replace('\\', "/");
+    let joined = root.join(Path::new(rel.trim_start_matches("./")));
+    if std::fs::symlink_metadata(&joined).map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+        return Err("바로 연결(링크·정션)은 여기서 바꿀 수 없습니다 — 탐색기에서 해 주세요".into());
+    }
+    Ok(canon)
+}
+
 fn rel_of(root: &Path, p: &Path) -> String {
     let root_c = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     p.strip_prefix(&root_c).unwrap_or(p).to_string_lossy().replace('\\', "/")
@@ -143,7 +161,7 @@ pub fn move_in(root: &Path, from: &str, to_dir: &str) -> Result<String, String> 
     if from.trim_matches('/').is_empty() {
         return Err("문서 폴더 자체는 옮길 수 없습니다".into());
     }
-    let src = resolve(root, from)?;
+    let src = resolve_item(root, from)?;
     let dir = resolve(root, to_dir)?;
     if !dir.is_dir() {
         return Err("폴더로만 옮길 수 있습니다".into());
@@ -214,7 +232,7 @@ pub fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<String, Strin
         return Err("문서 폴더 자체의 이름은 여기서 바꿀 수 없습니다".into());
     }
     let name = check_name(new_name)?;
-    let src = resolve(root, rel)?;
+    let src = resolve_item(root, rel)?;
     let parent = src.parent().ok_or_else(|| "이름을 바꿀 수 없습니다".to_string())?;
     let dest = parent.join(&name);
     let same_ci = src.file_name().map(|f| f.to_string_lossy().to_lowercase()) == Some(name.to_lowercase());
@@ -501,7 +519,7 @@ pub fn trash_in(root: &Path, rel: &str) -> Result<(), String> {
     if rel.trim_matches('/').is_empty() {
         return Err("문서 폴더 자체는 지울 수 없습니다".into());
     }
-    let p = resolve(root, rel)?;
+    let p = resolve_item(root, rel)?;
     if !p.exists() {
         return Err("이미 없습니다".into());
     }
@@ -940,7 +958,7 @@ pub fn copy_in(root: &Path, rel: &str) -> Result<String, String> {
     if rel.trim_matches('/').is_empty() {
         return Err("문서 폴더 자체는 복제할 수 없습니다".into());
     }
-    let src = resolve(root, rel)?;
+    let src = resolve_item(root, rel)?;
     let dir = src.parent().ok_or_else(|| "복제할 수 없습니다".to_string())?.to_path_buf();
     let name = src.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_os_string();
     let dest = free_dest(&dir, &name);
@@ -1061,6 +1079,43 @@ mod tests {
             assert!(resolve(&root, bad).is_err(), "거부해야 함: {bad}");
         }
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// `"."`·`"./"` 는 문서 폴더 자체로 풀린다 — 옮기기·이름 바꾸기·복제·휴지통은 이걸 받으면 안 된다
+    /// (예전엔 `""` 만 막아서 `"."` 로 문서 폴더 전체를 휴지통에 보내거나, 폴더 밖(부모)에 복제본을 만들 수 있었다).
+    #[test]
+    fn item_commands_refuse_the_root_itself() {
+        let r = tmp("rootself");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        for rel in ["", ".", "./", "./.", "/", "가 폴더/.."] {
+            assert!(resolve_item(&root, rel).is_err(), "거부해야 함: {rel:?}");
+            assert!(trash_in(&root, rel).is_err(), "휴지통 거부: {rel:?}");
+            assert!(rename_in(&root, rel, "새이름").is_err(), "이름 바꾸기 거부: {rel:?}");
+            assert!(copy_in(&root, rel).is_err(), "복제 거부: {rel:?}");
+            assert!(move_in(&root, rel, "가 폴더/안쪽").is_err(), "옮기기 거부: {rel:?}");
+        }
+        assert!(r.exists() && r.join("표.xlsx").exists(), "문서 폴더는 그대로");
+        assert!(!r.parent().unwrap().join(format!("{} (2)", r.file_name().unwrap().to_string_lossy())).exists(), "폴더 밖에 복제본이 생기지 않는다");
+        assert!(resolve_item(&root, "./가 폴더/보고서.hwpx").is_ok(), "평범한 항목은 그대로 된다");
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 정션(링크)을 따라가 **진짜 폴더**를 바꾸지 않는다 — 문서 폴더 자신을 가리키는 정션이면 폴더 전체가 걸린다.
+    #[cfg(windows)]
+    #[test]
+    fn item_commands_refuse_links() {
+        let r = tmp("junction");
+        let link = r.join("고리");
+        let ok = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(&link).arg(&r).output().map(|o| o.status.success()).unwrap_or(false);
+        if !ok { eprintln!("mklink /J 를 못 만들어 건너뜀"); let _ = std::fs::remove_dir_all(&r); return; }
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert!(trash_in(&root, "고리").is_err());
+        assert!(rename_in(&root, "고리", "딴이름").is_err());
+        assert!(copy_in(&root, "고리").is_err());
+        assert!(move_in(&root, "고리", "가 폴더").is_err());
+        assert!(link.exists() && r.join("표.xlsx").exists(), "정션도 대상 폴더도 그대로");
+        let _ = std::fs::remove_dir(&link);   // 정션만 지운다(대상은 안 따라감)
+        let _ = std::fs::remove_dir_all(&r);
     }
 
     #[test]
