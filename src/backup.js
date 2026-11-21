@@ -148,8 +148,12 @@ export function initBackup(){
         phonebook:Array.isArray(d.phonebook)?d.phonebook:S.phonebook,
         items:migrated
       };
-      try{ await invoke('backup_import',{payload}); }
+      let version;
+      try{ version=await invoke('backup_import',{payload}); }
       catch(err){ await appAlert('백업 복원 실패 (데이터는 변경되지 않았습니다): '+err); return; }
+      /* 복원은 번호표를 올린다(v3.3.7) — 새 번호를 받아 두지 않으면 아래 persist() 가 옛 번호로 저장해
+         '낡은 화면'으로 거절되고, 비상 덤프 + "다른 창이 바꿨다"는 거짓 안내 + 새로고침이 뒤따른다. */
+      if(typeof version==='number') S.dataVersion=version;
       // DB 복원이 성공한 뒤에만 메모리 상태를 갈아끼운다
       S.items=migrated;
       /* v3.6.0: 복원은 DB 를 통째로 갈아끼운다(backup_import 는 전체 교체). 그 전에 쌓인

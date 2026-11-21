@@ -43,7 +43,8 @@ pub fn export_payload(conn: &Connection) -> DbResult<BackupPayload> {
 /// transaction (the caller is expected to have taken a fresh auto-backup
 /// of the live .sqlite file immediately before calling this, as a second
 /// line of defense — see commands::backup_import).
-pub fn import_payload(conn: &mut Connection, payload: BackupPayload) -> DbResult<()> {
+/// 돌려주는 값은 복원 뒤의 새 번호표 — 복원한 화면이 이 번호로 다음 저장을 해야 '낡은 화면'으로 거절되지 않는다.
+pub fn import_payload(conn: &mut Connection, payload: BackupPayload) -> DbResult<i64> {
     let tx = conn.transaction()?;
     fields::save_fields_tx(&tx, &payload.fields)?;
     presets::save_presets_tx(&tx, &payload.presets)?;
@@ -54,7 +55,7 @@ pub fn import_payload(conn: &mut Connection, payload: BackupPayload) -> DbResult
     items::save_items_tx(&tx, &payload.items)?;
     /* 복원도 '데이터가 바뀐 사건'이다 — 번호를 올려 두어야, 복원 직전 상태를 들고
        있던 다른 화면(또는 다른 창)의 저장이 복원한 내용을 곧바로 덮어쓰지 못한다. */
-    meta::bump_version_tx(&tx)?;
+    let version = meta::bump_version_tx(&tx)?;
     tx.commit()?;
-    Ok(())
+    Ok(version)
 }

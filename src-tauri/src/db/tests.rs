@@ -1062,6 +1062,36 @@ fn restoring_a_backup_bumps_the_version() {
     assert!(super::meta::read_version(&conn).unwrap() > before);
 }
 
+// 복원한 그 화면의 첫 저장은 통과해야 한다 — 복원이 돌려준 번호를 쓰면 된다.
+// 예전엔 번호를 돌려주지 않아 프런트가 옛 번호로 저장했고, 매 복원마다 '낡은 화면'으로
+// 거절돼 비상 덤프 + "다른 창이 데이터를 바꿨다"는 거짓 안내 + 새로고침이 일어났다.
+#[test]
+fn first_save_after_restore_uses_the_returned_version() {
+    let mut conn = test_conn();
+    let before = super::meta::read_version(&conn).unwrap();
+    let items = sample_items();
+    let payload = BackupPayload {
+        v: backup::BACKUP_VERSION,
+        exported: "2026-08-02T00:00:00.000Z".into(),
+        fields: vec![],
+        presets: vec![],
+        id_kinds: vec![],
+        settings: Settings::new(),
+        items: items.clone(),
+        recur_defs: vec![],
+        phonebook: vec![],
+    };
+    let v = backup::import_payload(&mut conn, payload).unwrap();
+    assert_eq!(v, super::meta::read_version(&conn).unwrap(), "돌려준 번호 = 지금 번호");
+    let dir = std::env::temp_dir().join(format!("wmhh_restore_ver_{}", std::process::id()));
+    let p = dir.join("wmhh.sqlite");
+    let stale = super::save_items_guarded(&mut conn, &p, &dir.join("b"), &items, &[], 20, Some(before)).unwrap();
+    assert!(matches!(stale, super::SaveOutcome::Stale { .. }), "옛 번호는 여전히 거절(방어는 그대로)");
+    let ok = super::save_items_guarded(&mut conn, &p, &dir.join("b"), &items, &[], 20, Some(v)).unwrap();
+    assert!(matches!(ok, super::SaveOutcome::Saved { .. }), "복원이 돌려준 번호로는 저장된다");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // load_all(=화면이 데이터를 읽는 경로)이 지금 번호를 함께 내려줘야 한다.
 #[test]
 fn load_app_state_carries_the_current_version() {

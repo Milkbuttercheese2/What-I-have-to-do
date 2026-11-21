@@ -223,7 +223,9 @@ pub fn backup_export(state: State<AppDb>) -> Result<BackupPayload, String> {
 }
 
 #[tauri::command]
-pub fn backup_import(state: State<AppDb>, payload: BackupPayload) -> Result<(), String> {
+/// 돌려주는 값은 복원 뒤의 번호표(dataVersion). 프런트는 이 값을 받아 두어야 한다 — 복원이 번호를
+/// 올리므로, 옛 번호로 첫 저장을 하면 '낡은 화면'으로 거절된다(v3.3.7 번호표).
+pub fn backup_import(state: State<AppDb>, payload: BackupPayload) -> Result<i64, String> {
     // Safety net before a destructive whole-dataset overwrite: snapshot the
     // live file under a distinguishable name before touching anything.
     // The copy runs while the connection lock is held (same lock we then
@@ -237,13 +239,13 @@ pub fn backup_import(state: State<AppDb>, payload: BackupPayload) -> Result<(), 
         BACKUP_KEEP,
     )
     .map_err(to_err)?;
-    db::backup::import_payload(&mut conn, payload).map_err(to_err)?;
+    let version = db::backup::import_payload(&mut conn, payload).map_err(to_err)?;
     // A successful full restore supersedes whatever the startup integrity
     // check concluded — without this, an app whose DB was flagged bad at
     // launch would keep rejecting load_all even after the user restored a
     // good backup, forcing a pointless extra restart.
     state.integrity_ok.store(true, Ordering::Relaxed);
-    Ok(())
+    Ok(version)
 }
 
 #[tauri::command]
