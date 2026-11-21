@@ -560,26 +560,30 @@ fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
     out.trim().to_string()
 }
 
-pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
-    let q = query.trim().to_lowercase();
-    if q.chars().count() < 1 {
-        return Ok(vec![]);
-    }
-    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let rel = |p: &Path| p.strip_prefix(&base).unwrap_or(p).to_string_lossy().replace('\\', "/");
-    let mut out = Vec::new();
-    let mut seen = 0usize;
+/// 찾기 색인(v3.8.4) — 폴더를 한 번 훑어 이름과 작은 글자 파일의 내용을 메모리에 둔다.
+/// 예전엔 글자를 칠 때마다 디스크를 처음부터 다시 훑고 파일을 다시 읽어(최대 64MB) 느렸다.
+/// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·저장·휴지통) 바로 버린다.
+struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<String> }
+struct SearchIndex { base: PathBuf, built: std::time::Instant, ents: Vec<IdxEntry> }
+static SEARCH_CACHE: Mutex<Vec<std::sync::Arc<SearchIndex>>> = Mutex::new(Vec::new());
+const SEARCH_CACHE_SECS: u64 = 30;
+
+/// 문서를 바꾸는 커맨드가 부른다 — 다음 찾기는 새로 훑는다
+pub fn invalidate_search() {
+    SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+fn build_index(base: &Path) -> SearchIndex {
+    let rel = |p: &Path| p.strip_prefix(base).unwrap_or(p).to_string_lossy().replace('\\', "/");
+    let mut ents = Vec::new();
     let mut budget = SEARCH_TEXT_BUDGET;
-    let mut stack = vec![base.clone()];
-    while let Some(dir) = stack.pop() {
+    let mut stack = vec![base.to_path_buf()];
+    'walk: while let Some(dir) = stack.pop() {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        let mut ents: Vec<_> = rd.flatten().collect();
-        ents.sort_by_key(|e| e.file_name());
-        for ent in ents {
-            seen += 1;
-            if seen > SEARCH_MAX_ENTRIES || out.len() >= SEARCH_MAX_HITS {
-                return Ok(out);
-            }
+        let mut list: Vec<_> = rd.flatten().collect();
+        list.sort_by_key(|e| e.file_name());
+        for ent in list {
+            if ents.len() >= SEARCH_MAX_ENTRIES { break 'walk }
             let name = ent.file_name().to_string_lossy().into_owned();
             let Ok(ft) = ent.file_type() else { continue };
             if ft.is_symlink() { continue }
@@ -588,28 +592,98 @@ pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
             let path = ent.path();
             let is_dir = md.is_dir();
             if is_dir { stack.push(path.clone()); }
-            if name.to_lowercase().contains(&q) {
-                out.push(SearchHit { rel: rel(&path), name, dir: is_dir, hit: "name".into(), snippet: String::new() });
-                continue;
-            }
-            if is_dir || md.len() > SEARCH_TEXT_MAX || md.len() > budget { continue }
-            let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-            if !SEARCH_TEXT_EXT.contains(&ext.as_str()) { continue }
-            let Ok(bytes) = std::fs::read(&path) else { continue };
-            budget = budget.saturating_sub(bytes.len() as u64);
-            let Some((text, _)) = decode_text(&bytes) else { continue };
-            for line in text.lines() {
-                let low = line.to_lowercase();
-                if let Some(at) = low.find(&q) {
-                    // 소문자 바꾸기로 바이트 위치가 어긋날 수 있어 원문 기준으로 다시 맞춘다
-                    let at = if line.is_char_boundary(at) && line.len() == low.len() { at } else { 0 };
-                    out.push(SearchHit { rel: rel(&path), name: name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, q.chars().count()) });
-                    break;
+            let mut text = None;
+            if !is_dir && md.len() <= SEARCH_TEXT_MAX && md.len() <= budget {
+                let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+                if SEARCH_TEXT_EXT.contains(&ext.as_str()) {
+                    if let Ok(bytes) = std::fs::read(&path) {
+                        budget = budget.saturating_sub(bytes.len() as u64);
+                        text = decode_text(&bytes).map(|(t, _)| t);
+                    }
                 }
+            }
+            ents.push(IdxEntry { rel: rel(&path), low: name.to_lowercase(), name, dir: is_dir, text });
+        }
+    }
+    SearchIndex { base: base.to_path_buf(), built: std::time::Instant::now(), ents }
+}
+
+fn query_index(ix: &SearchIndex, query: &str) -> Vec<SearchHit> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() { return vec![] }
+    let qlen = q.chars().count();
+    let mut out = Vec::new();
+    for e in &ix.ents {
+        if out.len() >= SEARCH_MAX_HITS { break }
+        if e.low.contains(&q) {
+            out.push(SearchHit { rel: e.rel.clone(), name: e.name.clone(), dir: e.dir, hit: "name".into(), snippet: String::new() });
+            continue;
+        }
+        let Some(text) = &e.text else { continue };
+        for line in text.lines() {
+            let low = line.to_lowercase();
+            if let Some(at) = low.find(&q) {
+                // 소문자 바꾸기로 바이트 위치가 어긋날 수 있어 원문 기준으로 다시 맞춘다
+                let at = if line.is_char_boundary(at) && line.len() == low.len() { at } else { 0 };
+                out.push(SearchHit { rel: e.rel.clone(), name: e.name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, qlen) });
+                break;
             }
         }
     }
-    Ok(out)
+    out
+}
+
+/// 색인을 새로 만들어 찾는다(시험·한 번 쓰기용)
+pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
+    if query.trim().is_empty() { return Ok(vec![]) }
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    Ok(query_index(&build_index(&base), query))
+}
+
+/// 30초 안에 만든 같은 폴더의 색인이 있으면 그대로 쓴다
+pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
+    if query.trim().is_empty() { return Ok(vec![]) }
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let have = {
+        let c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        c.iter().find(|x| x.base == base).cloned()
+    };
+    let ix = match have {
+        /* 오래된 색인이라도 바로 답하고, 새 색인은 뒤에서 만든다 — 공유 폴더는 한 번 훑는 데 10초가 넘을 수 있어
+           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search 가 색인을 지워 다음 찾기가 새로 만든다 */
+        Some(ix) => {
+            if ix.built.elapsed().as_secs() >= SEARCH_CACHE_SECS { refresh_later(base.clone()); }
+            ix
+        }
+        None => {
+            let ix = std::sync::Arc::new(build_index(&base));
+            store_index(ix.clone());
+            ix
+        }
+    };
+    Ok(query_index(&ix, query))
+}
+
+fn store_index(ix: std::sync::Arc<SearchIndex>) {
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    c.retain(|x| x.base != ix.base);
+    c.push(ix);
+}
+
+static REFRESHING: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+fn refresh_later(base: PathBuf) {
+    {
+        let mut r = REFRESHING.lock().unwrap_or_else(|e| e.into_inner());
+        if r.contains(&base) { return }                    // 이미 만드는 중
+        r.push(base.clone());
+    }
+    std::thread::spawn(move || {
+        let ix = std::sync::Arc::new(build_index(&base));
+        /* 만드는 사이 앱이 문서를 바꿔 색인이 지워졌다면(invalidate) 다음 찾기가 새로 만든다 — 그 자리에 낡은 것을 넣지 않는다 */
+        let still = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == base);
+        if still { store_index(ix); }
+        REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
+    });
 }
 
 /* ── 글자 파일 (v3.8.1) — 읽기·쓰기, 인코딩 보존 ─────────────────────────── */
@@ -751,8 +825,17 @@ pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mt
 /* ── 명령 ───────────────────────────────────────────────────────────── */
 
 /// 문서 폴더들을 한꺼번에 잡는다(화면 순서 = 폴더 번호). 못 여는 폴더는 그 자리만 ok:false.
+/// 동기 커맨드는 Tauri 메인(화면) 스레드에서 돈다 — 디스크(특히 공유 폴더)가 느리면 그동안 앱 전체가 멈춘다.
+/// 그래서 파일을 만지는 문서 커맨드는 모두 이걸로 별도 스레드에서 돌린다(v3.8.5).
+async fn off_main<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
-pub fn doc_set_roots(paths: Vec<String>) -> Vec<RootInfo> {
+pub async fn doc_set_roots(paths: Vec<String>) -> Result<Vec<RootInfo>, String> {
+    off_main(move || Ok(set_roots(paths))).await
+}
+pub fn set_roots(paths: Vec<String>) -> Vec<RootInfo> {
     let mut roots = Vec::new();
     let mut out = Vec::new();
     for p in &paths {
@@ -766,34 +849,53 @@ pub fn doc_set_roots(paths: Vec<String>) -> Vec<RootInfo> {
 }
 
 #[tauri::command]
-pub fn doc_list(root: usize, rel: String) -> Result<Vec<DocEntry>, String> {
-    list_in(&self::root(root)?, &rel)
+pub async fn doc_list(root: usize, rel: String) -> Result<Vec<DocEntry>, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        list_in(&r, &rel)
+    }).await
 }
 
 /// 파일 내용을 그대로(배열 버퍼로) 돌려준다 — JSON 숫자 배열로 보내면 큰 파일에서 몇 배로 커진다.
 #[tauri::command]
-pub fn doc_read(root: usize, rel: String) -> Result<tauri::ipc::Response, String> {
-    Ok(tauri::ipc::Response::new(read_in(&self::root(root)?, &rel)?))
+pub async fn doc_read(root: usize, rel: String) -> Result<tauri::ipc::Response, String> {
+    let r = self::root(root)?;
+    Ok(tauri::ipc::Response::new(off_main(move || read_in(&r, &rel)).await?))
 }
 
 #[tauri::command]
-pub fn doc_read_text(root: usize, rel: String) -> Result<TextFile, String> {
-    read_text_in(&self::root(root)?, &rel)
+pub async fn doc_read_text(root: usize, rel: String) -> Result<TextFile, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        read_text_in(&r, &rel)
+    }).await
 }
 
 #[tauri::command]
-pub fn doc_write_text(root: usize, rel: String, text: String, encoding: String, base_mtime: i64) -> Result<i64, String> {
-    write_text_in(&self::root(root)?, &rel, &text, &encoding, base_mtime)
+pub async fn doc_write_text(root: usize, rel: String, text: String, encoding: String, base_mtime: i64) -> Result<i64, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        write_text_in(&r, &rel, &text, &encoding, base_mtime)
+    }).await
 }
 
 #[tauri::command]
-pub fn doc_move(root: usize, from: String, to_dir: String) -> Result<String, String> {
-    move_in(&self::root(root)?, &from, &to_dir)
+pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        move_in(&r, &from, &to_dir)
+    }).await
 }
 
 #[tauri::command]
-pub fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
-    import_in(&self::root(root)?, &dir, &paths, mv.unwrap_or(false))
+pub async fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        import_in(&r, &dir, &paths, mv.unwrap_or(false))
+    }).await
 }
 
 /// 지금 Shift 가 눌려 있나 — 탐색기에서 끌어 오는 동안 웹뷰는 키 입력을 못 받으므로 Windows 에 직접 묻는다
@@ -823,13 +925,18 @@ pub fn copy_in(root: &Path, rel: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn doc_copy(root: usize, rel: String) -> Result<String, String> {
-    copy_in(&self::root(root)?, &rel)
+pub async fn doc_copy(root: usize, rel: String) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        copy_in(&r, &rel)
+    }).await
 }
 
 /// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
 #[tauri::command]
 pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
+    invalidate_search();
     trash_in(&self::root(root)?, &rel)
 }
 
@@ -837,22 +944,59 @@ pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn doc_search(root: usize, query: String) -> Result<Vec<SearchHit>, String> {
     let r = self::root(root)?;
-    tauri::async_runtime::spawn_blocking(move || search_in(&r, &query)).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || search_cached(&r, &query)).await.map_err(|e| e.to_string())?
+}
+
+/// 찾기 칸을 누르면 미리 색인을 만들어 둔다(공유 폴더는 처음 훑는 데 오래 걸린다) — 이미 있으면 아무것도 안 한다
+#[tauri::command]
+pub async fn doc_search_warm(root: usize) -> Result<(), String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        let base = std::fs::canonicalize(&r).unwrap_or(r);
+        let have = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == base);
+        if !have { refresh_later_now(base); }
+        Ok(())
+    }).await
+}
+/// 색인이 아직 없을 때 뒤에서 만든다(refresh_later 는 '있던 색인이 지워졌으면 넣지 않는다' 규칙이라 따로)
+fn refresh_later_now(base: PathBuf) {
+    {
+        let mut r = REFRESHING.lock().unwrap_or_else(|e| e.into_inner());
+        if r.contains(&base) { return }
+        r.push(base.clone());
+    }
+    std::thread::spawn(move || {
+        let ix = std::sync::Arc::new(build_index(&base));
+        store_index(ix);
+        REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
+    });
 }
 
 #[tauri::command]
-pub fn doc_create_doc(root: usize, dir: String, name: String) -> Result<String, String> {
-    create_doc_in(&self::root(root)?, &dir, &name)
+pub async fn doc_create_doc(root: usize, dir: String, name: String) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        create_doc_in(&r, &dir, &name)
+    }).await
 }
 
 #[tauri::command]
-pub fn doc_create(root: usize, dir: String, name: String, is_dir: bool) -> Result<String, String> {
-    create_in(&self::root(root)?, &dir, &name, is_dir)
+pub async fn doc_create(root: usize, dir: String, name: String, is_dir: bool) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        create_in(&r, &dir, &name, is_dir)
+    }).await
 }
 
 #[tauri::command]
-pub fn doc_rename(root: usize, rel: String, name: String) -> Result<String, String> {
-    rename_in(&self::root(root)?, &rel, &name)
+pub async fn doc_rename(root: usize, rel: String, name: String) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        invalidate_search();
+        rename_in(&r, &rel, &name)
+    }).await
 }
 
 /// 열기·폴더에서 보기(이미 있는 open_file_path / reveal_file_path)에 넘길 절대 경로 — 역시 문서 폴더 안만.
@@ -1050,6 +1194,20 @@ mod tests {
         assert_eq!(search_in(&root, "11월").unwrap()[0].hit, "name");
         assert_eq!(search_in(&root, "안쪽").unwrap()[0].dir, true, "폴더 이름도 찾는다");
         assert!(search_in(&root, "  ").unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn search_cache_reused_until_invalidated() {
+        let r = tmp("search-cache");
+        std::fs::write(r.join("가 폴더/첫.txt"), "x").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        invalidate_search();
+        assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
+        std::fs::write(r.join("가 폴더/둘째첫.txt"), "x").unwrap();   // 앱 밖에서 생긴 파일 — 색인을 다시 쓰므로 아직 안 보인다
+        assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
+        invalidate_search();                                          // 앱이 문서를 바꾸면 버린다
+        assert_eq!(search_cached(&root, "첫").unwrap().len(), 2);
         let _ = std::fs::remove_dir_all(&r);
     }
 
