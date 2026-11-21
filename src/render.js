@@ -213,8 +213,8 @@ export function doneCalHtml(list, y, m, selDay, now){
   for(let i=0;i<lead;i++) cells+='<span class="dcal-d dcal-x"></span>';
   for(let d=1; d<=days; d++){
     const t=new Date(y, m, d).getTime(), n=counts.get(t)||0; total+=n;
-    const lv = n>=4 ? 3 : n>=2 ? 2 : n ? 1 : 0;
-    cells+=`<button type="button" class="dcal-d dcal-l${lv}${t===today?' dcal-today':''}${t===selDay?' on':''}" data-dcalday="${t}"${n?'':' disabled'} title="${m+1}.${d} · ${n}건"><span class="num">${d}</span>${n?`<b class="num">${n}</b>`:''}</button>`;
+    /* 강조는 둘뿐(소유자 지정): 완료 기록이 있는 날 = 연한 녹색, 오늘 = 진한 녹색. 건수 단계 색은 기준이 안 읽혀 뺐다 */
+    cells+=`<button type="button" class="dcal-d${n?' dcal-has':''}${t===today?' dcal-today':''}${t===selDay?' on':''}" data-dcalday="${t}"${n?'':' disabled'} title="${m+1}.${d} · ${n}건"><span class="num">${d}</span>${n?`<b class="num">${n}</b>`:''}</button>`;
   }
   return `<div class="dcal-head"><button type="button" class="dcal-nav" data-dcalnav="-1" aria-label="앞 달">‹</button><b class="num">${y}년 ${m+1}월</b><span class="dcal-total num">${total}건</span><button type="button" class="dcal-nav" data-dcalnav="1" aria-label="다음 달">›</button></div>`
     +`<div class="dcal-dow">${['월','화','수','목','금','토','일'].map(x=>`<span>${x}</span>`).join('')}</div><div class="dcal-grid">${cells}</div>`

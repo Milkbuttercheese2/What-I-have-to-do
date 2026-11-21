@@ -52,7 +52,9 @@ const parentOf = rel => rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) :
 const nameOf = rel => rel ? rel.slice(rel.lastIndexOf('/')+1) : '';
 const fmtSize = n => n<1024 ? `${n} B` : n<1048576 ? `${(n/1024).toFixed(1)} KB` : `${(n/1048576).toFixed(1)} MB`;
 const fmtTime = ms => { if(!ms) return ''; const d=new Date(ms); return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
-function saveSettings(){ window.SETTINGS=S.settings; STORE.saveSettings(S.settings); }
+/* 설정 저장은 표 전체를 다시 쓰므로 파일을 누를 때마다 하지 않고 잠깐 모아서 한 번(v3.8.5) */
+let settingsTimer=0;
+function saveSettings(){ window.SETTINGS=S.settings; clearTimeout(settingsTimer); settingsTimer=setTimeout(()=>STORE.saveSettings(S.settings), 800); }
 
 /* 설정의 폴더 목록 — v3.8.0 의 단일 docRoot 는 첫 폴더로 옮긴다(옛 열쇠 docOpen/docLast 도 0번 폴더로) */
 export function docRoots(){
@@ -778,20 +780,19 @@ async function trashItem(key, dir){
 let searchQ='', searchSeq=0, searchTimer=0, searchHits=null;
 function onSearchInput(){
   clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>{ searchQ=$('dc-search').value.trim(); if(searchQ) runSearch(); else { searchHits=null; renderTree(); } }, 300);
+  /* 지우면 바로 트리로 — 아직 돌고 있던 찾기는 번호를 올려 버린다(예전엔 지운 뒤 늦게 끝난 찾기가 '찾은 것 없음'을 덮어썼다) */
+  if(!$('dc-search').value.trim()){ searchQ=''; searchHits=null; searchSeq++; renderTree(); return; }
+  searchTimer=setTimeout(()=>{ searchQ=$('dc-search').value.trim(); if(searchQ) runSearch(); else { searchHits=null; searchSeq++; renderTree(); } }, 200);
 }
 async function runSearch(){
   const q=searchQ, seq=++searchSeq;
   const el=$('dt-tree'); if(!el) return;
-  el.innerHTML='<div class="dt-note" style="padding-left:12px">찾는 중</div>';
-  const all=[];
-  for(let i=0;i<roots.length;i++){
-    if(!(roots[i]&&roots[i].ok)) continue;
-    try{ for(const h of await invoke('doc_search', {root:i, query:q})) all.push({...h, i}); }
-    catch(e){ all.push({i, rel:'', name:rootName(i), dir:true, hit:'err', snippet:String(e)}); }
-    if(seq!==searchSeq) return;                                  // 그새 글자를 바꿨다
-  }
-  searchHits=all;
+  if(!searchHits) el.innerHTML='<div class="dt-note" style="padding-left:12px">찾는 중</div>';   // 이미 결과가 있으면 그대로 두고 바꿔 끼운다(깜빡임 없음)
+  /* 폴더마다 동시에(Rust 가 폴더별 색인을 30초 기억하므로 두 번째 글자부터는 디스크를 다시 훑지 않는다) */
+  const per=await Promise.all(roots.map((r,i)=>!(r&&r.ok) ? [] :
+    invoke('doc_search', {root:i, query:q}).then(hs=>hs.map(h=>({...h, i})), e=>[{i, rel:'', name:rootName(i), dir:true, hit:'err', snippet:String(e)}])));
+  if(seq!==searchSeq || !searchQ) return;                        // 그새 글자를 바꿨거나 지웠다
+  searchHits=per.flat();
   renderHits();
 }
 function renderHits(){
@@ -878,8 +879,10 @@ export async function renderDocs(){
   /* 처음 보는 폴더는 펼친 채로 */
   rs.forEach((_,i)=>{ if(!S.settings.docSeen || !S.settings.docSeen.includes(rs[i])){ open.add(nodeKey(i,'')); } });
   S.settings.docSeen=[...rs];
-  for(const k of [...open]){ const p=parseKey(k); if(p.i<rs.length && !kids.has(k)) await load(p.i, p.rel); }
-  for(let i=0;i<rs.length;i++) if(!kids.has(nodeKey(i,''))) await load(i, '');
+  /* 펼친 폴더를 한꺼번에 읽는다(예전엔 하나씩 기다려 폴더가 많으면 탭을 열 때마다 느렸다) */
+  const need=new Set([...open].filter(k=>{ const p=parseKey(k); return p.i<rs.length && !kids.has(k); }));
+  for(let i=0;i<rs.length;i++) if(!kids.has(nodeKey(i,''))) need.add(nodeKey(i,''));
+  await Promise.all([...need].map(k=>{ const p=parseKey(k); return load(p.i, p.rel); }));
   if(sel && sel.i>=rs.length) sel=null;
   if(!sel && S.settings.docLast){ const p=parseKey(S.settings.docLast); if(p.i<rs.length && kids.has(nodeKey(p.i, parentOf(p.rel))) && entryOf(p.i, p.rel)) sel={i:p.i, rel:p.rel, dir:false}; }
   if(!sel) sel={i:0, rel:'', dir:true};

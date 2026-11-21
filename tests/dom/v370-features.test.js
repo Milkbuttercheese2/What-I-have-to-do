@@ -441,7 +441,7 @@ test('v3.8.4 완료 탭 달력 띠: 날마다 끝낸 건수 · 누르면 그날 
   assert.match(cal.querySelector('.dcal-head b').textContent, new RegExp(`${now.getFullYear()}년 ${now.getMonth()+1}월`));
   const todayCell=cal.querySelector('.dcal-today');
   assert.equal(todayCell.querySelector('b').textContent, '2');
-  assert.ok(todayCell.classList.contains('dcal-l2'));
+  assert.ok(todayCell.classList.contains('dcal-has'), '기록 있는 오늘 — 연한 녹색 표시도 함께(진한 녹색이 위에 덮는다)');
   assert.equal(doc.querySelectorAll('#col-done .drow:not(.drow-h)').length, 3);
   click($('done-cal').querySelector('.dcal-today'));
   assert.deepEqual([...doc.querySelectorAll('#col-done .drow:not(.drow-h) .drow-memo')].map(x=>x.textContent).sort(), ['오늘 둘','오늘 하나']);

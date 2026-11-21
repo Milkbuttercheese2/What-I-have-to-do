@@ -525,6 +525,22 @@ test('v3.8.3 문서 찾기: 모든 문서 폴더에서 · 결과는 트리 자�
   assert.ok(row('0:깊은/견적 회신.txt').classList.contains('on'), '트리로 돌아오면 그 파일이 보이고 골라져 있다');
 });
 
+test('v3.8.4 문서 찾기: 찾는 도중 검색어를 지우면 늦게 끝난 찾기가 트리를 덮지 않는다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  fakeFs(()=>({'0:':[{name:'보고.txt',rel:'보고.txt',dir:false,size:1,mtime:1}]}));
+  let release; env.onInvoke('doc_search', ()=>new Promise(r=>{ release=()=>r([]); }));
+  await openDocs();
+  const s=$('dc-search'); s.value='없는말'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(350); await env.flush(4);
+  s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  await env.flush(2);
+  assert.ok(row('0:보고.txt'), '지우자마자 트리');
+  release(); await env.flush(8);
+  assert.ok(row('0:보고.txt'), '늦게 끝난 찾기가 덮지 않는다');
+  assert.ok(!/찾은 것 없음/.test($('dt-tree').textContent));
+});
+
 test('v3.8.3 탐색기에서 끌어 오기: Shift 를 누른 채 놓으면 옮기기(mv) · 아니면 복사', async () => {
   const {handleDragDrop, dropTarget, applyDrop} = await import('../../src/filedrop.js');
   await env.resetS(); S.loaded = true;
@@ -666,7 +682,8 @@ test('v3.8.4 트리 폭: 180~560 으로 묶고, 손잡이를 끌면 settings.doc
   assert.equal(S.settings.docTreeW, 340);
   assert.equal(doc.querySelector('#view-docs .dc-layout').style.getPropertyValue('--dc-tree-w'), '340px');
   ms(doc.body,'mouseup',340,0);
-  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_settings'), '놓으면 저장');
+  mock.timers.tick(900); await env.flush(2);
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_settings'), '놓으면 저장(잠깐 모아서)');
   sp.dispatchEvent(new env.window.MouseEvent('dblclick',{bubbles:true}));
   assert.equal(S.settings.docTreeW, 260);
 });

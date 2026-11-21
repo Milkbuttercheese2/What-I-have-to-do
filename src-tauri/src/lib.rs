@@ -65,7 +65,7 @@ fn open_main_window(app: &tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         /* v3.8.4 문서 탭 HTML 보기 — 문서 폴더 안 파일만 내주는 전용 주소(docs.rs serve_path 가 폴더 안인지 확인) */
-        .register_uri_scheme_protocol("wmhhdoc", |_ctx, request| {
+        .register_asynchronous_uri_scheme_protocol("wmhhdoc", |_ctx, request, responder| {
             let build = |status: u16, mime: &str, body: Vec<u8>| {
                 tauri::http::Response::builder()
                     .status(status)
@@ -77,10 +77,14 @@ pub fn run() {
                     .body(body)
                     .unwrap()
             };
-            match docs::serve_path(request.uri().path()) {
-                Ok((bytes, mime)) => build(200, mime, bytes),
-                Err(e) => build(404, "text/plain; charset=utf-8", e.into_bytes()),
-            }
+            /* 파일 읽기는 별도 스레드에서(큰 HTML·그림을 메인 스레드에서 읽으면 그동안 화면이 멈춘다) */
+            let path = request.uri().path().to_string();
+            std::thread::spawn(move || {
+                responder.respond(match docs::serve_path(&path) {
+                    Ok((bytes, mime)) => build(200, mime, bytes),
+                    Err(e) => build(404, "text/plain; charset=utf-8", e.into_bytes()),
+                });
+            });
         })
         // Single-instance MUST be the first plugin registered. This app's
         // save model is a whole-dataset replace (save_all rewrites every
