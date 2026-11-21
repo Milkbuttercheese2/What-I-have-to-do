@@ -882,3 +882,33 @@ test('v3.8.12 장평 글자(transform="translate() scale()")도 글자 층에 �
   assert.equal(r.runs[1].x, 100); assert.equal(r.runs[1].y, 50);
   assert.deepEqual([r.runs[2].x, r.runs[2].y], [15, 105], '묶음(g)의 옮기기도 더한다');
 });
+
+test('양식 [문서] 로 넘어오면 그 줄을 초록 강조(reveal)·트리 가운데로 · 다른 줄을 누르면 강조가 풀린다', async () => {
+  const {showDoc} = await import('../../src/docs.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['Z:\\가운데']; S.settings.docOpen=[]; S.settings.docSeen=['Z:\\가운데'];
+  env.onInvoke('doc_set_roots', a=>a.paths.map(p=>({ok:true,path:p,error:''})));
+  env.onInvoke('doc_list', a=>a.rel==='' ? [{name:'깊은',rel:'깊은',dir:true,size:0,mtime:1},{name:'z.txt',rel:'z.txt',dir:false,size:1,mtime:1}]
+    : a.rel==='깊은' ? Array.from({length:40},(_,k)=>({name:`f${String(k).padStart(2,'0')}.txt`,rel:`깊은/f${String(k).padStart(2,'0')}.txt`,dir:false,size:1,mtime:1})) : []);
+  env.onInvoke('doc_read_text', ()=>({text:'x',encoding:'utf-8',mtime:1}));
+  const tree=document.getElementById('dt-tree');
+  /* jsdom 은 배치를 안 하므로 줄 높이·자리를 흉내 낸다: 줄마다 28px, 트리 높이 280px */
+  Object.defineProperty(tree, 'clientHeight', {configurable:true, get:()=>280});
+  const rowsTop=()=>[...tree.querySelectorAll('.dt-row')];
+  const origGB=window.HTMLElement.prototype.getBoundingClientRect;
+  window.HTMLElement.prototype.getBoundingClientRect=function(){ if(this===tree) return {top:100-0, bottom:380, left:0, right:200, height:280, width:200};
+    const k=rowsTop().indexOf(this); if(k>=0) return {top:100+k*28-tree.scrollTop, bottom:128+k*28-tree.scrollTop, left:0, right:200, height:28, width:200}; return origGB.call(this); };
+  Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', {configurable:true, get(){ return this.classList&&this.classList.contains('dt-row') ? 28 : 0; }});
+  try{
+    await showDoc('Z:\\가운데\\깊은\\f30.txt'); await env.flush(12);
+    const rows=rowsTop(), k=rows.findIndex(r=>r.dataset.dkey==='0:깊은/f30.txt');
+    assert.ok(k>0, '상위 폴더를 펼쳐 그 파일 줄이 보인다');
+    assert.ok(rows[k].classList.contains('reveal') && rows[k].classList.contains('on'), '초록 강조 + 고른 표시');
+    assert.equal(rows.filter(r=>r.classList.contains('reveal')).length, 1);
+    assert.equal(tree.scrollTop, k*28-(280-28)/2, '그 줄이 트리 세로 가운데');
+    rows.find(r=>r.dataset.dkey==='0:z.txt').click(); await env.flush(12);
+    assert.equal(tree.querySelectorAll('.dt-row.reveal').length, 0, '다른 줄을 누르면 강조가 풀린다');
+  } finally {
+    window.HTMLElement.prototype.getBoundingClientRect=origGB; delete window.HTMLElement.prototype.offsetHeight; delete tree.clientHeight;
+  }
+});

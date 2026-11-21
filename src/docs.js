@@ -92,10 +92,21 @@ async function load(i, rel){
 
 /* ── 왼쪽: 트리 ── */
 const isSel = (i, rel) => !!sel && sel.i===i && sel.rel===rel;
+/* 양식의 [문서] 로 넘어온 줄 — 초록으로 강조하고 트리 가운데로. 강조는 트리에서 다른 줄(또는 그 줄)을 누를 때까지(pick·pickHit 에서 지운다).
+   가운데 맞추기는 그 줄이 그려지는 첫 renderTree 에서 한 번만 — 폴더 읽기가 늦어도 줄이 나타나는 때 맞춘다 */
+let revealKey=null, centerKey=null;
+const revCls = k => k===revealKey ? ' reveal' : '';
+function centerRow(){
+  const el=$('dt-tree'); if(!el || !centerKey) return;
+  const row=[...el.querySelectorAll('.dt-row')].find(r=>r.dataset.dkey===centerKey); if(!row) return;
+  centerKey=null;
+  const top=row.getBoundingClientRect().top-el.getBoundingClientRect().top+el.scrollTop;
+  el.scrollTop=Math.max(0, top-(el.clientHeight-row.offsetHeight)/2);
+}
 function rowHtml(i, e, depth){
   const k=nodeKey(i, e.rel), isOpen=e.dir && open.has(k);
   const kind=e.dir ? '' : docKind(e.name);
-  return `<div class="dt-row${isSel(i,e.rel)?' on':''}${e.dir?' dir':''}" data-dkey="${escAttr(k)}" data-ddir="${e.dir?1:0}" style="padding-left:${4+depth*16}px" title="${escAttr(e.name)}">`
+  return `<div class="dt-row${isSel(i,e.rel)?' on':''}${revCls(k)}${e.dir?' dir':''}" data-dkey="${escAttr(k)}" data-ddir="${e.dir?1:0}" style="padding-left:${4+depth*16}px" title="${escAttr(e.name)}">`
     +`<span class="dt-caret"${e.dir?' data-caret="1"':''}>${e.dir?(isOpen?'▾':'▸'):''}</span>`
     +`<span class="dt-ico ${e.dir?'ico-dir':'ico-'+kind}"></span><span class="dt-name">${esc(e.name)}</span></div>`
     +(isOpen ? listHtml(i, e.rel, depth+1) : '');
@@ -112,11 +123,12 @@ function renderTree(){
   if(searchHits){ renderHits(); return; }                     // 찾는 중이면 결과 목록을 그대로
   el.innerHTML=docRoots().map((p,i)=>{
     const k=nodeKey(i,''), isOpen=open.has(k);
-    return `<div class="dt-row dt-root dir${isSel(i,'')?' on':''}" data-dkey="${escAttr(k)}" data-ddir="1" title="${escAttr(p)}">`
+    return `<div class="dt-row dt-root dir${isSel(i,'')?' on':''}${revCls(k)}" data-dkey="${escAttr(k)}" data-ddir="1" title="${escAttr(p)}">`
       +`<span class="dt-caret" data-caret="1">${isOpen?'▾':'▸'}</span><span class="dt-ico ico-dir"></span><span class="dt-name">${esc(rootName(i))}</span>`
       +`<button type="button" class="dt-unroot" data-unroot="${i}" title="문서 폴더 해지(폴더는 그대로)" aria-label="문서 폴더 해지">×</button></div>`
       +(isOpen ? listHtml(i, '', 1) : '');
   }).join('');
+  centerRow();
 }
 
 /* ── 가운데: 보기 ── */
@@ -836,6 +848,7 @@ function renderHits(){
   }).join('')+(searchHits.length>=200?'<div class="dt-note" style="padding-left:12px">200개까지만</div>':'');
 }
 async function pickHit(key, dir){
+  revealKey=centerKey=null;
   const {i, rel}=parseKey(key);
   const r=await revealPath(i, rel);
   await leaveViewer();
@@ -924,6 +937,7 @@ export function collapseKeys(openSet, i, rel){
 }
 function collapse(i, rel){ collapseKeys(open, i, rel); }
 async function pick(key, dir, caret){
+  revealKey=centerKey=null;
   const {i, rel}=parseKey(key);
   if(dir){
     if(open.has(key) && (isSel(i, rel) || caret)) collapse(i, rel); else open.add(key);
@@ -979,6 +993,7 @@ export async function showDoc(path){
   const r=await revealPath(t.i, t.rel);
   await leaveViewer();
   sel={i:t.i, rel:r.rel, dir:r.dir};
+  revealKey=centerKey=nodeKey(t.i, r.rel);
   /* 탭 줄의 표시도 '문서'로 — 화면만 바꾸면 탭은 '보드'에 남는다(지금 탭의 진실은 .tab.on 하나 — views.js) */
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on', x.dataset.view==='docs'));
   showView('docs');

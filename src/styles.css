@@ -1368,6 +1368,8 @@
   .dt-row{display:flex;align-items:center;gap:6px;height:28px;padding-right:8px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--ink);user-select:none}
   .dt-row:hover{background:var(--sunk)}
   .dt-row.on{background:var(--slate-bg);color:var(--focus);font-weight:600}
+  /* 양식 [문서] 로 넘어온 줄 — 초록(다크도 토큰). 다른 줄을 누르면 풀린다 */
+  .dt-row.reveal,.dt-row.reveal.on{background:var(--green-bg);color:var(--green);font-weight:700;box-shadow:inset 0 0 0 1.5px var(--green)}
   .dt-root{font-weight:700}
   /* v3.8.1 접기 ▸ — 크게, 누름 자리 넓게(줄 높이 전체 · 26px 폭) */
   .dt-caret{flex:none;width:26px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-soft);border-radius:6px;margin-right:-4px}
