@@ -163,15 +163,41 @@ export function guardSelection(layer){
   });
 }
 const PDF_MAX_PX=4096;
-export async function renderPdf(box, bytes){
+async function openPdf(bytes){
   if(!pdfLib){
     pdfLib=await import('./vendor/pdfjs/pdf.min.mjs');
     pdfLib.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
   }
   const base=new URL('./vendor/pdfjs/', import.meta.url).href;
-  let doc;
-  try{ doc=await pdfLib.getDocument({data:bytes, cMapUrl:base+'cmaps/', cMapPacked:true, standardFontDataUrl:base+'standard_fonts/', isEvalSupported:false, useSystemFonts:true}).promise; }
+  try{ return await pdfLib.getDocument({data:bytes, cMapUrl:base+'cmaps/', cMapPacked:true, standardFontDataUrl:base+'standard_fonts/', isEvalSupported:false, useSystemFonts:true}).promise; }
   catch(e){ throw new Error(/password/i.test(String(e&&e.name)+String(e&&e.message)) ? '암호가 걸린 PDF — [열기]로 보세요' : 'PDF 를 읽지 못함 — '+(e&&e.message||e)); }
+}
+/* v3.8.11 [글자] 보기 — 쪽마다 글자만 줄줄이(골라 복사하기 좋게). pdf.js 가 알려 주는 줄 끝(hasEOL)으로 줄을 나눈다 */
+export function pdfLines(items){
+  const out=[]; let cur='';
+  for(const it of items||[]){ if(typeof it.str!=='string') continue; cur+=it.str; if(it.hasEOL){ out.push(cur); cur=''; } }
+  if(cur) out.push(cur);
+  return out.map(l=>l.replace(/\s+$/,''));
+}
+export async function pdfTextHtml(bytes){
+  const doc=await openPdf(bytes);
+  try{
+    const n=Math.min(doc.numPages, 500), parts=[];
+    for(let k=1;k<=n;k++){
+      const tc=await (await doc.getPage(k)).getTextContent();
+      const lines=pdfLines(tc.items);
+      parts.push(`<section class="dv-sec"><div class="dv-pgno num">${k}쪽</div>${lines.length ? lines.map(l=>l.trim()?`<p>${esc(l)}</p>`:'<p class="dv-blank"></p>').join('') : '<p class="dv-blank">(글자 없음 — 그림으로 된 쪽)</p>'}</section>`);
+    }
+    return `<div class="dv-doc dv-pdftext">${parts.join('')}</div>`+(doc.numPages>n?`<div class="dv-cap">앞 ${n}쪽까지만</div>`:'');
+  } finally { try{ doc.destroy(); }catch{} }
+}
+export function hwpTextHtml(bytes, kind, rhwp){
+  let x=bytes;
+  if(kind!=='hwpx'){ const d=new rhwp.HwpDocument(bytes); try{ x=d.exportHwpx(); } finally { try{ d.free(); }catch{} } }
+  return `<div class="dv-doc dv-hwpx">${hwpxHtml(unzip(x))}</div>`;
+}
+export async function renderPdf(box, bytes){
+  const doc=await openPdf(bytes);
   box.innerHTML=`<div class="dv-pdf-bar"><span class="num">${doc.numPages}쪽</span><button type="button" class="seg-btn" data-pdfz="-1" title="작게">−</button><span class="num dv-pdf-z">100%</span><button type="button" class="seg-btn" data-pdfz="1" title="크게">＋</button></div><div class="dv-pdf"></div>`;
   const wrap=box.querySelector('.dv-pdf'), zl=box.querySelector('.dv-pdf-z');
   let zoom=1, dead=false, ratio=1.414;
@@ -259,26 +285,40 @@ export function hwpTextRuns(svg){
     const cw=size*[...s].reduce((n,ch)=>n+(ch.charCodeAt(0)>0x2e80?1:0.55),0);
     if(cur && Math.abs(cur.y-y)<0.5 && Math.abs(cur.size-size)<0.5 && x>=cur.end-size*0.3 && x-cur.end<size*2){
       if(x-cur.end>size*0.25) cur.text+=' ';
-      cur.text+=s; cur.end=Math.max(cur.end, x+cw);
-    }else{ cur={x, y, size, text:s, end:x+cw}; runs.push(cur); }
+      cur.text+=s; cur.end=Math.max(cur.end, x+cw); cur.cs.push({x, s, w:cw});
+    }else{ cur={x, y, size, text:s, end:x+cw, cs:[{x, s, w:cw}]}; runs.push(cur); }
   }
   return {w:W, h:H, runs};
+}
+/* v3.8.11 글자 층 — 글자 하나마다 그 글자의 자리(SVG 의 x)에 놓고, 다음 글자 자리까지의 폭으로 늘이고 줄인다.
+   (v3.8.9 는 줄 단위였다 — 문서 글꼴이 PC 에 없으면 줄 가운데에서 고른 칸이 한두 글자씩 밀렸다.)
+   글자 사이가 벌어지면 띄어쓰기를 그 글자 뒤에 붙이고(복사 때 띄어쓰기), 줄이 바뀌면 <br>(복사 때 줄바꿈). */
+let measCtx=null, measFont='';
+function measW(text, size){
+  if(measCtx===null){ try{ measCtx=document.createElement('canvas').getContext('2d')||false; }catch{ measCtx=false; } }
+  if(!measCtx) return 0;
+  const f=`${size}px 'Malgun Gothic',sans-serif`; if(f!==measFont){ measCtx.font=f; measFont=f; }
+  return measCtx.measureText(text).width;
 }
 function hwpTextLayer(svg){
   const {w, h, runs}=hwpTextRuns(svg); if(!w||!h||!runs.length) return null;
   const d=document.createElement('div'); d.className='dv-hwp-tl'; d.style.width=w+'px'; d.style.height=h+'px';
+  const frag=document.createDocumentFragment();
   runs.forEach((r, k)=>{
     const nx=runs[k+1], same=nx && Math.abs(nx.y-r.y)<r.size*0.5;
-    const s=document.createElement('span'); s.textContent=r.text+(same ? ' ' : '');
-    s.style.left=r.x+'px'; s.style.top=(r.y-r.size*0.88)+'px'; s.style.fontSize=r.size+'px'; s.dataset.w=String(r.end-r.x);
-    d.appendChild(s);
-    if(nx && !same) d.appendChild(document.createElement('br'));
+    r.cs.forEach((c, j)=>{
+      const nc=r.cs[j+1]; let t=c.s, want;
+      if(nc){ want=nc.x-c.x; if(nc.x-(c.x+c.w)>r.size*0.25) t+=' '; }
+      else { want=c.w; if(same) t+=' '; }
+      const sp=document.createElement('span'); sp.textContent=t;
+      sp.style.left=c.x+'px'; sp.style.top=(r.y-r.size*0.88)+'px'; sp.style.fontSize=r.size+'px';
+      const got=measW(t, r.size); if(got>0 && want>0) sp.style.transform=`scaleX(${(want/got).toFixed(4)})`;
+      frag.appendChild(sp);
+    });
+    if(nx && !same) frag.appendChild(document.createElement('br'));
   });
+  d.appendChild(frag);
   return d;
-}
-/* 글자 층의 각 줄을 그림 속 글자 폭에 맞춰 가로로 늘이고 줄인다(웹뷰 글꼴로 잰 폭 → 문서 폭) — 고를 때 자리가 맞게 */
-function fitHwpLayer(d){
-  for(const s of d.querySelectorAll('span')){ const want=Number(s.dataset.w), got=s.offsetWidth; if(want>0 && got>0) s.style.transform=`scaleX(${(want/got).toFixed(4)})`; }
 }
 /* 첫 쪽은 바로(실패하면 예외 → 부르는 쪽이 글자·표 보기로), 나머지는 쉬어 가며 그려 화면을 멈추지 않는다. 돌려주는 함수 = 정리 */
 export async function renderHwp(box, bytes, rhwp){
@@ -291,14 +331,21 @@ export async function renderHwp(box, bytes, rhwp){
     box.innerHTML=`<div class="dv-hwp-bar num">${n}쪽</div><div class="dv-hwp"></div>`+(n>HWP_MAX_PAGES?`<div class="dv-cap">앞 ${HWP_MAX_PAGES}쪽까지만 — 나머지는 [한글에서 열기]</div>`:'');
     const list=box.querySelector('.dv-hwp');
     const fit=()=>{ for(const pg of list.children){ const tl=pg.querySelector('.dv-hwp-tl'), im=pg.querySelector('img'); if(tl&&im&&im.clientWidth) tl.style.transform=`scale(${im.clientWidth/parseFloat(tl.style.width)})`; } };
+    const layer=(pg, svg)=>{
+      if(pg.dataset.tl || dead) return; pg.dataset.tl='1';
+      let tl=null; try{ tl=hwpTextLayer(svg || doc.renderPageSvg(Number(pg.dataset.pg))); }catch(e){ console.warn('한글 글자 층 실패', Number(pg.dataset.pg)+1, e); }
+      if(!tl) return;
+      pg.appendChild(tl); guardSelection(tl); fit();
+    };
+    const io=typeof IntersectionObserver==='function' ? new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ io.unobserve(e.target); layer(e.target); } }, {root:box.closest('.dv-content')||null, rootMargin:'1200px 0px'}) : null;
     const page=i=>{ const svg=doc.renderPageSvg(i); const u=URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'})); urls.push(u);
-      const pg=document.createElement('div'); pg.className='dv-hwp-pg';
+      const pg=document.createElement('div'); pg.className='dv-hwp-pg'; pg.dataset.pg=String(i);
       const im=document.createElement('img'); im.alt=`${i+1}쪽`; im.src=u; im.draggable=false; pg.appendChild(im);
-      let tl=null; try{ tl=hwpTextLayer(svg); }catch(e){ console.warn('한글 글자 층 실패', i+1, e); }
-      if(tl){ pg.appendChild(tl); im.addEventListener('load', fit, {once:true}); }
-      list.appendChild(pg); if(tl){ fitHwpLayer(tl); guardSelection(tl); } };
+      im.addEventListener('load', fit, {once:true});
+      list.appendChild(pg);
+      if(io) io.observe(pg); else layer(pg, svg); };
     const ro=typeof ResizeObserver==='function' ? new ResizeObserver(fit) : null; if(ro) ro.observe(list);
-    cleanupRO=()=>{ if(ro) ro.disconnect(); };
+    cleanupRO=()=>{ if(ro) ro.disconnect(); if(io) io.disconnect(); };
     page(0);
     (async()=>{ for(let i=1;i<total && !dead;i++){ await new Promise(r=>setTimeout(r, 0)); if(dead || !list.isConnected) return; try{ page(i); }catch(e){ console.warn('rhwp 쪽 그리기 실패', i+1, e); return; } } })();
     return cleanup;

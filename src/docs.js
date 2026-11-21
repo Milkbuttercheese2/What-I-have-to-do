@@ -24,7 +24,7 @@ import {S} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, appAlert, appConfirm, showToast} from './dom-utils.js';
 import {registerView, showView} from './views.js';
-import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp} from './docs-view.js';
+import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp, pdfTextHtml, hwpTextHtml} from './docs-view.js';
 import {cardHtml, persist} from './render.js';
 import {placeOf} from './placement.js';
 import {openForm} from './form.js';
@@ -163,7 +163,9 @@ async function doRenderViewer(){
     if(kind==='img' || kind==='media' || kind==='pdf'){
       const bytes=new Uint8Array(await invoke('doc_read', {root:i, rel}));
       if(!alive()) return;
-      if(kind==='pdf'){ box().innerHTML='<div class="dv-empty">읽는 중</div>'; const c=await renderPdf(box(), bytes); if(alive()) viewCleanup=c; else c(); return; }
+      if(kind==='pdf'){
+        if(pageMode()==='text'){ box().innerHTML=modeBar()+'<div class="dv-empty">글자를 읽는 중</div>'; const h=await pdfTextHtml(bytes); if(alive()) box().innerHTML=modeBar()+h; return; }
+        box().innerHTML='<div class="dv-empty">읽는 중</div>'; const c=await renderPdf(box(), bytes); if(alive()){ viewCleanup=c; addModeSeg(); } else c(); return; }
       const ext=extOf(rel), url=URL.createObjectURL(new Blob([bytes], {type:(IMG_MIME[ext]||MEDIA_MIME[ext]||'application/octet-stream')}));
       viewCleanup=()=>URL.revokeObjectURL(url);
       box().innerHTML = kind==='img' ? `<div class="dv-img" title="누르면 원래 크기 ↔ 창에 맞춤"><img src="${url}" alt="${escAttr(nameOf(rel))}"></div>`
@@ -204,15 +206,21 @@ function infoHtml(kind, rel, e, why){
   return `<div class="dv-info"><span class="dt-ico ico-${kind}"></span><div>${esc(why)}</div><div class="dv-meta">${esc(extOf(rel).toUpperCase()||'파일')}${e?` · ${fmtSize(e.size)}`:''}</div>`
     +`<button type="button" class="btn btn-ok" data-dopen="${escAttr(nodeKey(sel.i, rel))}">${openLabel(kind)}</button></div>`;
 }
+/* v3.8.11 PDF·한글 보기 방식 — '쪽'(쪽 모양 그대로, 글자 층으로 고르기) | '글자'(글자만 줄줄이 — 정확히 골라 복사). settings.docPageMode 에 기억 */
+const pageMode = () => S.settings.docPageMode==='text' ? 'text' : 'page';
+const modeSeg = () => `<div class="seg dv-seg dv-pmode"><button type="button" class="seg-btn${pageMode()==='page'?' on':''}" data-pmode="page" title="쪽 모양 그대로">쪽</button><button type="button" class="seg-btn${pageMode()==='text'?' on':''}" data-pmode="text" title="글자만 줄줄이 — 골라 복사하기 좋게">글자</button></div>`;
+const modeBar = () => `<div class="dv-hwp-bar">${modeSeg()}</div>`;
+function addModeSeg(){ const b=box() && box().querySelector('.dv-pdf-bar, .dv-hwp-bar'); if(b && !b.querySelector('.dv-pmode')) b.insertAdjacentHTML('afterbegin', modeSeg()); }
 async function showHwp(i, rel, kind, seq){
   const bytes=new Uint8Array(await invoke('doc_read', {root:i, rel}));
   if(seq!==viewSeq || !box()) return;
   try{
-    box().innerHTML='<div class="dv-empty">쪽을 그리는 중</div>';
+    box().innerHTML = pageMode()==='text' ? modeBar()+'<div class="dv-empty">글자를 읽는 중</div>' : '<div class="dv-empty">쪽을 그리는 중</div>';
     const m=await loadRhwp();
     if(seq!==viewSeq || !box()) return;
+    if(pageMode()==='text'){ box().innerHTML=modeBar()+hwpTextHtml(bytes, kind, m); return; }
     const c=await renderHwp(box(), bytes, m);
-    if(seq===viewSeq && box()) viewCleanup=c; else c();
+    if(seq===viewSeq && box()){ viewCleanup=c; addModeSeg(); } else c();
     return;
   }catch(err){ console.warn('rhwp 로 그리지 못해 글자·표 보기로', err); }
   if(seq!==viewSeq || !box()) return;
@@ -1066,6 +1074,8 @@ export function initDocs(){
     }
     const r=e.target.closest('[data-dreveal]');
     if(r){ const p=parseKey(r.dataset.dreveal); try{ await invoke('reveal_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }catch(err){ appAlert('폴더를 열 수 없습니다:\n'+err); } return; }
+    const pm=e.target.closest('[data-pmode]');
+    if(pm){ if(pm.dataset.pmode!==pageMode()){ S.settings.docPageMode=pm.dataset.pmode; saveSettings(); shown=null; renderViewer(); } return; }   // shown 을 비워야 같은 파일을 다시 그린다
     const tm=e.target.closest('[data-tmode]');
     if(tm && ed){
       if(ed.kind==='md') S.settings.docMdMode=tm.dataset.tmode; else if(ed.kind==='html') S.settings.docHtmlMode=tm.dataset.tmode; else S.settings.docCsvMode=tm.dataset.tmode;

@@ -29,3 +29,9 @@ for (const f of ['rhwp-sample.hwpx', 'rhwp-sample.hwp']) {
 test('rhwp: 한글 문서가 아니면 예외 — 앱은 이걸 받아 글자·표 보기로 돌아간다', () => {
   assert.throws(() => new rhwp.HwpDocument(new Uint8Array([1, 2, 3, 4])));
 });
+
+test('rhwp: HWP 를 HWPX(zip)로 바꿀 수 있다 — [글자] 보기가 HWP 도 문단·표로 보여 주는 길', () => {
+  const d = open('rhwp-sample.hwp');
+  try { const x = d.exportHwpx(); assert.ok(x.length > 100); assert.equal(String.fromCharCode(x[0], x[1]), 'PK'); }
+  finally { d.free(); }
+});
