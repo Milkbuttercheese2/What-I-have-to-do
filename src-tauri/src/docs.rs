@@ -612,15 +612,68 @@ fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
 
 /// 찾기 색인(v3.8.4) — 폴더를 한 번 훑어 이름과 작은 글자 파일의 내용을 메모리에 둔다.
 /// 예전엔 글자를 칠 때마다 디스크를 처음부터 다시 훑고 파일을 다시 읽어(최대 64MB) 느렸다.
-/// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·저장·휴지통) 바로 버린다.
-struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<String> }
+/// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·휴지통) 그 폴더 색인만 버리고, 글자 저장은 그 파일 내용만 바꿔 끼운다.
+/// 내용은 `Arc<str>` — 글자 파일 하나를 저장할 때 색인을 복사해 그 줄만 바꿔 끼우는데(patch_search_text),
+/// 그때 다른 파일들의 내용(최대 64MB)까지 복사하지 않게.
+#[derive(Clone)]
+struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<std::sync::Arc<str>> }
 struct SearchIndex { base: PathBuf, built: std::time::Instant, ents: Vec<IdxEntry> }
 static SEARCH_CACHE: Mutex<Vec<std::sync::Arc<SearchIndex>>> = Mutex::new(Vec::new());
 const SEARCH_CACHE_SECS: u64 = 30;
+/// 색인 세대 — 문서가 바뀔 때마다 하나 올린다. 만들기 시작할 때의 세대와 넣을 때의 세대가 다르면 그 색인은
+/// 바뀌기 전 디스크를 훑은 것이라 넣지 않는다(예전엔 만드는 도중 저장·휴지통이 있어도 낡은 색인을 다시 넣었다).
+/// 세대는 **폴더별**이다 — 한 폴더의 변화가 다른 폴더 색인 넣기를 막지 않게.
+/// 잠금 순서는 항상 SEARCH_CACHE → SEARCH_GENS(넣기·버리기), 만들기 시작은 SEARCH_GENS 만.
+static SEARCH_GENS: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
+fn search_gen(base: &Path) -> u64 {
+    let mut g = SEARCH_GENS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, v)) = g.iter().find(|(k, _)| k == base) { return *v }
+    g.push((base.to_path_buf(), 0));   // 만들기 시작할 때 자리를 잡아 둬야, 그 사이 변화가 이 폴더 세대를 올린다
+    0
+}
+/// changed 와 겹치는(같거나 안팎인) 폴더들의 세대를 올린다
+fn bump_search_gens(changed: Option<&Path>) {
+    let mut g = SEARCH_GENS.lock().unwrap_or_else(|e| e.into_inner());
+    for (k, v) in g.iter_mut() {
+        if changed.map_or(true, |b| b.starts_with(&*k) || k.starts_with(b)) { *v += 1; }
+    }
+}
 
-/// 문서를 바꾸는 커맨드가 부른다 — 다음 찾기는 새로 훑는다
-pub fn invalidate_search() {
-    SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+/// 문서를 바꾼 **뒤에** 부른다 — 그 문서 폴더(와 겹치는 폴더)의 색인만 버린다. 예전엔 모든 폴더의 색인을 버려서,
+/// 한 폴더에서 일하는 동안 다른 공유 폴더 찾기도 매번 처음부터 다시 훑었다.
+/// 작업 '전'에 버리면 작업 도중 시작된 찾기가 바뀌기 전 상태로 색인을 다시 채울 수 있다 — 그래서 뒤에, 세대와 함께.
+pub fn invalidate_search_root(root: &Path) {
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    bump_search_gens(Some(&base));
+    c.retain(|x| !(base.starts_with(&x.base) || x.base.starts_with(&base)));
+}
+
+/// 글자 파일 하나를 저장한 뒤 — 색인을 버리지 않고 그 파일의 내용만 바꿔 끼운다. 글자 파일은 고치는 동안 1.2초마다
+/// 저장되는데, 그때마다 색인을 버리면 고치는 내내 찾기가 폴더를 처음부터 다시 훑었다(공유 폴더는 한 번에 10초 넘게).
+/// 색인에 없는 파일이면(새로 생긴 등) 그 폴더 색인을 버린다.
+pub fn patch_search_text(root: &Path, rel: &str, text: &str) {
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    // 성분 단위로 붙인다 — `\\?\` 경로에는 '/' 가 구분자로 읽히지 않는다
+    let full = rel.replace('\\', "/").split('/').filter(|s| !s.is_empty() && *s != ".").fold(base.clone(), |p, s| p.join(s));
+    let ext = full.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let keep_text = text.len() as u64 <= SEARCH_TEXT_MAX && SEARCH_TEXT_EXT.contains(&ext.as_str());
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    bump_search_gens(Some(&base));   // 만드는 중이던 색인은 이 저장 전 내용이라 넣지 않는다
+    let mut drop_bases = Vec::new();
+    for slot in c.iter_mut() {
+        let Ok(inner) = full.strip_prefix(&slot.base) else { continue };
+        let r = inner.to_string_lossy().replace('\\', "/");
+        match slot.ents.iter().position(|e| e.rel == r && !e.dir) {
+            Some(pos) => {
+                let mut ents = slot.ents.clone();
+                ents[pos].text = if keep_text { Some(std::sync::Arc::from(text)) } else { None };
+                *slot = std::sync::Arc::new(SearchIndex { base: slot.base.clone(), built: slot.built, ents });
+            }
+            None => drop_bases.push(slot.base.clone()),
+        }
+    }
+    c.retain(|x| !drop_bases.contains(&x.base));
 }
 
 fn build_index(base: &Path) -> SearchIndex {
@@ -648,7 +701,7 @@ fn build_index(base: &Path) -> SearchIndex {
                 if SEARCH_TEXT_EXT.contains(&ext.as_str()) {
                     if let Ok(bytes) = std::fs::read(&path) {
                         budget = budget.saturating_sub(bytes.len() as u64);
-                        text = decode_text(&bytes).map(|(t, _)| t);
+                        text = decode_text(&bytes).map(|(t, _)| std::sync::Arc::from(t));
                     }
                 }
             }
@@ -700,7 +753,7 @@ pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String>
     };
     let ix = match have {
         /* 오래된 색인이라도 바로 답하고, 새 색인은 뒤에서 만든다 — 공유 폴더는 한 번 훑는 데 10초가 넘을 수 있어
-           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search 가 색인을 지워 다음 찾기가 새로 만든다 */
+           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search_root(글자 저장은 patch_search_text)가 맡는다 */
         Some(ix) => {
             if ix.built.elapsed().as_secs() >= SEARCH_CACHE_SECS { refresh_later(base.clone()); }
             ix
@@ -710,8 +763,9 @@ pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String>
                같은 폴더를 두 번 훑지 않는다(공유 폴더는 한 번 훑는 데 10초가 넘는다) */
             Some(ix) => ix,
             None => {
+                let g = search_gen(&base);
                 let ix = std::sync::Arc::new(build_index(&base));
-                store_index(ix.clone());
+                store_index_if(ix.clone(), g);   // 훑는 사이 문서가 바뀌었으면 이번 답에만 쓰고 넣지 않는다
                 ix
             }
         },
@@ -733,10 +787,13 @@ fn wait_for_build(base: &Path) -> Option<std::sync::Arc<SearchIndex>> {
     }
 }
 
-fn store_index(ix: std::sync::Arc<SearchIndex>) {
+/// 만들기 시작할 때의 세대(gen)가 지금도 같을 때만 넣는다 — 위 SEARCH_GEN 설명. 넣었으면 true
+fn store_index_if(ix: std::sync::Arc<SearchIndex>, gen: u64) -> bool {
     let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if search_gen(&ix.base) != gen { return false }
     c.retain(|x| x.base != ix.base);
     c.push(ix);
+    true
 }
 
 static REFRESHING: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
@@ -747,10 +804,10 @@ fn refresh_later(base: PathBuf) {
         r.push(base.clone());
     }
     std::thread::spawn(move || {
+        let g = search_gen(&base);
         let ix = std::sync::Arc::new(build_index(&base));
-        /* 만드는 사이 앱이 문서를 바꿔 색인이 지워졌다면(invalidate) 다음 찾기가 새로 만든다 — 그 자리에 낡은 것을 넣지 않는다 */
-        let still = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == base);
-        if still { store_index(ix); }
+        /* 만드는 사이 앱이 문서를 바꿨다면(세대가 다르면) 넣지 않는다 — 다음 찾기가 새로 만든다 */
+        store_index_if(ix, g);
         REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
     });
 }
@@ -950,8 +1007,9 @@ pub async fn doc_read_text(root: usize, rel: String) -> Result<TextFile, String>
 pub async fn doc_write_text(root: usize, rel: String, text: String, encoding: String, base_mtime: i64) -> Result<i64, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        write_text_in(&r, &rel, &text, &encoding, base_mtime)
+        let out = write_text_in(&r, &rel, &text, &encoding, base_mtime);
+        if out.is_ok() { patch_search_text(&r, &rel, &text); }   // 색인은 버리지 않고 이 파일만 바꿔 끼운다
+        out
     }).await
 }
 
@@ -959,8 +1017,9 @@ pub async fn doc_write_text(root: usize, rel: String, text: String, encoding: St
 pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        move_in(&r, &from, &to_dir)
+        let out = move_in(&r, &from, &to_dir);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -968,8 +1027,9 @@ pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<Strin
 pub async fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        import_in(&r, &dir, &paths, mv.unwrap_or(false))
+        let out = import_in(&r, &dir, &paths, mv.unwrap_or(false));
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -1003,16 +1063,19 @@ pub fn copy_in(root: &Path, rel: &str) -> Result<String, String> {
 pub async fn doc_copy(root: usize, rel: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        copy_in(&r, &rel)
+        let out = copy_in(&r, &rel);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
 /// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
 #[tauri::command]
 pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
-    invalidate_search();
-    trash_in(&self::root(root)?, &rel)
+    let r = self::root(root)?;
+    let out = trash_in(&r, &rel);
+    invalidate_search_root(&r);
+    out
 }
 
 /// 문서 폴더 안 찾기 — 이름(폴더·파일)과 작은 글자 파일의 내용. 무거운 일이라 별도 스레드에서.
@@ -1041,8 +1104,9 @@ fn refresh_later_now(base: PathBuf) {
         r.push(base.clone());
     }
     std::thread::spawn(move || {
+        let g = search_gen(&base);
         let ix = std::sync::Arc::new(build_index(&base));
-        store_index(ix);
+        store_index_if(ix, g);   // 만드는 사이 문서가 바뀌었으면 넣지 않는다(예전엔 이 길에 그 확인이 없었다)
         REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
     });
 }
@@ -1051,8 +1115,9 @@ fn refresh_later_now(base: PathBuf) {
 pub async fn doc_create_doc(root: usize, dir: String, name: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        create_doc_in(&r, &dir, &name)
+        let out = create_doc_in(&r, &dir, &name);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -1060,8 +1125,9 @@ pub async fn doc_create_doc(root: usize, dir: String, name: String) -> Result<St
 pub async fn doc_create(root: usize, dir: String, name: String, is_dir: bool) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        create_in(&r, &dir, &name, is_dir)
+        let out = create_in(&r, &dir, &name, is_dir);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -1069,8 +1135,9 @@ pub async fn doc_create(root: usize, dir: String, name: String, is_dir: bool) ->
 pub async fn doc_rename(root: usize, rel: String, name: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        rename_in(&r, &rel, &name)
+        let out = rename_in(&r, &rel, &name);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -1336,21 +1403,22 @@ mod tests {
         let r = tmp("search-wait");
         std::fs::write(r.join("가 폴더/기다림.txt"), "x").unwrap();
         let root = canon_dir(&r.to_string_lossy()).unwrap();
-        invalidate_search();
+        invalidate_search_root(&root);
         REFRESHING.lock().unwrap().push(root.clone());              // 다른 스레드가 만드는 중인 척
         let ready = root.clone();
         let h = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(150));
             /* 그 사이 생긴 파일까지 든 '미리 만든' 색인을 넣고 끝났다고 알린다 — 찾기가 직접 훑었다면 이 파일 이름은 안 보인다 */
+            let g = search_gen(&ready);
             let mut ix = build_index(&ready);
             ix.ents.push(IdxEntry { rel: "가 폴더/미리만든표시".into(), name: "미리만든표시".into(), low: "미리만든표시".into(), dir: false, text: None });
-            store_index(std::sync::Arc::new(ix));
+            store_index_if(std::sync::Arc::new(ix), g);
             REFRESHING.lock().unwrap().retain(|x| x != &ready);
         });
         let hits = search_cached(&root, "미리만든").unwrap();
         h.join().unwrap();
         assert_eq!(hits.len(), 1, "미리 만들던 색인을 기다렸다가 썼다");
-        invalidate_search();
+        invalidate_search_root(&root);
         let _ = std::fs::remove_dir_all(&r);
     }
 
@@ -1359,12 +1427,63 @@ mod tests {
         let r = tmp("search-cache");
         std::fs::write(r.join("가 폴더/첫.txt"), "x").unwrap();
         let root = canon_dir(&r.to_string_lossy()).unwrap();
-        invalidate_search();
+        invalidate_search_root(&root);
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
         std::fs::write(r.join("가 폴더/둘째첫.txt"), "x").unwrap();   // 앱 밖에서 생긴 파일 — 색인을 다시 쓰므로 아직 안 보인다
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
-        invalidate_search();                                          // 앱이 문서를 바꾸면 버린다
+        invalidate_search_root(&root);                                // 앱이 문서를 바꾸면 버린다
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 글자 파일을 저장하면 색인을 버리지 않고 그 파일 내용만 바꿔 끼운다 — 고치는 동안(1.2초마다 저장) 찾기가
+    /// 폴더를 처음부터 다시 훑지 않게. 앱 밖에서 생긴 파일이 안 보이는 것이 '다시 훑지 않았다'는 증거다.
+    #[test]
+    fn saving_text_patches_the_index_instead_of_dropping_it() {
+        let r = tmp("search-patch");
+        std::fs::write(r.join("가 폴더/메모.txt"), "처음").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        invalidate_search_root(&root);
+        assert_eq!(search_cached(&root, "고친말").unwrap().len(), 0);
+        std::fs::write(r.join("가 폴더/몰래.txt"), "고친말").unwrap();   // 앱 밖에서 생김 — 다시 훑으면 보인다
+        let m = read_text_in(&root, "가 폴더/메모.txt").unwrap();
+        write_text_in(&root, "가 폴더/메모.txt", "고친말 들어감", &m.encoding, m.mtime).unwrap();
+        patch_search_text(&root, "가 폴더/메모.txt", "고친말 들어감");
+        let hits = search_cached(&root, "고친말").unwrap();
+        assert_eq!(hits.iter().map(|h| h.rel.as_str()).collect::<Vec<_>>(), vec!["가 폴더/메모.txt"], "고친 내용은 바로 찾히고, 다시 훑지는 않았다");
+        invalidate_search_root(&root);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 한 문서 폴더를 바꾸면 그 폴더 색인만 버린다(예전엔 모든 폴더 — 다른 공유 폴더도 처음부터 다시 훑었다)
+    #[test]
+    fn invalidating_one_root_keeps_other_roots() {
+        let a = tmp("search-root-a");
+        let b = tmp("search-root-b");
+        let (ra, rb) = (canon_dir(&a.to_string_lossy()).unwrap(), canon_dir(&b.to_string_lossy()).unwrap());
+        search_cached(&ra, "표").unwrap();
+        search_cached(&rb, "표").unwrap();
+        invalidate_search_root(&ra);
+        let have = |p: &Path| SEARCH_CACHE.lock().unwrap().iter().any(|x| x.base == p);
+        assert!(!have(&ra), "바꾼 폴더는 버린다");
+        assert!(have(&rb), "다른 폴더는 그대로");
+        invalidate_search_root(&rb);
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    /// 만드는 도중 그 폴더가 바뀌면 다 만든 색인을 넣지 않는다(낡은 색인 다시 넣기 방지)
+    #[test]
+    fn index_built_before_a_change_is_not_stored() {
+        let r = tmp("search-gen");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let g = search_gen(&root);
+        let ix = std::sync::Arc::new(build_index(&root));
+        invalidate_search_root(&root);                                // 그 사이 앱이 이 폴더를 바꿨다
+        assert!(!store_index_if(ix, g), "바뀌기 전에 훑은 색인은 넣지 않는다");
+        let g2 = search_gen(&root);
+        assert!(store_index_if(std::sync::Arc::new(build_index(&root)), g2), "바뀐 뒤에 훑은 것은 넣는다");
+        invalidate_search_root(&root);
         let _ = std::fs::remove_dir_all(&r);
     }
 
