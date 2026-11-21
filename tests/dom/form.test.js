@@ -454,6 +454,27 @@ test('완료 취소(체크박스): 완료가 풀리고 그 변화가 저장에 �
   assert.equal(S.doneDirty.has(it.id), false, '저장 성공 후에는 표시가 비워진다');
 });
 
+/* 문서 탭의 옆 칸 양식은 가림막이 없어서, 양식을 연 채 오른쪽 메모 카드의 ○ 로 **같은 업무를
+   완료**할 수 있다. 그 뒤 양식에서 고쳐 저장하면 대상이 이미 완료 업무다 — 증분 저장은 완료
+   업무를 다시 쓰지 않으므로, 표시를 하지 않으면 고친 내용이 저장에 실리지 않고 조용히 사라진다. */
+test('양식을 연 채 같은 업무가 완료되면, 양식에서 고친 내용도 저장에 실린다', async () => {
+  const {toggleDone} = await import('../../src/state.js');
+  const {STORE} = await import('../../src/store.js');
+  await env.resetS(); S.loaded = true;
+  const it = fullItem(); S.items.push(it);
+  await openForm(it);
+  toggleDone(it);                                  // 옆 칸 양식이 열린 채 카드의 ○
+  await STORE.saveAll(S.items); await STORE._saving; await env.flush();
+  $('fm-memo').value = '완료 후 고친 메모'; input($('fm-memo'));
+  $('fm-save').click();
+  await env.flush(); await STORE._saving; await env.flush();
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all').pop();
+  const row = sent && sent.args.items.find(x=>x.id===it.id);
+  assert.ok(row, '완료된 업무라도 고친 내용은 저장 목록에 실려야 한다');
+  assert.equal(row.memo, '완료 후 고친 메모');
+  assert.equal(row.done, true, '완료 상태는 그대로');
+});
+
 test('v3.8.4 메모칸 높이 손잡이: 끌면 높이가 바뀌고(120~1600), 두 번 누르면 원래대로', async () => {
   await env.resetS(); S.loaded = true;
   openForm({});
