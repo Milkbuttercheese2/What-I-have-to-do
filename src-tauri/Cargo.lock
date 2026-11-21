@@ -4981,7 +4981,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wmhh-desktop"
-version = "3.8.0"
+version = "3.8.1"
 dependencies = [
  "rusqlite",
  "rusqlite_migration",
@@ -4995,6 +4995,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "thiserror 1.0.69",
+ "windows",
 ]
 
 [[package]]

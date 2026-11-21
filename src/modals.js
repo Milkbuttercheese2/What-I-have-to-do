@@ -106,3 +106,16 @@ export function isOpen(id){ return stack.some(m => m.id === id); }
 
 /* v3.7.0 지금 화면 맨 위 팝업의 id (없으면 null) — 파일 끌어다 놓기가 '어디에 놓였나'를 정할 때 쓴다 */
 export function topId(){ const i = topIndex(); return i < 0 ? null : stack[i].id; }
+
+/* v3.8.0 배경 클릭 닫기 오작동 막기(소유자 지적 — 전화번호부 [＋ 추가] 팝업).
+   팝업 안(입력칸 등)에서 누른 채 끌다가 바깥 배경에서 놓으면, 브라우저는 그 click 을 두 지점의 공통 조상인
+   배경(.modal-bg)에 보낸다 → 각 팝업의 '배경 클릭 = 닫기'가 타서 쓰던 내용과 함께 닫혔다.
+   누른 곳과 놓은 곳이 **둘 다 그 배경**일 때만 배경 클릭으로 인정한다(문서 캡처 단계에서 먼저 걸러 모든 팝업에 적용). */
+let downOn=null;
+export function initBackdropGuard(){
+  document.addEventListener('mousedown', e=>{ downOn=e.target; }, true);
+  document.addEventListener('click', e=>{
+    const t=e.target;
+    if(t && t.classList && t.classList.contains('modal-bg') && downOn!==t){ e.stopImmediatePropagation(); e.stopPropagation(); }
+  }, true);
+}

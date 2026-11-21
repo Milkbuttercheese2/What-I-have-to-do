@@ -20,8 +20,9 @@ import {initSettingsMenu, syncSettings, syncAutostart} from './settings-menu.js'
 import {initRecurBox, runRecurSpawn} from './recur-box.js';
 import {initPhonebook} from './phonebook.js';
 import {initAtComplete} from './at-complete.js';
+import {initDocs} from './docs.js';
 import {showView} from './views.js';
-import {openModal, closeModal, closeTop, topSave} from './modals.js';
+import {openModal, closeModal, closeTop, topSave, initBackdropGuard} from './modals.js';
 import {makeItem} from './state.js';
 import {setPlaceMode} from './placement.js';
 import {initUiScale, applyUiScale, adoptDefaultScale} from './ui-scale.js';
@@ -33,10 +34,10 @@ reconcileCore();
 window.items=S.items; window.FIELDS=S.fields; window.PRESETS=S.presets;
 window.ID_KINDS=S.idKinds; window.SETTINGS=S.settings;
 
-initToast(); initDtDelegation(); initForm(); initPresets();
+initBackdropGuard(); initToast(); initDtDelegation(); initForm(); initPresets();
 initRender(); initCalendar(); initAlarms(); initBackup(); initCapture();
 initSettingsMenu(); initRecurBox(); initUiScale();
-initPhonebook(); initAtComplete(); initQuit(); initFileDrop();
+initPhonebook(); initAtComplete(); initQuit(); initFileDrop(); initDocs();
 renderPresets();
 
 /* 탭 — 어떤 화면이 있는지는 여기서 알지 못한다. 각 모듈이 init*() 에서

@@ -30,6 +30,7 @@
   <nav class="tabs">
     <button class="tab on" data-view="board">보드</button>
     <button class="tab" data-view="cal">캘린더</button>
+    <button class="tab" data-view="docs">문서</button>
     <button class="tab" data-view="done">완료</button>
     <button class="tab" data-view="phone">전화번호부</button>
   </nav>
@@ -54,10 +55,9 @@
     <!-- 양식 패널 -->
     <div class="form-panel" id="formPanel">
      <div class="fm-inner">
-      <!-- v3.7.0 머리줄: 제목 + 저장 위치 + 닫기(×). 길어진 양식에서도 위에 붙어 있다(sticky). -->
+      <!-- v3.7.0 머리줄: 제목 + 닫기(×) (v3.8.1 저장 위치 칩 삭제). 길어진 양식에서도 위에 붙어 있다(sticky). -->
       <div class="fm-head">
         <h3 id="fm-title">양식 입력</h3>
-        <span class="fm-place" id="fm-place"></span>
         <button type="button" class="fm-x" id="fm-close" title="닫기 (ESC). 작성 중 내용은 임시저장됩니다" aria-label="닫기">×</button>
       </div>
 
@@ -195,8 +195,8 @@
     </div>
     <!-- v3.8.0 현행 | 종료 — 고른 값은 settings.calView (calendar.js) -->
     <div class="seg cal-mode" id="cal-mode" role="group" aria-label="캘린더 보기">
-      <button type="button" class="seg-btn on" data-v="live" title="진행 중인 업무의 마감·점검">현행</button>
-      <button type="button" class="seg-btn" data-v="done" title="끝낸 업무를 끝낸 날에">종료</button>
+      <button type="button" class="seg-btn on" data-v="live">현행</button>
+      <button type="button" class="seg-btn" data-v="done">종료</button>
     </div>
     <div class="cal-legend" id="cal-legend">
       <!-- 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17: --slate/--red 직접 참조라
@@ -226,13 +226,34 @@
   <div class="cards" id="col-done"></div>
 </section>
 
+<!-- 문서 (v3.8.0) — 왼쪽 폴더 트리 · 가운데 읽기 전용 미리보기 · 오른쪽 그 폴더의 업무 메모(보드와 같은 업무 데이터) (docs.js). 문서 폴더 안만 읽고 쓰지 않는다 -->
+<section id="view-docs">
+  <div class="done-head">
+    <h2>문서</h2>
+    <span class="dc-path" id="dc-path"></span>
+    <div class="done-tools"><button type="button" class="btn btn-tool" id="dc-root">＋ 폴더 추가</button></div>
+  </div>
+  <div class="dc-none">
+    <div class="dc-none-t">문서 폴더 미지정</div>
+    <button type="button" class="btn btn-ok" id="dc-root-empty">＋ 폴더 추가</button>
+  </div>
+  <div class="dc-layout">
+    <aside class="dc-tree" id="dt-tree"></aside>
+    <div class="dc-view" id="dv-body"></div>
+    <aside class="dc-note">
+      <div class="dn-head"><span class="dt-ico ico-dir"></span><b id="dn-title"></b><span class="dn-at num" id="dn-count"></span>
+        <button type="button" class="btn fsub-add dn-add" id="dn-add">＋ 메모</button></div>
+      <div class="cards dn-list" id="dn-list"></div>
+    </aside>
+  </div>
+</section>
+
 <!-- 전화번호부 (v2.7.0) — 아이템과 독립적인 관련인 목록. @ 자동완성의 데이터 원천 -->
 <section id="view-phone">
   <div class="done-head">
     <h2>전화번호부 <span id="pb-count" class="done-cnt">0</span></h2>
     <div class="done-tools">
       <button class="btn btn-ok" id="pb-add" title="관련인 한 명을 직접 추가합니다">＋ 추가</button>
-      <button class="btn btn-tool" id="pb-import" title="아이템에 입력된 관련인 중 여기 없는 사람(소속·이름·연락처 완비)을 다시 훑어 추가">새로고침</button>
       <button class="btn btn-tool" id="pb-tmpl" title="관련소속·관련인·연락처 제목 줄만 있는 빈 엑셀 파일을 저장합니다. 채워서 [엑셀 불러오기]로 넣으세요">엑셀 양식</button>
       <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 관련소속·관련인·연락처 제목)에서 일괄 추가">엑셀 불러오기</button>
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
@@ -261,10 +282,10 @@
   </div>
 </div>
 
-<!-- 전화번호부 새로고침·엑셀 확인 팝업 (v2.9.0) — 네이티브 confirm 대신 표준 모달 -->
+<!-- 전화번호부 엑셀 확인 팝업 (v2.9.0) — 네이티브 confirm 대신 표준 모달 -->
 <div class="modal-bg" id="pbSyncModal">
   <div class="modal">
-    <h3 id="pbs-title">전화번호부 새로고침</h3>
+    <h3 id="pbs-title">엑셀 불러오기</h3>
     <div class="m-sub" id="pbs-sub"></div>
     <div class="rel-list" id="pbs-list"></div>
     <div class="m-actions">
@@ -447,6 +468,7 @@
         </div>
       </div>
     </div>
+
 
     <div class="set-sec">업무 도구</div>
     <div class="set-card">

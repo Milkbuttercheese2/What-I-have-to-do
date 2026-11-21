@@ -61,7 +61,7 @@ test('현행 | 종료 전환: 종료 보기는 끝낸 시각에 부모 업무만
   assert.ok(doc.querySelector('#cal-mode [data-v="done"]').classList.contains('on'));
   const chips = [...doc.querySelectorAll('#cal-detail-cards .tl-chip')];
   assert.equal(chips.length, 1, '부모 업무 하나만 — 세부·doneAt 없는 것·주기 부모는 안 그린다');
-  assert.match(chips[0].textContent, /^10:20종료오늘 끝낸 일$/);
+  assert.match(chips[0].textContent, /^10:20종료오늘 끝낸 일×$/);
   assert.ok(chips[0].classList.contains('tl-fin'));
   assert.equal(doc.querySelector('#cal-detail-cards .tl-line.tl-fin').style.top, `${(10+20/60)*HOUR_PX}px`);
   assert.ok(doc.querySelector('#cal-grid .pill.p-fin'), '달 칸 알약도 그린다');
@@ -154,4 +154,45 @@ test('달 칸: 한 번 누르기 = 날짜 고르기, 두 번 누르기 = 그날 
   assert.equal(subDate(), ymd(d));
   closeForm();
   assert.equal(S.items.length, 0);
+});
+
+test('이름표 × (v3.8.0): 마감 = 업무 삭제 · 점검 = 그 세부 줄만 · 종료 = 종료 업무 삭제 — 양식·새 업무는 안 생긴다', async () => {
+  await fresh();
+  const keep = {id:newId(), title:'남는 세부', mid:today(16).toISOString(), done:false, al:{mid:true}, owner:''};
+  const cut  = {id:newId(), title:'지울 세부', mid:today(11).toISOString(), done:false, al:{}, owner:''};
+  const a = mk({memo:'마감 업무', f:{due:today(15).toISOString()}, al:{due:true}});
+  const b = mk({memo:'점검 업무', subs:[cut, keep]});
+  const c = mk({memo:'끝낸 업무', done:true, doneAt:today(10).getTime()});
+  S.items.push(a, b, c);
+  doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='cal'));   // 캘린더 탭을 보는 중(지운 뒤 다시 그려지게)
+  (await import('../../src/views.js')).showView('cal');
+  click($('cal-today'));
+  const x = sel => doc.querySelector(`#cal-detail-cards ${sel}`);
+  const saves = () => env.invokeCalls.filter(c=>c.cmd==='save_all').length;
+  /* 점검 × — 세부 줄만, 남은 세부의 알람 상태 그대로, 양식 안 열림·새 업무 없음 */
+  let n0 = saves();
+  click(x(`[data-delsub="${cut.id}"]`)); await env.flush();
+  assert.ok(!isOpen('formPanel'), '× 는 양식을 열지 않는다');
+  assert.equal(S.items.length, 3, '빈 자리 클릭 = 새 업무가 타지 않는다');
+  assert.deepEqual(S.items.find(i=>i.id===b.id).subs.map(s=>s.title), ['남는 세부']);
+  assert.deepEqual(S.items.find(i=>i.id===b.id).subs[0].al, {mid:true});
+  assert.ok(saves() > n0);
+  assert.ok(!x(`[data-delsub="${cut.id}"]`), '이름표가 사라진다');
+  click($('toast-undo')); await env.flush();
+  assert.deepEqual(S.items.find(i=>i.id===b.id).subs.map(s=>s.title), ['지울 세부', '남는 세부'], '실행 취소 = 제자리로');
+  /* 마감 × — 카드의 × 와 같은 경로(업무 삭제 + 실행 취소) */
+  click(x(`.tl-chip [data-del="${a.id}"]`)); await env.flush();
+  assert.ok(!isOpen('formPanel'));
+  assert.ok(!S.items.some(i=>i.id===a.id));
+  assert.equal($('toast-msg').textContent, '업무 삭제함');
+  click($('toast-undo')); await env.flush();
+  assert.ok(S.items.some(i=>i.id===a.id));
+  /* 종료 보기의 × — 종료 업무 삭제(종료 탭 카드의 × 와 같게: deletedDone 으로 저장에 실린다) */
+  click(doc.querySelector('#cal-mode [data-v="done"]'));
+  click(x(`.tl-chip [data-del="${c.id}"]`)); await env.flush();
+  assert.ok(!isOpen('formPanel'));
+  assert.ok(!S.items.some(i=>i.id===c.id));
+  const last = env.invokeCalls.filter(k=>k.cmd==='save_all').at(-1).args;
+  assert.ok((last.deletedDone||[]).includes(c.id), '종료 업무 삭제가 저장에 실린다(markDoneRemoved)');
+  assert.equal(S.items.length, 2);
 });

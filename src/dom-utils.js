@@ -57,19 +57,6 @@ export function initToast(){
   $('toast-undo').addEventListener('click',()=>{ if(_undoFn){const fn=_undoFn;_undoFn=null;$('toast').classList.remove('on');clearTimeout(_toastTimer);fn();} });
 }
 
-/* v3.8.0 클립보드에 글자 넣기 — 웹 표준 navigator.clipboard 만 쓴다(Tauri 플러그인·권한 불필요:
-   앱 페이지는 보안 문맥이고, 버튼 클릭(사용자 동작) 안에서 부르면 Chromium/WebView2 가 쓰기를 허락한다).
-   그게 없거나 거절되면 옛 방식(숨은 textarea + execCommand('copy'))으로 한 번 더. 성공 여부를 돌려준다. */
-export async function copyText(txt){
-  try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(txt); return true; } }catch{}
-  try{
-    const ta=document.createElement('textarea'); ta.value=txt; ta.setAttribute('readonly','');
-    ta.style.cssText='position:fixed;left:-9999px;top:0;opacity:0';
-    document.body.appendChild(ta); ta.select();
-    const ok=document.execCommand && document.execCommand('copy'); ta.remove(); return !!ok;
-  }catch{ return false; }
-}
-
 /* 저장 실패 표시 — 조용한 성공/시끄러운 실패. 저장 성공 시엔 아무 것도 띄우지 않고,
    실패하면 다음 저장이 성공할 때까지 계속 떠 있는 경고 배너를 켠다(store.js가 호출).
    요소가 없어도(테스트 하네스 등) 죽지 않게 널 가드. */

@@ -123,3 +123,22 @@ test('topSave: 저장 가능한 팝업만, 위에서부터', () => {
   drain();
   assert.equal(topSave(), null, '다 닫히면 저장 대상도 없다');
 });
+
+test('v3.8.0 배경 클릭 닫기: 팝업 안에서 누르고 배경에서 놓으면(끌기) 닫히지 않고, 배경을 누르고 놓으면 닫힌다', async () => {
+  const {initBackdropGuard} = await import('../../src/modals.js');
+  initBackdropGuard();
+  const doc = env.document;
+  const bg = doc.createElement('div'); bg.className='modal-bg on'; bg.id='guardModal';
+  bg.innerHTML='<div class="modal"><input id="guardInp"></div>';
+  doc.body.appendChild(bg);
+  let closed=0;
+  bg.addEventListener('click', e=>{ if(e.target.id==='guardModal') closed++; });
+  const ev = (el, type) => el.dispatchEvent(new env.window.MouseEvent(type, {bubbles:true, cancelable:true}));
+  ev(doc.getElementById('guardInp'), 'mousedown'); ev(bg, 'mouseup'); ev(bg, 'click');
+  assert.equal(closed, 0, '안에서 시작한 끌기는 닫지 않는다');
+  ev(bg, 'mousedown'); ev(bg, 'mouseup'); ev(bg, 'click');
+  assert.equal(closed, 1, '배경을 누르고 놓으면 닫힌다');
+  ev(doc.getElementById('guardInp'), 'mousedown'); ev(doc.getElementById('guardInp'), 'click');
+  assert.equal(closed, 1, '안쪽 클릭은 원래대로 닫지 않는다');
+  bg.remove();
+});

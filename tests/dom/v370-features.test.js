@@ -327,65 +327,26 @@ test('doneGroupOf: 오늘 / 이번 주 / 그 이전은 주별 / 날짜 모름 (v
   assert.ok(doneGroupOf(at(10,8), now).order > doneGroupOf(at(10,1), now).order);
 });
 
-test('weekReportText: 그 주에 끝낸 일만, 끝낸 순서대로, 날짜·메모 첫 줄·관련인 (v3.8.0)', async () => {
-  const {weekReportText, weekStart} = await import('../../src/done-weeks.js');
-  const mon = new Date(2026, 10, 9).getTime();
-  assert.equal(weekStart(new Date(2026,10,15,23,59).getTime()), mon, '일요일 밤도 그 주');
-  const items = [
-    mk({memo:'목요일 일\n둘째 줄', done:true, doneAt:new Date(2026,10,12,10).getTime(), contacts:[{who:'홍길동'},{who:'김철수'},{who:'홍길동'}]}),
-    mk({memo:'월요일 0시', done:true, doneAt:mon}),
-    mk({memo:'', done:true, doneAt:new Date(2026,10,10,9).getTime()}),
-    mk({memo:'지난 주', done:true, doneAt:mon-1}),
-    mk({memo:'다음 주 월요일 0시', done:true, doneAt:new Date(2026,10,16).getTime()}),
-    mk({memo:'진행 중', done:false, doneAt:null}),
-    mk({memo:'주기 부모', done:true, doneAt:mon+1000, recur:{type:'dow'}}),
-  ];
-  assert.equal(weekReportText(items, mon), [
-    '- 11.9(월) 월요일 0시',
-    '- 11.10(화) (메모 없음)',
-    '- 11.12(목) 목요일 일 (홍길동·김철수)',
-  ].join('\n'));
-  assert.equal(weekReportText(items, new Date(2026,9,5).getTime()), '', '끝낸 일이 없으면 빈 글자');
-});
-
-test('완료 탭: 지난 주는 접혀 있고 머리줄로 펼치며, 검색어가 있으면 모두 펼친다 · 요약은 오늘·이번 주 (v3.8.0)', async () => {
+test('완료 탭: 주별 묶음은 기본 펼침(v3.8.1)이고 머리줄로 접으며, 검색어가 있으면 모두 펼친다 · 요약은 오늘·이번 주', async () => {
   await fresh();
   const now=Date.now();
   S.items.push(mk({memo:'오늘 끝', done:true, doneAt:now}), mk({memo:'옛날 끝', done:true, doneAt:now-86400e3*60}));
   renderDone();
   const grp = () => doc.querySelectorAll('#col-done .done-group')[1];
-  assert.ok(grp().classList.contains('dg-closed'));
-  assert.equal(grp().querySelectorAll('.card').length, 0, '접힌 묶음은 카드를 만들지 않는다');
+  assert.ok(!grp().classList.contains('dg-closed'), '지난 주도 펼친 채');
+  assert.equal(grp().querySelectorAll('.card').length, 1);
   assert.match(grp().querySelector('.dg-label').textContent, /^\d+\.\d+\(월\)~\d+\.\d+\(일\)$|^\d{4}년 /);
   click(grp().querySelector('.dg-label'));
-  assert.ok(!grp().classList.contains('dg-closed'));
-  assert.equal(grp().querySelectorAll('.card').length, 1);
+  assert.ok(grp().classList.contains('dg-closed'));
+  assert.equal(grp().querySelectorAll('.card').length, 0, '접힌 묶음은 카드를 만들지 않는다');
   click(grp().querySelector('.dg-head'));
-  assert.ok(grp().classList.contains('dg-closed'), '다시 누르면 접힌다');
+  assert.ok(!grp().classList.contains('dg-closed'), '다시 누르면 펼친다');
+  click(grp().querySelector('.dg-head'));
   $('done-search').value='옛날'; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
   assert.equal(doc.querySelectorAll('#col-done .done-group').length, 1);
   assert.ok(!doc.querySelector('#col-done .done-group').classList.contains('dg-closed'), '검색 중엔 펼친다');
   $('done-search').value=''; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
   assert.deepEqual([...doc.querySelectorAll('#done-metrics span')].map(s=>s.textContent), ['1오늘','1이번 주']);
-});
-
-test('완료 탭 [복사]: 그 주 목록을 클립보드에 넣고 토스트 (v3.8.0)', async () => {
-  await fresh();
-  let copied=null;
-  for(const nav of [env.window.navigator, globalThis.navigator]) Object.defineProperty(nav, 'clipboard', {configurable:true, value:{writeText:async t=>{copied=t;}}});
-  const now=Date.now();
-  S.items.push(mk({memo:'오늘 끝', done:true, doneAt:now, contacts:[{who:'박영희'}]}), mk({memo:'옛날 끝', done:true, doneAt:now-86400e3*60}));
-  renderDone();
-  const btns=[...doc.querySelectorAll('#col-done [data-dgcopy]')];
-  assert.equal(btns.length, 2, '이번 주 묶음이 없으면 오늘 묶음에 이번 주 복사 + 지난 주 묶음에 복사');
-  assert.equal(btns[0].textContent, '이번 주 복사');
-  const wasClosed = doc.querySelectorAll('#col-done .done-group')[1].classList.contains('dg-closed');
-  click(btns[0]); await env.flush();
-  assert.match(copied, /^- \d+\.\d+\(.\) 오늘 끝 \(박영희\)$/);
-  assert.equal($('toast-msg').textContent, '1건을 복사했습니다');
-  click(btns[1]); await env.flush();
-  assert.match(copied, /옛날 끝/);
-  assert.equal(doc.querySelectorAll('#col-done .done-group')[1].classList.contains('dg-closed'), wasClosed, '복사 단추는 접기를 건드리지 않는다');
 });
 
 test('완료 탭: 묶음 머리와 카드가 그려지고, 카드를 누르면 읽기 전용 양식이 열린다', async () => {

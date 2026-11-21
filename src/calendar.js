@@ -39,7 +39,7 @@ function liveEvents(){
   S.items.forEach(it=>{
     if(it.recur || it.done) return;                 // 부모 정의·완료 업무 제외
     push((it.f||{}).due,{it,fkey:'due',label:'마감'});
-    (it.subs||[]).filter(s=>s.mid && !s.done).forEach(s=>push(s.mid,{it,fkey:'mid',label:'세부',subTitle:s.title,subDone:s.done}));
+    (it.subs||[]).filter(s=>s.mid && !s.done).forEach(s=>push(s.mid,{it,fkey:'mid',label:'세부',subTitle:s.title,subDone:s.done,subId:s.id}));
   });
   return map;
 }
@@ -98,11 +98,15 @@ function renderDetail(evMap){
     const cls=ev.fkey==='mid'?'tl-mid':ev.fkey==='done'?'tl-fin':'tl-due';
     return `<div class="tl-line ${cls}" style="top:${r.line}px"></div>`
       +`<div class="tl-chip ${cls}" style="top:${r.chip}px" data-open="${ev.it.id}" title="${escAttr(kind+' '+hm+' · '+what)}">`
-      +`<span class="tl-time num">${hm}</span><span class="tl-kind">${kind}</span><span class="tl-what">${esc(what)}</span></div>`;
+      +`<span class="tl-time num">${hm}</span><span class="tl-kind">${kind}</span><span class="tl-what">${esc(what)}</span>`
+      /* v3.8.0 × — 카드의 × 와 같은 클래스·같은 위임(render.js). 마감·종료 = 그 업무 삭제(data-del),
+         점검 = 그 세부 줄만 삭제(data-delsub). 이름표의 data-open·빈 자리 클릭보다 먼저 먹는다. */
+      +(ev.fkey==='mid' ? `<button class="del tl-del" data-delsub="${ev.subId}" data-item="${ev.it.id}" title="세부 할 일 삭제">×</button>`
+                        : `<button class="del tl-del" data-del="${ev.it.id}" title="삭제">×</button>`)+`</div>`;
   }).join('');
   const now=new Date(); const isToday=now.getFullYear()===y&&now.getMonth()===m&&now.getDate()===dd;
   const nowLine=isToday?`<div class="tl-now" style="top:${(now.getHours()*60+now.getMinutes())/60*HOUR_PX}px"></div>`:'';
-  const empty=rows.length?'':`<div class="tl-empty">${view==='done'?'이날 끝낸 업무가 없습니다.':'이날 마감·점검할 업무가 없습니다. 빈 시간을 누르면 그 시각으로 새 업무를 씁니다.'}</div>`;
+  const empty=rows.length?'':`<div class="tl-empty">${view==='done'?'이날 끝낸 업무가 없습니다.':'이날 마감·점검할 업무가 없습니다.'}</div>`;
   /* 현행 보기만: 빈 자리 누르기 = 새 업무. 마우스 자리에 흐린 줄 + 시각(.tl-hover — mousemove 가 옮긴다) */
   const hover=view==='live'?'<div class="tl-hover" aria-hidden="true"><span class="tl-hover-t num"></span></div>':'';
   const box=$('cal-detail-cards');
@@ -174,7 +178,7 @@ export function initCalendar(){
   const tl=$('cal-detail-cards');
   const yOf=(e,cv)=>e.clientY-cv.getBoundingClientRect().top;
   tl.addEventListener('click',e=>{
-    if(calView()!=='live' || e.target.closest('[data-open]')) return;
+    if(calView()!=='live' || e.target.closest('[data-open],.del')) return;
     const cv=e.target.closest('.tl-canvas'); if(!cv) return;
     openAt(slotIso(calSel, minuteAtY(yOf(e,cv))));
   });
