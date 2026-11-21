@@ -172,30 +172,6 @@ async function openPdf(bytes){
   try{ return await pdfLib.getDocument({data:bytes, cMapUrl:base+'cmaps/', cMapPacked:true, standardFontDataUrl:base+'standard_fonts/', isEvalSupported:false, useSystemFonts:true}).promise; }
   catch(e){ throw new Error(/password/i.test(String(e&&e.name)+String(e&&e.message)) ? '암호가 걸린 PDF — [열기]로 보세요' : 'PDF 를 읽지 못함 — '+(e&&e.message||e)); }
 }
-/* v3.8.11 [글자] 보기 — 쪽마다 글자만 줄줄이(골라 복사하기 좋게). pdf.js 가 알려 주는 줄 끝(hasEOL)으로 줄을 나눈다 */
-export function pdfLines(items){
-  const out=[]; let cur='';
-  for(const it of items||[]){ if(typeof it.str!=='string') continue; cur+=it.str; if(it.hasEOL){ out.push(cur); cur=''; } }
-  if(cur) out.push(cur);
-  return out.map(l=>l.replace(/\s+$/,''));
-}
-export async function pdfTextHtml(bytes){
-  const doc=await openPdf(bytes);
-  try{
-    const n=Math.min(doc.numPages, 500), parts=[];
-    for(let k=1;k<=n;k++){
-      const tc=await (await doc.getPage(k)).getTextContent();
-      const lines=pdfLines(tc.items);
-      parts.push(`<section class="dv-sec"><div class="dv-pgno num">${k}쪽</div>${lines.length ? lines.map(l=>l.trim()?`<p>${esc(l)}</p>`:'<p class="dv-blank"></p>').join('') : '<p class="dv-blank">(글자 없음 — 그림으로 된 쪽)</p>'}</section>`);
-    }
-    return `<div class="dv-doc dv-pdftext">${parts.join('')}</div>`+(doc.numPages>n?`<div class="dv-cap">앞 ${n}쪽까지만</div>`:'');
-  } finally { try{ doc.destroy(); }catch{} }
-}
-export function hwpTextHtml(bytes, kind, rhwp){
-  let x=bytes;
-  if(kind!=='hwpx'){ const d=new rhwp.HwpDocument(bytes); try{ x=d.exportHwpx(); } finally { try{ d.free(); }catch{} } }
-  return `<div class="dv-doc dv-hwpx">${hwpxHtml(unzip(x))}</div>`;
-}
 export async function renderPdf(box, bytes){
   const doc=await openPdf(bytes);
   box.innerHTML=`<div class="dv-pdf-bar"><span class="num">${doc.numPages}쪽</span><button type="button" class="seg-btn" data-pdfz="-1" title="작게">−</button><span class="num dv-pdf-z">100%</span><button type="button" class="seg-btn" data-pdfz="1" title="크게">＋</button></div><div class="dv-pdf"></div>`;
