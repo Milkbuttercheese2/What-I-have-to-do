@@ -52,10 +52,34 @@ pub struct RootInfo {
     pub error: String,
 }
 
-/// `\\?\` 접두를 뗀 보기용 경로
+/// `\\?\` 접두를 뗀 보기용 경로. 공유 폴더는 `canonicalize` 가 `\\?\UNC\서버\공유\…` 로 돌려주므로
+/// `\\서버\공유\…` 로 되돌린다 — `\\?\` 만 떼면 `UNC\서버\…` 라는 상대 경로가 되어 열기·휴지통이 실패했다.
 fn display(p: &Path) -> String {
     let s = p.to_string_lossy().into_owned();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
     s.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(s)
+}
+
+/// 휴지통으로 보내도 **되살릴 수 있는 자리인가**. Windows 는 휴지통이 없는 곳(공유 폴더·USB 같은 이동식
+/// 드라이브·네트워크 드라이브)에서 '휴지통으로'를 받으면 경고 없이 **영구 삭제**한다(`FOF_NOCONFIRMATION`).
+/// 화면은 "휴지통에서 되살릴 수 있습니다"라고 안내하므로, 그런 자리에서는 지우지 않고 거부한다.
+/// `drive_type` 은 `GetDriveTypeW` 값(3 = 고정 디스크) — 시험에서 바꿔 끼울 수 있게 밖에서 받는다.
+fn trash_place_ok(shown: &str, drive_type: impl FnOnce(&str) -> u32) -> Result<(), String> {
+    const NO_BIN: &str = "이 위치(공유 폴더·네트워크·이동식 드라이브)에는 휴지통이 없어, 지우면 되살릴 수 없습니다.\n지우려면 탐색기에서 직접 지워 주세요.";
+    if shown.starts_with(r"\\") {
+        return Err(NO_BIN.into());
+    }
+    let b = shown.as_bytes();
+    if b.len() < 2 || b[1] != b':' {
+        return Err(NO_BIN.into());
+    }
+    const DRIVE_FIXED: u32 = 3;
+    if drive_type(&format!("{}\\", &shown[..2])) != DRIVE_FIXED {
+        return Err(NO_BIN.into());
+    }
+    Ok(())
 }
 
 /// 상대 경로 → 루트 안의 실제 경로. 루트 밖이면 Err.
@@ -75,6 +99,24 @@ pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let root_c = std::fs::canonicalize(root).map_err(|e| format!("문서 폴더를 열 수 없습니다: {e}"))?;
     if !canon.starts_with(&root_c) {
         return Err("문서 폴더 밖의 경로입니다".into());
+    }
+    Ok(canon)
+}
+
+/// 옮기기·이름 바꾸기·복제·휴지통처럼 **항목 하나를 바꾸는** 명령의 대상. `resolve` 에 두 가지를 더 본다.
+/// 1. 결과가 문서 폴더 자체면 거부 — `""` 만 막던 문자열 검사는 `"."`·`"./"` 를 그대로 통과시켰다.
+/// 2. 대상이 링크·정션이면 거부 — `resolve` 는 링크를 따라가므로 그대로 두면 링크가 아니라
+///    **링크가 가리키는 진짜 폴더**를 지우거나 이름을 바꾼다(루트를 가리키는 정션이면 문서 폴더 전체).
+pub fn resolve_item(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let canon = resolve(root, rel)?;
+    let root_c = std::fs::canonicalize(root).map_err(|e| format!("문서 폴더를 열 수 없습니다: {e}"))?;
+    if canon == root_c {
+        return Err("문서 폴더 자체는 여기서 바꿀 수 없습니다".into());
+    }
+    let rel = rel.replace('\\', "/");
+    let joined = root.join(Path::new(rel.trim_start_matches("./")));
+    if std::fs::symlink_metadata(&joined).map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+        return Err("바로 연결(링크·정션)은 여기서 바꿀 수 없습니다 — 탐색기에서 해 주세요".into());
     }
     Ok(canon)
 }
@@ -138,12 +180,37 @@ pub fn read_in(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
     std::fs::read(&p).map_err(|e| format!("읽을 수 없습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))
 }
 
+/// 이름 바꾸기·옮기기 — **이미 있는 이름이면 덮어쓰지 않고 실패한다.**
+/// `std::fs::rename` 은 Windows 에서 MOVEFILE_REPLACE_EXISTING 으로 돌아 기존 파일을 덮어쓴다. 바로 앞에서 '같은 이름이
+/// 있나'를 확인하긴 하지만, 그 사이(공유 폴더에서 다른 사람이 같은 이름을 만들면) 그 파일이 사라졌다.
+fn rename_no_replace(src: &Path, dest: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use windows::core::HSTRING;
+        use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVE_FILE_FLAGS};
+        // 깃발 0 = 덮어쓰기 없음·다른 드라이브로 복사 없음(std::fs::rename 과 같은 범위에서 덮어쓰기만 뺀 것)
+        unsafe { MoveFileExW(&HSTRING::from(src.as_os_str()), &HSTRING::from(dest.as_os_str()), MOVE_FILE_FLAGS(0)) }
+            .map_err(|e| std::io::Error::from_raw_os_error(e.code().0 & 0xFFFF))
+    }
+    #[cfg(not(windows))]
+    {
+        if dest.exists() {
+            return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+        }
+        std::fs::rename(src, dest)
+    }
+}
+/// 덮어쓰기를 거절당했는가(ERROR_FILE_EXISTS 80 · ERROR_ALREADY_EXISTS 183)
+fn is_exists_err(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::AlreadyExists || matches!(e.raw_os_error(), Some(80) | Some(183))
+}
+
 /// 항목(파일·폴더) 하나를 같은 문서 폴더 안의 다른 폴더로 옮긴다. 새 상대 경로를 돌려준다.
 pub fn move_in(root: &Path, from: &str, to_dir: &str) -> Result<String, String> {
     if from.trim_matches('/').is_empty() {
         return Err("문서 폴더 자체는 옮길 수 없습니다".into());
     }
-    let src = resolve(root, from)?;
+    let src = resolve_item(root, from)?;
     let dir = resolve(root, to_dir)?;
     if !dir.is_dir() {
         return Err("폴더로만 옮길 수 있습니다".into());
@@ -159,7 +226,7 @@ pub fn move_in(root: &Path, from: &str, to_dir: &str) -> Result<String, String> 
     if dest.exists() {
         return Err("같은 이름이 이미 있습니다".into());
     }
-    std::fs::rename(&src, &dest).map_err(|e| format!("옮기지 못했습니다(다른 프로그램에서 사용 중이거나 다른 드라이브일 수 있음): {e}"))?;
+    rename_no_replace(&src, &dest).map_err(|e| if is_exists_err(&e) { "같은 이름이 이미 있습니다".to_string() } else { format!("옮기지 못했습니다(다른 프로그램에서 사용 중이거나 다른 드라이브일 수 있음): {e}") })?;
     Ok(rel_of(root, &dest))
 }
 
@@ -214,14 +281,14 @@ pub fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<String, Strin
         return Err("문서 폴더 자체의 이름은 여기서 바꿀 수 없습니다".into());
     }
     let name = check_name(new_name)?;
-    let src = resolve(root, rel)?;
+    let src = resolve_item(root, rel)?;
     let parent = src.parent().ok_or_else(|| "이름을 바꿀 수 없습니다".to_string())?;
     let dest = parent.join(&name);
     let same_ci = src.file_name().map(|f| f.to_string_lossy().to_lowercase()) == Some(name.to_lowercase());
     if dest.exists() && !same_ci {
         return Err("같은 이름이 이미 있습니다".into());
     }
-    std::fs::rename(&src, &dest).map_err(|e| format!("이름을 바꾸지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))?;
+    rename_no_replace(&src, &dest).map_err(|e| if is_exists_err(&e) { "같은 이름이 이미 있습니다".to_string() } else { format!("이름을 바꾸지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}") })?;
     Ok(rel_of(root, &dest))
 }
 
@@ -411,7 +478,7 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
             continue; // 이미 그 폴더에 있다 — 복사본을 만들지 않는다
         }
         let dest = free_dest(&d, &name);
-        if mv && std::fs::rename(&src, &dest).is_ok() {
+        if mv && rename_no_replace(&src, &dest).is_ok() {
             out.push(rel_of(root, &dest));
             continue;
         }
@@ -501,20 +568,28 @@ pub fn trash_in(root: &Path, rel: &str) -> Result<(), String> {
     if rel.trim_matches('/').is_empty() {
         return Err("문서 폴더 자체는 지울 수 없습니다".into());
     }
-    let p = resolve(root, rel)?;
+    let p = resolve_item(root, rel)?;
     if !p.exists() {
         return Err("이미 없습니다".into());
     }
     #[cfg(windows)]
     {
         use windows::core::PCWSTR;
-        use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
-        let mut from: Vec<u16> = display(&p).encode_utf16().collect();
+        use windows::Win32::Storage::FileSystem::GetDriveTypeW;
+        use windows::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FOF_WANTNUKEWARNING, FO_DELETE, SHFILEOPSTRUCTW};
+        let shown = display(&p);
+        trash_place_ok(&shown, |vol| {
+            let w: Vec<u16> = vol.encode_utf16().chain([0]).collect();
+            unsafe { GetDriveTypeW(PCWSTR(w.as_ptr())) }
+        })?;
+        let mut from: Vec<u16> = shown.encode_utf16().collect();
         from.extend([0, 0]); // 이중 NUL 끝
         let mut op = SHFILEOPSTRUCTW {
             wFunc: FO_DELETE,
             pFrom: PCWSTR(from.as_ptr()),
-            fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT).0 as u16,
+            /* FOF_WANTNUKEWARNING: 고정 디스크라도 휴지통이 꺼져 있거나 휴지통보다 큰 항목이면 Windows 가
+               영구 삭제 전에 한 번 묻는다(FOF_NOCONFIRMATION 을 그 경우에만 덮는다). 아니오 → 중단 → 아래 오류. */
+            fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING).0 as u16,
             ..Default::default()
         };
         let r = unsafe { SHFileOperationW(&mut op) };
@@ -562,15 +637,68 @@ fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
 
 /// 찾기 색인(v3.8.4) — 폴더를 한 번 훑어 이름과 작은 글자 파일의 내용을 메모리에 둔다.
 /// 예전엔 글자를 칠 때마다 디스크를 처음부터 다시 훑고 파일을 다시 읽어(최대 64MB) 느렸다.
-/// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·저장·휴지통) 바로 버린다.
-struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<String> }
+/// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·휴지통) 그 폴더 색인만 버리고, 글자 저장은 그 파일 내용만 바꿔 끼운다.
+/// 내용은 `Arc<str>` — 글자 파일 하나를 저장할 때 색인을 복사해 그 줄만 바꿔 끼우는데(patch_search_text),
+/// 그때 다른 파일들의 내용(최대 64MB)까지 복사하지 않게.
+#[derive(Clone)]
+struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<std::sync::Arc<str>> }
 struct SearchIndex { base: PathBuf, built: std::time::Instant, ents: Vec<IdxEntry> }
 static SEARCH_CACHE: Mutex<Vec<std::sync::Arc<SearchIndex>>> = Mutex::new(Vec::new());
 const SEARCH_CACHE_SECS: u64 = 30;
+/// 색인 세대 — 문서가 바뀔 때마다 하나 올린다. 만들기 시작할 때의 세대와 넣을 때의 세대가 다르면 그 색인은
+/// 바뀌기 전 디스크를 훑은 것이라 넣지 않는다(예전엔 만드는 도중 저장·휴지통이 있어도 낡은 색인을 다시 넣었다).
+/// 세대는 **폴더별**이다 — 한 폴더의 변화가 다른 폴더 색인 넣기를 막지 않게.
+/// 잠금 순서는 항상 SEARCH_CACHE → SEARCH_GENS(넣기·버리기), 만들기 시작은 SEARCH_GENS 만.
+static SEARCH_GENS: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
+fn search_gen(base: &Path) -> u64 {
+    let mut g = SEARCH_GENS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, v)) = g.iter().find(|(k, _)| k == base) { return *v }
+    g.push((base.to_path_buf(), 0));   // 만들기 시작할 때 자리를 잡아 둬야, 그 사이 변화가 이 폴더 세대를 올린다
+    0
+}
+/// changed 와 겹치는(같거나 안팎인) 폴더들의 세대를 올린다
+fn bump_search_gens(changed: Option<&Path>) {
+    let mut g = SEARCH_GENS.lock().unwrap_or_else(|e| e.into_inner());
+    for (k, v) in g.iter_mut() {
+        if changed.map_or(true, |b| b.starts_with(&*k) || k.starts_with(b)) { *v += 1; }
+    }
+}
 
-/// 문서를 바꾸는 커맨드가 부른다 — 다음 찾기는 새로 훑는다
-pub fn invalidate_search() {
-    SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+/// 문서를 바꾼 **뒤에** 부른다 — 그 문서 폴더(와 겹치는 폴더)의 색인만 버린다. 예전엔 모든 폴더의 색인을 버려서,
+/// 한 폴더에서 일하는 동안 다른 공유 폴더 찾기도 매번 처음부터 다시 훑었다.
+/// 작업 '전'에 버리면 작업 도중 시작된 찾기가 바뀌기 전 상태로 색인을 다시 채울 수 있다 — 그래서 뒤에, 세대와 함께.
+pub fn invalidate_search_root(root: &Path) {
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    bump_search_gens(Some(&base));
+    c.retain(|x| !(base.starts_with(&x.base) || x.base.starts_with(&base)));
+}
+
+/// 글자 파일 하나를 저장한 뒤 — 색인을 버리지 않고 그 파일의 내용만 바꿔 끼운다. 글자 파일은 고치는 동안 1.2초마다
+/// 저장되는데, 그때마다 색인을 버리면 고치는 내내 찾기가 폴더를 처음부터 다시 훑었다(공유 폴더는 한 번에 10초 넘게).
+/// 색인에 없는 파일이면(새로 생긴 등) 그 폴더 색인을 버린다.
+pub fn patch_search_text(root: &Path, rel: &str, text: &str) {
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    // 성분 단위로 붙인다 — `\\?\` 경로에는 '/' 가 구분자로 읽히지 않는다
+    let full = rel.replace('\\', "/").split('/').filter(|s| !s.is_empty() && *s != ".").fold(base.clone(), |p, s| p.join(s));
+    let ext = full.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let keep_text = text.len() as u64 <= SEARCH_TEXT_MAX && SEARCH_TEXT_EXT.contains(&ext.as_str());
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    bump_search_gens(Some(&base));   // 만드는 중이던 색인은 이 저장 전 내용이라 넣지 않는다
+    let mut drop_bases = Vec::new();
+    for slot in c.iter_mut() {
+        let Ok(inner) = full.strip_prefix(&slot.base) else { continue };
+        let r = inner.to_string_lossy().replace('\\', "/");
+        match slot.ents.iter().position(|e| e.rel == r && !e.dir) {
+            Some(pos) => {
+                let mut ents = slot.ents.clone();
+                ents[pos].text = if keep_text { Some(std::sync::Arc::from(text)) } else { None };
+                *slot = std::sync::Arc::new(SearchIndex { base: slot.base.clone(), built: slot.built, ents });
+            }
+            None => drop_bases.push(slot.base.clone()),
+        }
+    }
+    c.retain(|x| !drop_bases.contains(&x.base));
 }
 
 fn build_index(base: &Path) -> SearchIndex {
@@ -598,7 +726,7 @@ fn build_index(base: &Path) -> SearchIndex {
                 if SEARCH_TEXT_EXT.contains(&ext.as_str()) {
                     if let Ok(bytes) = std::fs::read(&path) {
                         budget = budget.saturating_sub(bytes.len() as u64);
-                        text = decode_text(&bytes).map(|(t, _)| t);
+                        text = decode_text(&bytes).map(|(t, _)| std::sync::Arc::from(t));
                     }
                 }
             }
@@ -650,7 +778,7 @@ pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String>
     };
     let ix = match have {
         /* 오래된 색인이라도 바로 답하고, 새 색인은 뒤에서 만든다 — 공유 폴더는 한 번 훑는 데 10초가 넘을 수 있어
-           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search 가 색인을 지워 다음 찾기가 새로 만든다 */
+           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search_root(글자 저장은 patch_search_text)가 맡는다 */
         Some(ix) => {
             if ix.built.elapsed().as_secs() >= SEARCH_CACHE_SECS { refresh_later(base.clone()); }
             ix
@@ -660,8 +788,9 @@ pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String>
                같은 폴더를 두 번 훑지 않는다(공유 폴더는 한 번 훑는 데 10초가 넘는다) */
             Some(ix) => ix,
             None => {
+                let g = search_gen(&base);
                 let ix = std::sync::Arc::new(build_index(&base));
-                store_index(ix.clone());
+                store_index_if(ix.clone(), g);   // 훑는 사이 문서가 바뀌었으면 이번 답에만 쓰고 넣지 않는다
                 ix
             }
         },
@@ -683,10 +812,13 @@ fn wait_for_build(base: &Path) -> Option<std::sync::Arc<SearchIndex>> {
     }
 }
 
-fn store_index(ix: std::sync::Arc<SearchIndex>) {
+/// 만들기 시작할 때의 세대(gen)가 지금도 같을 때만 넣는다 — 위 SEARCH_GEN 설명. 넣었으면 true
+fn store_index_if(ix: std::sync::Arc<SearchIndex>, gen: u64) -> bool {
     let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if search_gen(&ix.base) != gen { return false }
     c.retain(|x| x.base != ix.base);
     c.push(ix);
+    true
 }
 
 static REFRESHING: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
@@ -697,10 +829,10 @@ fn refresh_later(base: PathBuf) {
         r.push(base.clone());
     }
     std::thread::spawn(move || {
+        let g = search_gen(&base);
         let ix = std::sync::Arc::new(build_index(&base));
-        /* 만드는 사이 앱이 문서를 바꿔 색인이 지워졌다면(invalidate) 다음 찾기가 새로 만든다 — 그 자리에 낡은 것을 넣지 않는다 */
-        let still = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == base);
-        if still { store_index(ix); }
+        /* 만드는 사이 앱이 문서를 바꿨다면(세대가 다르면) 넣지 않는다 — 다음 찾기가 새로 만든다 */
+        store_index_if(ix, g);
         REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
     });
 }
@@ -765,20 +897,22 @@ fn cp949_decode(b: &[u8]) -> Option<String> {
 #[cfg(windows)]
 fn cp949_encode(text: &str) -> Result<Vec<u8>, String> {
     use windows::core::BOOL;
-    use windows::Win32::Globalization::WideCharToMultiByte;
+    use windows::Win32::Globalization::{WideCharToMultiByte, WC_NO_BEST_FIT_CHARS};
     let w: Vec<u16> = text.encode_utf16().collect();
     if w.is_empty() {
         return Ok(Vec::new());
     }
     unsafe {
         let mut used = BOOL(0);
-        let n = WideCharToMultiByte(949, 0, &w, None, None, Some(&mut used));
+        /* WC_NO_BEST_FIT_CHARS: 없는 글자를 '비슷한 글자'(é→e)로 바꾸지 말고 기본 글자로 — 그래야 아래 used 가 서서 거부된다.
+           이 깃발이 없으면 글자가 조용히 바뀐 채 저장됐다 */
+        let n = WideCharToMultiByte(949, WC_NO_BEST_FIT_CHARS, &w, None, None, Some(&mut used));
         if n <= 0 {
             return Err("EUC-KR 로 바꾸지 못했습니다".into());
         }
         let mut out = vec![0u8; n as usize];
         used = BOOL(0);
-        let m = WideCharToMultiByte(949, 0, &w, Some(&mut out), None, Some(&mut used));
+        let m = WideCharToMultiByte(949, WC_NO_BEST_FIT_CHARS, &w, Some(&mut out), None, Some(&mut used));
         if m <= 0 {
             return Err("EUC-KR 로 바꾸지 못했습니다".into());
         }
@@ -833,12 +967,26 @@ pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mt
     }
     let name = p.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_string_lossy().into_owned();
     let tmp = p.with_file_name(format!("~${name}.wmhh-tmp"));
-    std::fs::write(&tmp, &bytes).map_err(|e| format!("저장하지 못했습니다: {e}"))?;
-    if let Err(e) = std::fs::rename(&tmp, &p) {
+    /* 임시 파일에 쓰고 디스크까지 내린 뒤, 그 **열린 파일**에서 고친 시각을 읽는다(바꿔치기는 고친 시각을 바꾸지 않는다).
+       예전엔 바꿔치기 뒤에 다시 읽었고, 그게 실패하면 0 을 돌려줘 다음 자동 저장마다 '다른 프로그램이 고쳤다'로 판정돼
+       쓸데없는 '(내 고침)' 파일이 생겼다. 또 쓰다 실패하면(디스크 가득 등) 임시 파일이 남아 쌓였다 — 지운다. */
+    let written = (|| -> std::io::Result<i64> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(&bytes)?;
+        f.sync_all()?;
+        Ok(mtime_ms(&f.metadata()?))
+    })();
+    let mtime = match written {
+        Ok(m) if m != 0 => m,
+        Ok(_) => { let _ = std::fs::remove_file(&tmp); return Err("저장하지 못했습니다(고친 시각을 읽지 못함)".into()); }
+        Err(e) => { let _ = std::fs::remove_file(&tmp); return Err(format!("저장하지 못했습니다: {e}")); }
+    };
+    if let Err(e) = std::fs::rename(&tmp, &p) {   // 자기 파일을 바꿔치기하는 것이라 덮어쓰기가 맞다
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("저장하지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}"));
     }
-    Ok(std::fs::metadata(&p).map(|m| mtime_ms(&m)).unwrap_or(0))
+    Ok(mtime)
 }
 
 /* ── 명령 ───────────────────────────────────────────────────────────── */
@@ -900,8 +1048,9 @@ pub async fn doc_read_text(root: usize, rel: String) -> Result<TextFile, String>
 pub async fn doc_write_text(root: usize, rel: String, text: String, encoding: String, base_mtime: i64) -> Result<i64, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        write_text_in(&r, &rel, &text, &encoding, base_mtime)
+        let out = write_text_in(&r, &rel, &text, &encoding, base_mtime);
+        if out.is_ok() { patch_search_text(&r, &rel, &text); }   // 색인은 버리지 않고 이 파일만 바꿔 끼운다
+        out
     }).await
 }
 
@@ -909,8 +1058,9 @@ pub async fn doc_write_text(root: usize, rel: String, text: String, encoding: St
 pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        move_in(&r, &from, &to_dir)
+        let out = move_in(&r, &from, &to_dir);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -918,8 +1068,9 @@ pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<Strin
 pub async fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        import_in(&r, &dir, &paths, mv.unwrap_or(false))
+        let out = import_in(&r, &dir, &paths, mv.unwrap_or(false));
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -940,7 +1091,7 @@ pub fn copy_in(root: &Path, rel: &str) -> Result<String, String> {
     if rel.trim_matches('/').is_empty() {
         return Err("문서 폴더 자체는 복제할 수 없습니다".into());
     }
-    let src = resolve(root, rel)?;
+    let src = resolve_item(root, rel)?;
     let dir = src.parent().ok_or_else(|| "복제할 수 없습니다".to_string())?.to_path_buf();
     let name = src.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_os_string();
     let dest = free_dest(&dir, &name);
@@ -953,16 +1104,23 @@ pub fn copy_in(root: &Path, rel: &str) -> Result<String, String> {
 pub async fn doc_copy(root: usize, rel: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        copy_in(&r, &rel)
+        let out = copy_in(&r, &rel);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
 /// 휴지통으로 — 영구 삭제가 아니다(Windows 휴지통에서 되살릴 수 있다)
+/// 큰 폴더·공유 폴더에서는 오래 걸리므로 화면 스레드 밖에서(P7). SHFileOperation 은 다른 스레드에서도 된다 —
+/// 실제 휴지통 시험(trash_inside_root_only)이 시험 스레드(메인 아님)에서 통과한다.
 #[tauri::command]
-pub fn doc_trash(root: usize, rel: String) -> Result<(), String> {
-    invalidate_search();
-    trash_in(&self::root(root)?, &rel)
+pub async fn doc_trash(root: usize, rel: String) -> Result<(), String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        let out = trash_in(&r, &rel);
+        invalidate_search_root(&r);
+        out
+    }).await
 }
 
 /// 문서 폴더 안 찾기 — 이름(폴더·파일)과 작은 글자 파일의 내용. 무거운 일이라 별도 스레드에서.
@@ -991,8 +1149,9 @@ fn refresh_later_now(base: PathBuf) {
         r.push(base.clone());
     }
     std::thread::spawn(move || {
+        let g = search_gen(&base);
         let ix = std::sync::Arc::new(build_index(&base));
-        store_index(ix);
+        store_index_if(ix, g);   // 만드는 사이 문서가 바뀌었으면 넣지 않는다(예전엔 이 길에 그 확인이 없었다)
         REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
     });
 }
@@ -1001,8 +1160,9 @@ fn refresh_later_now(base: PathBuf) {
 pub async fn doc_create_doc(root: usize, dir: String, name: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        create_doc_in(&r, &dir, &name)
+        let out = create_doc_in(&r, &dir, &name);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -1010,8 +1170,9 @@ pub async fn doc_create_doc(root: usize, dir: String, name: String) -> Result<St
 pub async fn doc_create(root: usize, dir: String, name: String, is_dir: bool) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        create_in(&r, &dir, &name, is_dir)
+        let out = create_in(&r, &dir, &name, is_dir);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
@@ -1019,15 +1180,18 @@ pub async fn doc_create(root: usize, dir: String, name: String, is_dir: bool) ->
 pub async fn doc_rename(root: usize, rel: String, name: String) -> Result<String, String> {
     let r = self::root(root)?;
     off_main(move || {
-        invalidate_search();
-        rename_in(&r, &rel, &name)
+        let out = rename_in(&r, &rel, &name);
+        invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
+        out
     }).await
 }
 
 /// 열기·폴더에서 보기(이미 있는 open_file_path / reveal_file_path)에 넘길 절대 경로 — 역시 문서 폴더 안만.
+/// canonicalize 두 번 — 끊긴 공유 폴더에서는 수 초 걸릴 수 있어 화면 스레드 밖에서(P7)
 #[tauri::command]
-pub fn doc_abs(root: usize, rel: String) -> Result<String, String> {
-    Ok(display(&resolve(&self::root(root)?, &rel)?))
+pub async fn doc_abs(root: usize, rel: String) -> Result<String, String> {
+    let r = self::root(root)?;
+    off_main(move || Ok(display(&resolve(&r, &rel)?))).await
 }
 
 /// 탐색기 미리 보기(preview.rs)용 — 문서 폴더 안의 실제 경로
@@ -1061,6 +1225,65 @@ mod tests {
             assert!(resolve(&root, bad).is_err(), "거부해야 함: {bad}");
         }
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// `"."`·`"./"` 는 문서 폴더 자체로 풀린다 — 옮기기·이름 바꾸기·복제·휴지통은 이걸 받으면 안 된다
+    /// (예전엔 `""` 만 막아서 `"."` 로 문서 폴더 전체를 휴지통에 보내거나, 폴더 밖(부모)에 복제본을 만들 수 있었다).
+    #[test]
+    fn item_commands_refuse_the_root_itself() {
+        let r = tmp("rootself");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        for rel in ["", ".", "./", "./.", "/", "가 폴더/.."] {
+            assert!(resolve_item(&root, rel).is_err(), "거부해야 함: {rel:?}");
+            assert!(trash_in(&root, rel).is_err(), "휴지통 거부: {rel:?}");
+            assert!(rename_in(&root, rel, "새이름").is_err(), "이름 바꾸기 거부: {rel:?}");
+            assert!(copy_in(&root, rel).is_err(), "복제 거부: {rel:?}");
+            assert!(move_in(&root, rel, "가 폴더/안쪽").is_err(), "옮기기 거부: {rel:?}");
+        }
+        assert!(r.exists() && r.join("표.xlsx").exists(), "문서 폴더는 그대로");
+        assert!(!r.parent().unwrap().join(format!("{} (2)", r.file_name().unwrap().to_string_lossy())).exists(), "폴더 밖에 복제본이 생기지 않는다");
+        assert!(resolve_item(&root, "./가 폴더/보고서.hwpx").is_ok(), "평범한 항목은 그대로 된다");
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 공유 폴더 경로는 `\\?\UNC\…` 로 정규화되는데, 보기용 경로는 `\\서버\공유\…` 여야 열기·휴지통이 된다
+    #[test]
+    fn display_turns_unc_back_into_a_share_path() {
+        assert_eq!(display(Path::new(r"\\?\UNC\srv\공유\가 폴더\a.hwpx")), r"\\srv\공유\가 폴더\a.hwpx");
+        assert_eq!(display(Path::new(r"\\?\C:\문서\a.txt")), r"C:\문서\a.txt");
+        assert_eq!(display(Path::new(r"C:\문서")), r"C:\문서");
+    }
+
+    /// 휴지통이 없는 자리(공유 폴더·이동식·네트워크 드라이브)에서는 Windows 가 경고 없이 영구 삭제하므로 거부한다
+    #[test]
+    fn trash_refuses_places_without_a_recycle_bin() {
+        let fixed = |_: &str| 3u32;
+        assert!(trash_place_ok(r"C:\문서\a.txt", fixed).is_ok());
+        assert!(trash_place_ok(r"\\srv\공유\a.txt", fixed).is_err(), "공유 폴더");
+        assert!(trash_place_ok(r"E:\a.txt", |_| 2).is_err(), "이동식(USB)");
+        assert!(trash_place_ok(r"Z:\a.txt", |_| 4).is_err(), "네트워크 드라이브");
+        assert!(trash_place_ok(r"R:\a.txt", |_| 6).is_err(), "램 디스크");
+        let mut asked = String::new();
+        let _ = trash_place_ok(r"D:\깊은\곳\a.txt", |v| { asked = v.to_string(); 3 });
+        assert_eq!(asked, r"D:\", "드라이브 뿌리로 묻는다");
+    }
+
+    /// 정션(링크)을 따라가 **진짜 폴더**를 바꾸지 않는다 — 문서 폴더 자신을 가리키는 정션이면 폴더 전체가 걸린다.
+    #[cfg(windows)]
+    #[test]
+    fn item_commands_refuse_links() {
+        let r = tmp("junction");
+        let link = r.join("고리");
+        let ok = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(&link).arg(&r).output().map(|o| o.status.success()).unwrap_or(false);
+        if !ok { eprintln!("mklink /J 를 못 만들어 건너뜀"); let _ = std::fs::remove_dir_all(&r); return; }
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert!(trash_in(&root, "고리").is_err());
+        assert!(rename_in(&root, "고리", "딴이름").is_err());
+        assert!(copy_in(&root, "고리").is_err());
+        assert!(move_in(&root, "고리", "가 폴더").is_err());
+        assert!(link.exists() && r.join("표.xlsx").exists(), "정션도 대상 폴더도 그대로");
+        let _ = std::fs::remove_dir(&link);   // 정션만 지운다(대상은 안 따라감)
+        let _ = std::fs::remove_dir_all(&r);
     }
 
     #[test]
@@ -1119,6 +1342,12 @@ mod tests {
             assert_eq!(decode_text(&euc).unwrap(), ("한글".to_string(), "cp949"));
             assert_eq!(encode_text("한글", "cp949").unwrap(), euc);
             assert!(encode_text("😀", "cp949").is_err(), "EUC-KR 로 못 쓰는 글자는 거부");
+            /* Windows 는 EUC-KR 에 없는 글자를 '비슷한 글자'로 바꿔 쓴다(é→e, ü→u, ñ→n — 실측). 그때는 '못 쓴 글자'
+               표시도 안 서서 거부를 그냥 지나갔다 — 저장하면 글자가 조용히 바뀌었다 */
+            for t in ["café", "Müller", "España"] {
+                assert!(encode_text(t, "cp949").is_err(), "비슷한 글자로 바꿔 쓰지 않고 거부: {t}");
+            }
+            assert_eq!(decode_text(&encode_text("한글 € Ω ⓐ", "cp949").unwrap()).unwrap().0, "한글 € Ω ⓐ", "EUC-KR 에 있는 글자는 그대로");
         }
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -1227,21 +1456,22 @@ mod tests {
         let r = tmp("search-wait");
         std::fs::write(r.join("가 폴더/기다림.txt"), "x").unwrap();
         let root = canon_dir(&r.to_string_lossy()).unwrap();
-        invalidate_search();
+        invalidate_search_root(&root);
         REFRESHING.lock().unwrap().push(root.clone());              // 다른 스레드가 만드는 중인 척
         let ready = root.clone();
         let h = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(150));
             /* 그 사이 생긴 파일까지 든 '미리 만든' 색인을 넣고 끝났다고 알린다 — 찾기가 직접 훑었다면 이 파일 이름은 안 보인다 */
+            let g = search_gen(&ready);
             let mut ix = build_index(&ready);
             ix.ents.push(IdxEntry { rel: "가 폴더/미리만든표시".into(), name: "미리만든표시".into(), low: "미리만든표시".into(), dir: false, text: None });
-            store_index(std::sync::Arc::new(ix));
+            store_index_if(std::sync::Arc::new(ix), g);
             REFRESHING.lock().unwrap().retain(|x| x != &ready);
         });
         let hits = search_cached(&root, "미리만든").unwrap();
         h.join().unwrap();
         assert_eq!(hits.len(), 1, "미리 만들던 색인을 기다렸다가 썼다");
-        invalidate_search();
+        invalidate_search_root(&root);
         let _ = std::fs::remove_dir_all(&r);
     }
 
@@ -1250,12 +1480,63 @@ mod tests {
         let r = tmp("search-cache");
         std::fs::write(r.join("가 폴더/첫.txt"), "x").unwrap();
         let root = canon_dir(&r.to_string_lossy()).unwrap();
-        invalidate_search();
+        invalidate_search_root(&root);
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
         std::fs::write(r.join("가 폴더/둘째첫.txt"), "x").unwrap();   // 앱 밖에서 생긴 파일 — 색인을 다시 쓰므로 아직 안 보인다
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
-        invalidate_search();                                          // 앱이 문서를 바꾸면 버린다
+        invalidate_search_root(&root);                                // 앱이 문서를 바꾸면 버린다
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 글자 파일을 저장하면 색인을 버리지 않고 그 파일 내용만 바꿔 끼운다 — 고치는 동안(1.2초마다 저장) 찾기가
+    /// 폴더를 처음부터 다시 훑지 않게. 앱 밖에서 생긴 파일이 안 보이는 것이 '다시 훑지 않았다'는 증거다.
+    #[test]
+    fn saving_text_patches_the_index_instead_of_dropping_it() {
+        let r = tmp("search-patch");
+        std::fs::write(r.join("가 폴더/메모.txt"), "처음").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        invalidate_search_root(&root);
+        assert_eq!(search_cached(&root, "고친말").unwrap().len(), 0);
+        std::fs::write(r.join("가 폴더/몰래.txt"), "고친말").unwrap();   // 앱 밖에서 생김 — 다시 훑으면 보인다
+        let m = read_text_in(&root, "가 폴더/메모.txt").unwrap();
+        write_text_in(&root, "가 폴더/메모.txt", "고친말 들어감", &m.encoding, m.mtime).unwrap();
+        patch_search_text(&root, "가 폴더/메모.txt", "고친말 들어감");
+        let hits = search_cached(&root, "고친말").unwrap();
+        assert_eq!(hits.iter().map(|h| h.rel.as_str()).collect::<Vec<_>>(), vec!["가 폴더/메모.txt"], "고친 내용은 바로 찾히고, 다시 훑지는 않았다");
+        invalidate_search_root(&root);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 한 문서 폴더를 바꾸면 그 폴더 색인만 버린다(예전엔 모든 폴더 — 다른 공유 폴더도 처음부터 다시 훑었다)
+    #[test]
+    fn invalidating_one_root_keeps_other_roots() {
+        let a = tmp("search-root-a");
+        let b = tmp("search-root-b");
+        let (ra, rb) = (canon_dir(&a.to_string_lossy()).unwrap(), canon_dir(&b.to_string_lossy()).unwrap());
+        search_cached(&ra, "표").unwrap();
+        search_cached(&rb, "표").unwrap();
+        invalidate_search_root(&ra);
+        let have = |p: &Path| SEARCH_CACHE.lock().unwrap().iter().any(|x| x.base == p);
+        assert!(!have(&ra), "바꾼 폴더는 버린다");
+        assert!(have(&rb), "다른 폴더는 그대로");
+        invalidate_search_root(&rb);
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    /// 만드는 도중 그 폴더가 바뀌면 다 만든 색인을 넣지 않는다(낡은 색인 다시 넣기 방지)
+    #[test]
+    fn index_built_before_a_change_is_not_stored() {
+        let r = tmp("search-gen");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let g = search_gen(&root);
+        let ix = std::sync::Arc::new(build_index(&root));
+        invalidate_search_root(&root);                                // 그 사이 앱이 이 폴더를 바꿨다
+        assert!(!store_index_if(ix, g), "바뀌기 전에 훑은 색인은 넣지 않는다");
+        let g2 = search_gen(&root);
+        assert!(store_index_if(std::sync::Arc::new(build_index(&root)), g2), "바뀐 뒤에 훑은 것은 넣는다");
+        invalidate_search_root(&root);
         let _ = std::fs::remove_dir_all(&r);
     }
 
@@ -1271,6 +1552,37 @@ mod tests {
         assert!(trash_in(&root, "../밖").is_err());
         trash_in(&root, "가 폴더/버릴.txt").unwrap();
         assert!(!r.join("가 폴더/버릴.txt").exists());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 이름 바꾸기·옮기기는 이미 있는 파일을 덮어쓰지 않는다 — 확인과 실행 사이에 같은 이름이 생겨도(공유 폴더)
+    #[test]
+    fn rename_never_overwrites_an_existing_file() {
+        let r = tmp("noreplace");
+        std::fs::write(r.join("가.txt"), "가").unwrap();
+        std::fs::write(r.join("나.txt"), "나 — 남아야 한다").unwrap();
+        let e = rename_no_replace(&r.join("가.txt"), &r.join("나.txt")).unwrap_err();
+        assert!(is_exists_err(&e), "덮어쓰기 거절로 알아본다: {e:?}");
+        assert_eq!(std::fs::read_to_string(r.join("나.txt")).unwrap(), "나 — 남아야 한다");
+        assert!(r.join("가.txt").exists());
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert_eq!(rename_in(&root, "표.xlsx", "표.XLSX").unwrap(), "표.XLSX", "대소문자만 바꾸기는 된다");
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 저장이 돌려주는 고친 시각은 실제 파일의 것이어야 한다(0 이면 다음 저장이 늘 '충돌') · 임시 파일은 남지 않는다
+    #[test]
+    fn text_save_returns_the_real_mtime_and_leaves_no_temp() {
+        let r = tmp("mtime");
+        std::fs::write(r.join("메모.txt"), "처음").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let m = read_text_in(&root, "메모.txt").unwrap();
+        let t = write_text_in(&root, "메모.txt", "고침", &m.encoding, m.mtime).unwrap();
+        assert_ne!(t, 0);
+        assert_eq!(t, mtime_ms(&std::fs::metadata(r.join("메모.txt")).unwrap()));
+        assert_eq!(write_text_in(&root, "메모.txt", "또 고침", &m.encoding, t).map(|_| ()), Ok(()), "돌려받은 시각으로 다음 저장이 된다");
+        let left: Vec<_> = std::fs::read_dir(&r).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains("wmhh-tmp")).collect();
+        assert!(left.is_empty(), "임시 파일이 남지 않는다");
         let _ = std::fs::remove_dir_all(&r);
     }
 

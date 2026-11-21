@@ -46,6 +46,28 @@ test('단일비행 last-wins: 비행 중 들어온 A,B,C 중 실제 저장은 [�
   assert.deepEqual(saved, [A, C]);
 });
 
+/* P7: save_all 은 이제 Rust 화면 스레드가 아니라 작업 스레드에서 돈다 — 화면 스레드가 지켜 주던 '도착 순서'가 없으므로
+   저장 순서는 프런트가 한 번에 하나만 보내는 것으로만 지켜진다. 저장·실패 재시도·종료 플러시가 섞여도
+   save_all 이 동시에 둘 이상 날아가지 않는지 본다(둘이면 나중에 보낸 옛 내용이 먼저 보낸 새 내용을 덮을 수 있다). */
+test('save_all 은 어떤 경로로 들어와도 동시에 하나만 날아간다 (저장·재시도·flush 섞어도)', async () => {
+  await env.resetS(); S.loaded = true;
+  let inFlight=0, maxInFlight=0, n=0;
+  const gates=[];
+  env.onInvoke('save_all', () => { inFlight++; maxInFlight=Math.max(maxInFlight,inFlight); n++;
+    const fail = n===2;                                   // 두 번째는 실패 → 재시도 경로
+    return new Promise((res,rej)=>gates.push(()=>{ inFlight--; fail ? rej(new Error('잠김')) : res({kind:'Saved', version:n}); })); });
+  for(let i=1;i<=5;i++) STORE.saveAll([{id:i}]);
+  const fl = STORE.flush();
+  for(let i=0;i<20;i++){ while(gates.length) gates.shift()(); await env.flush(); mock.timers.tick(1000); STORE.saveAll([{id:100+i%3}]); }
+  for(let i=0;i<60 && (STORE._saving || STORE._pending || gates.length);i++){   // 다 비울 때까지(재시도 타이머 포함)
+    while(gates.length) gates.shift()(); await env.flush(); mock.timers.tick(31000); await env.flush();
+  }
+  await fl;
+  assert.equal(maxInFlight, 1, '동시에 둘 이상 날아가면 안 된다');
+  assert.ok(n>=3, '실패 뒤 재시도까지 돌았다');
+  env.onInvoke('save_all', () => undefined);
+});
+
 test('저장 실패: _saving 복구 → 다음 저장 정상', async () => {
   await env.resetS(); S.loaded = true;
   env.onInvoke('save_all', () => { throw new Error('disk'); });

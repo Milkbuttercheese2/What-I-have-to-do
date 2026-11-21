@@ -56,6 +56,23 @@ test('JSON 복원 해피패스: 구형 아이템 마이그레이션 + backup_imp
   assert.equal($('toast-msg').textContent, '백업 1건을 복원했습니다');
 });
 
+/* 복원은 번호표(dataVersion)를 올린다. 새 번호를 받아 두지 않으면 복원 직후의 저장이 옛 번호로 나가
+   '낡은 화면'으로 거절된다(비상 덤프 + 거짓 안내 + 새로고침). */
+test('JSON 복원 뒤 첫 저장은 복원이 돌려준 번호표로 나간다', async () => {
+  await env.resetS(); S.loaded = true; S.dataVersion = 4;
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 5);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:6}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  const save = env.invokeCalls.filter(c=>c.cmd==='save_all').pop();
+  assert.ok(save, '복원 뒤 저장이 나간다');
+  assert.equal(save.args.baseVersion, 5, '옛 번호(4)가 아니라 복원 뒤 번호(5)');
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
 test('형식 오류 JSON → alert + backup_import 미호출 + 상태 불변', async () => {
   await env.resetS(); S.loaded = true;
   S.items.push({id:1, memo:'보존되어야 함', done:false, staged:true, f:{}, contacts:[], ids:[], subs:[], al:{}});
@@ -109,6 +126,24 @@ test('Cancelled → 아무 일도 없음 / Db 거절 → cancel_pending_import /
   $('bkImp').click();
   await env.flush(8);
   assert.ok(env.invokeCalls.some(c=>c.cmd==='restart_app'));
+});
+
+/* DB 파일 복원을 거절했는데 대기 파일 지우기(cancel_pending_import)가 실패하면, 다음 실행 때 거절한
+   복원이 적용된다. 예전엔 그 실패를 삼키고 '복원을 취소했습니다'를 띄웠다. */
+test('DB 복원 취소가 실패하면 취소됐다고 하지 않고 알린다 (한 번 더 시도한 뒤)', async () => {
+  await env.resetS(); S.loaded = true;
+  env.onInvoke('import_backup_file', () => ({kind:'Db', items:7}));
+  env.onInvoke('cancel_pending_import', () => { throw new Error('사용 중'); });
+  $('toast-msg').textContent = '';
+  const before = env.alerts.length;
+  env.answerConfirm(false);
+  $('bkImp').click();
+  for (let i = 0; i < 4; i++) { await env.flush(4); mock.timers.tick(400); }
+  await env.flush(8);
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='cancel_pending_import').length, 2, '한 번 더 시도');
+  assert.notEqual($('toast-msg').textContent, '복원을 취소했습니다');
+  assert.ok(env.alerts.slice(before).some(m=>m.includes('복원 취소에 실패')), '실패를 알린다');
+  env.onInvoke('cancel_pending_import', () => null);
 });
 
 test('JSON 백업 내보내기: 파일명 패턴 + 내용이 유효한 v5 payload', async () => {

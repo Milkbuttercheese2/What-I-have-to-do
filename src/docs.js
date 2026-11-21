@@ -333,7 +333,10 @@ export function resolveRel(dir, rel){
 }
 function markSave(text, bad){
   const s=$('dv-save'); if(!s) return;
-  s.textContent=text; s.classList.toggle('dv-bad', !!bad);
+  /* 같은 글자면 다시 쓰지 않는다 — 글자를 칠 때마다 '고치는 중'을 다시 쓰면 그때마다 화면 전체 스타일을
+     다시 계산해, 파일이 많은 폴더를 펼쳐 둔 채 쓰면 입력이 느려졌다 */
+  if(s.textContent!==text) s.textContent=text;
+  if(s.classList.contains('dv-bad')!==!!bad) s.classList.toggle('dv-bad', !!bad);
 }
 /* 색 층 다시 칠하기 — 글자가 길면 잠깐 쉬었다가(입력이 밀리지 않게), 너무 길면 색 없이 */
 let hlSeq=0, hlTimer=0;

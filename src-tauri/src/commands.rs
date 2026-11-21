@@ -21,7 +21,7 @@ fn to_err<E: std::fmt::Display>(e: E) -> String {
 /// recoverable corruption into a permanent one. `backup_import` is exempt
 /// (restoring is the recovery path and re-arms the flag); `backup_export`
 /// is exempt too (read-only — let the user salvage what still reads).
-fn ensure_integrity(state: &State<AppDb>) -> Result<(), String> {
+fn ensure_integrity(state: &AppDb) -> Result<(), String> {
     if !state.integrity_ok.load(Ordering::Relaxed) {
         return Err(
             "데이터를 지키기 위해 저장이 잠겨 있습니다(무결성 검사 실패).\n\
@@ -35,8 +35,28 @@ fn ensure_integrity(state: &State<AppDb>) -> Result<(), String> {
     Ok(())
 }
 
+/// 화면(메인) 스레드 밖에서 DB 일을 한다 (P7).
+/// 동기 `#[tauri::command]` 는 Tauri 메인 스레드에서 돈다 — DB 가 잠겨 있거나(busy_timeout 5초 × 재시도) 데이터 폴더가
+/// 공유 폴더면 그동안 앱 전체가 멈췄다. 옮긴 것은 **순서가 문제 되지 않는** 명령뿐이다:
+/// - save_all: 프런트(store.js)가 한 번에 하나만 보낸다(단일 비행) — 순서가 프런트에서 정해진다
+/// - load_all·backup_export: 읽기 / backup_import·emergency_dump: 사람이 누르는 한 번짜리
+/// 설정·전화번호부 같은 사이드카 저장은 프런트가 같은 종류를 앞의 것이 끝나기 전에 또 보낼 수 있어서,
+/// 메인 스레드가 지켜 주던 도착 순서를 잃으면 옛 값이 새 값을 덮을 수 있다 — 그래서 그대로 둔다.
+/// DB 잠금(AppDb.conn)은 예전과 같은 하나뿐이라 잠금 순서는 바뀌지 않는다.
+async fn on_db_thread<T: Send + 'static>(
+    app: AppHandle,
+    f: impl FnOnce(&AppDb) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || f(&app.state::<AppDb>()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
-pub fn load_all(state: State<AppDb>) -> Result<AppState, String> {
+pub async fn load_all(app: AppHandle) -> Result<AppState, String> {
+    on_db_thread(app, load_all_now).await
+}
+fn load_all_now(state: &AppDb) -> Result<AppState, String> {
     if !state.integrity_ok.load(Ordering::Relaxed) {
         /* v3.4.1: 거절도 로그에 남긴다 — "경고창이 떴다"는 제보를 나중에 로그로
            확인할 수 있어야 원인을 짚는다(성공만 기록하면 실패가 안 보인다). */
@@ -75,8 +95,16 @@ pub enum SaveResult {
 /// `base_version` 은 이 화면이 데이터를 읽어갈 때 받은 번호표(load_all 의 dataVersion).
 /// 없으면(구버전 프런트) 확인 없이 예전처럼 저장한다 — 새 방어가 기존 동작을 깨지 않게.
 #[tauri::command]
-pub fn save_all(
-    state: State<AppDb>,
+pub async fn save_all(
+    app: AppHandle,
+    items: Vec<Item>,
+    deleted_done: Option<Vec<i64>>,
+    base_version: Option<i64>,
+) -> Result<SaveResult, String> {
+    on_db_thread(app, move |state| save_all_now(state, items, deleted_done, base_version)).await
+}
+fn save_all_now(
+    state: &AppDb,
     items: Vec<Item>,
     // v3.6.0 완료 탭에서 **지워 없앤** 업무의 id ('완료 처리'가 아니라 '삭제'다).
     // 완료 업무는 저장 때 다시 쓰지 않으므로 사라졌다는 사실만은 따로 알려줘야 한다 —
@@ -86,7 +114,7 @@ pub fn save_all(
     base_version: Option<i64>,
 ) -> Result<SaveResult, String> {
     let deleted_done = deleted_done.unwrap_or_default();
-    ensure_integrity(&state)?;
+    ensure_integrity(state)?;
     let mut conn = state.conn();
     /* v3.3.6: 건수가 바뀌는 저장은 로그에 남긴다. "18건이던 게 어느 순간 8건"처럼
        통째로 되돌아간 사고를 나중에 짚으려면 **언제 몇 건이 몇 건이 됐는지**가
@@ -218,12 +246,17 @@ pub fn save_settings(state: State<AppDb>, settings: Settings) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn backup_export(state: State<AppDb>) -> Result<BackupPayload, String> {
-    db::backup::export_payload(&state.conn()).map_err(to_err)
+pub async fn backup_export(app: AppHandle) -> Result<BackupPayload, String> {
+    on_db_thread(app, |state| db::backup::export_payload(&state.conn()).map_err(to_err)).await
 }
 
 #[tauri::command]
-pub fn backup_import(state: State<AppDb>, payload: BackupPayload) -> Result<(), String> {
+/// 돌려주는 값은 복원 뒤의 번호표(dataVersion). 프런트는 이 값을 받아 두어야 한다 — 복원이 번호를
+/// 올리므로, 옛 번호로 첫 저장을 하면 '낡은 화면'으로 거절된다(v3.3.7 번호표).
+pub async fn backup_import(app: AppHandle, payload: BackupPayload) -> Result<i64, String> {
+    on_db_thread(app, move |state| backup_import_now(state, payload)).await
+}
+fn backup_import_now(state: &AppDb, payload: BackupPayload) -> Result<i64, String> {
     // Safety net before a destructive whole-dataset overwrite: snapshot the
     // live file under a distinguishable name before touching anything.
     // The copy runs while the connection lock is held (same lock we then
@@ -237,13 +270,13 @@ pub fn backup_import(state: State<AppDb>, payload: BackupPayload) -> Result<(), 
         BACKUP_KEEP,
     )
     .map_err(to_err)?;
-    db::backup::import_payload(&mut conn, payload).map_err(to_err)?;
+    let version = db::backup::import_payload(&mut conn, payload).map_err(to_err)?;
     // A successful full restore supersedes whatever the startup integrity
     // check concluded — without this, an app whose DB was flagged bad at
     // launch would keep rejecting load_all even after the user restored a
     // good backup, forcing a pointless extra restart.
     state.integrity_ok.store(true, Ordering::Relaxed);
-    Ok(())
+    Ok(version)
 }
 
 #[tauri::command]
@@ -423,7 +456,10 @@ fn finish_exit(app: &AppHandle, code: i32) {
 /// 않고 이걸 부른다 — 저장 경로와 완전히 독립적인(트랜잭션·SQLite 무관) 마지막
 /// 그물이다. 성공하면 그 파일 경로를 돌려주어 화면에 그대로 보여줄 수 있다.
 #[tauri::command]
-pub fn emergency_dump(state: State<AppDb>, json: String) -> Result<String, String> {
+pub async fn emergency_dump(app: AppHandle, json: String) -> Result<String, String> {
+    on_db_thread(app, move |state| emergency_dump_now(state, json)).await
+}
+fn emergency_dump_now(state: &AppDb, json: String) -> Result<String, String> {
     let dir = state.base_dir.join("emergency");
     std::fs::create_dir_all(&dir).map_err(to_err)?;
     let stamp = db::fs_stamp();

@@ -255,21 +255,46 @@ export function renderDone(){
     dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
   if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
-  const groups=[];
+  const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
     const g=doneGroupOf(it.doneAt, now);
-    let grp=groups.find(x=>x.key===g.key);
-    if(!grp){ grp=Object.assign({items:[]}, g); groups.push(grp); }
+    let grp=byKey.get(g.key);
+    if(!grp){ grp=Object.assign({items:[]}, g); groups.push(grp); byKey.set(g.key, grp); }
     grp.items.push(it);
   }
   groups.sort((a,b)=>b.order-a.order);
+  /* P6 지연 그리기 — 완료 업무가 쌓이면(1만 건 = 1만 줄) 탭을 열 때 1초 가까이 멈췄다. 앞쪽 DONE_SYNC_ROWS 줄만 바로 그리고
+     나머지는 DONE_CHUNK_ROWS 줄씩 잠깐씩 이어 붙인다. 무엇을 어떤 순서로 보여 주는지·묶음·펼침은 그대로다(다 그리면 같다).
+     다시 그리면(doneSeq) 이어 그리던 것은 멈춘다. 줄 수가 적으면 예전처럼 한 번에 그린다. */
+  const seq=++doneSeq, later=[];
+  let budget=DONE_SYNC_ROWS;
   $('col-done').innerHTML=groups.map(g=>{
     const open = (dq || dcalDay!=null) ? true : groupOpen(g.key);
+    let rows='';
+    if(open){
+      const head=g.items.slice(0, budget);
+      rows=head.map(doneRowHtml).join(''); budget-=head.length;
+      if(head.length<g.items.length) later.push({key:g.key, items:g.items.slice(head.length)});
+    }
     return `<section class="done-group${open?'':' dg-closed'}" data-group="${g.key}">
       <div class="dg-head" data-dgtoggle="${g.key}" role="button" aria-expanded="${open}"><span class="dg-caret">${open?'▾':'▸'}</span><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span></div>
-      ${open ? `<div class="dg-rows">${doneHeadRow()}${g.items.map(doneRowHtml).join('')}</div>` : ''}
+      ${open ? `<div class="dg-rows">${doneHeadRow()}${rows}</div>` : ''}
     </section>`;
   }).join('');
+  if(later.length) setTimeout(()=>fillDoneLater(seq, later), 0);
+}
+const DONE_SYNC_ROWS=300, DONE_CHUNK_ROWS=400;
+let doneSeq=0;
+function fillDoneLater(seq, later){
+  if(seq!==doneSeq) return;                              // 그새 다시 그렸다 — 이 이어 그리기는 낡았다
+  let n=DONE_CHUNK_ROWS;
+  while(n>0 && later.length){
+    const t=later[0], take=t.items.splice(0, n); n-=take.length;
+    const box=document.querySelector(`#col-done .done-group[data-group="${t.key}"] .dg-rows`);
+    if(box) box.insertAdjacentHTML('beforeend', take.map(doneRowHtml).join(''));
+    if(!t.items.length) later.shift();
+  }
+  if(later.length) setTimeout(()=>fillDoneLater(seq, later), 0);
 }
 /* v3.7.0 속도: 화면을 **먼저** 그리고 저장은 뒤에서 한다(소유자 지적 — 메모 저장 뒤 살짝 멈칫).
    예전엔 `await saveAll` 뒤에 render 해서, 디스크 쓰기(진행 중인 앞 저장 + 백업 회전까지)가 끝날 때까지

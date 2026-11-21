@@ -557,6 +557,9 @@ async function commitForm(opts){
         it.memo=d.memo; it.f=d.f; it.contacts=d.contacts; it.ids=d.ids; it.subs=d.subs; it.files=d.files; it.staged=false;
         it.al = it.al || {};
         if(oldDue !== d.f.due) delete it.al.due;   // F2: 마감이 바뀌면 알람 재무장
+        /* 양식을 연 채 이 업무가 완료됐을 수 있다(문서 탭 옆 칸 양식은 가림막이 없어 카드의 ○ 가 눌린다).
+           증분 저장은 완료 업무를 다시 쓰지 않으므로 표시하지 않으면 고친 내용이 조용히 사라진다. */
+        if(it.done) S.doneDirty.add(it.id);
       }
     }
     let target=prev;

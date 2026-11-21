@@ -93,6 +93,26 @@ test('카드 시각 표시 정책: 마감보다 앞서는 세부가 있으면 �
   assert.ok(card(c.id).innerHTML.includes('마감:'));
 });
 
+/* P6: 완료 업무가 많으면 앞쪽 줄만 먼저 그리고 나머지는 잠깐씩 나눠 이어 그린다(1만 건에서 탭 열기가 1초 가까이 멈췄다).
+   보이는 내용·묶음·기본 펼침은 그대로여야 한다 — 다 그린 뒤의 줄 수·순서가 한꺼번에 그린 것과 같아야 한다. */
+test('완료 업무가 많으면 나눠 그리되, 다 그리면 줄 수·순서·묶음이 한꺼번에 그린 것과 같다', async () => {
+  await env.resetS(); S.loaded = true;
+  const now = Date.now();
+  for(let i=0;i<1500;i++) S.items.push(mk({memo:'완료'+i, done:true, doneAt: now - i*3600e3}));   // 두 달 남짓 — 묶음 여럿
+  const rows = () => [...$('col-done').querySelectorAll('.drow:not(.drow-h)')].map(r=>r.dataset.open);
+  const expected = S.items.filter(x=>x.done).sort((a,b)=>b.doneAt-a.doneAt).map(x=>String(x.id));
+  renderDone();
+  const first = rows().length;
+  assert.ok(first>0 && first<1500, `처음엔 앞쪽만(${first}줄)`);
+  const groups = [...$('col-done').querySelectorAll('.done-group')].map(g=>g.dataset.group+':'+g.classList.contains('dg-closed'));
+  renderDone();                                        // 이어 그리는 도중 다시 그려도 섞이지 않는다
+  for(let i=0;i<50 && rows().length<1500;i++){ mock.timers.tick(20); await env.flush(1); }
+  assert.deepEqual(rows(), expected, '다 그리면 한꺼번에 그린 것과 같은 줄·같은 순서');
+  assert.deepEqual([...$('col-done').querySelectorAll('.done-group')].map(g=>g.dataset.group+':'+g.classList.contains('dg-closed')), groups, '묶음·펼침 그대로');
+  for(const g of $('col-done').querySelectorAll('.done-group:not(.dg-closed)'))
+    assert.equal(g.querySelector('.count').textContent, String(g.querySelectorAll('.drow:not(.drow-h)').length), '묶음 머리 건수 = 그 묶음 줄 수');
+});
+
 test('done 아이템은 보드 제외, renderDone에 표시 — 완료 카드 = 메모 + 완료 시각만 (v2.5.2)', async () => {
   await env.resetS(); S.loaded = true;
   S.items.push(mk({memo:'끝난 일', done:true, doneAt:Date.now(),
