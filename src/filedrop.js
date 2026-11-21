@@ -50,6 +50,8 @@ export function dropTarget(el){
   /* v3.8.1 문서 탭의 폴더(트리의 폴더 줄 · 가운데 폴더 보기) 위 → 그 폴더 안으로 복사 */
   const dk=dropFolderAt(el);
   if(dk) return {kind:'docdir', key:dk.key, label:dk.label, row:dk.row};
+  /* v3.8.9: 문서 탭 가운데(문서 보기)는 놓는 자리가 아니다 — 글자를 골라 끌 때 '새 업무 양식' 안내가 떠서 헷갈렸다(소유자 지정) */
+  if(el && el.closest && el.closest('#view-docs.on .dc-view')) return {kind:'none'};
   const card=el&&el.closest&&el.closest('.card[data-open]:not(.drag-ghost), .drow[data-open]');   // .drow = 완료 탭의 한 줄(v3.8.4)
   if(card){
     const it=S.items.find(x=>String(x.id)===card.dataset.open);
@@ -66,6 +68,7 @@ const fileName = p => (String(p||'').split(/[\\/]/).filter(Boolean).pop()||p);
 export function applyDrop(target, paths){
   paths=(paths||[]).filter(p=>String(p||'').trim());
   if(!paths.length) return false;
+  if(target.kind==='none') return false;
   if(target.kind==='blocked'){ showToast(target.why); return false; }
   if(target.kind==='docdir'){ importInto(target.key, paths, !!target.mv); return true; }
   if(target.kind==='form'){ const n=addLinkPaths(paths); showToast(n?`링크 ${n}개를 양식에 추가했습니다. 저장해야 반영됩니다`:'이미 연결된 링크입니다'); return n>0; }
@@ -94,8 +97,10 @@ function clearHl(){
 }
 function showHl(target, el){
   clearHl();
+  if(target.kind==='none') return;
   const v=$('dropVeil'), c=$('dropCard'); if(!v||!c) return;
   v.classList.add('on');
+  v.classList.toggle('framed', target.kind!=='form' && target.kind!=='card' && target.kind!=='docdir');   // 전체 테두리는 빈 곳·막힘일 때만
   if(target.kind==='form'){ const w=document.querySelector('.fm-files-wrap'); if(w) w.classList.add('drop-on'); c.textContent='놓으면 이 양식의 링크 칸에 추가합니다'; }
   else if(target.kind==='card'){ const card=el&&el.closest('.card[data-open]'); if(card) card.classList.add('drop-on'); c.textContent='놓으면 이 업무에 링크로 연결합니다'; }
   else if(target.kind==='blocked'){ c.textContent=target.why; }
@@ -113,9 +118,13 @@ function elAt(pos){
    Windows 에 직접 묻는다(key_shift_down). 끄는 동안 0.15초마다 묻고, 놓을 때 한 번 더 묻는다. */
 let shiftNow=false, shiftAt=0;
 const askShift = () => invoke('key_shift_down').then(v=>!!v, ()=>false);
+/* v3.8.9: 끄는 것이 파일이 아니면(문서 보기에서 고른 글자·그림 — 경로가 없다) 아무 안내도 하지 않는다 */
+let noPaths=false;
 export async function handleDragDrop(payload){
   const p=payload||{};
-  if(p.type==='leave'){ clearHl(); shiftNow=false; return; }
+  if(p.type==='leave'){ clearHl(); shiftNow=false; noPaths=false; return; }
+  if(p.type==='enter') noPaths=!(p.paths||[]).length;
+  if(noPaths && p.type!=='drop'){ clearHl(); return; }
   if(p.type==='enter'||p.type==='over'){
     const el=elAt(p.position), t=dropTarget(el); showHl(t, el);
     if(t.kind==='docdir' && Date.now()-shiftAt>150){
@@ -126,6 +135,7 @@ export async function handleDragDrop(payload){
     return;
   }
   if(p.type==='drop'){
+    noPaths=false;
     const el=elAt(p.position), t=dropTarget(el); clearHl();
     if(t.kind==='docdir') t.mv = shiftNow || await askShift();
     shiftNow=false;

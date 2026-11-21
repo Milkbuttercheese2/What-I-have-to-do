@@ -72,6 +72,9 @@ export function docRoots(){
 const rootName = i => { const r=String(docRoots()[i]||''); return r.split(/[\\/]/).filter(Boolean).pop()||r; };
 function entryOf(i, rel){ const list=kids.get(nodeKey(i, parentOf(rel))); return Array.isArray(list) ? list.find(e=>e.rel===rel) : null; }
 
+/* v3.8.9: 앱이 켜진 뒤 한 번 — 문서 폴더를 Rust 에 알려 둔다. Rust 는 그때 찾기 색인을 뒤에서 만들기 시작하므로
+   문서 탭을 열기 전부터 색인이 준비된다. 실패해도 문서 탭을 열 때 다시 정하므로 조용히 넘어간다 */
+export async function primeDocRoots(){ try{ if(docRoots().length) await ensureRoots(); }catch(e){ console.warn('문서 폴더 준비 실패', e); } }
 async function ensureRoots(){
   const want=docRoots(), sig=JSON.stringify(want);
   if(rootsFor===sig) return;
@@ -522,6 +525,8 @@ export function renderNote(){
   const list=folderItems(S.items, folderPaths(nf.i, nf.rel), Array.isArray(here) ? here.filter(e=>e.dir).map(e=>e.name.toLowerCase()) : []);
   $('dn-count').textContent = list.length ? String(list.length) : '';
   $('view-docs').classList.toggle('no-note', !list.length);       // 메모가 없으면 오른쪽 칸을 접어 가운데를 넓힌다
+  $('view-docs').classList.toggle('note-fold', !!list.length && !!S.settings.docNoteFold);   // v3.8.9: 메모가 있어도 사용자가 접어 둘 수 있다(좁은 띠만 남김)
+  if($('dn-rail-n')) $('dn-rail-n').textContent = list.length ? String(list.length) : '';
   $('dn-list').innerHTML = list.length ? list.map(it=>cardHtml(it, it.done ? 'done' : placeOf(it))).join('') : '<div class="dv-empty">이 폴더의 메모 없음</div>';
 }
 /* 업무 링크에 쓸 그 항목의 절대 경로 — 사용자가 고른 폴더 표기(매핑 드라이브 등) 기준, '\' 구분 */
@@ -798,6 +803,7 @@ async function trashItem(key, dir){
 
 /* ── 문서 찾기 (v3.8.3) — 이름(모든 폴더·파일)과 작은 글자 파일의 내용. 찾는 동안 트리 자리에 결과 목록 ── */
 let searchQ='', searchSeq=0, searchTimer=0, searchHits=null;
+
 function onSearchInput(){
   clearTimeout(searchTimer);
   /* 지우면 바로 트리로 — 아직 돌고 있던 찾기는 번호를 올려 버린다(예전엔 지운 뒤 늦게 끝난 찾기가 '찾은 것 없음'을 덮어썼다) */
@@ -906,14 +912,21 @@ export async function renderDocs(){
   if(sel && sel.i>=rs.length) sel=null;
   if(!sel && S.settings.docLast){ const p=parseKey(S.settings.docLast); if(p.i<rs.length && kids.has(nodeKey(p.i, parentOf(p.rel))) && entryOf(p.i, p.rel)) sel={i:p.i, rel:p.rel, dir:false}; }
   if(!sel) sel={i:0, rel:'', dir:true};
+
   renderTree(); renderNote(); await renderViewer();
   syncNative();
 }
 /* 폴더: 처음 누르면 펼치고 고른다, 고른 폴더를 다시 누르거나 ▸/▾ 를 누르면 접기·펼치기 */
+/* 폴더 접기 — 그 아래 펼쳐 둔 폴더도 모두 접는다(v3.8.9 소유자 지정): 다시 펼치면 하위 폴더는 접힌 상태로 시작 */
+export function collapseKeys(openSet, i, rel){
+  const pre = rel ? `${i}:${rel}/` : `${i}:`;
+  for(const k of [...openSet]) if(k===nodeKey(i, rel) || k.startsWith(pre)) openSet.delete(k);
+}
+function collapse(i, rel){ collapseKeys(open, i, rel); }
 async function pick(key, dir, caret){
   const {i, rel}=parseKey(key);
   if(dir){
-    if(open.has(key) && (isSel(i, rel) || caret)) open.delete(key); else open.add(key);
+    if(open.has(key) && (isSel(i, rel) || caret)) collapse(i, rel); else open.add(key);
     keepOpen(); saveSettings();
     if(open.has(key) && !kids.has(key)){ renderTree(); await load(i, rel); }
     if(caret && !isSel(i, rel)){ renderTree(); return; }           // ▸ 만 누르면 접기·펼치기만(고른 것 유지)
@@ -994,6 +1007,11 @@ async function revealPath(i, rel){
   return {rel:cur, dir};
 }
 
+/* 오른쪽 메모 칸 접기/펼치기 — settings.docNoteFold 에 기억(설정 가방 키라 마이그레이션 없음) */
+export function setNoteFold(on){
+  S.settings.docNoteFold = !!on;
+  renderNote(); saveSettings();
+}
 export function initDocs(){
   registerView({key:'docs', els:[{id:'view-docs'}], render:renderDocs});
   $('dc-root').addEventListener('click', addRoot);
@@ -1002,6 +1020,8 @@ export function initDocs(){
   $('dn-add').addEventListener('click', addNote);
   initSplit();
   $('dn-add2').addEventListener('click', addNote);     // 메모가 없어 오른쪽 칸이 사라졌을 때 쓰는 같은 단추(위 도구줄)
+  $('dn-fold').addEventListener('click', ()=>setNoteFold(true));
+  $('dn-unfold').addEventListener('click', ()=>setNoteFold(false));
   $('dc-search').addEventListener('input', onSearchInput);
   /* 찾기 칸을 누르면 색인을 미리(기다리지 않는다) — 공유 폴더는 처음 훑는 데 오래 걸려, 글자를 치는 동안 만들어 둔다 */
   document.addEventListener('focusin', e=>{

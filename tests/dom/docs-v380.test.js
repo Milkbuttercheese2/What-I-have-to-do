@@ -190,17 +190,21 @@ test('v3.8.7 한글은 rhwp 로 쪽 모양 그대로 — 쪽마다 <img>(SVG 는
   const keep={c:W.createObjectURL, r:W.revokeObjectURL, gc:globalThis.URL.createObjectURL, gr:globalThis.URL.revokeObjectURL};
   W.createObjectURL=globalThis.URL.createObjectURL=()=>`blob:pg${++made}`; W.revokeObjectURL=globalThis.URL.revokeObjectURL=()=>{ revoked++; };
   let freed=0, got=null;
-  class HwpDocument{ constructor(b){ got=b; } pageCount(){ return 3; } renderPageSvg(i){ return `<svg><text>${i+1}</text></svg>`; } free(){ freed++; } }
+  class HwpDocument{ constructor(b){ got=b; } pageCount(){ return 3; } renderPageSvg(i){ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140"><text x="10" y="20" font-size="10">${i+1}</text><script>alert(1)</script></svg>`; } free(){ freed++; } }
   _setRhwpLoader(()=>Promise.resolve({HwpDocument}));
   try{
     await openDocs();
     click(row('0:r.hwpx')); await env.flush(12);
     for(let k=0;k<4;k++){ mock.timers.tick(1); await env.flush(3); }
     assert.deepEqual([...got], [9,9], '파일 바이트를 그대로 넘긴다');
-    const imgs=[...$('dv-body').querySelectorAll('img.dv-hwp-pg')];
+    const imgs=[...$('dv-body').querySelectorAll('.dv-hwp-pg > img')];
     assert.equal(imgs.length, 3, '쪽마다 그림 하나');
     assert.match(imgs[0].getAttribute('src'), /^blob:/);
     assert.ok(!$('dv-body').querySelector('.dv-hwp svg'), 'SVG 를 화면에 직접 넣지 않는다');
+    assert.ok(!$('dv-body').querySelector('script'), '문서의 스크립트는 화면에 들어오지 않는다');
+    const tls=[...$('dv-body').querySelectorAll('.dv-hwp-tl')];
+    assert.equal(tls.length, 3, '쪽마다 투명 글자 층');
+    assert.equal(tls[1].textContent, '2', '글자는 글자로만(textContent)');
     assert.match($('dv-body').textContent, /3쪽/);
     click(row('0:b.txt')); await env.flush(12);
     assert.equal(freed, 1, '다른 파일로 가면 문서를 놓아 준다');
@@ -788,4 +792,64 @@ test('v3.8.8 파워포인트(PPT·PPTX)는 읽지 않고 [파워포인트에서 
     assert.match($('dv-body').textContent, /파워포인트에서 열어 보세요/);
     assert.ok($('dv-body').querySelector('.dv-info [data-dopen]'), f+': [파워포인트에서 열기]');
   }
+});
+
+test('v3.8.9 앱이 켜지면 문서 폴더를 미리 알린다(그때 Rust 가 찾기 색인을 뒤에서 만든다) · 폴더가 없으면 부르지 않는다', async () => {
+  const {primeDocRoots} = await import('../../src/docs.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=[];
+  const n0=env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').length;
+  await primeDocRoots(); await env.flush(4);
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').length, n0, '폴더가 없으면 부르지 않는다');
+  S.settings.docRoots=['Y:\\미리'];
+  env.onInvoke('doc_set_roots', a=>a.paths.map(p=>({ok:true,path:p,error:''})));
+  await primeDocRoots(); await env.flush(4);
+  const call=env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').at(-1);
+  assert.deepEqual(call.args.paths, ['Y:\\미리']);
+});
+
+test('v3.8.9 폴더를 접으면 그 아래 펼쳐 둔 폴더도 모두 접힌다 — 다시 펼치면 하위 폴더는 접힌 채로', async () => {
+  const {collapseKeys} = await import('../../src/docs.js');
+  const set=new Set(['0:','0:가','0:가/나','0:가/나/다','0:가나다','0:라','1:가']);
+  collapseKeys(set, 0, '가');
+  assert.deepEqual([...set].sort(), ['0:','0:가나다','0:라','1:가'].sort(), "'가' 와 그 아래만 — 이름이 '가' 로 시작하는 다른 폴더(가나다)·다른 문서 폴더는 그대로");
+  collapseKeys(set, 0, '');
+  assert.deepEqual([...set], ['1:가'], '문서 폴더 자체를 접으면 그 안 전부');
+});
+
+test('v3.8.9 메모 칸 접기 — 메모가 있을 때만 note-fold, 설정에 기억, 펼치면 해제', async () => {
+  const {setNoteFold} = await import('../../src/docs.js');
+  await env.resetS(); S.loaded = true;
+  const v=document.getElementById('view-docs');
+  setNoteFold(true); await env.flush(4);
+  assert.equal(S.settings.docNoteFold, true);
+  if(v.classList.contains('no-note')) assert.equal(v.classList.contains('note-fold'), false, '메모가 없으면 접기 표시를 하지 않는다(칸 자체가 없다)');
+  setNoteFold(false); await env.flush(4);
+  assert.equal(S.settings.docNoteFold, false);
+  assert.equal(v.classList.contains('note-fold'), false);
+  assert.ok(document.getElementById('dn-fold') && document.getElementById('dn-unfold'), '접기·펼치기 단추가 있다');
+});
+
+test('v3.8.9 파워포인트 아이콘은 PP(PDF 의 P 와 구분)', () => {
+  const css=fs.readFileSync(new URL('../../src/styles.css', import.meta.url),'utf8');
+  assert.match(css, /\.dt-ico\.ico-pptx::before\{content:"PP"\}/);
+});
+
+test('v3.8.9 한글 글자 층 — 글자를 줄로 묶고, 조금 벌어지면 띄어쓰기, 많이 벌어지거나 높이가 다르면 새 덩어리, 돌린 글자는 뺀다', async () => {
+  const {hwpTextRuns} = await import('../../src/docs-view.js');
+  const T=(x,y,c,sz=10)=>`<text x="${x}" y="${y}" font-size="${sz}">${c}</text>`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">${T(10,20,'전')}${T(20,20,'자')}${T(33,20,'입')}${T(43,20,'찰')}${T(150,20,'표')}${T(10,40,'둘')}<g transform="rotate(90)">${T(60,60,'돌')}</g></svg>`;
+  const r=hwpTextRuns(svg);
+  assert.equal(r.w, 200); assert.equal(r.h, 300);
+  assert.deepEqual(r.runs.map(x=>x.text), ['전자 입찰','표','둘']);
+  assert.deepEqual(hwpTextRuns('<svg xmlns="http://www.w3.org/2000/svg"></svg>').runs, []);
+  assert.deepEqual(hwpTextRuns('깨진').runs, []);
+});
+
+test('v3.8.9 끌어 놓기: 문서 탭 가운데(문서 보기)는 놓는 자리가 아니다 — 안내도 동작도 없음', async () => {
+  const {dropTarget, applyDrop} = await import('../../src/filedrop.js');
+  await openDocs();
+  const v=$('dv-body');
+  assert.equal(dropTarget(v).kind, 'none');
+  assert.equal(applyDrop({kind:'none'}, ['C:\\a.txt']), false);
 });
