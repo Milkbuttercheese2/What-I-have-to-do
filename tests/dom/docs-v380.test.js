@@ -853,3 +853,15 @@ test('v3.8.9 끌어 놓기: 문서 탭 가운데(문서 보기)는 놓는 자리
   assert.equal(dropTarget(v).kind, 'none');
   assert.equal(applyDrop({kind:'none'}, ['C:\\a.txt']), false);
 });
+
+test('v3.8.10 한글 글자 층 — 줄마다 <br>(복사 때 줄바꿈), 끌어 고르기 받침(.endOfContent)이 붙는다', async () => {
+  const {guardSelection} = await import('../../src/docs-view.js');
+  const d=document.createElement('div'); d.className='dv-hwp-tl'; d.innerHTML='<span>가</span>'; document.body.appendChild(d);
+  guardSelection(d);
+  assert.equal(d.lastElementChild.className, 'endOfContent');
+  d.dispatchEvent(new window.MouseEvent('mousedown', {bubbles:true}));
+  assert.ok(d.classList.contains('selecting'), '누르는 동안 받침이 층 전체를 덮는다');
+  document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+  assert.ok(!d.classList.contains('selecting'));
+  d.remove();
+});

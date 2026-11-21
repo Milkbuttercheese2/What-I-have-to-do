@@ -125,6 +125,43 @@ export function csvHtml(text, tsv){
    v3.8.4: 쪽은 보일 때 읽고(쪽이 수백 장이어도 바로 뜬다), 화면에서 멀어진 쪽의 그림은 놓아 준다(쪽당 수십 MB),
    한 쪽 그림 폭은 4096px 까지(확대해도 메모리가 터지지 않게). 암호 걸린 PDF 는 알기 쉬운 말로. */
 let pdfLib=null;
+/* v3.8.9 글자 층에서 끌어 고를 때 튀지 않게 — pdf.js 뷰어(text_layer_builder.js)와 같은 방법.
+   글자 층 끝에 '받침'(.endOfContent)을 두고, 고르는 동안(.selecting) 받침이 층 전체를 덮게 한 뒤
+   지금 고르는 끝 글자 바로 뒤로 옮긴다. 줄 사이·여백 같은 빈 곳을 지나도 마우스 아래에는 받침이 있어
+   선택 끝이 '층의 맨 끝/맨 앞'으로 튀지 않는다. 받침은 글자 아래(z-index 0)라 글자 위에서는 글자가 잡힌다. */
+const selLayers=new Map();   // 글자 층 → 받침
+let selOn=false, prevRange=null;
+function selReset(end, layer){ layer.append(end); end.style.width=''; end.style.height=''; layer.classList.remove('selecting'); }
+export function guardSelection(layer){
+  const end=document.createElement('div'); end.className='endOfContent'; layer.append(end);
+  selLayers.set(layer, end);
+  layer.addEventListener('mousedown', ()=>layer.classList.add('selecting'));
+  if(selOn) return; selOn=true;
+  const resetAll=()=>{ for(const [l, e] of selLayers){ if(!l.isConnected){ selLayers.delete(l); continue; } selReset(e, l); } prevRange=null; };
+  document.addEventListener('pointerup', resetAll);
+  document.addEventListener('mouseup', resetAll);
+  window.addEventListener('blur', resetAll);
+  document.addEventListener('keyup', resetAll);
+  document.addEventListener('selectionchange', ()=>{
+    const s=document.getSelection();
+    if(!s || !s.rangeCount){ resetAll(); return; }
+    const range=s.getRangeAt(0);
+    for(const [l, e] of selLayers){
+      if(!l.isConnected){ selLayers.delete(l); continue; }
+      if(range.intersectsNode(l)) l.classList.add('selecting'); else selReset(e, l);
+    }
+    const modStart=prevRange && (range.compareBoundaryPoints(Range.END_TO_END, prevRange)===0 || range.compareBoundaryPoints(Range.START_TO_END, prevRange)===0);
+    let anchor=modStart ? range.startContainer : range.endContainer;
+    if(anchor && anchor.nodeType===3) anchor=anchor.parentNode;
+    const layer=anchor && anchor.parentElement && anchor.parentElement.closest('.textLayer, .dv-hwp-tl');
+    const end=layer && selLayers.get(layer);
+    if(end && anchor!==end){
+      end.style.width=layer.style.width; end.style.height=layer.style.height;
+      anchor.parentElement.insertBefore(end, modStart ? anchor : anchor.nextSibling);
+    }
+    prevRange=range.cloneRange();
+  });
+}
 const PDF_MAX_PX=4096;
 export async function renderPdf(box, bytes){
   if(!pdfLib){
@@ -152,7 +189,7 @@ export async function renderPdf(box, bytes){
     if(p.tl || !pdfLib.TextLayer) return;
     const d=document.createElement('div'); d.className='textLayer'; p.w.appendChild(d);
     p.tl=new pdfLib.TextLayer({textContentSource:p.pg.streamTextContent(), container:d, viewport:p.pg.getViewport({scale:1})});
-    p.tl.render().catch(e=>console.warn('pdf 글자 층 실패', e));
+    p.tl.render().then(()=>guardSelection(d), e=>console.warn('pdf 글자 층 실패', e));
   };
   const layout=()=>{ for(const p of pages){ size(p); p.drawn=0; } };
   const draw=async p=>{
@@ -230,16 +267,18 @@ export function hwpTextRuns(svg){
 function hwpTextLayer(svg){
   const {w, h, runs}=hwpTextRuns(svg); if(!w||!h||!runs.length) return null;
   const d=document.createElement('div'); d.className='dv-hwp-tl'; d.style.width=w+'px'; d.style.height=h+'px';
-  for(const r of runs){
-    const s=document.createElement('span'); s.textContent=r.text;
+  runs.forEach((r, k)=>{
+    const nx=runs[k+1], same=nx && Math.abs(nx.y-r.y)<r.size*0.5;
+    const s=document.createElement('span'); s.textContent=r.text+(same ? ' ' : '');
     s.style.left=r.x+'px'; s.style.top=(r.y-r.size*0.88)+'px'; s.style.fontSize=r.size+'px'; s.dataset.w=String(r.end-r.x);
     d.appendChild(s);
-  }
+    if(nx && !same) d.appendChild(document.createElement('br'));
+  });
   return d;
 }
 /* 글자 층의 각 줄을 그림 속 글자 폭에 맞춰 가로로 늘이고 줄인다(웹뷰 글꼴로 잰 폭 → 문서 폭) — 고를 때 자리가 맞게 */
 function fitHwpLayer(d){
-  for(const s of d.children){ const want=Number(s.dataset.w), got=s.offsetWidth; if(want>0 && got>0) s.style.transform=`scaleX(${(want/got).toFixed(4)})`; }
+  for(const s of d.querySelectorAll('span')){ const want=Number(s.dataset.w), got=s.offsetWidth; if(want>0 && got>0) s.style.transform=`scaleX(${(want/got).toFixed(4)})`; }
 }
 /* 첫 쪽은 바로(실패하면 예외 → 부르는 쪽이 글자·표 보기로), 나머지는 쉬어 가며 그려 화면을 멈추지 않는다. 돌려주는 함수 = 정리 */
 export async function renderHwp(box, bytes, rhwp){
@@ -257,7 +296,7 @@ export async function renderHwp(box, bytes, rhwp){
       const im=document.createElement('img'); im.alt=`${i+1}쪽`; im.src=u; im.draggable=false; pg.appendChild(im);
       let tl=null; try{ tl=hwpTextLayer(svg); }catch(e){ console.warn('한글 글자 층 실패', i+1, e); }
       if(tl){ pg.appendChild(tl); im.addEventListener('load', fit, {once:true}); }
-      list.appendChild(pg); if(tl) fitHwpLayer(tl); };
+      list.appendChild(pg); if(tl){ fitHwpLayer(tl); guardSelection(tl); } };
     const ro=typeof ResizeObserver==='function' ? new ResizeObserver(fit) : null; if(ro) ro.observe(list);
     cleanupRO=()=>{ if(ro) ro.disconnect(); };
     page(0);
