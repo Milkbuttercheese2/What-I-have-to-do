@@ -180,6 +180,31 @@ pub fn read_in(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
     std::fs::read(&p).map_err(|e| format!("읽을 수 없습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))
 }
 
+/// 이름 바꾸기·옮기기 — **이미 있는 이름이면 덮어쓰지 않고 실패한다.**
+/// `std::fs::rename` 은 Windows 에서 MOVEFILE_REPLACE_EXISTING 으로 돌아 기존 파일을 덮어쓴다. 바로 앞에서 '같은 이름이
+/// 있나'를 확인하긴 하지만, 그 사이(공유 폴더에서 다른 사람이 같은 이름을 만들면) 그 파일이 사라졌다.
+fn rename_no_replace(src: &Path, dest: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use windows::core::HSTRING;
+        use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVE_FILE_FLAGS};
+        // 깃발 0 = 덮어쓰기 없음·다른 드라이브로 복사 없음(std::fs::rename 과 같은 범위에서 덮어쓰기만 뺀 것)
+        unsafe { MoveFileExW(&HSTRING::from(src.as_os_str()), &HSTRING::from(dest.as_os_str()), MOVE_FILE_FLAGS(0)) }
+            .map_err(|e| std::io::Error::from_raw_os_error(e.code().0 & 0xFFFF))
+    }
+    #[cfg(not(windows))]
+    {
+        if dest.exists() {
+            return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+        }
+        std::fs::rename(src, dest)
+    }
+}
+/// 덮어쓰기를 거절당했는가(ERROR_FILE_EXISTS 80 · ERROR_ALREADY_EXISTS 183)
+fn is_exists_err(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::AlreadyExists || matches!(e.raw_os_error(), Some(80) | Some(183))
+}
+
 /// 항목(파일·폴더) 하나를 같은 문서 폴더 안의 다른 폴더로 옮긴다. 새 상대 경로를 돌려준다.
 pub fn move_in(root: &Path, from: &str, to_dir: &str) -> Result<String, String> {
     if from.trim_matches('/').is_empty() {
@@ -201,7 +226,7 @@ pub fn move_in(root: &Path, from: &str, to_dir: &str) -> Result<String, String> 
     if dest.exists() {
         return Err("같은 이름이 이미 있습니다".into());
     }
-    std::fs::rename(&src, &dest).map_err(|e| format!("옮기지 못했습니다(다른 프로그램에서 사용 중이거나 다른 드라이브일 수 있음): {e}"))?;
+    rename_no_replace(&src, &dest).map_err(|e| if is_exists_err(&e) { "같은 이름이 이미 있습니다".to_string() } else { format!("옮기지 못했습니다(다른 프로그램에서 사용 중이거나 다른 드라이브일 수 있음): {e}") })?;
     Ok(rel_of(root, &dest))
 }
 
@@ -263,7 +288,7 @@ pub fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<String, Strin
     if dest.exists() && !same_ci {
         return Err("같은 이름이 이미 있습니다".into());
     }
-    std::fs::rename(&src, &dest).map_err(|e| format!("이름을 바꾸지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}"))?;
+    rename_no_replace(&src, &dest).map_err(|e| if is_exists_err(&e) { "같은 이름이 이미 있습니다".to_string() } else { format!("이름을 바꾸지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}") })?;
     Ok(rel_of(root, &dest))
 }
 
@@ -453,7 +478,7 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
             continue; // 이미 그 폴더에 있다 — 복사본을 만들지 않는다
         }
         let dest = free_dest(&d, &name);
-        if mv && std::fs::rename(&src, &dest).is_ok() {
+        if mv && rename_no_replace(&src, &dest).is_ok() {
             out.push(rel_of(root, &dest));
             continue;
         }
@@ -942,12 +967,26 @@ pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mt
     }
     let name = p.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_string_lossy().into_owned();
     let tmp = p.with_file_name(format!("~${name}.wmhh-tmp"));
-    std::fs::write(&tmp, &bytes).map_err(|e| format!("저장하지 못했습니다: {e}"))?;
-    if let Err(e) = std::fs::rename(&tmp, &p) {
+    /* 임시 파일에 쓰고 디스크까지 내린 뒤, 그 **열린 파일**에서 고친 시각을 읽는다(바꿔치기는 고친 시각을 바꾸지 않는다).
+       예전엔 바꿔치기 뒤에 다시 읽었고, 그게 실패하면 0 을 돌려줘 다음 자동 저장마다 '다른 프로그램이 고쳤다'로 판정돼
+       쓸데없는 '(내 고침)' 파일이 생겼다. 또 쓰다 실패하면(디스크 가득 등) 임시 파일이 남아 쌓였다 — 지운다. */
+    let written = (|| -> std::io::Result<i64> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(&bytes)?;
+        f.sync_all()?;
+        Ok(mtime_ms(&f.metadata()?))
+    })();
+    let mtime = match written {
+        Ok(m) if m != 0 => m,
+        Ok(_) => { let _ = std::fs::remove_file(&tmp); return Err("저장하지 못했습니다(고친 시각을 읽지 못함)".into()); }
+        Err(e) => { let _ = std::fs::remove_file(&tmp); return Err(format!("저장하지 못했습니다: {e}")); }
+    };
+    if let Err(e) = std::fs::rename(&tmp, &p) {   // 자기 파일을 바꿔치기하는 것이라 덮어쓰기가 맞다
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("저장하지 못했습니다(다른 프로그램에서 사용 중일 수 있음): {e}"));
     }
-    Ok(std::fs::metadata(&p).map(|m| mtime_ms(&m)).unwrap_or(0))
+    Ok(mtime)
 }
 
 /* ── 명령 ───────────────────────────────────────────────────────────── */
@@ -1507,6 +1546,37 @@ mod tests {
         assert!(trash_in(&root, "../밖").is_err());
         trash_in(&root, "가 폴더/버릴.txt").unwrap();
         assert!(!r.join("가 폴더/버릴.txt").exists());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 이름 바꾸기·옮기기는 이미 있는 파일을 덮어쓰지 않는다 — 확인과 실행 사이에 같은 이름이 생겨도(공유 폴더)
+    #[test]
+    fn rename_never_overwrites_an_existing_file() {
+        let r = tmp("noreplace");
+        std::fs::write(r.join("가.txt"), "가").unwrap();
+        std::fs::write(r.join("나.txt"), "나 — 남아야 한다").unwrap();
+        let e = rename_no_replace(&r.join("가.txt"), &r.join("나.txt")).unwrap_err();
+        assert!(is_exists_err(&e), "덮어쓰기 거절로 알아본다: {e:?}");
+        assert_eq!(std::fs::read_to_string(r.join("나.txt")).unwrap(), "나 — 남아야 한다");
+        assert!(r.join("가.txt").exists());
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        assert_eq!(rename_in(&root, "표.xlsx", "표.XLSX").unwrap(), "표.XLSX", "대소문자만 바꾸기는 된다");
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 저장이 돌려주는 고친 시각은 실제 파일의 것이어야 한다(0 이면 다음 저장이 늘 '충돌') · 임시 파일은 남지 않는다
+    #[test]
+    fn text_save_returns_the_real_mtime_and_leaves_no_temp() {
+        let r = tmp("mtime");
+        std::fs::write(r.join("메모.txt"), "처음").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let m = read_text_in(&root, "메모.txt").unwrap();
+        let t = write_text_in(&root, "메모.txt", "고침", &m.encoding, m.mtime).unwrap();
+        assert_ne!(t, 0);
+        assert_eq!(t, mtime_ms(&std::fs::metadata(r.join("메모.txt")).unwrap()));
+        assert_eq!(write_text_in(&root, "메모.txt", "또 고침", &m.encoding, t).map(|_| ()), Ok(()), "돌려받은 시각으로 다음 저장이 된다");
+        let left: Vec<_> = std::fs::read_dir(&r).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains("wmhh-tmp")).collect();
+        assert!(left.is_empty(), "임시 파일이 남지 않는다");
         let _ = std::fs::remove_dir_all(&r);
     }
 
