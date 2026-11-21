@@ -104,7 +104,7 @@ test('done 아이템은 보드 제외, renderDone에 표시 — 완료 카드 = 
   assert.equal($('done-count').textContent, '2');
   assert.ok($('col-done').textContent.includes('끝난 일'));
   // 완료 카드는 메모 + 완료: 시각 뿐 — 세부·마감·점검·주기 배지 없음
-  assert.ok($('col-done').innerHTML.includes('완료:'));
+  assert.equal($('col-done').querySelectorAll('.drow:not(.drow-h)').length, 2);   // v3.8.4 완료 탭은 한 줄 목록
   assert.ok(!$('col-done').innerHTML.includes('마감:'));
   assert.ok(!$('col-done').innerHTML.includes('점검:'));
   assert.ok(!$('col-done').querySelector('.card-subline'));

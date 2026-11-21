@@ -24,7 +24,7 @@ import {S} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, appAlert, appConfirm, showToast} from './dom-utils.js';
 import {registerView, showView} from './views.js';
-import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, xlsxBook, inApp, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, renderPdf} from './docs-view.js';
+import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf} from './docs-view.js';
 import {cardHtml, persist} from './render.js';
 import {placeOf} from './placement.js';
 import {openForm} from './form.js';
@@ -122,17 +122,21 @@ function viewHead(i, rel, e, extra){
     +`<button type="button" class="btn btn-tool" data-dreveal="${k}">폴더에서 보기</button></div></div>`;
 }
 const box = () => { const b=$('dv-body'); return b && b.querySelector('.dv-content'); };
-async function leaveViewer(){
-  await flushEdit();
+async function leaveViewer(inChain){
+  await flushEdit(inChain);
   if(viewCleanup){ try{ viewCleanup(); }catch{} viewCleanup=null; }
   if(native){ native=false; stopNativeWatch(); try{ await invoke('doc_preview_close'); }catch{} }
   ed=null; book=null; shown=null;
 }
-async function renderViewer(){
+/* ⚠️ 한 번에 하나씩 돈다(직렬). 겹쳐 돌면 늦게 끝난 앞 호출이 뒤 호출이 띄운 탐색기 미리 보기 창을 닫아
+   빈 화면이 남는다(showDoc 처럼 탭 전환과 직접 호출이 겹칠 때). 안에서 renderViewer 를 다시 부르지 말 것 — 자기를 기다려 멈춘다. */
+let viewChain=Promise.resolve();
+function renderViewer(){ return (viewChain=viewChain.then(doRenderViewer, doRenderViewer)); }
+async function doRenderViewer(){
   const el=$('dv-body'); if(!el) return;
   const same = sel && !sel.dir && shown && shown.i===sel.i && shown.rel===sel.rel;
   if(same) return;                                         // 보던 파일 그대로 — 입력 중인 글자·PDF 를 갈아엎지 않는다
-  await leaveViewer();
+  await leaveViewer(true);
   const seq=++viewSeq;
   if(!sel){ el.innerHTML='<div class="dv-empty">폴더 없음</div>'; return; }
   if(sel.dir){
@@ -156,21 +160,37 @@ async function renderViewer(){
       if(kind==='pdf'){ box().innerHTML='<div class="dv-empty">읽는 중</div>'; const c=await renderPdf(box(), bytes); if(alive()) viewCleanup=c; else c(); return; }
       const ext=extOf(rel), url=URL.createObjectURL(new Blob([bytes], {type:(IMG_MIME[ext]||MEDIA_MIME[ext]||'application/octet-stream')}));
       viewCleanup=()=>URL.revokeObjectURL(url);
-      box().innerHTML = kind==='img' ? `<div class="dv-img"><img src="${url}" alt="${escAttr(nameOf(rel))}"></div>`
+      box().innerHTML = kind==='img' ? `<div class="dv-img" title="누르면 원래 크기 ↔ 창에 맞춤"><img src="${url}" alt="${escAttr(nameOf(rel))}"></div>`
         : String(MEDIA_MIME[ext]).startsWith('audio') ? `<audio class="dv-media" controls src="${url}"></audio>` : `<video class="dv-media" controls src="${url}"></video>`;
+      /* 웹뷰가 못 푸는 형식(일부 동영상 코덱·깨진 그림) — 빈 칸으로 두지 않는다 */
+      const m=box().querySelector('img,video,audio');
+      if(m) m.addEventListener('error', ()=>{ if(alive()) box().innerHTML=infoHtml(kind, rel, e, '이 형식은 앱 안에서 볼 수 없음'); }, {once:true});
+      return;
+    }
+    if(kind==='zip'){
+      const bytes=new Uint8Array(await invoke('doc_read', {root:i, rel}));
+      if(!alive()) return;
+      const list=zipList(bytes);
+      box().innerHTML=`<div class="dv-ro">압축 파일 안 ${list.length}개</div><div class="dv-flist">${list.slice(0,2000).map(f=>`<div class="dv-frow dv-zrow"><span class="dt-ico ico-${docKind(f.name)}"></span><span class="dv-fname" title="${escAttr(f.name)}">${esc(f.name)}</span><span class="dv-meta num">${fmtSize(f.size)}</span></div>`).join('')}</div>`+(list.length>2000?'<div class="dv-cap">2,000개까지만</div>':'');
       return;
     }
     /* 그 밖: 탐색기 미리 보기 → 대체본 → 글자로 읽히면 편집 → 정보 */
     if(await tryNative(i, rel, seq)) return;
     if(!alive()) return;
-    if(kind==='hwpx' || kind==='pptx' || kind==='xlsx') return await showFallback(i, rel, kind, seq);
+    if(['hwpx','hwp','pptx','xlsx','docx'].includes(kind) && !/^(ppt|doc)$/.test(extOf(rel))) return await showFallback(i, rel, kind, seq);
     if(kind==='other'){
       try{ return await showText(i, rel, 'text', seq, true); }catch{ /* 글자 파일 아님 */ }
     }
-    if(alive()) box().innerHTML=`<div class="dv-info"><span class="dt-ico ico-${kind}"></span><div>미리 보기 없음</div><div class="dv-meta">${esc(extOf(rel).toUpperCase()||'파일')}${e?` · ${fmtSize(e.size)}`:''}</div></div>`;
+    if(alive()) box().innerHTML=infoHtml(kind, rel, e, '미리 보기 없음');
   }catch(err){
-    if(alive()) box().innerHTML=`<div class="dv-empty dv-err">${esc(String(err&&err.message||err))}</div>`;
+    const msg=String(err&&err.message||err);
+    /* 너무 큰 파일은 오류가 아니다 — 안내와 [열기] */
+    if(alive()) box().innerHTML = /상한|너무 큽니다|too large/i.test(msg) ? infoHtml(kind, rel, e, '앱 안에서 보기엔 큰 파일') : `<div class="dv-empty dv-err">${esc(msg)}</div>`;
   }
+}
+function infoHtml(kind, rel, e, why){
+  return `<div class="dv-info"><span class="dt-ico ico-${kind}"></span><div>${esc(why)}</div><div class="dv-meta">${esc(extOf(rel).toUpperCase()||'파일')}${e?` · ${fmtSize(e.size)}`:''}</div>`
+    +`<button type="button" class="btn btn-ok" data-dopen="${escAttr(nodeKey(sel.i, rel))}">${openLabel(kind)}</button></div>`;
 }
 async function showFallback(i, rel, kind, seq){
   const bytes=new Uint8Array(await invoke('doc_read', {root:i, rel}));
@@ -182,15 +202,27 @@ async function showFallback(i, rel, kind, seq){
         +(book.names.length>1?`<div class="dv-sheets">${book.names.map((n,j)=>`<button type="button" class="seg-btn${j===sheetIdx?' on':''}" data-dsheet="${j}">${esc(n)}</button>`).join('')}</div>`:'')
         +`<div class="dv-scroll">${book.html(sheetIdx)}</div>`;
     } else {
-      const html = kind==='hwpx' ? hwpxHtml(unzip(bytes)) : pptxHtml(unzip(bytes));
-      box().innerHTML=`<div class="dv-ro">글자·표만 보기</div><div class="dv-doc dv-${kind}">${html}</div>`;
+      const files=unzip(bytes);
+      /* 문서에 든 첫 쪽 그림(만든 프로그램이 저장해 둔 것)이 있으면 위에 — 쪽 모양을 짐작할 수 있다 */
+      const th=docThumb(files); let thumb='';
+      if(th){ const u=URL.createObjectURL(new Blob([th.bytes], {type:th.mime})); viewCleanup=()=>URL.revokeObjectURL(u); thumb=`<div class="dv-thumb"><img src="${u}" alt=""><span class="dv-meta">첫 쪽</span></div>`; }
+      let html='', note='글자·표만 보기';
+      try{
+        if(kind==='hwpx') html=hwpxHtml(files);
+        else if(kind==='pptx') html=pptxHtml(files);
+        else if(kind==='docx') html=docxHtml(files);
+        else { html=`<section class="dv-sec">${hwpText(files).split(/\r?\n/).map(l=>l.trim()?`<p>${esc(l)}</p>`:'<p class="dv-blank"></p>').join('')}</section>`; note='앞부분 글자만 보기'; }
+      }catch(err){ if(!thumb) throw err; note='첫 쪽 그림만 보기'; }
+      box().innerHTML=`<div class="dv-ro">${note}</div>${thumb}<div class="dv-doc dv-${kind}">${html}</div>`;
     }
-  }catch(err){ box().innerHTML=`<div class="dv-empty dv-err">미리 보기 실패 — ${esc(err.message||String(err))}</div>`; }
+  }catch(err){ box().innerHTML=infoHtml(kind, rel, entryOf(i, rel), '미리 보기 없음'); }
 }
 
 /* ── 글자 파일: 보는 즉시 고침 ── */
 const mdMode = () => S.settings.docMdMode==='edit' ? 'edit' : 'view';
 const csvMode = () => S.settings.docCsvMode==='edit' ? 'edit' : 'table';
+const htmlMode = () => S.settings.docHtmlMode==='edit' ? 'edit' : 'view';
+const csvDelim = rel => extOf(rel)==='tsv' ? '\t' : ',';
 async function showText(i, rel, kind, seq, probe){
   const f=await invoke('doc_read_text', {root:i, rel});
   if(seq!==viewSeq || !box()) return;
@@ -199,31 +231,44 @@ async function showText(i, rel, kind, seq, probe){
   ed={i, rel, kind, encoding:f.encoding, eol: crlf>0 && crlf>=lf ? '\r\n' : '\n', mtime:f.mtime, text:f.text, dirty:false, saving:false, timer:0, err:''};
   if(shown) shown.mtime=f.mtime;
   const seg = kind==='md' ? `<div class="seg dv-seg"><button type="button" class="seg-btn${mdMode()==='view'?' on':''}" data-tmode="view">보기</button><button type="button" class="seg-btn${mdMode()==='edit'?' on':''}" data-tmode="edit">편집</button></div>`
-    : kind==='csv' ? `<div class="seg dv-seg"><button type="button" class="seg-btn${csvMode()==='table'?' on':''}" data-tmode="table">표</button><button type="button" class="seg-btn${csvMode()==='edit'?' on':''}" data-tmode="edit">편집</button></div>` : '';
+    : kind==='html' ? `<div class="seg dv-seg"><button type="button" class="seg-btn${htmlMode()==='view'?' on':''}" data-tmode="view">보기</button><button type="button" class="seg-btn${htmlMode()==='edit'?' on':''}" data-tmode="edit">편집</button></div>`
+    : kind==='csv' ? `<div class="seg dv-seg"><button type="button" class="seg-btn${csvMode()==='table'?' on':''}" data-tmode="table">표</button><button type="button" class="seg-btn${csvMode()==='edit'?' on':''}" data-tmode="edit">글자</button></div>` : '';
   const head=$('dv-body').querySelector('.dv-head .dv-acts');
   if(head) head.insertAdjacentHTML('afterbegin', `<span class="dv-save num" id="dv-save">${probe?'글자로 열림 · ':''}${esc(encName(f.encoding))}</span>${seg}`);
   box().classList.add('dv-text');
-  box().innerHTML=`<textarea class="dv-ta" id="dv-ta" spellcheck="false" maxlength="5000000"></textarea><div class="dv-md" id="dv-md"></div>`;
+  /* 입력칸 뒤에 같은 글꼴·같은 줄바꿈의 색 층(#dv-hl)을 깐다 — 코드·쿼리 파일이면 그 층이 색을 보여 주고 입력칸 글자는 투명 */
+  box().innerHTML=`<div class="dv-code" id="dv-code"><pre class="dv-hl" id="dv-hl" aria-hidden="true"></pre><textarea class="dv-ta" id="dv-ta" spellcheck="false" maxlength="5000000"></textarea></div><div class="dv-md" id="dv-md"></div>`;
   $('dv-ta').value=f.text;
+  ed.lang=codeLang(rel);
+  paintCode();
   await textMode();
 }
 const encName = e => e==='utf-8' ? 'UTF-8' : e==='utf-8-bom' ? 'UTF-8(BOM)' : e==='utf-16le' ? 'UTF-16' : e==='cp949' ? 'EUC-KR' : String(e||'');
 async function textMode(){
   if(!ed) return;
   const ta=$('dv-ta'), md=$('dv-md'); if(!ta||!md) return;
-  const view = ed.kind==='md' ? mdMode()==='view' : ed.kind==='csv' ? csvMode()==='table' : false;
-  ta.style.display = view ? 'none' : '';
+  const view = ed.kind==='md' ? mdMode()==='view' : ed.kind==='html' ? htmlMode()==='view' : ed.kind==='csv' ? csvMode()==='table' : false;
+  const wrap=$('dv-code'); if(wrap) wrap.style.display = view ? 'none' : '';
+  if(!view) paintCode();
   md.style.display = view ? '' : 'none';
   if(!view) return;
   const text=ta.value;
   if(ed.kind==='csv'){
-    try{ md.innerHTML=`<div class="dv-scroll">${csvHtml(text, extOf(ed.rel)==='tsv')}</div>`; }catch(e){ md.innerHTML=`<div class="dv-empty dv-err">${esc(String(e))}</div>`; }
+    /* 표에서 바로 고친다(칸을 누르고 입력). 너무 큰 표는 읽기 전용 */
+    try{
+      ed.rows=parseCsv(text, csvDelim(ed.rel));
+      const t=csvEditHtml(ed.rows);
+      if(t) md.innerHTML=`<div class="dv-scroll">${t}</div><div class="dv-csvbar"><button type="button" class="btn btn-tool" data-csvadd="row">＋ 행</button><button type="button" class="btn btn-tool" data-csvadd="col">＋ 열</button></div>`;
+      else { ed.rows=null; md.innerHTML=`<div class="dv-ro">큰 표 — 고치려면 [글자]</div><div class="dv-scroll">${csvHtml(text, extOf(ed.rel)==='tsv')}</div>`; }
+    }catch(e){ ed.rows=null; md.innerHTML=`<div class="dv-empty dv-err">${esc(String(e))}</div>`; }
     return;
   }
   const want=ed;
-  const html=await mdHtml(text);
+  if(ed.kind==='html'){ await htmlFrame(md, want); return; }
+  const html = await mdHtml(text);
   if(ed!==want) return;
   md.innerHTML=`<div class="dv-mdv">${html}</div>`;
+  highlightBlocks(md).catch(()=>{});
   /* 같은 폴더 기준 상대 경로 그림 — 파일을 읽어 넣는다(웹뷰는 문서 폴더를 직접 못 읽는다) */
   for(const img of md.querySelectorAll('img')){
     const src=img.getAttribute('src')||'';
@@ -237,6 +282,17 @@ async function textMode(){
       img.src=u; const prev=viewCleanup; viewCleanup=()=>{ URL.revokeObjectURL(u); if(prev) prev(); };
     }catch{ img.removeAttribute('src'); img.alt=`(그림 없음: ${src})`; }
   }
+}
+/* HTML 보기 — 앱이 쓰는 브라우저 엔진(WebView2 = Edge) 그대로, 모래상자 프레임 안에서 그 파일을 연다.
+   주소는 문서 폴더 전용(`http://wmhhdoc.localhost/<폴더번호>/<상대경로>` — docs.rs serve_path)이라 그 문서의 스크립트·CSS·그림
+   (상대 경로)까지 그대로 돈다. 앱 화면과 다른 출처 + sandbox(allow-scripts 만)라 앱 화면·앱 기능에는 닿지 못한다.
+   고치던 글자가 있으면 먼저 저장하고 연다(프레임은 저장된 파일을 읽는다). */
+export const docUrl = (i, rel) => `http://wmhhdoc.localhost/${i}/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
+async function htmlFrame(box, want){
+  if(want.dirty || want.saving) await saveEdit(want);
+  if(ed!==want) return;
+  box.innerHTML='<iframe class="dv-frame" sandbox="allow-scripts allow-popups" referrerpolicy="no-referrer" title="HTML 보기"></iframe>';
+  box.querySelector('iframe').src=`${docUrl(want.i, want.rel)}?t=${want.mtime||0}`;
 }
 /* 상대 경로 → 문서 폴더 안 rel(밖으로 나가면 null) */
 export function resolveRel(dir, rel){
@@ -253,43 +309,78 @@ function markSave(text, bad){
   const s=$('dv-save'); if(!s) return;
   s.textContent=text; s.classList.toggle('dv-bad', !!bad);
 }
+/* 색 층 다시 칠하기 — 글자가 길면 잠깐 쉬었다가(입력이 밀리지 않게), 너무 길면 색 없이 */
+let hlSeq=0, hlTimer=0;
+function paintCode(){
+  const ta=$('dv-ta'), pre=$('dv-hl'); if(!ta || !pre || !ed) return;
+  const text=ta.value, lang=ed.lang;
+  if(!lang || text.length>CODE_HL_MAX){ ta.classList.remove('dv-ta-hl'); pre.innerHTML=''; return; }
+  clearTimeout(hlTimer);
+  const run=async()=>{
+    const seq=++hlSeq, html=await codeHtml(text, lang);
+    if(seq!==hlSeq || !$('dv-hl') || $('dv-ta').value!==text) return;
+    if(html==null){ ta.classList.remove('dv-ta-hl'); pre.innerHTML=''; return; }
+    pre.innerHTML=html+'\n';                                // 끝 줄바꿈 뒤의 빈 줄도 높이를 갖게
+    ta.classList.add('dv-ta-hl');
+    pre.scrollTop=ta.scrollTop; pre.scrollLeft=ta.scrollLeft;
+  };
+  if(text.length>60000) hlTimer=setTimeout(run, 200); else run();
+}
 function onEdit(){
   if(!ed) return;
+  paintCode();
   ed.dirty=true; ed.err='';
   markSave('고치는 중');
-  clearTimeout(ed.timer); ed.timer=setTimeout(()=>saveEdit(), SAVE_IDLE_MS);
+  clearTimeout(ed.timer); const cur=ed; ed.timer=setTimeout(()=>saveEdit(cur), SAVE_IDLE_MS);
 }
-/* 저장 — 실패해도 입력한 글자는 그대로 둔다(화면에 남기고 알림) */
-export async function saveEdit(){
-  const cur=ed; if(!cur || !cur.dirty) return true;
+/* 저장 — 실패해도 입력한 글자는 그대로 둔다(화면에 남기고 알림).
+   ⚠️ 대상(cur)을 처음에 잡아 끝까지 쓴다 — 저장 도중 다른 파일로 넘어가도(전역 ed 가 바뀌어도) 그 파일에 쓴다.
+   한 파일에 저장은 한 번에 하나: 도는 중에 또 부르면 끝난 뒤 한 번 더 돈다(같은 약속을 돌려줘 떠나는 쪽이 끝까지 기다린다).
+   opts.leaving: 그 파일을 떠나는 중(가운데 보기 직렬 사슬 안) — 충돌이 나도 다시 그리지 않는다(자기를 기다려 멈추므로). */
+export function saveEdit(target, opts){
+  const cur=target||ed; if(!cur) return Promise.resolve(true);
+  if(opts && opts.leaving) cur.leaving=true;
+  if(cur.saving){ cur.again=true; return cur.promise; }
+  if(!cur.dirty) return Promise.resolve(true);
+  return (cur.promise=saveLoop(cur));
+}
+async function saveLoop(cur){
+  let ok=true;
+  cur.saving=true;
+  try{
+    do{ cur.again=false; ok=await saveOnce(cur); }while(ok && (cur.again || cur.dirty) && !cur.conflict);
+  }finally{ cur.saving=false; }
+  return ok;
+}
+async function saveOnce(cur){
   clearTimeout(cur.timer);
-  if(cur.saving){ cur.again=true; return false; }
   const ta=$('dv-ta'); const typed = ta && ed===cur ? ta.value : cur.pending;
   if(typed==null) return false;
   const text = cur.eol==='\r\n' ? typed.replace(/\r?\n/g, '\r\n') : typed;
-  cur.saving=true; cur.dirty=false; markSave('저장 중');
+  cur.dirty=false; if(ed===cur) markSave('저장 중');
   try{
     cur.mtime=await invoke('doc_write_text', {root:cur.i, rel:cur.rel, text, encoding:cur.encoding, baseMtime:cur.mtime});
     cur.text=text;
     if(shown && shown.i===cur.i && shown.rel===cur.rel) shown.mtime=cur.mtime;
     const e=entryOf(cur.i, cur.rel); if(e){ e.mtime=cur.mtime; e.size=new Blob([text]).size; }
     if(ed===cur) markSave(`저장됨 · ${encName(cur.encoding)}`);
-    cur.saving=false;
-    if(cur.again){ cur.again=false; if(cur.dirty) return saveEdit(); }
     return true;
   }catch(err){
-    cur.saving=false; cur.err=String(err);
+    cur.err=String(err);
     /* 그새 다른 프로그램이 고쳤다 — 어느 쪽도 버리지 않는다: 내 고침은 '… (내 고침)' 새 파일로, 원래 파일은 다시 연다 */
     if(/다른 프로그램이 이 파일을 고쳤/.test(cur.err)){
-      cur.dirty=false;
+      cur.dirty=false; cur.conflict=true;
       const kept=await keepMine(cur, text);
-      if(ed===cur && shown && shown.i===cur.i && shown.rel===cur.rel){ ed=null; shown=null; await load(cur.i, parentOf(cur.rel)); renderTree(); await renderViewer(); }
-      await appAlert(kept ? `다른 프로그램이 '${nameOf(cur.rel)}' 을(를) 먼저 고쳤습니다.\n고친 내용은 '${nameOf(kept)}' 로 따로 저장했습니다.` : `'${nameOf(cur.rel)}' 저장 실패\n${err}`);
+      if(!cur.leaving && ed===cur && shown && shown.i===cur.i && shown.rel===cur.rel){
+        ed=null; shown=null; await load(cur.i, parentOf(cur.rel)); renderTree();
+        renderViewer();                                        // 기다리지 않는다(직렬 사슬 — 위 주석)
+      } else if(kept){ await load(cur.i, parentOf(cur.rel)); renderTree(); }
+      appAlert(kept ? `다른 프로그램이 '${nameOf(cur.rel)}' 을(를) 먼저 고쳤습니다.\n고친 내용은 '${nameOf(kept)}' 로 따로 저장했습니다.` : `'${nameOf(cur.rel)}' 저장 실패\n${err}`);
       return !!kept;
     }
     cur.dirty=true;
     if(ed===cur) markSave('저장 실패', true);
-    await appAlert(`'${nameOf(cur.rel)}' 저장 실패\n${err}`);
+    appAlert(`'${nameOf(cur.rel)}' 저장 실패\n${err}`);
     return false;
   }
 }
@@ -305,11 +396,17 @@ async function keepMine(cur, text){
     return rel;
   }catch(e){ console.warn('내 고침 따로 저장 실패', e); return null; }
 }
+/* CSV 표에서 고친 칸 → 글자(숨은 입력칸)로 되돌려 평소 저장 길을 탄다 */
+function csvCommit(){
+  const ta=$('dv-ta'); if(!ta || !ed || !ed.rows) return;
+  ta.value=toCsv(ed.rows, csvDelim(ed.rel));
+  onEdit();
+}
 /* 떠나기 전에 고친 글자를 저장한다(다른 파일·다른 탭·폴더 바꾸기) */
-async function flushEdit(){
-  if(!ed || !ed.dirty) return;
-  const ta=$('dv-ta'); if(ta) ed.pending=ta.value;
-  await saveEdit();
+export async function flushEdit(leaving){
+  const cur=ed; if(!cur || (!cur.dirty && !cur.saving)) return;
+  const ta=$('dv-ta'); if(ta) cur.pending=ta.value;
+  await saveEdit(cur, leaving ? {leaving:true} : null);
 }
 
 /* ── 탐색기 미리 보기 창(preview.rs) ── */
@@ -339,7 +436,11 @@ function nativeBlocked(){
   const v=$('view-docs');
   if(!v || !v.classList.contains('on')) return true;
   if(topId()) return true;
-  return !!document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on, body.dt-dragging, .dt-menu');
+  if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on, body.dt-dragging, body.dc-resizing, .dt-menu, #dropVeil.on')) return true;
+  /* 토스트([실행 취소])가 미리 보기 자리와 겹치면 그동안 숨긴다 — 별도 창이라 토스트를 가려 버린다 */
+  const t=document.querySelector('.toast.on'), ph=$('dv-native');
+  if(t && ph){ const a=t.getBoundingClientRect(), b=ph.getBoundingClientRect(); if(a.width && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top) return true; }
+  return false;
 }
 let lastRect='';
 async function syncNative(){
@@ -396,6 +497,7 @@ export function renderNote(){
   const here=kids.get(nodeKey(nf.i, nf.rel));
   const list=folderItems(S.items, folderPaths(nf.i, nf.rel), Array.isArray(here) ? here.filter(e=>e.dir).map(e=>e.name.toLowerCase()) : []);
   $('dn-count').textContent = list.length ? String(list.length) : '';
+  $('view-docs').classList.toggle('no-note', !list.length);       // 메모가 없으면 오른쪽 칸을 접어 가운데를 넓힌다
   $('dn-list').innerHTML = list.length ? list.map(it=>cardHtml(it, it.done ? 'done' : placeOf(it))).join('') : '<div class="dv-empty">이 폴더의 메모 없음</div>';
 }
 /* 업무 링크에 쓸 그 항목의 절대 경로 — 사용자가 고른 폴더 표기(매핑 드라이브 등) 기준, '\' 구분 */
@@ -523,7 +625,7 @@ function openMenu(x, y, key, dir){
   const m=document.createElement('div'); m.className='dt-menu'; m.setAttribute('role','menu');
   const item=([k,label,ext])=>`<button type="button" data-mnew="${k}">${label}${ext?` (${ext})`:''}</button>`;
   m.innerHTML=(dir ? NEW_KINDS.filter(x=>!x[3]).map(item).join('')+'<hr>'+NEW_KINDS.filter(x=>x[3]).map(item).join('') : '')
-    +(rel ? `${dir?'<hr>':''}<button type="button" data-mren="1">이름 바꾸기</button><button type="button" data-mtrash="1">휴지통으로</button>` : '')
+    +(rel ? `${dir?'<hr>':''}<button type="button" data-mren="1">이름 바꾸기</button><button type="button" data-mcopy="1">복제</button><button type="button" data-mtrash="1">휴지통으로</button>` : '')
     +(!dir ? `<button type="button" data-mopen="1">열기</button>` : '')
     +`<button type="button" data-mreveal="1">폴더에서 보기</button>`;
   document.body.appendChild(m);
@@ -537,6 +639,7 @@ function openMenu(x, y, key, dir){
     if(b.dataset.mnew) return createItem(p.i, p.rel, b.dataset.mnew);
     if(b.dataset.mren) return startRename(key);
     if(b.dataset.mtrash) return trashItem(key, dir);
+    if(b.dataset.mcopy) return copyItem(key);
     if(b.dataset.mopen || b.dataset.mreveal){
       if(b.dataset.mopen) await flushEdit();
       try{ await invoke(b.dataset.mopen?'open_file_path':'reveal_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }
@@ -544,6 +647,26 @@ function openMenu(x, y, key, dir){
     }
   });
   const first=m.querySelector('button'); if(first && first.focus) first.focus();
+}
+/* 복제 — 같은 폴더에 '이름 (2)' 로 */
+async function copyItem(key){
+  const {i, rel}=parseKey(key);
+  if(ed && ed.i===i && ed.rel===rel) await flushEdit();
+  let to;
+  try{ to=await invoke('doc_copy', {root:i, rel}); }
+  catch(e){ await appAlert('복제하지 못했습니다\n'+e); return; }
+  await load(i, parentOf(rel));
+  const e=entryOf(i, to);
+  await leaveViewer();
+  sel={i, rel:to, dir:!!(e&&e.dir)};
+  if(!sel.dir){ S.settings.docLast=nodeKey(i, to); saveSettings(); }
+  renderTree(); renderNote(); await renderViewer();
+  showToast(`'${nameOf(to)}' 만듦`);
+}
+async function openExternal(i, rel){
+  await flushEdit();
+  try{ await invoke('open_file_path', {path:await invoke('doc_abs', {root:i, rel})}); }
+  catch(err){ appAlert('열 수 없습니다:\n'+err); }
 }
 async function createItem(i, dirRel, kind){
   const k=nodeKey(i, dirRel);
@@ -692,6 +815,23 @@ function clearSearch(){
   searchQ=''; searchHits=null; searchSeq++; renderTree();
 }
 
+/* 트리 폭 — 트리와 가운데 사이 손잡이를 끌어 조절(180~560px), settings.docTreeW 에 기억. 두 번 누르면 기본(260) */
+const TREE_MIN=180, TREE_MAX=560, TREE_DEF=260;
+export const clampTreeW = w => Math.max(TREE_MIN, Math.min(TREE_MAX, Math.round(Number(w)||TREE_DEF)));
+function applyTreeW(){ const l=document.querySelector('#view-docs .dc-layout'); if(l) l.style.setProperty('--dc-tree-w', clampTreeW(S.settings.docTreeW)+'px'); }
+function initSplit(){
+  const sp=$('dc-split'); if(!sp) return;
+  let from=null;
+  sp.addEventListener('mousedown', e=>{ if(e.button!==0) return; e.preventDefault(); from={x:e.clientX, w:clampTreeW(S.settings.docTreeW)}; document.body.classList.add('dc-resizing'); });
+  document.addEventListener('mousemove', e=>{
+    if(!from) return;
+    if(e.buttons===0){ from=null; document.body.classList.remove('dc-resizing'); return; }
+    S.settings.docTreeW=clampTreeW(from.w+(e.clientX-from.x)); applyTreeW();
+  });
+  document.addEventListener('mouseup', ()=>{ if(!from) return; from=null; document.body.classList.remove('dc-resizing'); saveSettings(); });
+  sp.addEventListener('dblclick', ()=>{ S.settings.docTreeW=TREE_DEF; applyTreeW(); saveSettings(); });
+}
+
 /* [＋ 메모] — 이 폴더 링크가 든 새 양식(저장해야 업무가 생긴다) */
 async function addNote(){
   const nf=noteFolder(); if(!nf) return;
@@ -711,6 +851,7 @@ export async function renderDocs(){
   }
   const has=rs.length>0;
   view.classList.toggle('has-root', has);
+  applyTreeW();
   $('dc-path').textContent = rs.length===1 ? rs[0] : rs.length ? `폴더 ${rs.length}개` : '';
   if(!has){ await leaveViewer(); sel=null; return; }
   await ensureRoots();
@@ -747,20 +888,21 @@ async function addRoot(){
   const rs=docRoots();
   if(rs.some(r=>norm(r)===norm(p))){ showToast('이미 있는 폴더'); return; }
   rs.push(p); saveSettings();
+  if(searchHits || searchQ) clearSearch();
+  await leaveViewer();
   sel={i:rs.length-1, rel:'', dir:true};
   await renderDocs();
 }
 async function removeRoot(i){
   const rs=docRoots(); if(!(i>=0 && i<rs.length)) return;
   if(!await appConfirm(`'${rootName(i)}' 목록에서 빼기\n(폴더와 파일은 그대로)`)) return;
-  if(sel && sel.i===i) await leaveViewer();
+  if(searchHits || searchQ) clearSearch();
+  await leaveViewer();                                       // 번호가 밀리므로 보던 것은 닫고 다시 연다
   rs.splice(i,1);
   const shift=k=>{ const p=parseKey(k); return p.i===i ? null : nodeKey(p.i>i?p.i-1:p.i, p.rel); };
   open=new Set([...open].map(shift).filter(Boolean)); keepOpen();
   S.settings.docLast = S.settings.docLast ? (shift(S.settings.docLast)||'') : '';
   if(sel){ sel = sel.i===i ? null : {...sel, i: sel.i>i ? sel.i-1 : sel.i}; }
-  if(shown && shown.i>i) shown={...shown, i:shown.i-1};
-  if(ed && ed.i>i) ed.i--;
   saveSettings(); rootsFor=null;
   await renderDocs();
 }
@@ -812,6 +954,8 @@ export function initDocs(){
   $('dc-root-empty').addEventListener('click', addRoot);
   initTreeDrag();
   $('dn-add').addEventListener('click', addNote);
+  initSplit();
+  $('dn-add2').addEventListener('click', addNote);     // 메모가 없어 오른쪽 칸이 사라졌을 때 쓰는 같은 단추(위 도구줄)
   $('dc-search').addEventListener('input', onSearchInput);
   $('dc-search').addEventListener('keydown', e=>{ if(e.key==='Escape' && $('dc-search').value){ e.preventDefault(); e.stopPropagation(); clearSearch(); } });
   $('dt-tree').addEventListener('contextmenu', e=>{
@@ -828,12 +972,22 @@ export function initDocs(){
     const un=e.target.closest('[data-unroot]');
     if(un){ e.stopPropagation(); removeRoot(Number(un.dataset.unroot)); return; }
     const o=e.target.closest('[data-dopen]');
-    if(o){ const p=parseKey(o.dataset.dopen); await flushEdit(); try{ await invoke('open_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }catch(err){ appAlert('열 수 없습니다:\n'+err); } return; }
+    if(o){ const p=parseKey(o.dataset.dopen); await openExternal(p.i, p.rel); return; }
+    const im=e.target.closest('.dv-img');
+    if(im){ im.classList.toggle('dv-actual'); return; }
+    const ca=e.target.closest('[data-csvadd]');
+    if(ca && ed && ed.rows){
+      const w=Math.max(1, ed.rows.reduce((m,r)=>Math.max(m,r.length),0));
+      if(ca.dataset.csvadd==='row') ed.rows.push(Array(w).fill('')); else ed.rows.forEach(r=>{ while(r.length<w) r.push(''); r.push(''); });
+      csvCommit(); await textMode();
+      const td=$('dv-md').querySelector(ca.dataset.csvadd==='row' ? 'tr:last-child td' : 'tr:first-child td:last-child'); if(td && td.focus) td.focus();
+      return;
+    }
     const r=e.target.closest('[data-dreveal]');
     if(r){ const p=parseKey(r.dataset.dreveal); try{ await invoke('reveal_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }catch(err){ appAlert('폴더를 열 수 없습니다:\n'+err); } return; }
     const tm=e.target.closest('[data-tmode]');
     if(tm && ed){
-      if(ed.kind==='md') S.settings.docMdMode=tm.dataset.tmode; else S.settings.docCsvMode=tm.dataset.tmode;
+      if(ed.kind==='md') S.settings.docMdMode=tm.dataset.tmode; else if(ed.kind==='html') S.settings.docHtmlMode=tm.dataset.tmode; else S.settings.docCsvMode=tm.dataset.tmode;
       saveSettings();
       tm.parentElement.querySelectorAll('[data-tmode]').forEach(b=>b.classList.toggle('on', b===tm));
       await textMode(); return;
@@ -842,7 +996,7 @@ export function initDocs(){
     if(sh && book){ sheetIdx=Number(sh.dataset.dsheet); const sc=$('dv-body').querySelector('.dv-scroll'); if(sc) sc.innerHTML=book.html(sheetIdx);
       $('dv-body').querySelectorAll('[data-dsheet]').forEach(b=>b.classList.toggle('on', Number(b.dataset.dsheet)===sheetIdx)); return; }
     /* MD 보기 속 링크 — 웹뷰가 다른 곳으로 넘어가지 않게. 같은 문서 폴더 안 파일이면 그 파일을 연다 */
-    const a=e.target.closest('.dv-mdv a');
+    const a=e.target.closest('.dv-mdv a, .dv-doc a');
     if(a){
       e.preventDefault();
       const href=a.getAttribute('href')||'';
@@ -856,18 +1010,61 @@ export function initDocs(){
     if(row && row.dataset.dhit) return pickHit(row.dataset.dkey, row.dataset.ddir==='1');
     if(row) pick(row.dataset.dkey, row.dataset.ddir==='1', !!e.target.closest('[data-caret]'));
   });
-  $('view-docs').addEventListener('input', e=>{ if(e.target.id==='dv-ta') onEdit(); });
+  /* 색 층은 입력칸의 스크롤을 따라간다 */
+  $('view-docs').addEventListener('scroll', e=>{ if(e.target && e.target.id==='dv-ta'){ const p=$('dv-hl'); if(p){ p.scrollTop=e.target.scrollTop; p.scrollLeft=e.target.scrollLeft; } } }, true);
+  $('view-docs').addEventListener('input', e=>{
+    if(e.target.id==='dv-ta') return onEdit();
+    const td=e.target.closest && e.target.closest('.dv-csv td');
+    if(td && ed && ed.rows){
+      const r=ed.rows[Number(td.dataset.r)]; if(!r) return;
+      const c=Number(td.dataset.c); while(r.length<=c) r.push('');
+      r[c]=td.textContent.replace(/\u00a0/g,' ');
+      csvCommit();
+    }
+  });
+  /* 글자 칸: Tab = 탭 글자(다음 단추로 넘어가지 않게) · CSV 칸: Enter = 아래 칸, Tab = 옆 칸(브라우저 기본) */
+  $('view-docs').addEventListener('keydown', e=>{
+    if(e.isComposing || e.keyCode===229) return;
+    if(e.target.id==='dv-ta' && e.key==='Tab' && !e.ctrlKey && !e.altKey && !e.shiftKey){
+      e.preventDefault();
+      const ta=e.target, a=ta.selectionStart, b=ta.selectionEnd;
+      if(typeof ta.setRangeText==='function') ta.setRangeText('\t', a, b, 'end'); else { ta.value=ta.value.slice(0,a)+'\t'+ta.value.slice(b); ta.selectionStart=ta.selectionEnd=a+1; }
+      onEdit(); return;
+    }
+    const td=e.target.closest && e.target.closest('.dv-csv td');
+    if(td && e.key==='Enter'){
+      e.preventDefault();
+      const n=$('dv-md').querySelector(`td[data-r="${Number(td.dataset.r)+1}"][data-c="${td.dataset.c}"]`); if(n && n.focus) n.focus();
+    }
+  });
+  /* 트리: 두 번 누르면 그 프로그램으로 열기 · F2 = 이름 바꾸기 · Delete = 휴지통으로(고른 항목) */
+  $('dt-tree').addEventListener('dblclick', e=>{
+    const row=e.target.closest('.dt-row'); if(!row || row.dataset.ddir==='1' || e.target.closest('.dt-rename')) return;
+    const p=parseKey(row.dataset.dkey); openExternal(p.i, p.rel);
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key!=='F2' && e.key!=='Delete') return;
+    const v=$('view-docs'); if(!v || !v.classList.contains('on') || !sel || !sel.rel || searchHits || topId()) return;
+    const t=e.target, tag=t && t.tagName;
+    if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT' || (t && t.isContentEditable)) return;
+    if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on, .dt-menu')) return;
+    e.preventDefault();
+    const key=nodeKey(sel.i, sel.rel);
+    if(e.key==='F2') startRename(key); else trashItem(key, sel.dir);
+  });
   /* Ctrl+S — 문서 탭에서 고친 글자가 있고 팝업이 없으면 그 파일 저장(전역 Ctrl+S=백업보다 먼저) */
   document.addEventListener('keydown', e=>{
     if(!(e.ctrlKey||e.metaKey) || (e.key!=='s'&&e.key!=='S') || e.altKey || e.shiftKey) return;
     const v=$('view-docs'); if(!v || !v.classList.contains('on') || !ed || topId()) return;
     if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on')) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    const ta=$('dv-ta'); if(ta && ed) { if(ta.value!==ed.text || ed.dirty){ ed.dirty=true; } }
-    saveEdit().then(ok=>{ if(ok && ed) markSave(`저장됨 · ${encName(ed.encoding)}`); });
+    const ta=$('dv-ta'), cur=ed;
+    if(ta && ta.value.replace(/\r\n/g,'\n')!==String(cur.text).replace(/\r\n/g,'\n')) cur.dirty=true;
+    saveEdit(cur).then(ok=>{ if(ok && ed===cur) markSave(`저장됨 · ${encName(cur.encoding)}`); });
   }, true);
   /* 다른 탭으로 가면 고친 글자를 저장한다 */
   document.addEventListener('click', e=>{ if(e.target.closest && e.target.closest('.tab') && ed && ed.dirty) flushEdit(); }, true);
+  /* 창을 떠날 때(다른 프로그램으로)도 바로 저장 — 1.2초를 기다리다 잃지 않게 */
+  window.addEventListener('blur', ()=>{ if(ed && ed.dirty) flushEdit(); });
   window.addEventListener('focus', recheck);
-  window.addEventListener('beforeunload', ()=>{ if(ed && ed.dirty) saveEdit(); });
 }

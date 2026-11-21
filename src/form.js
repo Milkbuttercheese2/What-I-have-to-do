@@ -135,7 +135,7 @@ function setReadonly(on){
   const p=$('formPanel');
   p.classList.toggle('fm-ro', on);
   p.querySelectorAll('input,textarea,select,button').forEach(el=>{
-    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·[문서]는 살려 둔다
+    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-clone'||el.id==='fm-book'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·[문서]는 살려 둔다
     el.disabled=on;
   });
   $('fm-save').style.display=on?'none':'';
@@ -145,6 +145,7 @@ function setReadonly(on){
      되돌리기는 toggleDone 하나만 거친다 — S.doneDirty 경로를 넓히지 않는다(설계 근간). */
   $('fm-finish').style.display=on?'none':'';
   $('fm-reopen').style.display=on?'':'none';
+  $('fm-clone').style.display=on?'':'none';
 }
 /* 지금 열린 양식이 읽기 전용(완료 업무)인가 — 파일 끌어다 놓기가 묻는다(filedrop.js) */
 export function formReadonly(){ return isOpen('formPanel') && $('formPanel').classList.contains('fm-ro'); }
@@ -237,8 +238,8 @@ function fillForm(pre){
 
   // 관련인 세트
   const cw=$('fm-contacts'); cw.innerHTML='';
-  const contacts = pre.contacts && pre.contacts.length ? pre.contacts : [{who:'',org:'',phone:'',email:''}];
-  contacts.forEach(c=>addContactRow(c));
+  /* v3.8.4 비어 있으면 줄을 만들지 않는다 — 묶음 제목 줄의 [＋ 추가]로 연다(양식이 한 화면에 들어오게) */
+  (pre.contacts||[]).forEach(c=>addContactRow(c));
 
   // 식별번호
   const iw=$('fm-ids'); iw.innerHTML='';
@@ -247,7 +248,6 @@ function fillForm(pre){
   // 세부 할일
   const sw=$('fm-subs'); sw.innerHTML='';
   (pre.subs||[]).forEach(s=>addFormSubRow(s.title,s.mid,false,s));
-  if(!(pre.subs||[]).length) addFormSubRow('','');
 
   // 파일 링크
   const fw=$('fm-files'); fw.innerHTML='';
@@ -502,6 +502,13 @@ export function initForm(){
   /* v3.7.0 업무 종료 — 연 채로 저장 + 완료 처리. 완료 체크(카드의 ○)와 같은 toggleDone 을 탄다. */
   $('fm-finish').addEventListener('click',()=>commitForm({finish:true}));
   /* v3.7.0 다시 진행 — 완료 업무(읽기 전용)를 진행 중으로 되돌리고 그 자리에서 고칠 수 있게 다시 연다 */
+  /* v3.8.4 끝난 업무와 같은 내용으로 새 업무 — 메모·관련인·식별정보·파일 링크·세부 제목(시각·완료 표시는 비움). 저장해야 생긴다 */
+  $('fm-clone').addEventListener('click',()=>{
+    const it=S.items.find(x=>x.id===editingId); if(!it) return;
+    const pre={memo:it.memo||'', contacts:(it.contacts||[]).map(c=>({...c})), ids:(it.ids||[]).map(x=>({...x})), files:(it.files||[]).slice(),
+      subs:(it.subs||[]).map(s=>({id:newId(), title:s.title, owner:s.owner||'', mid:'', done:false}))};
+    closeForm(); openForm(pre);
+  });
   $('fm-reopen').addEventListener('click',()=>{
     const it=editingId ? S.items.find(x=>x.id===editingId) : null;
     if(!it||!it.done) return;

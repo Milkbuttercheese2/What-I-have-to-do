@@ -201,9 +201,50 @@ function renderHidden(){
 export {doneGroupOf};
 const dgToggled=new Set();             // 기본값과 반대로 바꾼 묶음 키
 function groupOpen(key){ return groupOpenByDefault(key) !== dgToggled.has(key); }
+/* v3.8.4 오른쪽 달력 띠(소유자 지정 — 한 달 단위). 날 칸의 농도 = 그날 끝낸 건수, 누르면 그날 것만(다시 누르면 풀림).
+   보는 달(dcalY/dcalM)·고른 날(dcalDay)은 화면 상태일 뿐 저장하지 않는다. 주는 완료 묶음과 같이 월요일 시작. */
+let dcalY=null, dcalM=null, dcalDay=null;
+const dayStart = ms => { const d=new Date(ms); d.setHours(0,0,0,0); return d.getTime(); };
+export function doneCalHtml(list, y, m, selDay, now){
+  const counts=new Map();
+  for(const it of list){ if(!it.doneAt) continue; const k=dayStart(it.doneAt); counts.set(k, (counts.get(k)||0)+1); }
+  const first=new Date(y, m, 1), days=new Date(y, m+1, 0).getDate(), lead=(first.getDay()+6)%7, today=dayStart(now);
+  let total=0, cells='';
+  for(let i=0;i<lead;i++) cells+='<span class="dcal-d dcal-x"></span>';
+  for(let d=1; d<=days; d++){
+    const t=new Date(y, m, d).getTime(), n=counts.get(t)||0; total+=n;
+    const lv = n>=4 ? 3 : n>=2 ? 2 : n ? 1 : 0;
+    cells+=`<button type="button" class="dcal-d dcal-l${lv}${t===today?' dcal-today':''}${t===selDay?' on':''}" data-dcalday="${t}"${n?'':' disabled'} title="${m+1}.${d} · ${n}건"><span class="num">${d}</span>${n?`<b class="num">${n}</b>`:''}</button>`;
+  }
+  return `<div class="dcal-head"><button type="button" class="dcal-nav" data-dcalnav="-1" aria-label="앞 달">‹</button><b class="num">${y}년 ${m+1}월</b><span class="dcal-total num">${total}건</span><button type="button" class="dcal-nav" data-dcalnav="1" aria-label="다음 달">›</button></div>`
+    +`<div class="dcal-dow">${['월','화','수','목','금','토','일'].map(x=>`<span>${x}</span>`).join('')}</div><div class="dcal-grid">${cells}</div>`
+    +(selDay!=null ? `<button type="button" class="dcal-clear" data-dcalday="${selDay}">${new Date(selDay).getMonth()+1}.${new Date(selDay).getDate()} 만 보는 중 ×</button>` : '');
+}
+/* v3.8.4 완료 탭 — 늘 전체를 한 줄 목록으로 보여 준다(거르기·카드 보기 단추는 소유자 지정으로 뺐다) */
+/* 한 줄 = 종료시각 · 메모 첫 줄 · 식별정보 · 접수시각 · 마감시각 · 관련인 · 파일 (소유자 지정) */
+const DONE_COLS=['종료','메모','식별정보','접수','마감','관련인','파일'];
+const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
+  return `${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+const baseName = p => String(p||'').split(/[\\/]/).filter(Boolean).pop()||'';
+function doneRowHtml(it){
+  const memo=(it.memo||'').split(/\r?\n/)[0].trim();
+  const ids=(it.ids||[]).filter(x=>x.val).map(x=>`${x.kind?x.kind+' ':''}${x.val}`).join(', ');
+  const who=(it.contacts||[]).filter(c=>c.who||c.org).map(c=>[c.org,c.who].filter(Boolean).join(' ')).join(', ');
+  const fs=(it.files||[]).map(baseName).filter(Boolean), files=fs.length ? fs[0]+(fs.length>1?` 외 ${fs.length-1}`:'') : '';
+  const cell=(cls,v,tip)=>`<span class="${cls}"${v?` title="${escAttr(tip||v)}"`:''}>${esc(v)}</span>`;
+  return `<div class="drow" data-open="${it.id}">`
+    +cell('drow-c num', dAt(it.doneAt))
+    +`<span class="drow-memo">${memo ? linkifyAt(esc(memo), S.phonebook) : '<span class="drow-none">(메모 없음)</span>'}</span>`
+    +cell('drow-c', ids)+cell('drow-c num', dAt(it.f&&it.f.received))+cell('drow-c num', dAt(it.f&&it.f.due))
+    +cell('drow-c', who)+cell('drow-c', files, fs.join('\n'))+`</div>`;
+}
+const doneHeadRow = () => `<div class="drow drow-h">${DONE_COLS.map((c,i)=>`<span class="${i===1?'drow-memo':'drow-c'}">${c}</span>`).join('')}</div>`;
 export function renderDone(){
   const all=S.items.filter(onBoard).filter(it=>it.done);
-  const list=all.filter(it=>textMatch(it, dq)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
+  const matched=all.filter(it=>textMatch(it, dq));
+  if(dcalY==null){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
+  const dc=$('done-cal'); if(dc) dc.innerHTML=doneCalHtml(matched, dcalY, dcalM, dcalDay, Date.now());
+  const list=matched.filter(it=>dcalDay==null || (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
   $('done-count').textContent=all.length;
   const now=Date.now();
   const dm=$('done-metrics');
@@ -213,7 +254,7 @@ export function renderDone(){
     /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
     dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
-  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
+  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[];
   for(const it of list){
     const g=doneGroupOf(it.doneAt, now);
@@ -223,10 +264,10 @@ export function renderDone(){
   }
   groups.sort((a,b)=>b.order-a.order);
   $('col-done').innerHTML=groups.map(g=>{
-    const open = dq ? true : groupOpen(g.key);
+    const open = (dq || dcalDay!=null) ? true : groupOpen(g.key);
     return `<section class="done-group${open?'':' dg-closed'}" data-group="${g.key}">
       <div class="dg-head" data-dgtoggle="${g.key}" role="button" aria-expanded="${open}"><span class="dg-caret">${open?'▾':'▸'}</span><span class="dg-label">${esc(g.label)}</span><span class="count num">${g.items.length}</span></div>
-      ${open?`<div class="cards dg-cards">${g.items.map(it=>cardHtml(it,'done')).join('')}</div>`:''}
+      ${open ? `<div class="dg-rows">${doneHeadRow()}${g.items.map(doneRowHtml).join('')}</div>` : ''}
     </section>`;
   }).join('');
 }
@@ -316,13 +357,19 @@ function initMergeDrag(){
 }
 
 export function initRender(){
+  const dcEl=$('done-cal');
+  if(dcEl) dcEl.addEventListener('click',e=>{
+    const nav=e.target.closest('[data-dcalnav]');
+    if(nav){ const d=new Date(dcalY, dcalM+Number(nav.dataset.dcalnav), 1); dcalY=d.getFullYear(); dcalM=d.getMonth(); renderDone(); return; }
+    const day=e.target.closest('[data-dcalday]');
+    if(day){ const t=Number(day.dataset.dcalday); dcalDay = dcalDay===t ? null : t; renderDone(); }
+  });
   /* 이 모듈이 소유한 화면 둘을 등록한다 (탭 배선은 main.js 가 아니라 여기).
      보드 탭은 보드 모드에 따라 4열/5열 중 하나만 보이고, 검색줄·입력칸이 함께 붙는다. */
   registerView({key:'board', els:[
     {id:'view-board',  display:'grid', when:()=>placeMode()==='time'},
     {id:'view-board5', display:'grid', when:()=>placeMode()==='owner'},
     {id:'strip',       display:'flex'},
-    {id:'capture',     display:'block'},
   ]});
   registerView({key:'done', els:[{id:'view-done'}], render:renderDone});
   /* 카드 상호작용 */

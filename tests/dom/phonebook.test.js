@@ -122,6 +122,7 @@ test('양식 관련인 칸: 이름 일부만 쳐도 드롭다운 → 클릭 시 
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   openForm({});
+  $('fm-contactadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const row=$('fm-contacts').querySelector('.contact-row');
   const who=row.querySelector('.c-who');
   who.value='김철'; who.focus();
@@ -194,6 +195,7 @@ test('양식 저장 시 관련인 → 전화번호부 자동 흡수 (3칸 완비
   adoptPhonebook([{id:11, who:'이영희', org:'세무과', phone:''}]);   // 번호 없는 기존 항목 (보강 대상)
   openForm({});
   $('fm-memo').value='새 업무';
+  $('fm-contactadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const row=$('fm-contacts').querySelector('.contact-row');
   row.querySelector('.c-org').value='행정과'; row.querySelector('.c-who').value='김철수'; row.querySelector('.c-phone').value='010-1';
   // 둘째 행: 이영희(번호 보강) / 셋째 행: 이름만(자동 흡수 제외)
@@ -293,6 +295,7 @@ test('세부 할 일 담당칸 자동완성: 2글자부터 후보, 선택하면 
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   openForm({});
+  $('fm-subadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const own=$('fm-subs').querySelector('.sub-owner');
   assert.ok(own, '담당 칸이 있어야 한다');
   const drop=env.document.getElementById('atDrop');
@@ -313,4 +316,26 @@ test('세부 할 일 담당칸 자동완성: 2글자부터 후보, 선택하면 
   assert.equal(row.querySelector('.c-org').value, '행정과');
   assert.equal(row.querySelector('.c-phone').value, '010-1234-5678');
   assert.equal(drop.style.display, 'none');
+});
+
+test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 사람 정보 + 엮인 업무(진행 먼저) · ×로 닫기', async () => {
+  const {renderPhonebook} = await import('../../src/phonebook.js');
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1', email:'k@x.kr'}, {id:12, who:'이영희', org:'세무과', phone:'010-2'}]);
+  const c={who:'김철수', org:'행정과', phone:'010-1'};
+  S.items=[{id:1, memo:'끝난 일', contacts:[c], done:true, doneAt:5}, {id:2, memo:'하는 일\n둘째', contacts:[c], done:false}, {id:3, memo:'남의 일', contacts:[{who:'이영희',org:'세무과',phone:'010-2'}], done:false}];
+  renderPhonebook();
+  const side=env.document.getElementById('pb-side');
+  assert.ok(!side.classList.contains('on'), '고르기 전엔 오른쪽 칸이 없다');
+  $('pb-list').querySelector('[data-pbid="11"] .pb-who').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
+  assert.ok(side.classList.contains('on'));
+  assert.ok(!env.document.getElementById('relModal').classList.contains('on'), '팝업은 뜨지 않는다');
+  assert.match(side.textContent, /김철수/); assert.match(side.textContent, /010-1 · k@x\.kr/); assert.match(side.textContent, /진행 1 · 완료 1/);
+  assert.deepEqual([...side.querySelectorAll('.rel-hit')].map(x=>x.dataset.open), ['2','1'], '진행 먼저, 3칸이 같은 사람만');
+  assert.ok($('pb-list').querySelector('[data-pbid="11"]').classList.contains('sel'));
+  /* 업무가 바뀌면 칸도 따라 바뀐다 */
+  S.items[1].done=true; S.items[1].doneAt=9; renderPhonebook();
+  assert.match(side.textContent, /진행 0 · 완료 2/);
+  env.document.getElementById('pb-side-x').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
+  assert.ok(!side.classList.contains('on'));
 });

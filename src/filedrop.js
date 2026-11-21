@@ -50,7 +50,7 @@ export function dropTarget(el){
   /* v3.8.1 문서 탭의 폴더(트리의 폴더 줄 · 가운데 폴더 보기) 위 → 그 폴더 안으로 복사 */
   const dk=dropFolderAt(el);
   if(dk) return {kind:'docdir', key:dk.key, label:dk.label, row:dk.row};
-  const card=el&&el.closest&&el.closest('.card[data-open]:not(.drag-ghost)');
+  const card=el&&el.closest&&el.closest('.card[data-open]:not(.drag-ghost), .drow[data-open]');   // .drow = 완료 탭의 한 줄(v3.8.4)
   if(card){
     const it=S.items.find(x=>String(x.id)===card.dataset.open);
     if(!it) return {kind:'new'};

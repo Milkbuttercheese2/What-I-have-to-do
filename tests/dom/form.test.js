@@ -148,6 +148,7 @@ test('F3: 오입력(시각만 입력)은 저장 차단 — alert + 패널 유지
 test('세부 제목에서 Enter → 마지막 행이면 새 행 추가', async () => {
   await env.resetS(); S.loaded = true;
   openForm({});
+  $('fm-subadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const rows0 = $('fm-subs').querySelectorAll('.fsub-row').length;
   const title = $('fm-subs').querySelector('.fsub-title');
   title.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
@@ -159,6 +160,7 @@ test('연락처는 저장 시 표준 하이픈 표기로 — 인식 못 하는 �
   await env.resetS(); S.loaded = true;
   openForm({});
   $('fm-memo').value = '전화 입력 건';
+  $('fm-contactadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const ph = $('fm-contacts').querySelector('.c-phone');
   ph.value = '01099998888';
   $('fm-save').click();
@@ -167,6 +169,7 @@ test('연락처는 저장 시 표준 하이픈 표기로 — 인식 못 하는 �
   // 내선 등 애매한 표기는 여전히 원문 유지 (보수적 파서 — 유실 없음)
   openForm({});
   $('fm-memo').value = '내선 건';
+  $('fm-contactadd').click();
   $('fm-contacts').querySelector('.c-phone').value = '02-123-4567 내선302';
   $('fm-save').click();
   await env.flush();
@@ -188,6 +191,7 @@ test('관련인 행에 드래그 핸들 존재 — DOM 순서가 저장 순서 (
 test('관련인: Enter로 다음 행 추가/이동, IME 조합 중은 무시 (v2.5.3)', async () => {
   await env.resetS(); S.loaded = true;
   openForm({});
+  $('fm-contactadd').click();   // v3.8.4 비어 있는 묶음엔 줄이 없다 — [＋ 추가]로 연다
   const rows0 = $('fm-contacts').querySelectorAll('.contact-row').length;   // 기본 1행
   const phone = $('fm-contacts').querySelector('.c-phone');
   phone.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Enter', bubbles:true, cancelable:true}));

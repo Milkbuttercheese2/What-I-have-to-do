@@ -30,12 +30,12 @@ test('각 모듈이 init*() 에서 자기 화면을 등록한다 — main.js 목
 
   goto('board');
   assert.ok(shown('view-board'), '보드 탭: 4열이 보인다');
-  assert.ok(shown('strip') && shown('capture'), '검색줄·입력칸이 보드에 딸려 온다');
+  assert.ok(shown('strip'), '요약 줄이 보드에 딸려 온다');
   assert.ok(!cls('view-cal') && !cls('view-done') && !cls('view-phone'));
 
   goto('cal');
   assert.ok(cls('view-cal'));
-  assert.ok(!shown('view-board') && !shown('strip') && !shown('capture'), '보드에 딸린 것들이 함께 숨는다');
+  assert.ok(!shown('view-board') && !shown('strip'), '보드에 딸린 것들이 함께 숨는다');
 
   goto('done');
   assert.ok(cls('view-done') && !cls('view-cal'));
