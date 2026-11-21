@@ -525,6 +525,8 @@ export function renderNote(){
   const list=folderItems(S.items, folderPaths(nf.i, nf.rel), Array.isArray(here) ? here.filter(e=>e.dir).map(e=>e.name.toLowerCase()) : []);
   $('dn-count').textContent = list.length ? String(list.length) : '';
   $('view-docs').classList.toggle('no-note', !list.length);       // 메모가 없으면 오른쪽 칸을 접어 가운데를 넓힌다
+  $('view-docs').classList.toggle('note-fold', !!list.length && !!S.settings.docNoteFold);   // v3.8.9: 메모가 있어도 사용자가 접어 둘 수 있다(좁은 띠만 남김)
+  if($('dn-rail-n')) $('dn-rail-n').textContent = list.length ? String(list.length) : '';
   $('dn-list').innerHTML = list.length ? list.map(it=>cardHtml(it, it.done ? 'done' : placeOf(it))).join('') : '<div class="dv-empty">이 폴더의 메모 없음</div>';
 }
 /* 업무 링크에 쓸 그 항목의 절대 경로 — 사용자가 고른 폴더 표기(매핑 드라이브 등) 기준, '\' 구분 */
@@ -1005,6 +1007,11 @@ async function revealPath(i, rel){
   return {rel:cur, dir};
 }
 
+/* 오른쪽 메모 칸 접기/펼치기 — settings.docNoteFold 에 기억(설정 가방 키라 마이그레이션 없음) */
+export function setNoteFold(on){
+  S.settings.docNoteFold = !!on;
+  renderNote(); saveSettings();
+}
 export function initDocs(){
   registerView({key:'docs', els:[{id:'view-docs'}], render:renderDocs});
   $('dc-root').addEventListener('click', addRoot);
@@ -1013,6 +1020,8 @@ export function initDocs(){
   $('dn-add').addEventListener('click', addNote);
   initSplit();
   $('dn-add2').addEventListener('click', addNote);     // 메모가 없어 오른쪽 칸이 사라졌을 때 쓰는 같은 단추(위 도구줄)
+  $('dn-fold').addEventListener('click', ()=>setNoteFold(true));
+  $('dn-unfold').addEventListener('click', ()=>setNoteFold(false));
   $('dc-search').addEventListener('input', onSearchInput);
   /* 찾기 칸을 누르면 색인을 미리(기다리지 않는다) — 공유 폴더는 처음 훑는 데 오래 걸려, 글자를 치는 동안 만들어 둔다 */
   document.addEventListener('focusin', e=>{

@@ -230,11 +230,11 @@
   <div class="done-head">
     <h2>문서</h2>
     <span class="dc-path" id="dc-path"></span>
-    <div class="done-tools"><input class="s-search" id="dc-search" placeholder="문서 찾기" autocomplete="off" spellcheck="false" maxlength="100"><button type="button" class="btn btn-tool" id="dn-add2" title="이 폴더 링크가 든 새 업무">＋ 메모</button><button type="button" class="btn btn-tool" id="dc-root">＋ 폴더 추가</button></div>
+    <div class="done-tools"><input class="s-search" id="dc-search" placeholder="문서 찾기" autocomplete="off" spellcheck="false" maxlength="100"><button type="button" class="btn btn-tool" id="dn-add2" title="이 폴더 링크가 든 새 업무">＋ 메모</button><button type="button" class="btn btn-tool" id="dc-root">＋ 폴더 등록</button></div>
   </div>
   <div class="dc-none">
     <div class="dc-none-t">문서 폴더 미지정</div>
-    <button type="button" class="btn btn-ok" id="dc-root-empty">＋ 폴더 추가</button>
+    <button type="button" class="btn btn-ok" id="dc-root-empty">＋ 폴더 등록</button>
   </div>
   <div class="dc-layout">
     <aside class="dc-tree" id="dt-tree"></aside>
@@ -242,7 +242,9 @@
     <div class="dc-view" id="dv-body"></div>
     <aside class="dc-note">
       <div class="dn-head"><span class="dt-ico ico-dir"></span><b id="dn-title"></b><span class="dn-at num" id="dn-count"></span>
-        <button type="button" class="btn fsub-add dn-add" id="dn-add">＋ 메모</button></div>
+        <button type="button" class="btn fsub-add dn-add" id="dn-add">＋ 메모</button>
+        <button type="button" class="dn-fold" id="dn-fold" title="메모 칸 접기" aria-label="메모 칸 접기">›</button></div>
+      <button type="button" class="dn-rail" id="dn-unfold" title="메모 칸 펼치기" aria-label="메모 칸 펼치기"><span class="dn-rail-a">‹</span><span class="dn-rail-n num" id="dn-rail-n"></span><span class="dn-rail-t">메모</span></button>
       <div class="cards dn-list" id="dn-list"></div>
     </aside>
   </div>

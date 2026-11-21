@@ -141,11 +141,19 @@ export async function renderPdf(box, bytes){
   try{ const v=(await doc.getPage(1)).getViewport({scale:1}); ratio=v.height/v.width; }catch{}
   const pages=[];
   for(let n=1;n<=doc.numPages;n++){
-    const c=document.createElement('canvas'); c.className='dv-pdf-pg'; c.dataset.pg=String(n); c.width=1; c.height=1; wrap.appendChild(c);
-    pages.push({n, c, pg:null, ratio, drawn:0, busy:false, on:false});
+    /* v3.8.9: 쪽 = 그림(canvas) + 그 위 투명한 글자 층(.textLayer) — 글자를 끌어 골라 복사할 수 있다 */
+    const w=document.createElement('div'); w.className='dv-pdf-pg'; w.dataset.pg=String(n);
+    const c=document.createElement('canvas'); c.width=1; c.height=1; w.appendChild(c); wrap.appendChild(w);
+    pages.push({n, w, c, pg:null, ratio, pw:0, tl:null, drawn:0, busy:false, on:false});
   }
   const fitW=()=>Math.max(200, wrap.clientWidth-24);
-  const size=p=>{ const w=fitW()*zoom; p.c.style.width=w+'px'; p.c.style.height=(w*p.ratio)+'px'; };
+  const size=p=>{ const w=fitW()*zoom; p.w.style.width=w+'px'; p.w.style.height=(w*p.ratio)+'px'; if(p.pw) p.w.style.setProperty('--scale-factor', String(w/p.pw)); };
+  const text=p=>{
+    if(p.tl || !pdfLib.TextLayer) return;
+    const d=document.createElement('div'); d.className='textLayer'; p.w.appendChild(d);
+    p.tl=new pdfLib.TextLayer({textContentSource:p.pg.streamTextContent(), container:d, viewport:p.pg.getViewport({scale:1})});
+    p.tl.render().catch(e=>console.warn('pdf 글자 층 실패', e));
+  };
   const layout=()=>{ for(const p of pages){ size(p); p.drawn=0; } };
   const draw=async p=>{
     const key=Math.min(PDF_MAX_PX, Math.round(fitW()*zoom*(window.devicePixelRatio||1)));
@@ -153,7 +161,7 @@ export async function renderPdf(box, bytes){
     p.busy=true;
     try{
       if(!p.pg) p.pg=await doc.getPage(p.n);
-      const v1=p.pg.getViewport({scale:1}); p.ratio=v1.height/v1.width; size(p);
+      const v1=p.pg.getViewport({scale:1}); p.ratio=v1.height/v1.width; p.pw=v1.width; size(p); text(p);
       const vp=p.pg.getViewport({scale:key/v1.width});
       if(!dead && p.on){
         p.c.width=Math.floor(vp.width); p.c.height=Math.floor(vp.height);
@@ -166,7 +174,7 @@ export async function renderPdf(box, bytes){
   };
   const drop=p=>{ if(p.busy) return; p.c.width=1; p.c.height=1; p.drawn=0; };
   const io=new IntersectionObserver(es=>{ for(const e of es){ const p=pages[Number(e.target.dataset.pg)-1]; if(!p) continue; p.on=e.isIntersecting; if(p.on) draw(p); else drop(p); } }, {root:box.closest('.dv-content')||null, rootMargin:'800px 0px'});
-  layout(); pages.forEach(p=>io.observe(p.c));
+  layout(); pages.forEach(p=>io.observe(p.w));
   const redraw=()=>{ layout(); pages.forEach(p=>{ if(p.on) draw(p); }); };
   const ro=new ResizeObserver(()=>{ if(Math.abs((ro.w||0)-wrap.clientWidth)>4){ ro.w=wrap.clientWidth; redraw(); } }); ro.w=wrap.clientWidth; ro.observe(wrap);
   box.querySelector('.dv-pdf-bar').addEventListener('click', e=>{
@@ -196,18 +204,62 @@ export function loadRhwp(){
   return rhwpP;
 }
 const HWP_MAX_PAGES=300;
+/* v3.8.9 한글 쪽 글자 층 — rhwp SVG 의 <text>(글자마다 x·y·크기)를 줄로 묶는다(순수). 같은 높이·같은 크기로 이어지면 한 줄,
+   글자 사이가 크게 벌어지면(표의 다른 칸) 새 덩어리. 사이가 조금 벌어지면 띄어쓰기를 넣는다.
+   반환: {w, h, runs:[{x, y, size, text, end}]} — end = 마지막 글자의 오른쪽 끝(추정) */
+export function hwpTextRuns(svg){
+  const d=new DOMParser().parseFromString(String(svg||''), 'image/svg+xml');
+  const root=d.documentElement; if(!root || root.localName!=='svg') return {w:0, h:0, runs:[]};
+  const vb=String(root.getAttribute('viewBox')||'').split(/[\s,]+/).map(Number);
+  const W=vb.length===4&&vb[2]>0 ? vb[2] : Number(root.getAttribute('width'))||0, H=vb.length===4&&vb[3]>0 ? vb[3] : Number(root.getAttribute('height'))||0;
+  const runs=[]; let cur=null;
+  for(const t of root.getElementsByTagName('text')){
+    let skip=false; for(let a=t; a && a!==root; a=a.parentNode) if(a.getAttribute && a.getAttribute('transform')) { skip=true; break; }
+    if(skip) continue;                                   // 돌리거나 기울인 글자는 자리를 맞출 수 없어 뺀다
+    const s=t.textContent; if(!s) continue;
+    const x=Number(t.getAttribute('x')), y=Number(t.getAttribute('y')), size=Number(t.getAttribute('font-size'))||10;
+    if(!isFinite(x)||!isFinite(y)) continue;
+    const cw=size*[...s].reduce((n,ch)=>n+(ch.charCodeAt(0)>0x2e80?1:0.55),0);
+    if(cur && Math.abs(cur.y-y)<0.5 && Math.abs(cur.size-size)<0.5 && x>=cur.end-size*0.3 && x-cur.end<size*2){
+      if(x-cur.end>size*0.25) cur.text+=' ';
+      cur.text+=s; cur.end=Math.max(cur.end, x+cw);
+    }else{ cur={x, y, size, text:s, end:x+cw}; runs.push(cur); }
+  }
+  return {w:W, h:H, runs};
+}
+function hwpTextLayer(svg){
+  const {w, h, runs}=hwpTextRuns(svg); if(!w||!h||!runs.length) return null;
+  const d=document.createElement('div'); d.className='dv-hwp-tl'; d.style.width=w+'px'; d.style.height=h+'px';
+  for(const r of runs){
+    const s=document.createElement('span'); s.textContent=r.text;
+    s.style.left=r.x+'px'; s.style.top=(r.y-r.size*0.88)+'px'; s.style.fontSize=r.size+'px'; s.dataset.w=String(r.end-r.x);
+    d.appendChild(s);
+  }
+  return d;
+}
+/* 글자 층의 각 줄을 그림 속 글자 폭에 맞춰 가로로 늘이고 줄인다(웹뷰 글꼴로 잰 폭 → 문서 폭) — 고를 때 자리가 맞게 */
+function fitHwpLayer(d){
+  for(const s of d.children){ const want=Number(s.dataset.w), got=s.offsetWidth; if(want>0 && got>0) s.style.transform=`scaleX(${(want/got).toFixed(4)})`; }
+}
 /* 첫 쪽은 바로(실패하면 예외 → 부르는 쪽이 글자·표 보기로), 나머지는 쉬어 가며 그려 화면을 멈추지 않는다. 돌려주는 함수 = 정리 */
 export async function renderHwp(box, bytes, rhwp){
   const doc=new rhwp.HwpDocument(bytes);
-  const urls=[]; let dead=false;
-  const cleanup=()=>{ dead=true; urls.forEach(u=>URL.revokeObjectURL(u)); urls.length=0; try{ doc.free(); }catch{} };
+  const urls=[]; let dead=false, cleanupRO=null;
+  const cleanup=()=>{ dead=true; if(cleanupRO) cleanupRO(); urls.forEach(u=>URL.revokeObjectURL(u)); urls.length=0; try{ doc.free(); }catch{} };
   try{
     const n=doc.pageCount(); if(!(n>0)) throw new Error('쪽이 없습니다');
     const total=Math.min(n, HWP_MAX_PAGES);
     box.innerHTML=`<div class="dv-hwp-bar num">${n}쪽</div><div class="dv-hwp"></div>`+(n>HWP_MAX_PAGES?`<div class="dv-cap">앞 ${HWP_MAX_PAGES}쪽까지만 — 나머지는 [한글에서 열기]</div>`:'');
     const list=box.querySelector('.dv-hwp');
-    const page=i=>{ const u=URL.createObjectURL(new Blob([doc.renderPageSvg(i)], {type:'image/svg+xml'})); urls.push(u);
-      const im=document.createElement('img'); im.className='dv-hwp-pg'; im.alt=`${i+1}쪽`; im.src=u; list.appendChild(im); };
+    const fit=()=>{ for(const pg of list.children){ const tl=pg.querySelector('.dv-hwp-tl'), im=pg.querySelector('img'); if(tl&&im&&im.clientWidth) tl.style.transform=`scale(${im.clientWidth/parseFloat(tl.style.width)})`; } };
+    const page=i=>{ const svg=doc.renderPageSvg(i); const u=URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'})); urls.push(u);
+      const pg=document.createElement('div'); pg.className='dv-hwp-pg';
+      const im=document.createElement('img'); im.alt=`${i+1}쪽`; im.src=u; im.draggable=false; pg.appendChild(im);
+      let tl=null; try{ tl=hwpTextLayer(svg); }catch(e){ console.warn('한글 글자 층 실패', i+1, e); }
+      if(tl){ pg.appendChild(tl); im.addEventListener('load', fit, {once:true}); }
+      list.appendChild(pg); if(tl) fitHwpLayer(tl); };
+    const ro=typeof ResizeObserver==='function' ? new ResizeObserver(fit) : null; if(ro) ro.observe(list);
+    cleanupRO=()=>{ if(ro) ro.disconnect(); };
     page(0);
     (async()=>{ for(let i=1;i<total && !dead;i++){ await new Promise(r=>setTimeout(r, 0)); if(dead || !list.isConnected) return; try{ page(i); }catch(e){ console.warn('rhwp 쪽 그리기 실패', i+1, e); return; } } })();
     return cleanup;
