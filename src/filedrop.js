@@ -96,6 +96,7 @@ function showHl(target, el){
   clearHl();
   const v=$('dropVeil'), c=$('dropCard'); if(!v||!c) return;
   v.classList.add('on');
+  v.classList.toggle('framed', target.kind!=='form' && target.kind!=='card' && target.kind!=='docdir');   // 전체 테두리는 빈 곳·막힘일 때만
   if(target.kind==='form'){ const w=document.querySelector('.fm-files-wrap'); if(w) w.classList.add('drop-on'); c.textContent='놓으면 이 양식의 링크 칸에 추가합니다'; }
   else if(target.kind==='card'){ const card=el&&el.closest('.card[data-open]'); if(card) card.classList.add('drop-on'); c.textContent='놓으면 이 업무에 링크로 연결합니다'; }
   else if(target.kind==='blocked'){ c.textContent=target.why; }
