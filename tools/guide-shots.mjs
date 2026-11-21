@@ -216,13 +216,13 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
   await page.close();
   console.log('phonebook.png');
 }
-/* ---- 12. related.png : @태그·행 클릭 → 관련 업무 팝업 ---------------- */
+/* ---- 12. related.png : 행 클릭 → 오른쪽 칸에 엮인 업무 ----------------
+   v3.8.4 부터 전화번호부 행 클릭은 팝업(#relModal) 대신 오른쪽 칸(#pb-side)을 연다 — 팝업은 양식 메모 @태그 전용. */
 {
   const page = await open({width: 1180, height: 700});
   await page.click('.tab[data-view="phone"]'); await page.waitForTimeout(400);
-  await page.click('.pb-item'); await page.waitForTimeout(500);          // 행 클릭 = 관련 업무
-  const modal = await page.$('#relModal .modal');
-  if(modal) await modal.screenshot({path: path.join(OUT,'related.png')});
+  await page.click('.pb-item'); await page.waitForTimeout(500);          // 행 클릭 = 오른쪽 칸
+  await shotPage(page, 'related.png', {x:0, y:0, width:1180, height:520});
   await page.close();
   console.log('related.png');
 }
