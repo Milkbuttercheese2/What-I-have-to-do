@@ -24,7 +24,7 @@ import {S} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, appAlert, appConfirm, showToast} from './dom-utils.js';
 import {registerView, showView} from './views.js';
-import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf} from './docs-view.js';
+import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp} from './docs-view.js';
 import {cardHtml, persist} from './render.js';
 import {placeOf} from './placement.js';
 import {openForm} from './form.js';
@@ -177,10 +177,9 @@ async function doRenderViewer(){
       box().innerHTML=`<div class="dv-ro">압축 파일 안 ${list.length}개</div><div class="dv-flist">${list.slice(0,2000).map(f=>`<div class="dv-frow dv-zrow"><span class="dt-ico ico-${docKind(f.name)}"></span><span class="dv-fname" title="${escAttr(f.name)}">${esc(f.name)}</span><span class="dv-meta num">${fmtSize(f.size)}</span></div>`).join('')}</div>`+(list.length>2000?'<div class="dv-cap">2,000개까지만</div>':'');
       return;
     }
-    /* 한글(HWP·HWPX)은 늘 앱이 직접 읽어 보여 준다(글자·표 + 문서에 든 첫 쪽 그림) — v3.8.5 소유자 결정.
-       한컴 탐색기 미리 보기 처리기는 한컴 판마다 다르게 굴고(2022 는 '열렸다'고 답하고도 아무것도 그리지 않아 빈 화면),
-       그렸는지 앱이 알 수 없어 일관되게 쓸 수 없다. 원래 모양 그대로는 [한글에서 열기]. */
-    if(kind==='hwpx' || kind==='hwp') return await showFallback(i, rel, kind, seq);
+    /* 한글(HWP·HWPX)은 늘 앱이 직접 그린다 — v3.8.7 부터 rhwp 로 쪽 모양 그대로, 실패하면 글자·표 보기(v3.8.5).
+       한컴 탐색기 미리 보기 처리기는 판마다 다르게 굴고(2022 는 '열렸다'고 답하고도 빈 화면) 그렸는지 알 수 없어 쓰지 않는다. */
+    if(kind==='hwpx' || kind==='hwp') return await showHwp(i, rel, kind, seq);
     /* 그 밖: 탐색기 미리 보기 → 대체본 → 글자로 읽히면 편집 → 정보 */
     if(await tryNative(i, rel, seq)) return;
     if(!alive()) return;
@@ -199,8 +198,22 @@ function infoHtml(kind, rel, e, why){
   return `<div class="dv-info"><span class="dt-ico ico-${kind}"></span><div>${esc(why)}</div><div class="dv-meta">${esc(extOf(rel).toUpperCase()||'파일')}${e?` · ${fmtSize(e.size)}`:''}</div>`
     +`<button type="button" class="btn btn-ok" data-dopen="${escAttr(nodeKey(sel.i, rel))}">${openLabel(kind)}</button></div>`;
 }
-async function showFallback(i, rel, kind, seq){
+async function showHwp(i, rel, kind, seq){
   const bytes=new Uint8Array(await invoke('doc_read', {root:i, rel}));
+  if(seq!==viewSeq || !box()) return;
+  try{
+    box().innerHTML='<div class="dv-empty">쪽을 그리는 중</div>';
+    const m=await loadRhwp();
+    if(seq!==viewSeq || !box()) return;
+    const c=await renderHwp(box(), bytes, m);
+    if(seq===viewSeq && box()) viewCleanup=c; else c();
+    return;
+  }catch(err){ console.warn('rhwp 로 그리지 못해 글자·표 보기로', err); }
+  if(seq!==viewSeq || !box()) return;
+  return showFallback(i, rel, kind, seq, bytes);
+}
+async function showFallback(i, rel, kind, seq, pre){
+  const bytes=pre || new Uint8Array(await invoke('doc_read', {root:i, rel}));
   if(seq!==viewSeq || !box()) return;
   try{
     if(kind==='xlsx'){

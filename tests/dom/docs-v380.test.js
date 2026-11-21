@@ -12,7 +12,7 @@ const XLSX = require('../../src/vendor/xlsx.full.min.js');
 env.window.XLSX = XLSX; globalThis.XLSX = XLSX;
 if(!globalThis.DOMParser) globalThis.DOMParser = env.window.DOMParser;
 const {S} = await import('../../src/state.js');
-const {docKind, openLabel, unzip, hwpxHtml, pptxHtml, xlsxBook} = await import('../../src/docs-view.js');
+const {docKind, openLabel, unzip, hwpxHtml, pptxHtml, xlsxBook, _setRhwpLoader} = await import('../../src/docs-view.js');
 const {initDocs, renderDocs, docTarget, dropOk, resolveRel} = await import('../../src/docs.js');
 const {showView} = await import('../../src/views.js');
 initDocs(); (await import('../../src/dom-utils.js')).initToast();
@@ -163,8 +163,9 @@ test('문서 탭: 폴더 미지정 → 안내 · 지정되면 트리 · XLSX(처
   assert.deepEqual(memos(), [], '폴더 바로 안만 — 깊은 곳 업무는 그 폴더에서');
 });
 
-test('v3.8.5 한글(HWP·HWPX)은 늘 앱이 읽어 보여 준다 — 한컴 탐색기 미리 보기 처리기가 있어도 부르지 않는다', async () => {
+test('v3.8.5 한글(HWP·HWPX)은 늘 앱이 읽어 보여 준다 — 한컴 탐색기 미리 보기 처리기가 있어도 부르지 않는다 · rhwp 가 실패하면 글자·표 보기', async () => {
   await env.resetS(); S.loaded = true;
+  _setRhwpLoader(()=>Promise.reject(new Error('rhwp 없음')));
   S.settings.docRoots=['H:\\한글'];
   fakeFs(()=>({'0:':[{name:'a.hwpx',rel:'a.hwpx',dir:false,size:1,mtime:1}]}));
   const bytes=zip({'Contents/section0.xml': `<hs:sec ${HP}>${p('한글 본문')}</hs:sec>`});
@@ -176,6 +177,37 @@ test('v3.8.5 한글(HWP·HWPX)은 늘 앱이 읽어 보여 준다 — 한컴 탐
   assert.equal(env.invokeCalls.filter(c=>c.cmd==='doc_preview_open').length, n0, '탐색기 미리 보기를 부르지 않는다');
   assert.match($('dv-body').textContent, /한글 본문/);
   assert.ok($('dv-body').querySelector('[data-dopen]'), '[한글에서 열기] 는 그대로');
+});
+
+test('v3.8.7 한글은 rhwp 로 쪽 모양 그대로 — 쪽마다 <img>(SVG 는 화면에 직접 넣지 않음) · 다른 파일로 가면 정리(free)', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['R:\\rhwp'];
+  fakeFs(()=>({'0:':[{name:'r.hwpx',rel:'r.hwpx',dir:false,size:1,mtime:1},{name:'b.txt',rel:'b.txt',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_read', ()=>new Uint8Array([9,9]).buffer);
+  env.onInvoke('doc_read_text', ()=>({text:'글', encoding:'utf-8', mtime:1}));
+  const W=env.window.URL; let made=0, revoked=0;
+  const keep={c:W.createObjectURL, r:W.revokeObjectURL, gc:globalThis.URL.createObjectURL, gr:globalThis.URL.revokeObjectURL};
+  W.createObjectURL=globalThis.URL.createObjectURL=()=>`blob:pg${++made}`; W.revokeObjectURL=globalThis.URL.revokeObjectURL=()=>{ revoked++; };
+  let freed=0, got=null;
+  class HwpDocument{ constructor(b){ got=b; } pageCount(){ return 3; } renderPageSvg(i){ return `<svg><text>${i+1}</text></svg>`; } free(){ freed++; } }
+  _setRhwpLoader(()=>Promise.resolve({HwpDocument}));
+  try{
+    await openDocs();
+    click(row('0:r.hwpx')); await env.flush(12);
+    for(let k=0;k<4;k++){ mock.timers.tick(1); await env.flush(3); }
+    assert.deepEqual([...got], [9,9], '파일 바이트를 그대로 넘긴다');
+    const imgs=[...$('dv-body').querySelectorAll('img.dv-hwp-pg')];
+    assert.equal(imgs.length, 3, '쪽마다 그림 하나');
+    assert.match(imgs[0].getAttribute('src'), /^blob:/);
+    assert.ok(!$('dv-body').querySelector('.dv-hwp svg'), 'SVG 를 화면에 직접 넣지 않는다');
+    assert.match($('dv-body').textContent, /3쪽/);
+    click(row('0:b.txt')); await env.flush(12);
+    assert.equal(freed, 1, '다른 파일로 가면 문서를 놓아 준다');
+    assert.equal(revoked, 3, '쪽 그림 주소도 놓아 준다');
+  } finally {
+    W.createObjectURL=keep.c; W.revokeObjectURL=keep.r; globalThis.URL.createObjectURL=keep.gc; globalThis.URL.revokeObjectURL=keep.gr;
+    _setRhwpLoader(()=>Promise.reject(new Error('rhwp 없음')));
+  }
 });
 
 test('탐색기 미리 보기: 처리기가 있으면 자리(물리 px)를 넘겨 띄우고, 다른 파일로 가면 앞 창을 닫는다', async () => {
