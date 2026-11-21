@@ -872,20 +872,22 @@ fn cp949_decode(b: &[u8]) -> Option<String> {
 #[cfg(windows)]
 fn cp949_encode(text: &str) -> Result<Vec<u8>, String> {
     use windows::core::BOOL;
-    use windows::Win32::Globalization::WideCharToMultiByte;
+    use windows::Win32::Globalization::{WideCharToMultiByte, WC_NO_BEST_FIT_CHARS};
     let w: Vec<u16> = text.encode_utf16().collect();
     if w.is_empty() {
         return Ok(Vec::new());
     }
     unsafe {
         let mut used = BOOL(0);
-        let n = WideCharToMultiByte(949, 0, &w, None, None, Some(&mut used));
+        /* WC_NO_BEST_FIT_CHARS: 없는 글자를 '비슷한 글자'(é→e)로 바꾸지 말고 기본 글자로 — 그래야 아래 used 가 서서 거부된다.
+           이 깃발이 없으면 글자가 조용히 바뀐 채 저장됐다 */
+        let n = WideCharToMultiByte(949, WC_NO_BEST_FIT_CHARS, &w, None, None, Some(&mut used));
         if n <= 0 {
             return Err("EUC-KR 로 바꾸지 못했습니다".into());
         }
         let mut out = vec![0u8; n as usize];
         used = BOOL(0);
-        let m = WideCharToMultiByte(949, 0, &w, Some(&mut out), None, Some(&mut used));
+        let m = WideCharToMultiByte(949, WC_NO_BEST_FIT_CHARS, &w, Some(&mut out), None, Some(&mut used));
         if m <= 0 {
             return Err("EUC-KR 로 바꾸지 못했습니다".into());
         }
@@ -1295,6 +1297,12 @@ mod tests {
             assert_eq!(decode_text(&euc).unwrap(), ("한글".to_string(), "cp949"));
             assert_eq!(encode_text("한글", "cp949").unwrap(), euc);
             assert!(encode_text("😀", "cp949").is_err(), "EUC-KR 로 못 쓰는 글자는 거부");
+            /* Windows 는 EUC-KR 에 없는 글자를 '비슷한 글자'로 바꿔 쓴다(é→e, ü→u, ñ→n — 실측). 그때는 '못 쓴 글자'
+               표시도 안 서서 거부를 그냥 지나갔다 — 저장하면 글자가 조용히 바뀌었다 */
+            for t in ["café", "Müller", "España"] {
+                assert!(encode_text(t, "cp949").is_err(), "비슷한 글자로 바꿔 쓰지 않고 거부: {t}");
+            }
+            assert_eq!(decode_text(&encode_text("한글 € Ω ⓐ", "cp949").unwrap()).unwrap().0, "한글 € Ω ⓐ", "EUC-KR 에 있는 글자는 그대로");
         }
         let _ = std::fs::remove_dir_all(&d);
     }
