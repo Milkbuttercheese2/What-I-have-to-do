@@ -29,6 +29,7 @@ import {cardHtml, persist} from './render.js';
 import {placeOf} from './placement.js';
 import {openForm} from './form.js';
 import {topId} from './modals.js';
+import {syncGSearch} from './gsearch.js';
 
 const kids=new Map();             // nodeKey(폴더) → 항목 목록 | {error}
 let open=null, openFor=null;      // 펼친 폴더 nodeKey 의 Set · 그것을 읽은(또는 마지막으로 쓴) settings.docOpen 배열
@@ -108,7 +109,7 @@ function renderTree(){
     const k=nodeKey(i,''), isOpen=open.has(k);
     return `<div class="dt-row dt-root dir${isSel(i,'')?' on':''}" data-dkey="${escAttr(k)}" data-ddir="1" title="${escAttr(p)}">`
       +`<span class="dt-caret" data-caret="1">${isOpen?'▾':'▸'}</span><span class="dt-ico ico-dir"></span><span class="dt-name">${esc(rootName(i))}</span>`
-      +`<button type="button" class="dt-unroot" data-unroot="${i}" title="목록에서 빼기(폴더는 그대로)" aria-label="목록에서 빼기">×</button></div>`
+      +`<button type="button" class="dt-unroot" data-unroot="${i}" title="문서 폴더 해지(폴더는 그대로)" aria-label="문서 폴더 해지">×</button></div>`
       +(isOpen ? listHtml(i, '', 1) : '');
   }).join('');
 }
@@ -435,8 +436,9 @@ async function tryNative(i, rel, seq){
 function nativeBlocked(){
   const v=$('view-docs');
   if(!v || !v.classList.contains('on')) return true;
-  if(topId()) return true;
-  if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on, body.dt-dragging, body.dc-resizing, .dt-menu, #dropVeil.on')) return true;
+  const docked=$('formPanel') && $('formPanel').classList.contains('fm-dock');
+  if(topId() && !(docked && topId()==='formPanel')) return true;       // 옆 칸 양식은 가운데를 가리지 않는다
+  if(document.querySelector('.modal-bg.on, .form-panel.on:not(.fm-dock), .alarm-bg.on, #appDialog.on, body.dt-dragging, body.dc-resizing, .dt-menu, #dropVeil.on')) return true;
   /* 토스트([실행 취소])가 미리 보기 자리와 겹치면 그동안 숨긴다 — 별도 창이라 토스트를 가려 버린다 */
   const t=document.querySelector('.toast.on'), ph=$('dv-native');
   if(t && ph){ const a=t.getBoundingClientRect(), b=ph.getBoundingClientRect(); if(a.width && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top) return true; }
@@ -627,7 +629,9 @@ function openMenu(x, y, key, dir){
   m.innerHTML=(dir ? NEW_KINDS.filter(x=>!x[3]).map(item).join('')+'<hr>'+NEW_KINDS.filter(x=>x[3]).map(item).join('') : '')
     +(rel ? `${dir?'<hr>':''}<button type="button" data-mren="1">이름 바꾸기</button><button type="button" data-mcopy="1">복제</button><button type="button" data-mtrash="1">휴지통으로</button>` : '')
     +(!dir ? `<button type="button" data-mopen="1">열기</button>` : '')
-    +`<button type="button" data-mreveal="1">폴더에서 보기</button>`;
+    +`<button type="button" data-mreveal="1">폴더에서 보기</button>`
+    /* 문서 폴더(맨 위 줄) — 목록에서 빼기(폴더와 파일은 그대로). 줄 끝의 ×와 같은 일 */
+    +(!rel ? `<hr><button type="button" data-munroot="1">문서 폴더 해지</button>` : '');
   document.body.appendChild(m);
   const r=m.getBoundingClientRect();
   m.style.left=Math.max(4, Math.min(x, window.innerWidth-r.width-4))+'px';
@@ -636,6 +640,7 @@ function openMenu(x, y, key, dir){
     const b=e.target.closest('button'); if(!b) return;
     closeMenu();
     const p=parseKey(key);
+    if(b.dataset.munroot) return removeRoot(p.i);
     if(b.dataset.mnew) return createItem(p.i, p.rel, b.dataset.mnew);
     if(b.dataset.mren) return startRename(key);
     if(b.dataset.mtrash) return trashItem(key, dir);
@@ -833,10 +838,25 @@ function initSplit(){
 }
 
 /* [＋ 메모] — 이 폴더 링크가 든 새 양식(저장해야 업무가 생긴다) */
-async function addNote(){
+/* v3.8.4: 문서 탭에서는 양식을 팝업이 아니라 **오른쪽 칸**으로 연다(소유자 지정 — 가운데 문서를 보면서, 세부 할 일·마감·관련인 등
+   양식의 모든 칸을 그대로). 같은 양식(form.js openForm)에 dock 만 준다. [＋ 메모] = 그 폴더 링크가 든 새 양식, 카드 클릭 = 그 업무. */
+function addNote(){
   const nf=noteFolder(); if(!nf) return;
   if(!(roots[nf.i]&&roots[nf.i].ok)){ appAlert('폴더를 찾을 수 없습니다'); return; }
-  openForm({files:[basePath(nf.i, nf.rel)]});
+  placeDock();
+  openForm({files:[basePath(nf.i, nf.rel)]}, {dock:true});
+}
+function openNoteItem(id){
+  const it=S.items.find(x=>x.id===id); if(!it) return;
+  placeDock();
+  openForm(it, {readonly:!!it.done, dock:true});
+}
+/* 옆 칸 양식이 놓일 자리 — 세 칸 줄(.dc-layout)의 위아래에 맞춘다 */
+function placeDock(){
+  const l=document.querySelector('#view-docs .dc-layout'); if(!l) return;
+  const r=l.getBoundingClientRect();
+  document.documentElement.style.setProperty('--dock-top', Math.max(40, Math.round(r.top))+'px');
+  document.documentElement.style.setProperty('--dock-bottom', Math.max(8, Math.round(window.innerHeight-r.bottom))+'px');
 }
 
 /* ── 전체 ── */
@@ -923,7 +943,10 @@ export async function showDoc(path){
   const r=await revealPath(t.i, t.rel);
   await leaveViewer();
   sel={i:t.i, rel:r.rel, dir:r.dir};
+  /* 탭 줄의 표시도 '문서'로 — 화면만 바꾸면 탭은 '보드'에 남는다(지금 탭의 진실은 .tab.on 하나 — views.js) */
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on', x.dataset.view==='docs'));
   showView('docs');
+  syncGSearch();
   await renderDocs();
 }
 /* 그 항목까지 위 폴더들을 펼친다(트리에 보이게). 실제 이름(대소문자)과 폴더 여부를 돌려준다 */
@@ -958,6 +981,16 @@ export function initDocs(){
   $('dn-add2').addEventListener('click', addNote);     // 메모가 없어 오른쪽 칸이 사라졌을 때 쓰는 같은 단추(위 도구줄)
   $('dc-search').addEventListener('input', onSearchInput);
   $('dc-search').addEventListener('keydown', e=>{ if(e.key==='Escape' && $('dc-search').value){ e.preventDefault(); e.stopPropagation(); clearSearch(); } });
+  /* 오른쪽 칸의 카드 클릭 — 양식 팝업(render.js 의 data-open 위임)보다 먼저 받아 옆 칸 양식으로 연다. 체크·삭제 단추는 그대로 둔다 */
+  $('dn-list').addEventListener('click', e=>{
+    const card=e.target.closest('.card[data-open]'); if(!card || e.target.closest('.chk,.del')) return;
+    e.stopPropagation();
+    openNoteItem(Number(card.dataset.open));
+  });
+  /* 옆 칸 양식은 문서 탭(넓은 창) 전용 — 다른 탭으로 가거나 창이 좁아지면 그 자리에서 평소 팝업으로 바뀐다(쓰던 글은 그대로) */
+  const undock=()=>{ const f=$('formPanel'); if(f) f.classList.remove('fm-dock'); };
+  window.addEventListener('resize', ()=>{ if(!$('formPanel').classList.contains('fm-dock')) return; if(window.innerWidth<1081) undock(); else placeDock(); });
+  document.addEventListener('click', e=>{ const t=e.target.closest && e.target.closest('.tab'); if(t && t.dataset.view!=='docs') undock(); }, true);
   $('dt-tree').addEventListener('contextmenu', e=>{
     const row=e.target.closest('.dt-row'); if(!row) return;
     e.preventDefault();
@@ -1056,7 +1089,7 @@ export function initDocs(){
   document.addEventListener('keydown', e=>{
     if(!(e.ctrlKey||e.metaKey) || (e.key!=='s'&&e.key!=='S') || e.altKey || e.shiftKey) return;
     const v=$('view-docs'); if(!v || !v.classList.contains('on') || !ed || topId()) return;
-    if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on')) return;
+    if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on')) return;   // 옆 칸 양식이 열려 있으면 Ctrl+S 는 그 양식 저장
     e.preventDefault(); e.stopImmediatePropagation();
     const ta=$('dv-ta'), cur=ed;
     if(ta && ta.value.replace(/\r\n/g,'\n')!==String(cur.text).replace(/\r\n/g,'\n')) cur.dirty=true;

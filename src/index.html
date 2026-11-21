@@ -69,6 +69,7 @@
         <div class="fm-memo-stack">
           <div id="fm-memo-hl" aria-hidden="true"></div>
           <textarea id="fm-memo" class="fm-memo" maxlength="50000" placeholder="업무 내용을 자유롭게 적으세요"></textarea>
+          <span class="fm-memo-grip" id="fm-memo-grip" aria-hidden="true" title="끌어서 높이 조절 · 두 번 누르면 원래대로"></span>
         </div>
       </div>
 
@@ -115,7 +116,6 @@
         <button class="btn btn-cancel" id="fm-revert" title="마지막으로 저장한 내용으로 되돌립니다 (임시저장분 삭제)">되돌리기</button>
         <!-- v3.7.0 업무 종료: 연 채로 저장 + 완료 처리 (카드의 ○ 와 같은 일). 완료 업무엔 [다시 진행]. -->
         <button class="btn btn-finish" id="fm-finish" title="지금 내용을 저장하고 업무를 완료(종료) 처리합니다">✓ 업무 종료</button>
-        <button class="btn btn-cancel" id="fm-clone" style="display:none" title="같은 메모·관련인·식별정보·파일 링크로 새 업무 양식을 엽니다">새 업무로 복사</button>
         <button class="btn btn-reopen" id="fm-reopen" style="display:none" title="완료를 취소하고 진행 중으로 되돌려 바로 고칠 수 있게 엽니다">↺ 다시 진행</button>
         <button class="btn btn-ok" id="fm-save" title="Ctrl+S · Ctrl+Enter 로도 저장됩니다">저장</button>
       </div>

@@ -135,7 +135,7 @@ function setReadonly(on){
   const p=$('formPanel');
   p.classList.toggle('fm-ro', on);
   p.querySelectorAll('input,textarea,select,button').forEach(el=>{
-    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-clone'||el.id==='fm-book'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·[문서]는 살려 둔다
+    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·[문서]는 살려 둔다
     el.disabled=on;
   });
   $('fm-save').style.display=on?'none':'';
@@ -145,7 +145,6 @@ function setReadonly(on){
      되돌리기는 toggleDone 하나만 거친다 — S.doneDirty 경로를 넓히지 않는다(설계 근간). */
   $('fm-finish').style.display=on?'none':'';
   $('fm-reopen').style.display=on?'':'none';
-  $('fm-clone').style.display=on?'':'none';
 }
 /* 지금 열린 양식이 읽기 전용(완료 업무)인가 — 파일 끌어다 놓기가 묻는다(filedrop.js) */
 export function formReadonly(){ return isOpen('formPanel') && $('formPanel').classList.contains('fm-ro'); }
@@ -154,6 +153,9 @@ export async function openForm(pre, opts){
   saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
   pre=pre||{};
   const readonly=!!(opts&&opts.readonly);
+  /* v3.8.4 옆 칸 양식(opts.dock) — 문서 탭에서는 양식을 팝업이 아니라 오른쪽 칸으로 연다(가운데 문서를 보면서 쓰게).
+     같은 양식·같은 저장 길이고 놓이는 자리만 다르다(#formPanel.fm-dock — CSS). 창이 좁으면 평소처럼 팝업. */
+  $('formPanel').classList.toggle('fm-dock', !!(opts&&opts.dock) && window.innerWidth>=1081);
   editingId=pre.id||null;
   subFromMemo=!readonly && !editingId && !!(opts&&opts.subFromMemo);
   draftKey = readonly ? null : (editingId ? String(editingId) : 'new');   // 읽기 전용은 초안을 만들지 않는다
@@ -259,6 +261,7 @@ function fillForm(pre){
 export function closeForm(){
   saveDraftNow();
   closeModal('formPanel'); editingId=null; draftKey=null; baseline=null; markDraft(0);
+  $('formPanel').classList.remove('fm-dock');
 }
 
 /* 관련인 행 — v3.2.0(소유자 지정)부터 연락처는 저장 시 표준 하이픈 표기로 정규화한다
@@ -444,7 +447,22 @@ function collectForm(){
   return {memo:$('fm-memo').value.trim(), f, contacts, ids, subs, files};
 }
 
+/* 메모칸 높이 조절 손잡이(v3.8.4 소유자 지정 — 늘릴 수 있다는 표시를 글자 없이). 브라우저 기본 모서리 손잡이는
+   작고 흐려 보이지 않아 직접 만든다. 높이는 이 양식을 닫을 때까지만 유지(저장하지 않음). 두 번 누르면 기본 높이. */
+function initMemoGrip(){
+  const g=$('fm-memo-grip'), m=$('fm-memo'); if(!g||!m) return;
+  let from=null;
+  g.addEventListener('mousedown', e=>{ if(e.button!==0) return; e.preventDefault(); from={y:e.clientY, h:m.offsetHeight}; document.body.classList.add('memo-resizing'); });
+  document.addEventListener('mousemove', e=>{
+    if(!from) return;
+    if(e.buttons===0){ from=null; document.body.classList.remove('memo-resizing'); return; }
+    m.style.height=Math.max(120, Math.min(1600, from.h+(e.clientY-from.y)))+'px';
+  });
+  document.addEventListener('mouseup', ()=>{ if(!from) return; from=null; document.body.classList.remove('memo-resizing'); });
+  g.addEventListener('dblclick', ()=>{ m.style.height=''; });
+}
 export function initForm(){
+  initMemoGrip();
   // 팝업이 어느 탭에서든 뜨도록 formPanel을 body 직속으로 이동
   document.body.appendChild($('formPanel'));
   wireTagHover($('fm-memo'), 'fm-memo-hl');
@@ -502,13 +520,6 @@ export function initForm(){
   /* v3.7.0 업무 종료 — 연 채로 저장 + 완료 처리. 완료 체크(카드의 ○)와 같은 toggleDone 을 탄다. */
   $('fm-finish').addEventListener('click',()=>commitForm({finish:true}));
   /* v3.7.0 다시 진행 — 완료 업무(읽기 전용)를 진행 중으로 되돌리고 그 자리에서 고칠 수 있게 다시 연다 */
-  /* v3.8.4 끝난 업무와 같은 내용으로 새 업무 — 메모·관련인·식별정보·파일 링크·세부 제목(시각·완료 표시는 비움). 저장해야 생긴다 */
-  $('fm-clone').addEventListener('click',()=>{
-    const it=S.items.find(x=>x.id===editingId); if(!it) return;
-    const pre={memo:it.memo||'', contacts:(it.contacts||[]).map(c=>({...c})), ids:(it.ids||[]).map(x=>({...x})), files:(it.files||[]).slice(),
-      subs:(it.subs||[]).map(s=>({id:newId(), title:s.title, owner:s.owner||'', mid:'', done:false}))};
-    closeForm(); openForm(pre);
-  });
   $('fm-reopen').addEventListener('click',()=>{
     const it=editingId ? S.items.find(x=>x.id===editingId) : null;
     if(!it||!it.done) return;

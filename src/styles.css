@@ -1636,3 +1636,56 @@
   .hljs-title,.hljs-section,.hljs-name,.hljs-function .hljs-title,.hljs-attr,.hljs-attribute,.hljs-selector-class,.hljs-selector-id{color:var(--focus)}
   .hljs-deletion{color:var(--red)}
   .dv-mdv pre code.hljs{background:none;padding:0}
+  /* 양식 파일 링크의 [문서]·[찾기] — [＋ 추가]와 같은 크기 */
+  .ffile-doc,.ffile-browse{height:26px;padding:0 9px;font-size:12px;display:inline-flex;align-items:center}
+  /* ── 옆 칸 양식(#formPanel.fm-dock, v3.8.4) — 문서 탭에서는 양식이 팝업이 아니라 오른쪽 칸에 놓인다.
+     어둡게 덮지 않고(가운데 문서를 계속 보고 고를 수 있게) 세 칸 줄의 오른쪽 자리를 차지한다. 양식 안의 것은 그대로. ── */
+  .form-panel.fm-dock{inset:var(--dock-top,150px) 28px var(--dock-bottom,16px) auto;width:480px;padding:0;background:transparent;overflow:visible}
+  .form-panel.fm-dock .fm-inner{max-width:none;height:100%;overflow-y:auto;overscroll-behavior:contain;border-radius:14px;box-shadow:var(--shadow)}
+  .form-panel.fm-dock .fm-head{top:0}
+  .form-panel.fm-dock .fm-actions{bottom:0}
+  .form-panel.fm-dock .fm-memo{min-height:150px}
+  /* 그동안 문서 탭은 오른쪽 자리를 비운다(메모 목록 칸은 숨김) */
+  body:has(#formPanel.on.fm-dock) #view-docs .dc-layout,body:has(#formPanel.on.fm-dock) #view-docs.no-note .dc-layout{grid-template-columns:var(--dc-tree-w,260px) 6px minmax(0,1fr) 480px}
+  body:has(#formPanel.on.fm-dock) #view-docs .dc-note{visibility:hidden;display:flex}
+  body:has(#formPanel.on.fm-dock) #dn-add2{display:none}
+  /* 옆 칸 양식은 폭이 480px 이라 좁은 창(컴팩트)과 같은 줄 접기를 쓴다 — 위 '좁은 창(560px 컴팩트)' 규칙을 그대로 옮긴 것.
+     그 규칙을 고치면 여기도 함께 고칠 것(세부: 제목 / 담당 / 날짜·시각 · 관련인: 소속·이름 / 연락처 / 이메일 · 접수·마감 세로). */
+  .fm-dock .fm-inner{overflow-x:hidden}
+  .fm-dock .fm-grid{grid-template-columns:1fr}
+  .fm-dock .fsub-row{flex-wrap:wrap;row-gap:0}
+  .fm-dock .fsub-row::after{content:"";flex:0 0 100%;height:0;order:0}
+  .fm-dock .fsub-row .fsub-title{flex:1 1 auto;min-width:0}
+  .fm-dock .fsub-row input.sub-owner{order:1;flex:0 1 auto;width:112px;margin-left:43px;margin-top:5px}
+  .fm-dock .fsub-row .fsub-dt{order:2;flex:1 1 100%;min-width:0;margin-left:43px;margin-top:5px}
+  .fm-dock .fsub-row + .fsub-row{margin-top:10px}
+  .fm-dock .fsub-row .fsub-dt .dt-date{flex:0 1 auto;width:112px}
+  .fm-dock .fsub-row .fsub-dt .dt-time{flex:0 1 auto;width:64px}
+  .fm-dock .contact-row{flex-wrap:wrap;row-gap:5px}
+  .fm-dock .contact-row .c-org,.fm-dock .contact-row .c-who{flex:1 1 0;min-width:0}
+  .fm-dock .contact-row .c-phone{order:1;flex:1 1 100%;min-width:0;margin-left:43px}
+  .fm-dock .contact-row .c-email{order:2;flex:1 1 100%;min-width:0;margin-left:43px}
+  .fm-dock .contact-row + .contact-row{margin-top:8px}
+  .fm-dock .fm-grid .dt-inp{margin-left:43px;min-width:0}
+  .fm-dock .dt-dow{display:none}
+  .fm-dock .fid-row .drag-handle,.fm-dock .contact-row .drag-handle{margin-right:25px}
+  .fm-dock .fid-row{flex-wrap:wrap}
+  .fm-dock .fid-row select{flex:1 1 110px;width:auto;min-width:0}
+  .fm-dock .fid-row input[type=text]{flex:2 1 120px;min-width:0}
+  .fm-dock .fm-actions{flex-wrap:wrap;row-gap:6px}
+  /* 다크 테마 점검(v3.8.4): ⠿ 끌기 손잡이가 선 색(--line)이라 다크에서 거의 안 보였다(대비 1.2:1) — × 와 같은 아이콘 색으로 */
+  .drag-handle{color:var(--icon-muted)}
+  .drag-handle:hover{color:var(--ink-soft)}
+  /* 양식 묶음 사이 가로선 — 옅은 선(--line-soft)은 다크에서 거의 안 보여 본선(--line)으로 */
+  .fm-inner .fm-subs,.fm-inner .fm-ids,.fm-inner .fm-contacts,.fm-inner .fm-files-wrap,.fm-inner .fm-grid{border-top-color:var(--line)}
+  /* 메모칸 높이 조절 손잡이(소유자 지정 — 글자 없이): 오른쪽 아래 모서리의 사선 두 줄. 끌면 늘고 줄며, 두 번 누르면 원래 높이.
+     브라우저 기본 모서리 손잡이는 너무 작고 흐려 있는지 몰랐다 — 그래서 끄고(resize:none) 이 손잡이 하나만 둔다. */
+  .fm-memo{resize:none}
+  .fm-memo-grip{position:absolute;right:3px;bottom:3px;z-index:2;width:16px;height:16px;border-radius:4px;cursor:ns-resize;
+    background:
+      linear-gradient(135deg, transparent 0 47%, var(--ink-soft) 47% 57%, transparent 57% 100%) 2px 2px/12px 12px no-repeat,
+      linear-gradient(135deg, transparent 0 44%, var(--ink-soft) 44% 58%, transparent 58% 100%) 8px 8px/6px 6px no-repeat}
+  .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--slate-bg);
+    background-image:linear-gradient(135deg, transparent 0 47%, var(--focus) 47% 57%, transparent 57% 100%), linear-gradient(135deg, transparent 0 44%, var(--focus) 44% 58%, transparent 58% 100%)}
+  body.memo-resizing,body.memo-resizing *{cursor:ns-resize !important;user-select:none}
+  .fm-ro .fm-memo-grip{display:none}

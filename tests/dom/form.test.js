@@ -453,3 +453,19 @@ test('완료 취소(체크박스): 완료가 풀리고 그 변화가 저장에 �
   assert.equal(row.done, false);
   assert.equal(S.doneDirty.has(it.id), false, '저장 성공 후에는 표시가 비워진다');
 });
+
+test('v3.8.4 메모칸 높이 손잡이: 끌면 높이가 바뀌고(120~1600), 두 번 누르면 원래대로', async () => {
+  await env.resetS(); S.loaded = true;
+  openForm({});
+  const m=$('fm-memo'), g=$('fm-memo-grip');
+  assert.ok(g, '손잡이가 있다');
+  Object.defineProperty(m, 'offsetHeight', {configurable:true, get(){ return parseFloat(m.style.height)||220; }});
+  const ms=(el,type,y,b)=>el.dispatchEvent(new env.window.MouseEvent(type,{bubbles:true,cancelable:true,button:0,buttons:b,clientX:5,clientY:y}));
+  ms(g,'mousedown',100,1); ms(env.document.body,'mousemove',260,1); ms(env.document.body,'mouseup',260,0);
+  assert.equal(m.style.height, '380px');
+  ms(g,'mousedown',100,1); ms(env.document.body,'mousemove',-900,1); ms(env.document.body,'mouseup',-900,0);
+  assert.equal(m.style.height, '120px', '최소 120');
+  g.dispatchEvent(new env.window.MouseEvent('dblclick',{bubbles:true}));
+  assert.equal(m.style.height, '');
+  closeForm();
+});

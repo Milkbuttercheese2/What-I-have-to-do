@@ -287,14 +287,38 @@ test('[＋ 메모] = 그 폴더 링크가 든 새 양식 · 저장하면 오른�
   env.onInvoke('doc_read_text', ()=>{ throw '글자 파일이 아닙니다'; });
   await openDocs();
   click(row('0:가 폴더')); await env.flush(6);
+  /* v3.8.4: 문서 탭에서는 같은 양식이 팝업이 아니라 오른쪽 칸(fm-dock)으로 열린다 — 세부·마감·관련인 등 모든 칸 그대로 */
+  env.window.innerWidth=1500;
   click($('dn-add')); await env.flush(6);
-  assert.ok(isOpen('formPanel'));
-  assert.equal(doc.querySelector('#fm-files .ffile-path').value, 'D:\\공유\\가 폴더');
+  assert.ok(isOpen('formPanel') && $('formPanel').classList.contains('fm-dock'), '옆 칸 양식');
+  assert.equal(doc.querySelector('#fm-files .ffile-path').value, 'D:\\공유\\가 폴더', '그 폴더 링크가 들어 있다');
+  assert.ok($('fm-subadd') && $('fm-contactadd') && $('fm-grid'), '양식의 칸이 모두 있다');
   $('fm-memo').value='회신 기한 11.28';
   click($('fm-save')); await env.flush(6);
+  assert.ok(!$('formPanel').classList.contains('fm-dock'), '닫히면 옆 칸 표시도 풀린다');
   assert.equal(S.items.length, 1);
   assert.deepEqual(S.items[0].files, ['D:\\공유\\가 폴더']);
   assert.deepEqual(memos(), ['회신 기한 11.28']);
+  /* 오른쪽 칸의 카드를 눌러도 옆 칸 양식 — 끝난 업무는 읽기 전용 */
+  click(doc.querySelector('#dn-list .card .card-memo')); await env.flush(4);
+  assert.ok(isOpen('formPanel') && $('formPanel').classList.contains('fm-dock'));
+  assert.equal($('fm-memo').value, '회신 기한 11.28');
+  /* 옆 칸 양식을 연 채 다른 탭으로 가면 평소 팝업으로 바뀐다(쓰던 글은 그대로) */
+  $('fm-memo').value='고치는 중';
+  click(doc.querySelector('.tab[data-view="board"]')); await env.flush(4);
+  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-dock'));
+  assert.equal($('fm-memo').value, '고치는 중');
+  closeForm();
+  doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='docs')); showView('docs'); await env.flush(6);
+  /* 다른 곳(보드 등)에서 여는 양식은 평소처럼 팝업 */
+  openForm(S.items[0]); await env.flush(4);
+  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-dock'));
+  closeForm();
+  /* 창이 좁으면 문서 탭에서도 팝업 */
+  env.window.innerWidth=700;
+  click($('dn-add')); await env.flush(4);
+  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-dock'));
+  closeForm(); env.window.innerWidth=1500;
   openForm({files:['D:\\공유\\가 폴더\\보고.zip', 'C:\\밖\\x.txt']}); await env.flush(4);
   const btns=[...doc.querySelectorAll('#fm-files .ffile-doc')];
   assert.deepEqual(btns.map(b=>b.style.display), ['', 'none'], '문서 폴더 안 링크에만 [문서]');
@@ -302,6 +326,7 @@ test('[＋ 메모] = 그 폴더 링크가 든 새 양식 · 저장하면 오른�
   click(btns[0]); await env.flush(14);
   assert.ok(!isOpen('formPanel'), '양식을 닫고');
   assert.ok($('view-docs').classList.contains('on'), '문서 탭으로');
+  assert.deepEqual([...doc.querySelectorAll('.tab.on')].map(x=>x.dataset.view), ['docs'], '탭 줄 표시도 문서로(보드에 남지 않는다)');
   assert.ok(row('0:가 폴더/보고.zip').classList.contains('on'), '그 파일을 고른다');
   openForm({id:77, done:true, files:['D:\\공유\\가 폴더']}, {readonly:true}); await env.flush(4);
   assert.equal(doc.querySelector('#fm-files .ffile-doc').disabled, false, '완료 업무(읽기 전용)에서도 [문서]는 눌린다');
@@ -467,6 +492,12 @@ test('v3.8.3 휴지통으로: 확인 → doc_trash · 고른 것은 위 폴더�
   /* 문서 폴더 자체 메뉴엔 휴지통이 없다 */
   row('0:').dispatchEvent(new env.window.MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:20, clientY:20}));
   assert.ok(!doc.querySelector('.dt-menu [data-mtrash]'));
+  /* 대신 [문서 폴더 해지] — 목록에서만 뺀다 */
+  assert.ok(!trashed.some(x=>x.rel===''));
+  env.answerConfirm(true);
+  click(doc.querySelector('.dt-menu [data-munroot]')); await env.flush(10);
+  assert.deepEqual(S.settings.docRoots, [], '문서 폴더 목록에서 빠진다');
+  assert.ok(!$('view-docs').classList.contains('has-root'));
 });
 
 test('v3.8.3 문서 찾기: 모든 문서 폴더에서 · 결과는 트리 자리 · 누르면 그 파일(위 폴더 펼침) · ESC 로 트리로', async () => {

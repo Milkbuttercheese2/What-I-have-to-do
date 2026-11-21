@@ -458,7 +458,7 @@ test('v3.8.4 완료 탭 달력 띠: 날마다 끝낸 건수 · 누르면 그날 
   for(let i=0;i<3;i++) click($('done-cal').querySelector('[data-dcalnav="1"]'));
 });
 
-test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마감·관련인·파일) · [새 업무로 복사] · 한곳 검색칸', async () => {
+test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마감·관련인·파일) · 한곳 검색칸', async () => {
   const {initGSearch} = await import('../../src/gsearch.js');
   await fresh();
   const now=Date.now();
@@ -476,15 +476,10 @@ test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마
   assert.match(cells[0], /^\d+\.\d+ \d\d:\d\d$/); assert.match(cells[3], /^\d+\.\d+ \d\d:\d\d$/); assert.match(cells[4], /^\d+\.\d+ \d\d:\d\d$/);
   assert.equal([...rows()[1].children][4].textContent, '', '마감이 없으면 빈 칸');
   assert.ok(!doc.querySelector('[data-downer],[data-dview],#done-files'), '거르기·보기 단추는 없다');
-  /* 줄을 누르면 읽기 전용 양식 → [새 업무로 복사] */
+  /* 줄을 누르면 읽기 전용 양식 */
   click(rows()[0]); await env.flush(4);
   assert.ok($('formPanel').classList.contains('fm-ro'));
-  assert.equal($('fm-clone').style.display, ''); assert.equal($('fm-clone').disabled, false);
-  click($('fm-clone')); await env.flush(4);
-  assert.ok(isOpen('formPanel') && !$('formPanel').classList.contains('fm-ro'), '새 양식(고칠 수 있음)');
-  assert.equal($('fm-memo').value, '내 일\n둘째 줄');
-  assert.equal(doc.querySelector('#fm-files .ffile-path').value, 'C:/docs/a.txt');
-  assert.equal(S.items.length, 2, '저장하기 전엔 생기지 않는다');
+  assert.ok(!$('fm-clone'), '[새 업무로 복사]는 없다');
   closeForm();
   /* 한곳 검색칸: 지금 탭의 검색칸으로 전달 */
   initGSearch();
