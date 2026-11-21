@@ -177,6 +177,43 @@ export async function renderPdf(box, bytes){
 }
 
 /* zip → {경로: Uint8Array} */
+/* ── 한글(HWP·HWPX) 쪽 보기 — rhwp(v3.8.7, MIT, Rust+WebAssembly: vendor/rhwp). 한컴 없이 앱이 직접 쪽 모양 그대로 그린다.
+   ⚠️ 쪽 SVG 는 innerHTML 로 넣지 않고 <img> 로 보여 준다 — 문서에서 나온 SVG 안의 스크립트·링크가 앱 화면에서 돌지 않게.
+   WASM(약 27MB)은 한글 문서를 처음 열 때 한 번만 불러온다(앱 시작을 늦추지 않는다). 실패하면 부르는 쪽이 글자·표 보기로 돌아간다. */
+let rhwpP=null, rhwpLoader=null;
+export function _setRhwpLoader(fn){ rhwpLoader=fn; rhwpP=null; }     // 시험용
+export function loadRhwp(){
+  if(!rhwpP) rhwpP=(rhwpLoader ? rhwpLoader() : (async()=>{
+    /* rhwp 가 글자 폭을 잴 때 부르는 자리(README 필수 항목) — 웹뷰의 글꼴로 잰다 */
+    if(typeof globalThis.measureTextWidth!=='function'){
+      let ctx=null, last='';
+      globalThis.measureTextWidth=(font, text)=>{ if(!ctx) ctx=document.createElement('canvas').getContext('2d'); if(font!==last){ ctx.font=font; last=font; } return ctx.measureText(text).width; };
+    }
+    const m=await import('./vendor/rhwp/rhwp.js');
+    await m.default({module_or_path:'./vendor/rhwp/rhwp_bg.wasm'});
+    return m;
+  })()).catch(e=>{ rhwpP=null; throw e; });
+  return rhwpP;
+}
+const HWP_MAX_PAGES=300;
+/* 첫 쪽은 바로(실패하면 예외 → 부르는 쪽이 글자·표 보기로), 나머지는 쉬어 가며 그려 화면을 멈추지 않는다. 돌려주는 함수 = 정리 */
+export async function renderHwp(box, bytes, rhwp){
+  const doc=new rhwp.HwpDocument(bytes);
+  const urls=[]; let dead=false;
+  const cleanup=()=>{ dead=true; urls.forEach(u=>URL.revokeObjectURL(u)); urls.length=0; try{ doc.free(); }catch{} };
+  try{
+    const n=doc.pageCount(); if(!(n>0)) throw new Error('쪽이 없습니다');
+    const total=Math.min(n, HWP_MAX_PAGES);
+    box.innerHTML=`<div class="dv-hwp-bar num">${n}쪽</div><div class="dv-hwp"></div>`+(n>HWP_MAX_PAGES?`<div class="dv-cap">앞 ${HWP_MAX_PAGES}쪽까지만 — 나머지는 [한글에서 열기]</div>`:'');
+    const list=box.querySelector('.dv-hwp');
+    const page=i=>{ const u=URL.createObjectURL(new Blob([doc.renderPageSvg(i)], {type:'image/svg+xml'})); urls.push(u);
+      const im=document.createElement('img'); im.className='dv-hwp-pg'; im.alt=`${i+1}쪽`; im.src=u; list.appendChild(im); };
+    page(0);
+    (async()=>{ for(let i=1;i<total && !dead;i++){ await new Promise(r=>setTimeout(r, 0)); if(dead || !list.isConnected) return; try{ page(i); }catch(e){ console.warn('rhwp 쪽 그리기 실패', i+1, e); return; } } })();
+    return cleanup;
+  }catch(e){ cleanup(); throw e; }
+}
+
 export function unzip(bytes){
   const z=window.XLSX.CFB.read(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), {type:'array'});
   const out={};
