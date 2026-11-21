@@ -789,3 +789,26 @@ test('v3.8.8 파워포인트(PPT·PPTX)는 읽지 않고 [파워포인트에서 
     assert.ok($('dv-body').querySelector('.dv-info [data-dopen]'), f+': [파워포인트에서 열기]');
   }
 });
+
+test('v3.8.9 앱이 켜지면 문서 폴더를 미리 알린다(그때 Rust 가 찾기 색인을 뒤에서 만든다) · 폴더가 없으면 부르지 않는다', async () => {
+  const {primeDocRoots} = await import('../../src/docs.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=[];
+  const n0=env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').length;
+  await primeDocRoots(); await env.flush(4);
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').length, n0, '폴더가 없으면 부르지 않는다');
+  S.settings.docRoots=['Y:\\미리'];
+  env.onInvoke('doc_set_roots', a=>a.paths.map(p=>({ok:true,path:p,error:''})));
+  await primeDocRoots(); await env.flush(4);
+  const call=env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').at(-1);
+  assert.deepEqual(call.args.paths, ['Y:\\미리']);
+});
+
+test('v3.8.9 폴더를 접으면 그 아래 펼쳐 둔 폴더도 모두 접힌다 — 다시 펼치면 하위 폴더는 접힌 채로', async () => {
+  const {collapseKeys} = await import('../../src/docs.js');
+  const set=new Set(['0:','0:가','0:가/나','0:가/나/다','0:가나다','0:라','1:가']);
+  collapseKeys(set, 0, '가');
+  assert.deepEqual([...set].sort(), ['0:','0:가나다','0:라','1:가'].sort(), "'가' 와 그 아래만 — 이름이 '가' 로 시작하는 다른 폴더(가나다)·다른 문서 폴더는 그대로");
+  collapseKeys(set, 0, '');
+  assert.deepEqual([...set], ['1:가'], '문서 폴더 자체를 접으면 그 안 전부');
+});

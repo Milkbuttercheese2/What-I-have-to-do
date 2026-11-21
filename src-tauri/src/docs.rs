@@ -655,13 +655,32 @@ pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String>
             if ix.built.elapsed().as_secs() >= SEARCH_CACHE_SECS { refresh_later(base.clone()); }
             ix
         }
-        None => {
-            let ix = std::sync::Arc::new(build_index(&base));
-            store_index(ix.clone());
-            ix
-        }
+        None => match wait_for_build(&base) {
+            /* 문서 탭을 열 때 시작한 미리 만들기가 아직 도는 중이면 끝나길 기다렸다가 그 색인을 쓴다(v3.8.9) —
+               같은 폴더를 두 번 훑지 않는다(공유 폴더는 한 번 훑는 데 10초가 넘는다) */
+            Some(ix) => ix,
+            None => {
+                let ix = std::sync::Arc::new(build_index(&base));
+                store_index(ix.clone());
+                ix
+            }
+        },
     };
     Ok(query_index(&ix, query))
+}
+
+/// 같은 폴더 색인을 다른 스레드가 만드는 중이면 끝날 때까지(최대 SEARCH_WAIT_SECS) 기다려 그 색인을 돌려준다.
+/// 아무도 안 만들고 있거나, 만들다 실패해 색인이 없으면 None — 부르는 쪽이 직접 만든다.
+const SEARCH_WAIT_SECS: u64 = 120;
+fn wait_for_build(base: &Path) -> Option<std::sync::Arc<SearchIndex>> {
+    let t0 = std::time::Instant::now();
+    loop {
+        let building = REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x == base);
+        let have = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|x| x.base == base).cloned();
+        if have.is_some() { return have; }
+        if !building || t0.elapsed().as_secs() >= SEARCH_WAIT_SECS { return None; }
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
 }
 
 fn store_index(ix: std::sync::Arc<SearchIndex>) {
@@ -843,6 +862,12 @@ pub fn set_roots(paths: Vec<String>) -> Vec<RootInfo> {
             Ok(c) => { out.push(RootInfo { ok: true, path: display(&c), error: String::new() }); roots.push(Some(c)); }
             Err(e) => { out.push(RootInfo { ok: false, path: p.clone(), error: e }); roots.push(None); }
         }
+    }
+    /* v3.8.9: 폴더를 정하는 순간 찾기 색인을 뒤에서 만들기 시작한다(앱이 켜질 때·폴더를 추가할 때) — 공유 폴더는 한 번 훑는 데
+       10초가 넘어, 처음 찾을 때 시작하면 그만큼 기다렸다. 이미 색인이 있거나 만드는 중이면 아무것도 안 한다. 디스크에는 저장하지 않는다(소유자 결정) */
+    for c in roots.iter().flatten() {
+        let have = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| &x.base == c);
+        if !have { refresh_later_now(c.clone()); }
     }
     *ROOTS.lock().unwrap_or_else(|e| e.into_inner()) = roots;
     out
@@ -1194,6 +1219,29 @@ mod tests {
         assert_eq!(search_in(&root, "11월").unwrap()[0].hit, "name");
         assert_eq!(search_in(&root, "안쪽").unwrap()[0].dir, true, "폴더 이름도 찾는다");
         assert!(search_in(&root, "  ").unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn search_waits_for_in_progress_build_instead_of_walking_twice() {
+        let r = tmp("search-wait");
+        std::fs::write(r.join("가 폴더/기다림.txt"), "x").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        invalidate_search();
+        REFRESHING.lock().unwrap().push(root.clone());              // 다른 스레드가 만드는 중인 척
+        let ready = root.clone();
+        let h = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            /* 그 사이 생긴 파일까지 든 '미리 만든' 색인을 넣고 끝났다고 알린다 — 찾기가 직접 훑었다면 이 파일 이름은 안 보인다 */
+            let mut ix = build_index(&ready);
+            ix.ents.push(IdxEntry { rel: "가 폴더/미리만든표시".into(), name: "미리만든표시".into(), low: "미리만든표시".into(), dir: false, text: None });
+            store_index(std::sync::Arc::new(ix));
+            REFRESHING.lock().unwrap().retain(|x| x != &ready);
+        });
+        let hits = search_cached(&root, "미리만든").unwrap();
+        h.join().unwrap();
+        assert_eq!(hits.len(), 1, "미리 만들던 색인을 기다렸다가 썼다");
+        invalidate_search();
         let _ = std::fs::remove_dir_all(&r);
     }
 
