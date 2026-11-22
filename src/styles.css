@@ -1808,8 +1808,8 @@
   .pbs-head{align-items:center;gap:10px}
   .pbs-avatar{width:36px;height:36px;font-size:15px}
   .pbs-info{margin:12px 0 0;display:flex;flex-direction:column;gap:4px}
-  .pbs-line{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
-  .pbs-k{flex:none;width:3.2rem;font-size:12px;color:var(--ink-soft)}
+  .pbs-line{display:flex;gap:6px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
+  .pbs-k{flex:none;width:2.6rem;font-size:12px;color:var(--ink-soft)}
   .pbs-v{min-width:0;overflow-wrap:anywhere}
   .pbs-box{margin-top:14px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
   .pbs-bhead{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line)}
@@ -1820,6 +1820,12 @@
   .pbs-list .rel-hit:first-child{border-top:0}
   .pbs-list .rel-hit:hover{background:var(--sunk);border-color:var(--line-soft)}
   .pbs-empty{padding:14px;font-size:12.5px;color:var(--ink-soft)}
+  /* 넓은 화면에선 목록 폭을 늘 오른쪽 칸이 있을 때의 폭으로 둔다(소유자 지정 — 줄이 화면 끝까지 펼쳐지면 눈이 멀리 간다).
+     사람을 고르기 전엔 그 자리에 안내만(새 프리셋 상자와 같은 면 --dash-bg · 실선 — v3.7.0 점선 금지). 좁은 폭(≤1080)은 예전처럼 한 열 */
+  @media(min-width:1081px){
+    .pb-layout,.pb-layout.has-side{grid-template-columns:minmax(0,1fr) 360px}
+    .pb-layout:not(.has-side)::after{content:"사람을 고르면 엮인 업무가 여기에 보입니다";position:sticky;top:14px;padding:22px 16px;border:1px solid var(--line);border-radius:14px;background:var(--dash-bg);color:var(--ink-soft);font-size:12.5px;text-align:center}
+  }
   /* 좁은 폭(560px 단일 열, 반응형 정책): 이름 / 전화·이메일 두 줄, 꼬리(배지·수정·바꾸기·삭제)는 오른쪽 */
   @media(max-width:1080px){
     .pb-group .pb-item{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"who tail" "sub tail";row-gap:2px;column-gap:10px}
