@@ -323,3 +323,17 @@ test('normEntry/migrate 경로: 기존 저장분 01012345678 도 표준형으로
   assert.equal(it.contacts[0].phone, '010-1234-5678');           // 기존 데이터 회복
   assert.equal(it.contacts[1].phone, '02-123-4567 내선3');       // 애매한 표기는 원문
 });
+
+test('v3.8.16 relatedCounts: 사람마다 relatedItems(...).length 와 같은 수(공백·하이픈·중복 관련인·주기 부모)', async () => {
+  const {relatedCounts, relKeyOf, relatedItems} = await import('../../src/phonebook-core.js');
+  const book=[{who:'김철수',org:'총무과',phone:'010-1234-5678'},{who:' 이영희 ',org:'회계과 ',phone:'02 123 4567'},{who:'박',org:'',phone:'+82 10 1111'},{who:'없음',org:'x',phone:'1'}];
+  const items=[
+    {id:1, contacts:[{who:'김철수',org:'총무과',phone:'01012345678'},{who:'김철수 ',org:' 총무과',phone:'010-1234-5678'}]},   // 같은 사람 두 번 → 1건
+    {id:2, contacts:[{who:'이영희',org:'회계과',phone:'021234567'}]},
+    {id:3, recur:{type:'dow'}, contacts:[{who:'김철수',org:'총무과',phone:'010-1234-5678'}]},                             // 주기 부모 제외
+    {id:4, contacts:[{who:'박',org:'',phone:'+82 10 1111'},{who:'김철수',org:'다른과',phone:'01012345678'}]},
+    {id:5, contacts:[]}, {id:6},
+  ];
+  const by=relatedCounts(items);
+  for(const e of book) assert.equal(by.get(relKeyOf(e))||0, relatedItems(items,{entries:[e]}).length, e.who);
+});

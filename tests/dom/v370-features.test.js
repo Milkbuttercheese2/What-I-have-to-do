@@ -393,7 +393,9 @@ test('layoutTimeline: 같은 시각대 이름표는 겹치지 않게 아래로 �
 test('전화번호부: 소속별 묶음 머리가 생기고 행에 머리글자가 붙는다', async () => {
   await fresh();
   adoptPhonebook([{id:1, who:'가나다', org:'가과', phone:'010-1'}, {id:2, who:'라마바', org:'가과', phone:'010-2'}, {id:3, who:'사아자', org:'나과', phone:'010-3'}]);
+  doc.getElementById('view-phone').classList.add('on');   // 탭이 보일 때만 그린다(v3.8.16)
   renderPhonebook();
+  doc.getElementById('view-phone').classList.remove('on');
   const g=[...doc.querySelectorAll('#pb-list .pb-ghead span:first-child')].map(x=>x.textContent);
   assert.deepEqual(g, ['가과','나과']);
   assert.equal(doc.querySelector('#pb-list .pb-avatar').textContent, '가');
@@ -455,7 +457,8 @@ test('v3.8.4 완료 탭 달력 띠: 날마다 끝낸 건수 · 누르면 그날 
   const box=doc.createElement('div'); box.innerHTML=doneCalHtml([], 2026, 10, null, t0);
   assert.equal(box.querySelectorAll('.dcal-x').length, 6);
   assert.equal(box.querySelectorAll('[data-dcalday]').length, 30);
-  for(let i=0;i<3;i++) click($('done-cal').querySelector('[data-dcalnav="1"]'));
+  /* 이번 달로 되돌려 둔다(v3.8.18 부터 다른 달이면 목록이 그 달 것만 — 다음 시험에 새지 않게) */
+  for(let i=0;i<4 && !new RegExp(`${now.getFullYear()}년 ${now.getMonth()+1}월`).test($('done-cal').querySelector('.dcal-head b').textContent);i++) click($('done-cal').querySelector('[data-dcalnav="1"]'));
 });
 
 test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마감·관련인·파일) · 한곳 검색칸', async () => {
@@ -494,4 +497,38 @@ test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마
   g.dispatchEvent(new env.window.Event('focus'));
   assert.equal(g.style.visibility, 'hidden', '캘린더엔 검색이 없다');
   doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='board'));
+});
+
+test('v3.8.18 완료 탭 달 단위: 이번 달=전체 · 다른 달=그 달에 끝낸 것만(안내 줄·건수) · 날짜 고르기 · 검색은 전체 · 빈 달 안내', async () => {
+  await fresh();
+  const now=new Date(); now.setHours(12,0,0,0);
+  const t0=now.getTime();
+  const prev=new Date(now.getFullYear(), now.getMonth()-1, 10, 9).getTime();      // 지난달 10일
+  const prev2=new Date(now.getFullYear(), now.getMonth()-2, 3, 9).getTime();      // 두 달 전
+  S.items.push(mk({memo:'이번 달', done:true, doneAt:t0}), mk({memo:'지난달 하나', done:true, doneAt:prev}), mk({memo:'지난달 둘', done:true, doneAt:prev+3600e3}),
+               mk({memo:'두 달 전', done:true, doneAt:prev2}), mk({memo:'시각 없는 옛 완료', done:true, doneAt:null}));
+  renderDone();
+  const memos=()=>[...doc.querySelectorAll('#col-done .drow:not(.drow-h) .drow-memo')].map(x=>x.textContent).sort();
+  const nav=k=>click($('done-cal').querySelector(`[data-dcalnav="${k}"]`));
+  assert.equal(memos().length, 5, '이번 달 = 전체(시각 없는 옛 완료 포함)');
+  assert.ok(!doc.querySelector('#col-done .done-month-note'), '이번 달엔 안내 줄 없음');
+  nav(-1);
+  assert.deepEqual(memos(), ['지난달 둘','지난달 하나']);
+  const pm=new Date(prev);
+  assert.equal($('col-done').querySelector('.done-month-note').textContent, `${pm.getFullYear()}년 ${pm.getMonth()+1}월에 끝낸 업무 2건`);
+  /* 날짜 고르기: 그날만 → 다시 누르면 그 달로 */
+  click($('done-cal').querySelector(`[data-dcalday="${new Date(pm.getFullYear(),pm.getMonth(),10).getTime()}"]`));
+  assert.deepEqual(memos(), ['지난달 둘','지난달 하나']);
+  click($('done-cal').querySelector(`[data-dcalday="${new Date(pm.getFullYear(),pm.getMonth(),10).getTime()}"]`));
+  assert.equal(memos().length, 2, '풀면 그 달 기준');
+  /* 검색어가 있으면 달과 상관없이 전체에서 */
+  const s=$('done-search'); s.value='두 달'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  assert.deepEqual(memos(), ['두 달 전']);
+  s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  /* 끝낸 것이 없는 달 */
+  nav(-1); nav(-1);
+  const em=new Date(now.getFullYear(), now.getMonth()-3, 1);
+  assert.match($('col-done').textContent, new RegExp(`${em.getFullYear()}년 ${em.getMonth()+1}월에 끝낸 업무가 없습니다`));
+  nav(1); nav(1); nav(1);
+  assert.equal(memos().length, 5, '이번 달로 돌아오면 다시 전체');
 });

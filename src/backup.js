@@ -3,7 +3,7 @@
    ========================================================================= */
 import {S, CORE_FIELDS, DEFAULT_SETTINGS, migrateItem, stripTemp, backupObj} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, showToast, appAlert, appConfirm} from './dom-utils.js';
+import {$, showToast, appAlert, appConfirm, needXlsx} from './dom-utils.js';
 import {placeOf, PLACE_NAME} from './placement.js';
 import {renderPresets} from './presets.js';
 import {applyAlarmOn} from './alarms.js';
@@ -77,6 +77,7 @@ export function initBackup(){
         '파일링크':(it.files||[]).join(' · ')
       };
     });
+    try{ await needXlsx(); }catch(e){ await appAlert('XLSX 저장 실패: '+e.message); return; }
     const ws=XLSX.utils.json_to_sheet(rows); const cols=Object.keys(rows[0]);
     ws['!cols']=cols.map(c=>({wch:Math.max(10,Math.min(46,rows.reduce((m,r)=>Math.max(m,String(r[c]||'').length*1.7),c.length*2)))}));
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'업무목록');

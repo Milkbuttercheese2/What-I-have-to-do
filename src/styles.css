@@ -1402,7 +1402,7 @@
   .dt-unroot{margin-left:auto;flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--ink-soft);font-size:15px;line-height:1;cursor:pointer;opacity:0}
   .dt-root:hover .dt-unroot,.dt-unroot:focus-visible{opacity:1}
   .dt-unroot:hover{background:var(--chip-bg);color:var(--red)}
-  .dt-root + .dt-row.dt-root,.dt-note + .dt-row.dt-root,.dt-row:not(.dt-root) + .dt-row.dt-root{margin-top:6px}
+  .dt-root + .dt-row.dt-root,.dt-note + .dt-row.dt-root,.dt-row:not(.dt-root) + .dt-row.dt-root,.dt-chunk + .dt-row.dt-root{margin-top:6px}
   .dt-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dt-note{height:26px;display:flex;align-items:center;font-size:12px;color:var(--ink-soft)}
   .dt-err{color:var(--red)}
@@ -1521,7 +1521,8 @@
   .dv-ftitle{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:10px}
   .dv-flist{border:1px solid var(--line-soft);border-radius:10px;overflow:hidden}
   .dv-frow{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:7px 12px;font-size:13px;cursor:pointer;border-top:1px solid var(--line-soft)}
-  .dv-frow:first-child{border-top:0}
+  .dv-flist>.dv-frow:first-child,.dv-flist>.dv-fchunk:first-child>.dv-frow:first-child{border-top:0}
+  .dv-fchunk.dv-cv{content-visibility:auto}   /* v3.8.16 큰 폴더 파일 목록 묶음 — 높이는 docs.js sizeFileChunks 가 첫 묶음에서 재서 적는다 */
   .dv-frow:hover{background:var(--sunk)}
   .dv-fname{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dc-note{display:flex;flex-direction:column;overflow:hidden}
@@ -1624,6 +1625,8 @@
   .pbs-name{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
   .pbs-name b{font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pbs-name span,.pbs-info,.pbs-count{font-size:12.5px;color:var(--ink-soft)}
+  .pbs-sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}   /* 소속 · 전화 · 이메일 한 줄, 하나씩 알약(소유자 지정) — 기존 칩 면(--chip-bg)·999px */
+  .pbs-sub > span{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;background:var(--chip-bg);color:var(--ink-2);font-size:12px;font-weight:500;min-width:0;overflow-wrap:anywhere}
   .pbs-info{margin-top:6px;word-break:break-all}
   .pbs-count{margin:10px 0 8px;font-weight:600}
   .pbs-list{max-height:none}
@@ -1753,7 +1756,7 @@
             mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/12px 12px no-repeat}
   .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--focus)}
   body.memo-resizing,body.memo-resizing *{cursor:ns-resize !important;user-select:none}
-  .fm-ro .fm-memo-grip{display:none}
+  /* v3.8.18: 완료 업무(읽기 전용 양식)에도 높이 손잡이를 둔다(소유자 지정) — 높이는 보기만 바꾸고 저장하지 않으므로 읽기 전용과 부딪치지 않는다 */
 
   /* v3.8.9 문서 탭 오른쪽 메모 칸 접기(소유자 지정) — 접으면 좁은 띠(‹ 개수 메모)만 남고 가운데가 넓어진다. 좁은 화면(세로로 쌓일 때)에는 쓰지 않는다 */
   .dn-fold{flex:none;width:24px;height:24px;margin-left:2px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink-2);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0 0 2px}
@@ -1773,7 +1776,85 @@
      (Edge 실측: 2만 줄에서 글자당 23ms → 6~7ms). 크기 격리(size)는 넣지 않는다 — 좁은 화면에서 트리 높이가 내용으로 정해진다.
      메뉴(.dt-menu)·끌기 유령(.dt-ghost)은 body 에 붙으므로 잘리지 않는다 */
   .dc-tree{contain:content}
+  /* v3.8.16 찾는 동안 트리 줄은 지우지 않고 높이 0 으로 접어 둔다 — 그려 둔 배치를 그대로 두므로 찾기를 지울 때 2만 줄을 다시 만들지 않는다.
+     display:none·content-visibility:hidden 은 다시 보일 때 배치·읽기 도구용 정보를 처음부터 다시 만들어 0.6초 넘게 걸렸다(Edge 실측). 결과 겹은 찾을 때만 */
+  .dc-tree.searching>.dt-rows{height:0;overflow:hidden}
+  .dc-tree:not(.searching)>.dt-hitlist{display:none}
+  /* v3.8.16 트리 줄 묶음(docs.js chunked) — 화면 밖 묶음은 건너뛴다. 높이는 docs.js 가 줄 높이 합으로 적는다(.dt-row 28px · .dt-note 26px 를 바꾸면 ROW_H·NOTE_H 도) */
+  .dt-chunk{content-visibility:auto}
   /* 완료 탭 줄 — 화면 밖 줄은 배치·그리기를 미룬다(내용·찾기(Ctrl+F)는 그대로). render.js 의 나눠 그리기와 함께 완료 1만 건 탭 열기 1033ms → 62ms(Edge 실측).
      19.5px = .drow 한 줄의 내용 높이(Edge 실측 36.5px − 위아래 여백 16 − 윗줄 1). 이 값은 여백을 뺀 내용 높이라야 한다 —
      여백 포함 값을 넣으면 화면 밖 줄마다 17px씩 커져 스크롤 위치가 밀린다. auto 라 한 번 그린 뒤엔 실제 높이를 기억 */
   .drow:not(.drow-h){content-visibility:auto;contain-intrinsic-size:auto 19.5px}
+
+  /* ── v3.8.18 전화번호부 화면 다듬기(소유자 요청 "다른 UI랑 통일되지만 예쁘게") ──
+     새 색·글꼴·그림자 없음 — 값은 모두 기존 토큰과 다른 탭의 값을 쓴다:
+     · 줄: 완료 탭 한 줄 목록(.drow)과 같은 여백·구분선·hover(--sunk), 고른 줄 = 문서 트리 고른 줄(.dt-row.on: --slate-bg + --focus 글자)
+     · 묶음 상자·머리줄: 완료 탭 묶음(.done-group/.dg-head)과 같은 값(그대로 둠)
+     · 오른쪽 칸 엮인 업무: 완료 탭 묶음 상자 + 한 줄 목록 모양, 진행/완료 표시는 기존 .rel-tag
+     줄의 칸 폭은 내용에 맞춘 고정 폭이라 줄끼리·묶음끼리 세로로 맞는다(이름 11rem · 전화 9rem · 이메일 나머지). */
+  .pb-group .pb-item{grid-template-columns:minmax(0,11rem) 9rem minmax(0,1fr) auto;gap:14px;padding:8px 14px;font-size:13px}
+  .pb-group .pb-item .pb-who,.pb-group .pb-item .pb-phone,.pb-group .pb-item .pb-email{padding-left:0}
+  .pb-item .pb-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pb-item .pb-phone{color:var(--ink-2)}
+  .pb-item .pb-email{font-size:12px}
+  .pb-tail{padding-right:0}
+  .pb-tail .pb-cnt{order:2}   /* 배지는 늘 오른쪽 끝 — hover 때 나오는 수정·바꾸기·삭제는 그 왼쪽(평소엔 감춰진 단추 자리만큼 배지가 가운데로 떠 보였다) */
+  .pb-group .pb-item.sel,.pb-group .pb-item.sel:hover{background:var(--slate-bg)}
+  .pb-item.sel .pb-name{color:var(--focus)}
+  .pb-item.sel .pb-avatar,.pb-item.sel .pb-cnt.live,.pb-item.sel .pb-cnt.past{background:var(--card)}   /* 고른 줄 바탕(--slate-bg)과 같은 색이라 동그라미·배지가 묻히지 않게 */
+  /* 업무 수 배지 — 진행 중이 있으면 강조, 끝난 것만 있으면 옅게, 0건은 배경 없이 흐린 글자(정보는 그대로 남긴다) */
+  .pb-cnt.past{background:var(--chip-bg);color:var(--ink-soft)}
+  .pb-cnt.none{background:transparent;color:var(--icon-muted);font-weight:600}
+  /* 오른쪽 칸 */
+  .pbs-head{align-items:flex-start;gap:10px}   /* 동그라미(36px)+사이(10px) = 아래 연락처 이름표 폭(36px)+사이(10px) — 이름과 번호, 동그라미와 '전화'가 세로로 맞는다(소유자 지정) */
+  .pbs-avatar{width:36px;height:36px;font-size:15px}
+  .pbs-info{margin:12px 0 0;display:flex;flex-direction:column;gap:4px}
+  .pbs-line{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
+  .pbs-k{flex:none;width:36px;font-size:12px;color:var(--ink-soft)}
+  .pbs-v{min-width:0;overflow-wrap:anywhere}
+  .pbs-box{margin-top:14px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .pbs-bhead{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line)}
+  .pbs-btitle{font-size:13.5px;font-weight:700}
+  .pbs-box .pbs-count{margin:0 0 0 auto;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line-soft);color:var(--ink-soft);line-height:1;display:inline-flex;align-items:center;height:20px}
+  .pbs-list{display:flex;flex-direction:column;gap:0}
+  .pbs-list .rel-hit{border:0;border-top:1px solid var(--line-soft);border-radius:0;background:transparent;padding:8px 14px;font-size:13px}
+  .pbs-list .rel-hit:first-child{border-top:0}
+  .pbs-list .rel-hit:hover{background:var(--sunk);border-color:var(--line-soft)}
+  .pbs-empty{padding:14px;font-size:12.5px;color:var(--ink-soft)}
+  /* 관련 업무 줄의 칸: 진행/완료 · 메모 · 식별정보 · 종료 — 머리줄은 완료 탭 .drow-h 와 같은 글자 */
+  .pbs-list .rel-hit{display:grid;grid-template-columns:2.6rem minmax(6rem,1.6fr) minmax(0,1fr) 6.5rem;gap:10px}   /* 메모 : 식별정보 = 1.6 : 1 — 칸이 좁아도(넓은 화면 경계 1081px) 메모가 몇 글자로 눌리지 않게 */
+  .pbs-c{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--ink-soft)}
+  .pbs-list .pbs-h{cursor:default;padding-top:7px;padding-bottom:6px}
+  .pbs-list .pbs-h:hover{background:transparent}
+  .pbs-h .rel-txt,.pbs-h .pbs-c{font-size:11.5px;font-weight:600;color:var(--ink-soft)}
+  .pbs-list .rel-tag{justify-self:start}
+  @media(max-width:700px){ .pbs-list .rel-hit{grid-template-columns:2.6rem minmax(0,1fr) 5.5rem} .pbs-list .rel-hit > :nth-child(3){display:none} }
+  /* 넓은 화면에선 목록 폭을 늘 오른쪽 칸이 있을 때의 폭으로 둔다(소유자 지정 — 줄이 화면 끝까지 펼쳐지면 눈이 멀리 간다).
+     사람을 고르기 전엔 그 자리에 안내만(새 프리셋 상자와 같은 면 --dash-bg · 실선 — v3.7.0 점선 금지). 좁은 폭(≤1080)은 예전처럼 한 열 */
+  @media(min-width:1081px){
+    .pb-layout,.pb-layout.has-side{grid-template-columns:minmax(35rem,4fr) minmax(0,6fr)}   /* 목록 4 : 오른쪽 칸 6(소유자 지정). 목록은 35rem 아래로 줄지 않는다 — 이메일 칸(약 25자)이 잘리지 않게 */
+    .pb-layout:not(.has-side)::after{content:"사람을 고르면 관련 업무가 여기에 보입니다";position:sticky;top:14px;padding:22px 16px;border:1px solid var(--line);border-radius:14px;background:var(--dash-bg);color:var(--ink-soft);font-size:12.5px;text-align:center}
+  }
+  /* 넓은 화면 줄 칸 폭 — 이름 8rem · 전화 8.5rem · 이메일 나머지 · 배지 */
+  @media(min-width:1081px){ .pb-group .pb-item{grid-template-columns:minmax(0,8rem) 8.5rem minmax(0,1fr) auto} }
+  /* 수정·바꾸기·삭제 = 오른쪽 칸 머리(v3.8.18 소유자 지정). 보조 단추(.btn-tool) 크기, 삭제는 hover 때 빨강 — 줄마다 뜨던 글자 단추 대신 */
+  /* 평소엔 감추고, 오른쪽 칸에 마우스를 올렸을 때(또는 키보드 초점)만 잠깐 — 늘 떠 있으면 긴 이름과 겹친다(소유자 지정).
+     자리를 차지하지 않고 머리줄 오른쪽(⇥ 왼쪽)에 칸 바탕(--card)으로 겹쳐 뜬다 */
+  .pbs-head{position:relative}
+  .pbs-acts{position:absolute;right:0;top:0;display:flex;gap:6px;padding-left:10px;background:var(--card);opacity:0;pointer-events:none;transition:opacity .12s}
+  .pb-side:hover .pbs-acts,.pb-side:focus-within .pbs-acts{opacity:1;pointer-events:auto}
+  .pbs-acts .btn{height:28px;padding:0 10px;font-size:12px}
+  .pbs-acts .pbs-del:hover{color:var(--red);border-color:var(--red)}
+  /* 좁은 폭(560px 단일 열, 반응형 정책): 이름 / 전화·이메일 두 줄, 꼬리(배지·수정·바꾸기·삭제)는 오른쪽 */
+  @media(max-width:1080px){
+    .pb-group .pb-item{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"who tail" "sub tail";row-gap:2px;column-gap:10px}
+    .pb-group .pb-item .pb-who{grid-area:who}
+    .pb-group .pb-item .pb-tail{grid-area:tail;grid-column:auto}
+    .pb-group .pb-item .pb-phone{grid-area:sub;padding-left:32px;font-size:12.5px}
+    .pb-group .pb-item .pb-email{grid-area:sub;justify-self:end;max-width:50%;text-align:right}
+  }
+
+  /* v3.8.18 완료 탭 — 다른 달을 보는 중이면 목록 위에 "YYYY년 M월에 끝낸 업무 N건"(완료 탭 위 요약 글자와 같은 크기·색) */
+  .done-month-note{margin:0 2px 10px;font-size:12.5px;color:var(--ink-soft)}
+  .done-month-note b{color:var(--ink);font-weight:700}

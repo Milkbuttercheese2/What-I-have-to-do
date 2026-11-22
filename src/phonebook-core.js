@@ -196,6 +196,25 @@ export function relatedItems(items, {entries}={}){
   return out.sort((a,b)=>(a.done?1:0)-(b.done?1:0) || b.id-a.id);
 }
 
+/* 사람마다 엮인 업무 수를 한 번에(v3.8.16) — relatedItems(items,{entries:[e]}).length 를 사람마다 부르면
+   (전화번호부 N명 × 업무 M건) 2천 명 × 1만 건에서 전화번호부 탭을 열 때 0.9초 걸렸다. 기준은 relatedItems 와 똑같다:
+   관련인의 이름·소속(앞뒤 공백 뺌)·연락처 숫자가 전화번호부 항목(normEntry)과 모두 같으면, 주기 부모는 빼고, 한 업무는 한 번.
+   돌려주는 값: entryKey 식 열쇠 → 업무 수. 전화번호부 항목의 수는 relKeyOf(e) 로 찾는다. */
+export const relKeyOf = e => { const n=normEntry(e); return `${n.who}|${n.org}|${phoneDigits(n.phone)}`; };
+export function relatedCounts(items){
+  const cnt=new Map();
+  for(const it of (items||[])){
+    if(it.recur) continue;
+    const seen=new Set();
+    for(const c of (it.contacts||[])){
+      const k=`${String(c.who||'').trim()}|${String(c.org||'').trim()}|${phoneDigits(c.phone)}`;
+      if(seen.has(k)) continue; seen.add(k);
+      cnt.set(k, (cnt.get(k)||0)+1);
+    }
+  }
+  return cnt;
+}
+
 /* 원문(이스케이프 전) 텍스트에서 @태그 이름들을 뽑는다 — 중복 제거, 등장 순서.
    linkifyAt 과 같은 문법(줄 시작/공백 뒤 @, '(' 앞까지, 꼬리 문장부호 제거). */
 export function extractTags(text){

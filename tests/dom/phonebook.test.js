@@ -11,6 +11,7 @@ const {initPhonebook, renderPhonebook, adoptPhonebook} = await import('../../src
 const {initAtComplete} = await import('../../src/at-complete.js');
 const {initForm, openForm, captureMemo} = await import('../../src/form.js');
 initPhonebook(); initAtComplete(); initForm();
+env.document.getElementById('view-phone').classList.add('on');   // v3.8.16: 전화번호부는 탭이 보일 때만 그린다 — 이 파일은 전화번호부 탭을 연 상태로 시험한다
 
 const $ = id => env.document.getElementById(id);
 const input = el => el.dispatchEvent(new env.window.Event('input', {bubbles:true}));
@@ -42,12 +43,14 @@ test('수정·삭제: 수정 저장이 항목을 갱신하고 삭제가 목록·
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1'}, {id:12, who:'이영희', org:'세무과', phone:'010-2'}]);
   renderPhonebook();
-  $('pb-list').querySelector('[data-pbedit="11"]').click();
+  $('pb-list').querySelector('[data-pbid="11"]').click();     // v3.8.18: 수정·삭제는 고른 사람 칸(오른쪽)에
+  $('pb-side').querySelector('[data-pbedit="11"]').click();
   assert.equal($('pb-who').value, '김철수');
   $('pb-phone').value='010-9999-0000';
   $('pb-save').click();
   assert.equal(S.phonebook.find(e=>e.id===11).phone, '010-9999-0000');
-  $('pb-list').querySelector('[data-pbdel="12"]').click();     // confirm 기본 true
+  $('pb-list').querySelector('[data-pbid="12"]').click();
+  $('pb-side').querySelector('[data-pbdel="12"]').click();     // confirm 기본 true
   await env.flush();                                           // v3.3.0: 확인 대화상자가 Promise 기반
   assert.equal(S.phonebook.length, 1);
   assert.ok(!$('pb-list').textContent.includes('이영희'));
@@ -249,7 +252,7 @@ test('본문 하이라이트: 전화번호부 실존 관련인만 — 한 글자
 });
 
 test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 업무 수 배지 (v2.11.0)', async () => {
-  await env.resetS(); S.loaded = true;
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
   adoptPhonebook([
     {id:1, who:'가나다', org:'가과', phone:'010-1'},            // 업무 0건
     {id:2, who:'마바사', org:'나과', phone:'010-2'},            // 업무 1건 (관련인 3칸 일치)
@@ -320,7 +323,7 @@ test('세부 할 일 담당칸 자동완성: 2글자부터 후보, 선택하면 
 
 test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 사람 정보 + 엮인 업무(진행 먼저) · ×로 닫기', async () => {
   const {renderPhonebook} = await import('../../src/phonebook.js');
-  await env.resetS(); S.loaded = true;
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1', email:'k@x.kr'}, {id:12, who:'이영희', org:'세무과', phone:'010-2'}]);
   const c={who:'김철수', org:'행정과', phone:'010-1'};
   S.items=[{id:1, memo:'끝난 일', contacts:[c], done:true, doneAt:5}, {id:2, memo:'하는 일\n둘째', contacts:[c], done:false}, {id:3, memo:'남의 일', contacts:[{who:'이영희',org:'세무과',phone:'010-2'}], done:false}];
@@ -330,12 +333,41 @@ test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 �
   $('pb-list').querySelector('[data-pbid="11"] .pb-who').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
   assert.ok(side.classList.contains('on'));
   assert.ok(!env.document.getElementById('relModal').classList.contains('on'), '팝업은 뜨지 않는다');
-  assert.match(side.textContent, /김철수/); assert.match(side.textContent, /010-1 · k@x\.kr/); assert.match(side.textContent, /진행 1 · 완료 1/);
-  assert.deepEqual([...side.querySelectorAll('.rel-hit')].map(x=>x.dataset.open), ['2','1'], '진행 먼저, 3칸이 같은 사람만');
+  assert.match(side.textContent, /김철수/); assert.deepEqual([...side.querySelectorAll('.pbs-line')].map(x=>x.textContent), ['010-1','k@x.kr'], 'v3.8.18: 전화·이메일은 이름표 없이 줄을 나눈다'); assert.match(side.textContent, /진행 1 · 완료 1/);
+  assert.deepEqual([...side.querySelectorAll('.rel-hit[data-open]')].map(x=>x.dataset.open), ['2','1'], '진행 먼저, 3칸이 같은 사람만');
   assert.ok($('pb-list').querySelector('[data-pbid="11"]').classList.contains('sel'));
   /* 업무가 바뀌면 칸도 따라 바뀐다 */
   S.items[1].done=true; S.items[1].doneAt=9; renderPhonebook();
   assert.match(side.textContent, /진행 0 · 완료 2/);
-  env.document.getElementById('pb-side-x').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
-  assert.ok(!side.classList.contains('on'));
+  assert.ok(!env.document.getElementById('pb-side-x'), 'v3.8.18: 칸 접기(⇥)는 없다');
+  assert.deepEqual([...side.querySelectorAll('.pbs-h span')].map(x=>x.textContent), ['','메모','식별정보','종료'], 'v3.8.18: 관련 업무 칸 머리줄');
+});
+
+test('v3.8.16 전화번호부 탭이 안 보이면 그리지 않고, 탭을 열면 그린다', async () => {
+  const {showView} = await import('../../src/views.js');
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:1, who:'숨김', org:'과', phone:'010-1234-5678'}]);
+  $('pb-list').innerHTML='';
+  env.document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='board')); showView('board');
+  renderPhonebook();
+  assert.equal($('pb-list').textContent, '', '숨은 탭은 그리지 않는다');
+  env.document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='phone')); showView('phone');
+  assert.match($('pb-list').textContent, /숨김/, '탭을 열면 그린다');
+});
+
+test('v3.8.18 전화번호부 줄: 소속은 묶음 머리줄에만 · 업무 배지는 진행 있음/끝난 것만/없음으로 구분', async () => {
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
+  adoptPhonebook([{id:1, who:'가가', org:'가과', phone:'010-1111-1111'},{id:2, who:'나나', org:'가과', phone:'010-2222-2222'},{id:3, who:'다다', org:'가과', phone:'010-3333-3333'}]);
+  const c = (who,phone)=>[{who, org:'가과', phone}];
+  S.items.push({id:101, memo:'a', done:false, f:{}, contacts:c('가가','010-1111-1111'), ids:[], subs:[], al:{}},
+               {id:102, memo:'b', done:true, doneAt:1, f:{}, contacts:c('나나','010-2222-2222'), ids:[], subs:[], al:{}});
+  renderPhonebook();
+  assert.equal($('pb-list').querySelectorAll('.pb-item .pb-org').length, 0, '줄에 소속 칸이 없다');
+  assert.equal($('pb-list').querySelector('.pb-ghead span').textContent, '가과', '소속은 머리줄에');
+  const cls = id => $('pb-list').querySelector(`[data-pbid="${id}"] .pb-cnt`).className;
+  assert.match(cls(1), /\blive\b/); assert.match(cls(2), /\bpast\b/); assert.match(cls(3), /\bnone\b/);
+  assert.equal($('pb-list').querySelector('[data-pbid="3"] .pb-cnt').textContent, '업무 0', '0건도 글자는 남긴다');
+  assert.equal($('pb-list').querySelectorAll('[data-pbedit],[data-pbswap],[data-pbdel]').length, 0, '줄에는 수정·바꾸기·삭제가 없다');
+  $('pb-list').querySelector('[data-pbid="1"]').click();
+  assert.equal($('pb-side').querySelectorAll('[data-pbedit="1"],[data-pbswap="1"],[data-pbdel="1"]').length, 3, '고른 사람 칸 머리에 있다');
 });

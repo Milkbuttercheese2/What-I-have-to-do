@@ -146,6 +146,11 @@ function renderMetrics(){
   el.innerHTML=`<span><b>${m.active}</b>진행 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 할 일</span>`
     +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
 }
+/* v3.8.16 보드 칸은 지난번과 같은 HTML 이면 다시 넣지 않는다 — 카드를 하나 체크·저장할 때 바뀌지 않은 칸까지
+   카드를 전부 다시 만들어(업무 1천 건: 그리기 200ms 넘게) 1분마다 도는 자동 다시 그리기도 같은 비용을 냈다.
+   칸 안 카드 DOM 을 직접 바꾸는 곳(끌기 표시 .dragging·.merge-over·.drop-on)은 끝날 때 스스로 지운다. */
+const colHtml=new WeakMap();
+function putCol(el, html){ if(!el) return; if(colHtml.get(el)===html) return; el.innerHTML=html; colHtml.set(el, html); }
 export function render(){
   syncBoardVisibility();
   renderMetrics();
@@ -157,8 +162,11 @@ export function render(){
     if(!isNaN(d)) ts.push(d);
     return ts.length?Math.min(...ts):null;
   };
+  /* 정렬 열쇠는 업무마다 한 번만 계산한다(비교마다 날짜를 다시 읽으면 1천 건에서 수만 번) */
+  const kt=new Map();
+  const keyOf=it=>{ if(!kt.has(it)) kt.set(it, keyTime(it)); return kt.get(it); };
   const sorter=(a,b)=>{
-    const at=keyTime(a), bt=keyTime(b);
+    const at=keyOf(a), bt=keyOf(b);
     if(at!=null&&bt!=null&&at!==bt) return at-bt;
     if(at!=null&&bt==null) return -1;
     if(at==null&&bt!=null) return 1;
@@ -171,7 +179,7 @@ export function render(){
     for(const k of ['inbox','metoday','othtoday','meplan','othplan']){
       const list=cols[k].sort(sorter);
       $('c5-'+k).textContent=list.length;
-      $('col5-'+k).innerHTML=list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`;
+      putCol($('col5-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`);
     }
     renderHidden();
     return;
@@ -182,7 +190,7 @@ export function render(){
   for(const k of ['inbox','today','doing','planned']){
     const list=cols[k].sort(sorter);
     $('c-'+k).textContent=list.length;
-    $('col-'+k).innerHTML=list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`;
+    putCol($('col-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`);
   }
   renderHidden();
 }
@@ -223,7 +231,7 @@ export function doneCalHtml(list, y, m, selDay, now){
 /* v3.8.4 완료 탭 — 늘 전체를 한 줄 목록으로 보여 준다(거르기·카드 보기 단추는 소유자 지정으로 뺐다) */
 /* 한 줄 = 종료시각 · 메모 첫 줄 · 식별정보 · 접수시각 · 마감시각 · 관련인 · 파일 (소유자 지정) */
 const DONE_COLS=['종료','메모','식별정보','접수','마감','관련인','파일'];
-const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
+export const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
   return `${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const baseName = p => String(p||'').split(/[\\/]/).filter(Boolean).pop()||'';
 function doneRowHtml(it){
@@ -244,7 +252,13 @@ export function renderDone(){
   const matched=all.filter(it=>textMatch(it, dq));
   if(dcalY==null){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
   const dc=$('done-cal'); if(dc) dc.innerHTML=doneCalHtml(matched, dcalY, dcalM, dcalDay, Date.now());
-  const list=matched.filter(it=>dcalDay==null || (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
+  /* v3.8.18 달 단위(소유자 지정): 목록은 달력 띠가 보는 달을 따라간다. 오늘이 든 달이면 지금처럼 전체, 다른 달이면 그 달에
+     끝낸 업무만(끝낸 시각 doneAt 기준 — 시각이 없는 옛 완료 업무는 전체 보기에서만 보인다). 날짜를 고르면 그날만(예전 그대로),
+     검색어가 있으면 달과 상관없이 전체에서 찾는다. 보는 달은 화면 상태일 뿐 저장하지 않는다(dcalY/dcalM). */
+  const monthOnly=doneMonthOnly();
+  const mFrom=new Date(dcalY, dcalM, 1).getTime(), mTo=new Date(dcalY, dcalM+1, 1).getTime();
+  const inMonth=it=>!monthOnly || (it.doneAt!=null && it.doneAt>=mFrom && it.doneAt<mTo);
+  const list=matched.filter(it=>dcalDay==null ? inMonth(it) : (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
   $('done-count').textContent=all.length;
   const now=Date.now();
   const dm=$('done-metrics');
@@ -254,7 +268,9 @@ export function renderDone(){
     /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
     dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
-  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
+  const mName=`${dcalY}년 ${dcalM+1}월`;
+  const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 끝낸 업무 <b class="num">${list.length}</b>건</div>` : '';
+  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 끝낸 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
     const g=doneGroupOf(it.doneAt, now);
@@ -268,7 +284,7 @@ export function renderDone(){
      다시 그리면(doneSeq) 이어 그리던 것은 멈춘다. 줄 수가 적으면 예전처럼 한 번에 그린다. */
   const seq=++doneSeq, later=[];
   let budget=DONE_SYNC_ROWS;
-  $('col-done').innerHTML=groups.map(g=>{
+  $('col-done').innerHTML=monthNote+groups.map(g=>{
     const open = (dq || dcalDay!=null) ? true : groupOpen(g.key);
     let rows='';
     if(open){
@@ -284,6 +300,11 @@ export function renderDone(){
   if(later.length) setTimeout(()=>fillDoneLater(seq, later), 0);
 }
 const DONE_SYNC_ROWS=300, DONE_CHUNK_ROWS=400;
+/* 다른 달을 보는 중이고 검색어가 없을 때만 그 달 것으로 거른다(오늘이 든 달 = 전체) */
+function doneMonthOnly(){
+  if(dq || dcalY==null) return false;
+  const d=new Date(); return !(dcalY===d.getFullYear() && dcalM===d.getMonth());
+}
 let doneSeq=0;
 function fillDoneLater(seq, later){
   if(seq!==doneSeq) return;                              // 그새 다시 그렸다 — 이 이어 그리기는 낡았다

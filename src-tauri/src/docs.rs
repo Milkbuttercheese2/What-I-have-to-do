@@ -740,6 +740,7 @@ fn query_index(ix: &SearchIndex, query: &str) -> Vec<SearchHit> {
     let q = query.trim().to_lowercase();
     if q.is_empty() { return vec![] }
     let qlen = q.chars().count();
+    let slow = q.chars().any(|c| !c.is_ascii() && (c.is_lowercase() || c.is_uppercase()));
     let mut out = Vec::new();
     for e in &ix.ents {
         if out.len() >= SEARCH_MAX_HITS { break }
@@ -748,17 +749,37 @@ fn query_index(ix: &SearchIndex, query: &str) -> Vec<SearchHit> {
             continue;
         }
         let Some(text) = &e.text else { continue };
-        for line in text.lines() {
-            let low = line.to_lowercase();
-            if let Some(at) = low.find(&q) {
-                // 소문자 바꾸기로 바이트 위치가 어긋날 수 있어 원문 기준으로 다시 맞춘다
-                let at = if line.is_char_boundary(at) && line.len() == low.len() { at } else { 0 };
-                out.push(SearchHit { rel: e.rel.clone(), name: e.name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, qlen) });
-                break;
-            }
+        if let Some((line, at)) = find_in_text(text, &q, slow) {
+            out.push(SearchHit { rel: e.rel.clone(), name: e.name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, qlen) });
         }
     }
     out
+}
+
+/// 내용에서 q(소문자)가 처음 나오는 줄과 그 줄 안 바이트 위치(v3.8.16).
+/// 예전엔 찾을 때마다 모든 파일의 모든 줄을 소문자로 바꿔(줄마다 새 문자열) 맞는 게 적은 검색어는
+/// 글자를 칠 때마다 0.28초 걸렸다(글자 파일 63MB 색인). 이제는:
+/// · 검색어에 대소문자가 있는 글자가 없으면(한글·숫자 등) 원문에서 바로 찾는다(복사 없음)
+/// · 대소문자가 있는 글자가 ASCII 영문뿐이면 파일마다 ASCII 만 소문자로 한 번 바꿔 찾는다(바이트 위치가 그대로라 줄을 바로 찾는다)
+/// · 그 밖(é·Ω 같은 대소문자 있는 비ASCII 글자가 검색어에 있으면)은 예전처럼 줄마다 유니코드 소문자로 맞춘다(slow)
+fn find_in_text<'a>(text: &'a str, q: &str, slow: bool) -> Option<(&'a str, usize)> {
+    if slow {
+        for line in text.lines() {
+            let low = line.to_lowercase();
+            if let Some(at) = low.find(q) {
+                // 소문자 바꾸기로 바이트 위치가 어긋날 수 있어 원문 기준으로 다시 맞춘다
+                let at = if line.is_char_boundary(at) && line.len() == low.len() { at } else { 0 };
+                return Some((line, at));
+            }
+        }
+        return None;
+    }
+    let pos = if q.bytes().any(|b| b.is_ascii_alphabetic()) { text.to_ascii_lowercase().find(q)? } else { text.find(q)? };
+    let start = text[..pos].rfind('\n').map_or(0, |i| i + 1);
+    let end = text[pos..].find('\n').map_or(text.len(), |i| pos + i);
+    let line = &text[start..end];
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    Some((line, pos - start))
 }
 
 /// 색인을 새로 만들어 찾는다(시험·한 번 쓰기용)
@@ -1607,5 +1628,28 @@ mod tests {
         assert!(serve_path("/x/a.html").is_err(), "폴더 번호가 숫자가 아니면 거부");
         assert!(serve_path("/999/a.html").is_err(), "없는 폴더 번호");
         assert!(serve_path("nopath").is_err());
+    }
+
+    #[test]
+    fn find_in_text_fast_path_matches_old_per_line_lowercase() {
+        // 빠른 길(원문·ASCII 소문자)과 예전 길(줄마다 유니코드 소문자)이 같은 줄·같은 자리를 돌려준다
+        let texts = [
+            "첫 줄\r\n둘째 줄 SR-1234 회신 요청\r\n셋째 Budget 표",
+            "Report Line\nreport line two\n",
+            "끝에 찾는말",
+            "찾는말이 첫 줄\n",
+            "줄바꿈만\r\n\r\n\r\nABC def\r\n",
+            "섞임 AbC가나 abc",
+        ];
+        let qs = ["회신", "sr-1234", "budget", "line", "line two", "찾는말", "abc", "abc가나", "없음", "\u{3000}", "1"];
+        for t in texts {
+            for q in qs {
+                let q = q.to_lowercase();
+                assert!(!q.chars().any(|c| !c.is_ascii() && (c.is_lowercase() || c.is_uppercase())));
+                assert_eq!(find_in_text(t, &q, false), find_in_text(t, &q, true), "text={t:?} q={q:?}");
+            }
+        }
+        // 대소문자 있는 비ASCII 글자가 검색어에 있으면 예전 길(é ↔ É)
+        assert!(find_in_text("CAFÉ 메뉴", "café", true).is_some());
     }
 }

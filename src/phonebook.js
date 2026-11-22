@@ -7,13 +7,13 @@
    ========================================================================= */
 import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
+import {$, esc, escAttr, showToast, appAlert, appConfirm, needXlsx} from './dom-utils.js';
 import {fmtT} from './datetime.js';
-import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, absorbContacts, swapPersonIn} from './phonebook-core.js';
+import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, relatedCounts, relKeyOf, absorbContacts, swapPersonIn} from './phonebook-core.js';
 /* v3.7.0: 인물 일괄 바꾸기가 업무를 고친 뒤 저장·재렌더해야 해서 persist 를 쓴다.
    render→form→phonebook→render 순환이지만 함수 호출만 오가므로(최상위 사용 없음) 안전하다 —
    CLAUDE.md 규칙 1(기능 모듈은 hoisted 함수 + init*() 만)이 지켜지는 동안. */
-import {persist} from './render.js';
+import {persist, dAt} from './render.js';
 import {registerView} from './views.js';
 import {openModal, closeModal} from './modals.js';
 
@@ -29,15 +29,13 @@ export function adoptPhonebook(list){
     .map(e=>{ if(e.id==null||e.id===''){ e.id=newId(); } else { e.id=Number(e.id); if(e.id>S.lastId) S.lastId=e.id; } return e; });
 }
 
-/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 팝업과 같은 기준
-   (v3.1.1: 관련인 3칸(관련소속·관련인·연락처) 완전 일치만) */
-function relCount(e){
-  return relatedItems(S.items, {entries:[e]}).length;
-}
+/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 팝업과 같은 기준(v3.1.1: 관련인 3칸 완전 일치만).
+   v3.8.16: 사람마다 업무를 훑지 않고 relatedCounts 로 한 번에 센다(아래 sorted) */
 /* 표시 정렬(v2.11.0 소유자 지정) — ① 관련 업무 수 많은 순 ② 소속 ③ 이름 (ko locale).
    원본 배열은 건드리지 않는다(배열 순서 = 저장 순서). */
 function sorted(){
-  const cnt=new Map(S.phonebook.map(e=>[e.id, relCount(e)]));
+  const by=relatedCounts(S.items);                              // 업무를 한 번만 훑는다(사람마다 훑지 않는다)
+  const cnt=new Map(S.phonebook.map(e=>[e.id, by.get(relKeyOf(e))||0]));
   return S.phonebook.slice().sort((a,b)=>
     (cnt.get(b.id)-cnt.get(a.id))
     || (a.org||'').localeCompare(b.org||'','ko')
@@ -52,7 +50,10 @@ function matches(e){
 }
 
 export function renderPhonebook(){
-  renderPbSide();                                            // 오른쪽 칸도 같은 데이터로 다시(업무가 바뀌었을 수 있다)
+  /* v3.8.16: 탭이 안 보이면 그리지 않는다 — 탭을 열 때 views.js 가 이 함수를 부르므로 늘 최신으로 열린다(달력·완료와 같은 규칙).
+     예전엔 앱을 켤 때(불러온 전화번호부 반영) 숨은 탭을 그려 시작이 그만큼 늦었다 */
+  const view=$('view-phone'); if(view && !view.classList.contains('on')) return;
+  renderPbSide();                                           // 오른쪽 칸도 같은 데이터로 다시(업무가 바뀌었을 수 있다)
   const w=$('pb-list'); if(!w) return;
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
@@ -67,20 +68,18 @@ export function renderPhonebook(){
   groups.sort((a,b)=>(b.n-a.n)||a.org.localeCompare(b.org,'ko'));
   groups.forEach(g=>g.rows.sort((a,b)=>(b.n-a.n)||(a.e.who||'').localeCompare(b.e.who||'','ko')));
   const initial=e=>esc((String(e.who||e.org||'?').trim()[0])||'?');
-  const row=({e,n})=>`<div class="pb-item${e.id===pbSel?' sel':''}" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
-    <span class="pb-org">${esc(e.org||'')}</span>
-    <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span>${esc(e.who||'')}</span>
+  /* v3.8.18 줄 모양: 소속은 묶음 머리줄에만(줄마다 되풀이하지 않는다) — 머리글자·이름이 줄 맨 앞.
+     '업무 N' 배지는 진행 중인 업무가 있는 사람만 강조(진행), 끝난 업무만 있으면 옅게(끝남), 0건은 글자만 흐리게(없음) */
+  const live=relatedCounts(S.items.filter(it=>!it.done));
+  const row=({e,n})=>{ const l=live.get(relKeyOf(e))||0;
+    return `<div class="pb-item${e.id===pbSel?' sel':''}" data-pbid="${e.id}" title="누르면 이 관련인과 관련 업무를 보여줍니다">
+    <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span><span class="pb-name">${esc(e.who||'')}</span></span>
     <span class="pb-phone num">${esc(e.phone||'')}</span>
     <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
     <span class="pb-tail">
-      <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
-      <!-- v3.6.2: 버튼에 title="" — 행의 '엮인 업무' 안내 툴팁이 상속돼 수정/삭제 위에서도
-           떠서 눌렀을 때 하는 일과 어긋났다(빈 title 이 조상 툴팁을 막는다) -->
-      <button class="ps-edit" data-pbedit="${e.id}" title="">수정</button>
-      <button class="ps-swap" data-pbswap="${e.id}" title="">바꾸기</button>
-      <button class="ps-del" data-pbdel="${e.id}" title="">삭제</button>
+      <span class="pb-cnt num ${l?'live':n?'past':'none'}" title="관련 업무 ${n}건 · 진행 ${l} · 완료 ${n-l}">업무 ${n}</span>
     </span>
-  </div>`;
+  </div>`; };
   w.innerHTML=groups.map(g=>`<section class="pb-group"><div class="pb-ghead"><span>${esc(g.org)}</span><span class="count num">${g.rows.length}명</span></div>`
     +g.rows.map(row).join('')+`</section>`).join('');
 }
@@ -159,6 +158,7 @@ async function importFromXlsx(file){
   reader.onload=async ()=>{
     let rows;
     try{
+      await needXlsx();
       const wb=XLSX.read(new Uint8Array(reader.result), {type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       rows=XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
@@ -169,12 +169,15 @@ async function importFromXlsx(file){
       return;
     }
     const complete=mapped.entries.filter(isComplete);
-    const fresh=complete.filter(e=>!S.phonebook.some(x=>entryKey(x)===entryKey(e))).map(normEntry);
+    /* 이미 있는 사람 찾기는 열쇠 표를 한 번 만들어 쓴다(v3.8.16) — 줄마다 전화번호부 전체를 훑으면
+       3천 줄 × 500명에서 파일을 고른 뒤 확인 창이 1초 걸렸다. 같은 열쇠가 여럿이면 앞의 것(예전 find 와 같다) */
+    const have=new Map(); for(const x of S.phonebook){ const k=entryKey(x); if(!have.has(k)) have.set(k, x); }
+    const fresh=complete.filter(e=>!have.has(entryKey(e))).map(normEntry);
     /* v3.5.0: 엑셀은 예전처럼 **추가만** 한다 — 이미 있는 사람은 건드리지 않는다.
        그래서 이미 있는 사람 줄에 이메일을 적어 와도 반영되지 않는데, 그 사실을 알린다
        (조용히 넘기면 "엑셀에 적었는데 왜 안 들어오지"가 된다). 고치는 길은 [수정] 하나. */
     const ignoredEmail=complete.filter(e=>{
-      const ex=S.phonebook.find(x=>entryKey(x)===entryKey(e));
+      const ex=have.get(entryKey(e));
       const v=String(e.email||'').trim();
       return ex && v && v!==String(ex.email||'').trim();
     }).length;
@@ -206,6 +209,7 @@ async function importFromXlsx(file){
    Uint8Array 로 감싸지 않으면 0바이트 파일이 나온다. */
 async function saveXlsxTemplate(){
   try{
+    await needXlsx();
     const ws=XLSX.utils.aoa_to_sheet([['관련소속','관련인','연락처','이메일']]);   // 화면 입력칸과 같은 이름
     ws['!cols']=[{wch:24},{wch:14},{wch:20},{wch:26}];
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
@@ -265,7 +269,7 @@ export function openRelated(name, extraEntries){
     const dv=it.done&&it.doneAt!=null?new Date(it.doneAt):null;
     const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
     return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
-  }).join(''):'<div class="empty" style="padding:14px">엮인 업무가 없습니다.</div>';
+  }).join(''):'<div class="empty" style="padding:14px">관련 업무가 없습니다.</div>';
   openModal('relModal');
 }
 export function closeRelated(){ closeModal('relModal'); }
@@ -282,16 +286,22 @@ export function renderPbSide(){
   const list=relatedItems(S.items, {entries:[en]}).slice().sort((a,b)=>((a.done?1:0)-(b.done?1:0)) || ((b.doneAt||b.id)-(a.doneAt||a.id)));
   const live=list.filter(it=>!it.done).length;
   el.classList.add('on'); if(lay) lay.classList.add('has-side');
-  el.innerHTML=`<div class="pbs-head"><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}</div>`
-    +`<button type="button" class="fm-x side-x" id="pb-side-x" aria-label="칸 닫기" title="칸 닫기">⇥</button></div>`
-    +`<div class="pbs-info num">${[en.phone, en.email].filter(Boolean).map(esc).join(' · ')}</div>`
-    +`<div class="pbs-count">진행 ${live} · 완료 ${list.length-live}</div>`
-    +`<div class="rel-list pbs-list">${list.length ? list.map(it=>{
+  /* v3.8.18 모양: 머리글자 동그라미 + 이름·소속, 연락처는 줄을 나눠(전화 / 이메일), 엮인 업무는 완료 탭 묶음과 같은 상자·한 줄 목록 */
+  const ini=esc((String(en.who||en.org||'?').trim()[0])||'?');
+  el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b><span class="pbs-sub">${en.org&&en.who?`<span class="pbs-org">${esc(en.org)}</span>`:''}${[[en.phone,' num'],[en.email,'']].filter(x=>x[0]).map(([v,c])=>`<span class="pbs-line${c}">${esc(v)}</span>`).join('')}</span></div>`
+    /* v3.8.18 수정·바꾸기·삭제는 고른 사람 칸의 머리에, 칸에 마우스를 올렸을 때만 보인다(소유자 지정 — 줄마다 hover 로 뜨던 것을 옮겼다) */
+    +`<span class="pbs-acts"><button type="button" class="btn btn-tool" data-pbedit="${en.id}">수정</button><button type="button" class="btn btn-tool" data-pbswap="${en.id}">바꾸기</button><button type="button" class="btn btn-tool pbs-del" data-pbdel="${en.id}">삭제</button></span>`
+    +`</div>`
+    /* v3.8.18 소속 · 전화 · 이메일은 이름 아래 한 줄에, 이름표 없이 같은 글자로(소유자 지정) */
+    +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">관련 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
+    /* 줄 = 진행/완료 · 메모 첫 줄 · 식별정보 · 종료(완료 탭 한 줄 목록과 같은 이름·같은 날짜 모양 — 소유자 요청) */
+    +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">종료</span></div>`+list.map(it=>{
       const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
-      const dv=it.done&&it.doneAt!=null?new Date(it.doneAt):null;
-      const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
-      return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
-    }).join('') : '<div class="empty" style="padding:14px">엮인 업무 없음</div>'}</div>`;
+      const ids=(it.ids||[]).filter(x=>x.val).map(x=>`${x.kind?x.kind+' ':''}${x.val}`).join(', ');
+      const end=it.done ? dAt(it.doneAt) : '';
+      return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>`
+        +`<span class="pbs-c"${ids?` title="${escAttr(ids)}"`:''}>${esc(ids)}</span><span class="pbs-c num">${esc(end)}</span></div>`;
+    }).join('') : '<div class="pbs-empty">관련 업무 없음</div>'}</div></div>`;
 }
 
 /* ── 인물 일괄 바꾸기 (v3.7.0, 소유자 요청) ──────────────────────────────────
@@ -321,7 +331,7 @@ function renderSwapList(){
   go.disabled=!plan.length && !$('pbsw-del').checked;
   sum.textContent=plan.length
     ? `업무 ${plan.length}건${done?`(완료 ${done}건 포함)`:''}의 관련인이 ${swapTo.who||swapTo.org} 님으로 바뀝니다.`
-    : '이 사람과 엮인 업무가 없습니다. 원래 인물 삭제만 할 수 있습니다.';
+    : '이 사람과 관련 업무가 없습니다. 원래 인물 삭제만 할 수 있습니다.';
 }
 export function openSwap(id){
   swapFrom=S.phonebook.find(x=>x.id===id)||null; swapTo=null;
@@ -399,8 +409,12 @@ export function initPhonebook(){
   $('pbsw-cancel').addEventListener('click',closeSwap);
   $('pbsw-go').addEventListener('click',applySwap);
   $('pbSwapModal').addEventListener('click',e=>{ if(e.target.id==='pbSwapModal') closeSwap(); });
-  $('pb-side').addEventListener('click',e=>{ if(e.target.closest('#pb-side-x')){ pbSel=null; renderPhonebook(); } });
-  $('pb-list').addEventListener('click',async e=>{
+  $('pb-side').addEventListener('click',pbClick);   // v3.8.18: 칸 접기(⇥)는 없앴다 — 오른쪽 자리는 늘 비워 두므로(소유자 지정)
+  $('pb-list').addEventListener('click',pbClick);
+}
+/* 목록·오른쪽 칸 공용 — 수정·바꾸기·삭제 단추(v3.8.18 부터 오른쪽 칸 머리에 있다) · 줄 누르기 */
+async function pbClick(e){
+  {
     const ed=e.target.closest('[data-pbedit]');
     if(ed){ openPbEdit(Number(ed.dataset.pbedit)); return; }
     const sw=e.target.closest('[data-pbswap]');
@@ -419,5 +433,5 @@ export function initPhonebook(){
     S.phonebook=S.phonebook.filter(x=>x.id!==id);
     if(editingPbId===id) closePbEdit();
     savePb(); renderPhonebook();
-  });
+  }
 }

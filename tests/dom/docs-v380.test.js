@@ -962,3 +962,98 @@ test('v3.8.14 MD 편집 색 층: 제목 줄(# ~ ######, 앞 공백 3칸까지)�
   // md 가 아닌 언어는 예전 그대로
   const sql=await codeHtml('SELECT 1', 'sql'); assert.match(sql, /hljs-keyword">SELECT</);
 });
+
+test('v3.8.16 찾기를 지우면 그려 둔 트리를 그대로 다시 보인다(다시 만들지 않음) · 스크롤 자리 · 고른 줄 · 폴더가 바뀌었으면 다시 그린다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  const big=[]; for(let k=0;k<250;k++){ const n='f'+String(k).padStart(3,'0')+'.txt'; big.push({name:n, rel:'큰/'+n, dir:false, size:1, mtime:1}); }
+  fakeFs(()=>({'0:':[{name:'큰',rel:'큰',dir:true,size:0,mtime:1},{name:'작은',rel:'작은',dir:true,size:0,mtime:1}], '0:큰':big, '0:작은':[{name:'a.txt',rel:'작은/a.txt',dir:false,size:1,mtime:1}]}));
+  S.settings.docOpen=['0:','0:큰']; S.settings.docSeen=['A:\하나'];
+  let hit={rel:'큰/f005.txt', name:'f005.txt', dir:false, hit:'name', snippet:''};
+  env.onInvoke('doc_search', ()=>[hit]);
+  env.onInvoke('doc_read_text', ()=>({text:'본문', encoding:'utf-8', mtime:1}));
+  await openDocs();
+  const tree=$('dt-tree');
+  /* 줄 묶음: 100줄씩, 높이는 줄 높이 합(스크롤 길이가 예전과 같게) */
+  const chunks=[...tree.querySelectorAll('.dt-rows .dt-chunk')];
+  assert.equal(chunks.length, 3, '폴더 줄 2 + 큰 폴더 파일 250 = 252줄 → 100줄씩 3묶음');
+  assert.match(chunks[0].getAttribute('style'), /contain-intrinsic-height:auto 2800px/);
+  assert.match(chunks[2].getAttribute('style'), /contain-intrinsic-height:auto 1456px/, '52줄 × 28px');
+  assert.equal(chunks[0].querySelectorAll('.dt-row').length, 100);
+  const kept=row('0:큰/f200.txt'), rowsBox=tree.querySelector('.dt-rows');
+  tree.scrollTop=1234;
+  const s=$('dc-search'); s.value='f005'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(350); await env.flush(10);
+  assert.ok(tree.classList.contains('searching'));
+  assert.ok(row('0:큰/f005.txt').classList.contains('dt-hit'), '찾는 동안 같은 열쇠의 결과 줄이 먼저 잡힌다');
+  click(row('0:큰/f005.txt')); await env.flush(12);
+  assert.equal($('dv-ta').value, '본문');
+  s.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape', bubbles:true, cancelable:true})); await env.flush(4);
+  assert.ok(!tree.classList.contains('searching'));
+  assert.equal(tree.querySelector('.dt-hitlist').children.length, 0, '결과 줄은 치운다');
+  assert.strictEqual(tree.querySelector('.dt-rows'), rowsBox); assert.strictEqual(row('0:큰/f200.txt'), kept, '트리 줄을 다시 만들지 않았다');
+  assert.equal(tree.scrollTop, 1234, '찾기 전 스크롤 자리');
+  assert.ok(row('0:큰/f005.txt').classList.contains('on'), '결과에서 고른 파일이 트리에서도 골라져 있다');
+  assert.equal(tree.querySelectorAll('.dt-rows .dt-row.on').length, 1, '고른 줄은 하나');
+  /* 접혀 있던 폴더의 결과를 고르면 폴더가 펼쳐지므로, 지울 때 트리를 새로 그린다 */
+  hit={rel:'작은/a.txt', name:'a.txt', dir:false, hit:'name', snippet:''};
+  S.settings.docOpen=S.settings.docOpen.filter(k=>k!=='0:작은');
+  s.value='a.txt'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(350); await env.flush(10);
+  click(row('0:작은/a.txt')); await env.flush(12);
+  s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true})); await env.flush(4);
+  assert.ok(row('0:작은/a.txt') && row('0:작은/a.txt').classList.contains('on'));
+  assert.notStrictEqual(row('0:큰/f200.txt'), kept, '펼침이 바뀌었으면 새로 그렸다');
+  assert.equal(tree.querySelectorAll('.dt-rows .dt-row.on').length, 1);
+});
+
+test('v3.8.16 파일을 누르면 트리 줄을 다시 만들지 않고 고른 줄 표시만 옮긴다 · 이름 바꾸기를 그만두면 줄이 되돌아온다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  fakeFs(()=>({'0:':[{name:'가.txt',rel:'가.txt',dir:false,size:1,mtime:1},{name:'나.txt',rel:'나.txt',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_read_text', ()=>({text:'본문', encoding:'utf-8', mtime:1}));
+  await openDocs();
+  const ga=row('0:가.txt'), na=row('0:나.txt');
+  click(ga); await env.flush(10);
+  assert.strictEqual(row('0:가.txt'), ga, '같은 줄 그대로'); assert.ok(ga.classList.contains('on'));
+  click(na); await env.flush(10);
+  assert.strictEqual(row('0:나.txt'), na); assert.ok(na.classList.contains('on')); assert.ok(!ga.classList.contains('on'));
+  assert.equal(doc.querySelectorAll('#dt-tree .dt-row.on').length, 1);
+  /* 이름 바꾸기 입력칸은 줄을 직접 바꾼다 — ESC 로 그만두면 줄이 다시 그려져 이름이 돌아온다 */
+  na.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'F2', bubbles:true, cancelable:true})); await env.flush(4);
+  const inp=doc.querySelector('#dt-tree .dt-rename');
+  assert.ok(inp, 'F2 로 이름 바꾸기'); { inp.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape', bubbles:true, cancelable:true})); await env.flush(6);
+    assert.ok(!doc.querySelector('#dt-tree .dt-rename')); assert.equal(row('0:나.txt').querySelector('.dt-name').textContent, '나.txt'); }
+});
+
+test('v3.8.16 큰 폴더를 고르면 가운데 파일 목록을 100줄 묶음으로(첫 묶음만 바로, 나머지는 화면 밖이면 건너뜀) · 작은 폴더는 예전 그대로', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  const many=n=>Array.from({length:n},(_,k)=>({name:'f'+k+'.txt', rel:'d'+n+'/f'+k+'.txt', dir:false, size:1, mtime:1}));
+  fakeFs(()=>({'0:':[{name:'d250',rel:'d250',dir:true,size:0,mtime:1},{name:'d200',rel:'d200',dir:true,size:0,mtime:1}], '0:d250':many(250), '0:d200':many(200)}));
+  S.settings.docOpen=['0:']; S.settings.docSeen=['A:\\하나'];
+  await openDocs();
+  click(row('0:d250').querySelector('.dt-name')); await env.flush(10);
+  const ch=[...doc.querySelectorAll('#dv-body .dv-flist > .dv-fchunk')];
+  assert.deepEqual(ch.map(c=>c.children.length), [100,100,50]);
+  assert.ok(!ch[0].classList.contains('dv-cv') && ch[1].classList.contains('dv-cv'), '첫 묶음은 늘 그린다');
+  assert.equal(doc.querySelectorAll('#dv-body .dv-frow').length, 250);
+  click(row('0:d200').querySelector('.dt-name')); await env.flush(10);
+  assert.equal(doc.querySelectorAll('#dv-body .dv-fchunk').length, 0, '200줄 이하는 묶지 않는다');
+  assert.equal(doc.querySelectorAll('#dv-body .dv-flist > .dv-frow').length, 200);
+});
+
+test('v3.8.16 엑셀 보기(xlsx·xls): 보여 줄 시트·5000줄만 읽어도 표·줄 수 안내가 전부 읽을 때와 같다(빈 줄 · 아래에서 시작하는 시트 · 여러 시트)', async () => {
+  const {xlsxBook} = await import('../../src/docs-view.js');
+  const sheet=(start,n,blankEvery)=>{ const ws={}; let last=start; for(let r=start;r<start+n;r++){ if(blankEvery&&r%blankEvery===0) continue; ws[XLSX.utils.encode_cell({r,c:0})]={t:'s',v:'가'+r}; ws[XLSX.utils.encode_cell({r,c:2})]={t:'n',v:r*1.5}; last=r; } ws['!ref']=XLSX.utils.encode_range({s:{r:start,c:0},e:{r:last+2,c:2}}); return ws; };
+  const cases=[[['짧음',sheet(0,30,0)]], [['빈줄',sheet(0,7000,7)],['둘째',sheet(0,6000,0)]], [['아래시작',sheet(10,7000,0)],['보통',sheet(0,6000,0)]]];
+  for(const sheets of cases) for(const bookType of ['xlsx','biff8']){
+    const wb=XLSX.utils.book_new(); for(const [n,ws] of sheets) XLSX.utils.book_append_sheet(wb, ws, n);
+    const bytes=new Uint8Array(XLSX.write(wb,{type:'array', bookType}));
+    const fast=xlsxBook(bytes), full=xlsxBook(null, XLSX.read(bytes,{type:'array', cellDates:true}));
+    assert.deepEqual(fast.names, full.names);
+    for(const i of [...full.names.keys()].reverse()) assert.equal(fast.html(i), full.html(i), bookType+' '+sheets[i][0]);   // 뒤 시트부터(나중에 읽는 길)
+  }
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, sheet(0,7000,0), 's');
+  assert.match(xlsxBook(new Uint8Array(XLSX.write(wb,{type:'array', bookType:'xlsx'}))).html(0), /7002행 중 5000행 표시/);
+});
