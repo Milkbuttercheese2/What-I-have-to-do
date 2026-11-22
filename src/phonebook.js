@@ -171,12 +171,15 @@ async function importFromXlsx(file){
       return;
     }
     const complete=mapped.entries.filter(isComplete);
-    const fresh=complete.filter(e=>!S.phonebook.some(x=>entryKey(x)===entryKey(e))).map(normEntry);
+    /* 이미 있는 사람 찾기는 열쇠 표를 한 번 만들어 쓴다(v3.8.16) — 줄마다 전화번호부 전체를 훑으면
+       3천 줄 × 500명에서 파일을 고른 뒤 확인 창이 1초 걸렸다. 같은 열쇠가 여럿이면 앞의 것(예전 find 와 같다) */
+    const have=new Map(); for(const x of S.phonebook){ const k=entryKey(x); if(!have.has(k)) have.set(k, x); }
+    const fresh=complete.filter(e=>!have.has(entryKey(e))).map(normEntry);
     /* v3.5.0: 엑셀은 예전처럼 **추가만** 한다 — 이미 있는 사람은 건드리지 않는다.
        그래서 이미 있는 사람 줄에 이메일을 적어 와도 반영되지 않는데, 그 사실을 알린다
        (조용히 넘기면 "엑셀에 적었는데 왜 안 들어오지"가 된다). 고치는 길은 [수정] 하나. */
     const ignoredEmail=complete.filter(e=>{
-      const ex=S.phonebook.find(x=>entryKey(x)===entryKey(e));
+      const ex=have.get(entryKey(e));
       const v=String(e.email||'').trim();
       return ex && v && v!==String(ex.email||'').trim();
     }).length;
