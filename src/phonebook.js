@@ -80,9 +80,7 @@ export function renderPhonebook(){
       <span class="pb-cnt num ${l?'live':n?'past':'none'}" title="관련 업무 ${n}건 · 진행 ${l} · 완료 ${n-l}">업무 ${n}</span>
       <!-- v3.6.2: 버튼에 title="" — 행의 '엮인 업무' 안내 툴팁이 상속돼 수정/삭제 위에서도
            떠서 눌렀을 때 하는 일과 어긋났다(빈 title 이 조상 툴팁을 막는다) -->
-      <button class="ps-edit" data-pbedit="${e.id}" title="">수정</button>
-      <button class="ps-swap" data-pbswap="${e.id}" title="">바꾸기</button>
-      <button class="ps-del" data-pbdel="${e.id}" title="">삭제</button>
+      <span class="pb-rowacts"><button class="ps-edit" data-pbedit="${e.id}" title="">수정</button><button class="ps-swap" data-pbswap="${e.id}" title="">바꾸기</button><button class="ps-del" data-pbdel="${e.id}" title="">삭제</button></span>
     </span>
   </div>`; };
   w.innerHTML=groups.map(g=>`<section class="pb-group"><div class="pb-ghead"><span>${esc(g.org)}</span><span class="count num">${g.rows.length}명</span></div>`
