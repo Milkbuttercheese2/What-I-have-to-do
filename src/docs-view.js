@@ -474,19 +474,35 @@ function zipName(raw){
   return s;
 }
 
-/* XLSX: 통합 문서 → {names, html(i)} */
+/* XLSX: 통합 문서 → {names, html(i)}
+   v3.8.16: 보여 주는 만큼(XLSX_ROW_MAX 줄)만 읽는다(SheetJS sheetRows) — 5만 줄 37MB 파일을 열 때 읽기 2.2초 → 0.3초.
+   잘라 읽은 시트는 SheetJS 가 원래 범위를 '!fullref' 에 남기므로 'N행 중 5000행 표시'의 N 은 예전과 같다.
+   sheetRows 는 시트 맨 위(1행)부터 세므로, 내용이 아래쪽에서 시작하는 시트는 보여 줄 줄이 모자랄 수 있다 —
+   그런 시트가 하나라도 있으면 예전처럼 전부 읽는다(readBook). */
+function readBook(u8){
+  const X=window.XLSX, opt={type:'array', cellDates:true};
+  const wb=X.read(u8, {...opt, sheetRows:XLSX_ROW_MAX+1});
+  const short=wb.SheetNames.some(n=>{
+    const ws=wb.Sheets[n]; if(!ws || !ws['!fullref']) return false;
+    const f=X.utils.decode_range(ws['!fullref']), r=ws['!ref'] ? X.utils.decode_range(ws['!ref']) : null;
+    return (r ? r.e.r-r.s.r+1 : 0) < Math.min(XLSX_ROW_MAX, f.e.r-f.s.r+1);
+  });
+  return short ? X.read(u8, opt) : wb;
+}
 export function xlsxBook(bytes, given){
-  const wb=given || window.XLSX.read(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), {type:'array', cellDates:true});
+  const wb=given || readBook(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
   return {
     names: wb.SheetNames.slice(),
     html(i){
       const ws=wb.Sheets[wb.SheetNames[i]]; if(!ws) return '';
       const rows=window.XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+      const full=ws['!fullref'] ? window.XLSX.utils.decode_range(ws['!fullref']) : null;
+      const total=full ? full.e.r-full.s.r+1 : rows.length;      // 잘라 읽었으면 원래 줄 수
       const shown=rows.slice(0, XLSX_ROW_MAX);
       const w=Math.min(XLSX_COL_MAX, shown.reduce((m,r)=>Math.max(m,r.length),0));
       const body=shown.map((r,ri)=>`<tr><th>${ri+1}</th>${Array.from({length:w},(_,ci)=>`<td>${esc(r[ci]??'')}</td>`).join('')}</tr>`).join('');
       return (rows.length ? `<table class="dv-table dv-sheet">${body}</table>` : '<div class="dv-empty">빈 시트</div>')
-        + (rows.length>XLSX_ROW_MAX ? `<div class="dv-cap">${rows.length}행 중 ${XLSX_ROW_MAX}행 표시</div>` : '');
+        + (total>XLSX_ROW_MAX ? `<div class="dv-cap">${total}행 중 ${XLSX_ROW_MAX}행 표시</div>` : '');
     }
   };
 }
