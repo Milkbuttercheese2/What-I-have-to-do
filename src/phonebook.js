@@ -9,7 +9,7 @@ import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
 import {fmtT} from './datetime.js';
-import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, absorbContacts, swapPersonIn} from './phonebook-core.js';
+import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, relatedCounts, relKeyOf, absorbContacts, swapPersonIn} from './phonebook-core.js';
 /* v3.7.0: 인물 일괄 바꾸기가 업무를 고친 뒤 저장·재렌더해야 해서 persist 를 쓴다.
    render→form→phonebook→render 순환이지만 함수 호출만 오가므로(최상위 사용 없음) 안전하다 —
    CLAUDE.md 규칙 1(기능 모듈은 hoisted 함수 + init*() 만)이 지켜지는 동안. */
@@ -29,15 +29,13 @@ export function adoptPhonebook(list){
     .map(e=>{ if(e.id==null||e.id===''){ e.id=newId(); } else { e.id=Number(e.id); if(e.id>S.lastId) S.lastId=e.id; } return e; });
 }
 
-/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 팝업과 같은 기준
-   (v3.1.1: 관련인 3칸(관련소속·관련인·연락처) 완전 일치만) */
-function relCount(e){
-  return relatedItems(S.items, {entries:[e]}).length;
-}
+/* 관련 업무 수 — 이 사람이 엮인 업무 개수. 팝업과 같은 기준(v3.1.1: 관련인 3칸 완전 일치만).
+   v3.8.16: 사람마다 업무를 훑지 않고 relatedCounts 로 한 번에 센다(아래 sorted) */
 /* 표시 정렬(v2.11.0 소유자 지정) — ① 관련 업무 수 많은 순 ② 소속 ③ 이름 (ko locale).
    원본 배열은 건드리지 않는다(배열 순서 = 저장 순서). */
 function sorted(){
-  const cnt=new Map(S.phonebook.map(e=>[e.id, relCount(e)]));
+  const by=relatedCounts(S.items);                              // 업무를 한 번만 훑는다(사람마다 훑지 않는다)
+  const cnt=new Map(S.phonebook.map(e=>[e.id, by.get(relKeyOf(e))||0]));
   return S.phonebook.slice().sort((a,b)=>
     (cnt.get(b.id)-cnt.get(a.id))
     || (a.org||'').localeCompare(b.org||'','ko')
