@@ -1805,11 +1805,11 @@
   .pb-cnt.past{background:var(--chip-bg);color:var(--ink-soft)}
   .pb-cnt.none{background:transparent;color:var(--icon-muted);font-weight:600}
   /* 오른쪽 칸 */
-  .pbs-head{align-items:center;gap:10px}
+  .pbs-head{align-items:center;gap:10px}   /* 동그라미(36px)+사이(10px) = 아래 연락처 이름표 폭(36px)+사이(10px) — 이름과 번호, 동그라미와 '전화'가 세로로 맞는다(소유자 지정) */
   .pbs-avatar{width:36px;height:36px;font-size:15px}
   .pbs-info{margin:12px 0 0;display:flex;flex-direction:column;gap:4px}
-  .pbs-line{display:flex;gap:6px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
-  .pbs-k{flex:none;width:2.6rem;font-size:12px;color:var(--ink-soft)}
+  .pbs-line{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
+  .pbs-k{flex:none;width:36px;font-size:12px;color:var(--ink-soft)}
   .pbs-v{min-width:0;overflow-wrap:anywhere}
   .pbs-box{margin-top:14px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
   .pbs-bhead{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line)}
@@ -1823,7 +1823,7 @@
   /* 넓은 화면에선 목록 폭을 늘 오른쪽 칸이 있을 때의 폭으로 둔다(소유자 지정 — 줄이 화면 끝까지 펼쳐지면 눈이 멀리 간다).
      사람을 고르기 전엔 그 자리에 안내만(새 프리셋 상자와 같은 면 --dash-bg · 실선 — v3.7.0 점선 금지). 좁은 폭(≤1080)은 예전처럼 한 열 */
   @media(min-width:1081px){
-    .pb-layout,.pb-layout.has-side{grid-template-columns:minmax(0,4fr) minmax(0,6fr)}   /* 목록 4 : 오른쪽 칸 6(소유자 지정) */
+    .pb-layout,.pb-layout.has-side{grid-template-columns:minmax(35rem,4fr) minmax(0,6fr)}   /* 목록 4 : 오른쪽 칸 6(소유자 지정). 목록은 35rem 아래로 줄지 않는다 — 이메일 칸(약 25자)이 잘리지 않게 */
     .pb-layout:not(.has-side)::after{content:"사람을 고르면 관련 업무가 여기에 보입니다";position:sticky;top:14px;padding:22px 16px;border:1px solid var(--line);border-radius:14px;background:var(--dash-bg);color:var(--ink-soft);font-size:12.5px;text-align:center}
   }
   /* 넓은 화면: 수정·바꾸기·삭제는 자리를 차지하지 않고 줄 위에 뜬다(hover·키보드 초점 때만) — 목록이 4할 폭이라
