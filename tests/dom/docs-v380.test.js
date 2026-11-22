@@ -1043,16 +1043,16 @@ test('v3.8.16 큰 폴더를 고르면 가운데 파일 목록을 100줄 묶음�
   assert.equal(doc.querySelectorAll('#dv-body .dv-flist > .dv-frow').length, 200);
 });
 
-test('v3.8.16 엑셀 보기: 보여 줄 5000줄만 읽어도 표·줄 수 안내가 전부 읽을 때와 같다(빈 줄 · 아래에서 시작하는 시트 · 여러 시트)', async () => {
+test('v3.8.16 엑셀 보기(xlsx·xls): 보여 줄 시트·5000줄만 읽어도 표·줄 수 안내가 전부 읽을 때와 같다(빈 줄 · 아래에서 시작하는 시트 · 여러 시트)', async () => {
   const {xlsxBook} = await import('../../src/docs-view.js');
   const sheet=(start,n,blankEvery)=>{ const ws={}; let last=start; for(let r=start;r<start+n;r++){ if(blankEvery&&r%blankEvery===0) continue; ws[XLSX.utils.encode_cell({r,c:0})]={t:'s',v:'가'+r}; ws[XLSX.utils.encode_cell({r,c:2})]={t:'n',v:r*1.5}; last=r; } ws['!ref']=XLSX.utils.encode_range({s:{r:start,c:0},e:{r:last+2,c:2}}); return ws; };
   const cases=[[['짧음',sheet(0,30,0)]], [['빈줄',sheet(0,7000,7)],['둘째',sheet(0,6000,0)]], [['아래시작',sheet(10,7000,0)],['보통',sheet(0,6000,0)]]];
-  for(const sheets of cases){
+  for(const sheets of cases) for(const bookType of ['xlsx','biff8']){
     const wb=XLSX.utils.book_new(); for(const [n,ws] of sheets) XLSX.utils.book_append_sheet(wb, ws, n);
-    const bytes=new Uint8Array(XLSX.write(wb,{type:'array', bookType:'xlsx'}));
+    const bytes=new Uint8Array(XLSX.write(wb,{type:'array', bookType}));
     const fast=xlsxBook(bytes), full=xlsxBook(null, XLSX.read(bytes,{type:'array', cellDates:true}));
     assert.deepEqual(fast.names, full.names);
-    for(let i=0;i<full.names.length;i++) assert.equal(fast.html(i), full.html(i), sheets[i][0]);
+    for(const i of [...full.names.keys()].reverse()) assert.equal(fast.html(i), full.html(i), bookType+' '+sheets[i][0]);   // 뒤 시트부터(나중에 읽는 길)
   }
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, sheet(0,7000,0), 's');
   assert.match(xlsxBook(new Uint8Array(XLSX.write(wb,{type:'array', bookType:'xlsx'}))).html(0), /7002행 중 5000행 표시/);
