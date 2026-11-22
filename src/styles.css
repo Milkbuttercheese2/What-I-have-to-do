@@ -1824,7 +1824,7 @@
      사람을 고르기 전엔 그 자리에 안내만(새 프리셋 상자와 같은 면 --dash-bg · 실선 — v3.7.0 점선 금지). 좁은 폭(≤1080)은 예전처럼 한 열 */
   @media(min-width:1081px){
     .pb-layout,.pb-layout.has-side{grid-template-columns:minmax(0,1fr) 360px}
-    .pb-layout:not(.has-side)::after{content:"사람을 고르면 엮인 업무가 여기에 보입니다";position:sticky;top:14px;padding:22px 16px;border:1px solid var(--line);border-radius:14px;background:var(--dash-bg);color:var(--ink-soft);font-size:12.5px;text-align:center}
+    .pb-layout:not(.has-side)::after{content:"사람을 고르면 관련 업무가 여기에 보입니다";position:sticky;top:14px;padding:22px 16px;border:1px solid var(--line);border-radius:14px;background:var(--dash-bg);color:var(--ink-soft);font-size:12.5px;text-align:center}
   }
   /* 좁은 폭(560px 단일 열, 반응형 정책): 이름 / 전화·이메일 두 줄, 꼬리(배지·수정·바꾸기·삭제)는 오른쪽 */
   @media(max-width:1080px){
