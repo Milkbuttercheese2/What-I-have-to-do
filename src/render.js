@@ -146,6 +146,11 @@ function renderMetrics(){
   el.innerHTML=`<span><b>${m.active}</b>진행 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 할 일</span>`
     +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
 }
+/* v3.8.16 보드 칸은 지난번과 같은 HTML 이면 다시 넣지 않는다 — 카드를 하나 체크·저장할 때 바뀌지 않은 칸까지
+   카드를 전부 다시 만들어(업무 1천 건: 그리기 200ms 넘게) 1분마다 도는 자동 다시 그리기도 같은 비용을 냈다.
+   칸 안 카드 DOM 을 직접 바꾸는 곳(끌기 표시 .dragging·.merge-over·.drop-on)은 끝날 때 스스로 지운다. */
+const colHtml=new WeakMap();
+function putCol(el, html){ if(!el) return; if(colHtml.get(el)===html) return; el.innerHTML=html; colHtml.set(el, html); }
 export function render(){
   syncBoardVisibility();
   renderMetrics();
@@ -157,8 +162,11 @@ export function render(){
     if(!isNaN(d)) ts.push(d);
     return ts.length?Math.min(...ts):null;
   };
+  /* 정렬 열쇠는 업무마다 한 번만 계산한다(비교마다 날짜를 다시 읽으면 1천 건에서 수만 번) */
+  const kt=new Map();
+  const keyOf=it=>{ if(!kt.has(it)) kt.set(it, keyTime(it)); return kt.get(it); };
   const sorter=(a,b)=>{
-    const at=keyTime(a), bt=keyTime(b);
+    const at=keyOf(a), bt=keyOf(b);
     if(at!=null&&bt!=null&&at!==bt) return at-bt;
     if(at!=null&&bt==null) return -1;
     if(at==null&&bt!=null) return 1;
@@ -171,7 +179,7 @@ export function render(){
     for(const k of ['inbox','metoday','othtoday','meplan','othplan']){
       const list=cols[k].sort(sorter);
       $('c5-'+k).textContent=list.length;
-      $('col5-'+k).innerHTML=list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`;
+      putCol($('col5-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`);
     }
     renderHidden();
     return;
@@ -182,7 +190,7 @@ export function render(){
   for(const k of ['inbox','today','doing','planned']){
     const list=cols[k].sort(sorter);
     $('c-'+k).textContent=list.length;
-    $('col-'+k).innerHTML=list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`;
+    putCol($('col-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`);
   }
   renderHidden();
 }

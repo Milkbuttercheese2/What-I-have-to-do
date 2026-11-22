@@ -220,3 +220,18 @@ test('완료 탭 검색(dq)은 보드 검색과 독립', async () => {
   ds.value = '';
   ds.dispatchEvent(new env.window.Event('input', {bubbles:true}));
 });
+
+test('v3.8.16 render: 바뀌지 않은 칸은 카드를 다시 만들지 않는다 · 바뀐 칸만 새로 · 정렬은 그대로', async () => {
+  await env.resetS(); S.loaded = true; setPlaceMode('time');
+  const a=mk({memo:'예정1', f:{due:iso(60*48)}}), b=mk({memo:'예정2', f:{due:iso(60*30)}}), c=mk({memo:'대기', staged:true});
+  S.items.push(a, b, c);
+  render();
+  const planned=$('col-planned'), first=planned.firstElementChild, inboxCard=$('col-inbox').firstElementChild;
+  assert.deepEqual([...planned.querySelectorAll('.card .card-memo')].map(x=>x.textContent), ['예정2','예정1'], '이른 시각이 위');
+  render();
+  assert.strictEqual(planned.firstElementChild, first, '같으면 그대로');
+  a.memo='예정1 고침'; render();
+  assert.notStrictEqual(planned.firstElementChild, first, '바뀐 칸은 새로');
+  assert.match(planned.textContent, /예정1 고침/);
+  assert.strictEqual($('col-inbox').firstElementChild, inboxCard, '다른 칸은 그대로');
+});
