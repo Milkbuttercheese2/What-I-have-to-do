@@ -393,7 +393,9 @@ test('layoutTimeline: 같은 시각대 이름표는 겹치지 않게 아래로 �
 test('전화번호부: 소속별 묶음 머리가 생기고 행에 머리글자가 붙는다', async () => {
   await fresh();
   adoptPhonebook([{id:1, who:'가나다', org:'가과', phone:'010-1'}, {id:2, who:'라마바', org:'가과', phone:'010-2'}, {id:3, who:'사아자', org:'나과', phone:'010-3'}]);
+  doc.getElementById('view-phone').classList.add('on');   // 탭이 보일 때만 그린다(v3.8.16)
   renderPhonebook();
+  doc.getElementById('view-phone').classList.remove('on');
   const g=[...doc.querySelectorAll('#pb-list .pb-ghead span:first-child')].map(x=>x.textContent);
   assert.deepEqual(g, ['가과','나과']);
   assert.equal(doc.querySelector('#pb-list .pb-avatar').textContent, '가');

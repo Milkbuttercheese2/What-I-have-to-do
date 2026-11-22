@@ -11,6 +11,7 @@ const {initPhonebook, renderPhonebook, adoptPhonebook} = await import('../../src
 const {initAtComplete} = await import('../../src/at-complete.js');
 const {initForm, openForm, captureMemo} = await import('../../src/form.js');
 initPhonebook(); initAtComplete(); initForm();
+env.document.getElementById('view-phone').classList.add('on');   // v3.8.16: 전화번호부는 탭이 보일 때만 그린다 — 이 파일은 전화번호부 탭을 연 상태로 시험한다
 
 const $ = id => env.document.getElementById(id);
 const input = el => el.dispatchEvent(new env.window.Event('input', {bubbles:true}));
@@ -249,7 +250,7 @@ test('본문 하이라이트: 전화번호부 실존 관련인만 — 한 글자
 });
 
 test('전화번호부 정렬: 엮인 업무 수 → 소속 → 이름, 행에 업무 수 배지 (v2.11.0)', async () => {
-  await env.resetS(); S.loaded = true;
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
   adoptPhonebook([
     {id:1, who:'가나다', org:'가과', phone:'010-1'},            // 업무 0건
     {id:2, who:'마바사', org:'나과', phone:'010-2'},            // 업무 1건 (관련인 3칸 일치)
@@ -320,7 +321,7 @@ test('세부 할 일 담당칸 자동완성: 2글자부터 후보, 선택하면 
 
 test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 사람 정보 + 엮인 업무(진행 먼저) · ×로 닫기', async () => {
   const {renderPhonebook} = await import('../../src/phonebook.js');
-  await env.resetS(); S.loaded = true;
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1', email:'k@x.kr'}, {id:12, who:'이영희', org:'세무과', phone:'010-2'}]);
   const c={who:'김철수', org:'행정과', phone:'010-1'};
   S.items=[{id:1, memo:'끝난 일', contacts:[c], done:true, doneAt:5}, {id:2, memo:'하는 일\n둘째', contacts:[c], done:false}, {id:3, memo:'남의 일', contacts:[{who:'이영희',org:'세무과',phone:'010-2'}], done:false}];
@@ -338,4 +339,16 @@ test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 �
   assert.match(side.textContent, /진행 0 · 완료 2/);
   env.document.getElementById('pb-side-x').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
   assert.ok(!side.classList.contains('on'));
+});
+
+test('v3.8.16 전화번호부 탭이 안 보이면 그리지 않고, 탭을 열면 그린다', async () => {
+  const {showView} = await import('../../src/views.js');
+  await env.resetS(); S.loaded = true;
+  adoptPhonebook([{id:1, who:'숨김', org:'과', phone:'010-1234-5678'}]);
+  $('pb-list').innerHTML='';
+  env.document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='board')); showView('board');
+  renderPhonebook();
+  assert.equal($('pb-list').textContent, '', '숨은 탭은 그리지 않는다');
+  env.document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='phone')); showView('phone');
+  assert.match($('pb-list').textContent, /숨김/, '탭을 열면 그린다');
 });

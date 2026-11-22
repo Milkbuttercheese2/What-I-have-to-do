@@ -50,7 +50,10 @@ function matches(e){
 }
 
 export function renderPhonebook(){
-  renderPbSide();                                            // 오른쪽 칸도 같은 데이터로 다시(업무가 바뀌었을 수 있다)
+  /* v3.8.16: 탭이 안 보이면 그리지 않는다 — 탭을 열 때 views.js 가 이 함수를 부르므로 늘 최신으로 열린다(달력·완료와 같은 규칙).
+     예전엔 앱을 켤 때(불러온 전화번호부 반영) 숨은 탭을 그려 시작이 그만큼 늦었다 */
+  const view=$('view-phone'); if(view && !view.classList.contains('on')) return;
+  renderPbSide();                                           // 오른쪽 칸도 같은 데이터로 다시(업무가 바뀌었을 수 있다)
   const w=$('pb-list'); if(!w) return;
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
