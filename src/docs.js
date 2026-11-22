@@ -668,6 +668,8 @@ const movedRel=(rel, from, to)=> rel===from ? to : rel.startsWith(from+'/') ? to
 const movedKey=(k, i, from, to)=>{ const p=parseKey(k); return p.i===i ? nodeKey(i, movedRel(p.rel, from, to)) : k; };
 /* 옮긴 뒤 정리 — 링크 고치기(저장), 트리 캐시·펼침·선택·마지막 파일 경로를 새 자리로 */
 async function applyMoved(i, from, to){
+  if(ed && ed.i===i) ed.rel=movedRel(ed.rel, from, to);              // 바깥에서 바꾼 경우 — 고치던 글자를 새 경로에 저장하게
+  if(shown && shown.i===i) shown.rel=movedRel(shown.rel, from, to);
   const changed=relinkFiles(S.items, folderPaths(i, from), basePath(i, to));
   for(const it of changed) if(it.done) S.doneDirty.add(it.id);       // 종료 업무 링크도 저장에 실리게(증분 저장 규칙)
   for(const k of [...kids.keys()]){ const p=parseKey(k); if(p.i===i && (p.rel===from || p.rel.startsWith(from+'/') || p.rel===parentOf(from) || p.rel===parentOf(to))) kids.delete(k); }
@@ -678,6 +680,48 @@ async function applyMoved(i, from, to){
   saveSettings();
   if(changed.length) persist();
   await renderDocs();
+}
+/* 문서 폴더 자체의 이름이 바뀐 뒤 — 사용자가 고른 표기(예: 매핑 드라이브 Z:)를 지키며 새 경로를 만든다.
+   oldCanon·newCanon 은 Rust 가 정규화한 앞뒤 경로. 앞에서부터 같은 부분을 빼고 남은 꼬리(바뀐 부분)를 userPath 끝에서 바꿔 끼운다.
+   userPath 끝이 그 꼬리가 아니면(바뀐 곳이 매핑 위쪽 등) 정규화된 새 경로를 그대로 쓴다 */
+export function rootMovedPath(userPath, oldCanon, newCanon){
+  const parts=p=>String(p||'').replace(/^\\\\\?\\(UNC\\)?/,'').split(/[\\/]+/).filter(Boolean);
+  const o=parts(oldCanon), n=parts(newCanon);
+  let k=0; while(k<o.length && k<n.length && o[k].toLowerCase()===n[k].toLowerCase()) k++;
+  const oT=o.slice(k), nT=n.slice(k);
+  if(!oT.length && !nT.length) return userPath;
+  const u=parts(userPath), lead=/^[\\/]{2}/.test(String(userPath)) ? '\\\\' : '';
+  const tail=u.slice(u.length-oT.length);
+  if(oT.length && u.length>oT.length && tail.every((x,j)=>x.toLowerCase()===oT[j].toLowerCase()))
+    return lead+[...u.slice(0, u.length-oT.length), ...nT].join('\\');
+  return String(newCanon);
+}
+/* 문서 폴더 i 가 base → to 로 바뀌었다(앱 안 이름 바꾸기·탐색기 모두). 업무 링크·설정을 새 경로로 — 이미 처리했으면(base 가 지금 것이 아니면) 아무것도 안 한다 */
+async function applyRootMoved(i, base, to){
+  const r=roots[i];
+  if(!r || !r.ok || norm(r.path)!==norm(base) || norm(base)===norm(to)) return false;
+  const rs=docRoots(), nu=rootMovedPath(rs[i], base, to);
+  const changed=relinkFiles(S.items, folderPaths(i, ''), nu);
+  for(const it of changed) if(it.done) S.doneDirty.add(it.id);
+  S.settings.docRoots=rs.map((p,j)=>j===i ? nu : p);
+  saveSettings(); rootsFor=null;
+  if(changed.length) persist();
+  await ensureRoots();
+  await renderDocs();
+  return true;
+}
+/* 앱 밖(탐색기 등)에서 바꾼 이름 — Rust 감시(docwatch.rs)가 확실한 이름 바뀜만 알린다. 차례대로 하나씩(폴더 이름 → 그 안 이름 순서가 뜻을 가진다) */
+let extChain=Promise.resolve();
+function queueExt(f){ extChain=extChain.then(f).catch(e=>console.warn('바깥 이름 바뀜 처리 실패', e)); return extChain; }
+export function onExtRenamed(p){
+  return queueExt(async()=>{
+    const i=Number(p&&p.root), r=roots[i];
+    if(!r || !r.ok || norm(r.path)!==norm(p.base) || !p.from || !p.to) return;   // 폴더 목록이 그 사이 바뀌었다 — 옛 알림
+    await applyMoved(i, String(p.from), String(p.to));
+  });
+}
+export function onExtRootMoved(p){
+  return queueExt(()=>applyRootMoved(Number(p&&p.root), p&&p.base, p&&p.to));
 }
 async function doMove(i, from, toDir){
   const dest = toDir ? nameOf(toDir) : rootName(i);
@@ -756,8 +800,8 @@ function openMenu(x, y, key, dir){
     +(rel ? `${dir?'<hr>':''}<button type="button" data-mren="1">이름 바꾸기</button><button type="button" data-mcopy="1">복제</button><button type="button" data-mtrash="1">휴지통으로</button>` : '')
     +(!dir ? `<button type="button" data-mopen="1">열기</button>` : '')
     +`<button type="button" data-mreveal="1">폴더에서 보기</button>`
-    /* 문서 폴더(맨 위 줄) — 목록에서 빼기(폴더와 파일은 그대로). 줄 끝의 ×와 같은 일 */
-    +(!rel ? `<hr><button type="button" data-munroot="1">문서 폴더 해지</button>` : '');
+    /* 문서 폴더(맨 위 줄) — 이름 바꾸기(폴더 자체) · 목록에서 빼기(폴더와 파일은 그대로, 줄 끝의 ×와 같은 일) */
+    +(!rel ? `<hr><button type="button" data-mren="1">이름 바꾸기</button><button type="button" data-munroot="1">문서 폴더 해지</button>` : '');
   document.body.appendChild(m);
   const r=m.getBoundingClientRect();
   m.style.left=Math.max(4, Math.min(x, window.innerWidth-r.width-4))+'px';
@@ -824,7 +868,7 @@ async function createItem(i, dirRel, kind){
 function startRename(key, after){
   const row=[...document.querySelectorAll('#dt-tree .dt-row')].find(r=>r.dataset.dkey===key); if(!row) return;
   const nm=row.querySelector('.dt-name'); if(!nm) return;
-  const {i, rel}=parseKey(key), old=nameOf(rel);
+  const {i, rel}=parseKey(key), old=rel ? nameOf(rel) : rootName(i);
   const inp=document.createElement('input'); inp.className='dt-rename'; inp.value=old; inp.maxLength=200; inp.spellcheck=false;
   nm.replaceWith(inp); rowsSig=null;                   // 줄 DOM 을 직접 바꿨다 — 다음 renderTree 는 새로 그린다
   const dot=row.dataset.ddir==='1' ? -1 : old.lastIndexOf('.');
@@ -834,6 +878,15 @@ function startRename(key, after){
     if(done) return; done=true;
     const v=inp.value.trim();
     if(!ok || !v || v===old){ renderTree(); if(after) after(rel); return; }
+    if(!rel){                                            // 문서 폴더 자체(맨 위 줄) — 폴더 이름을 바꾸고 목록·업무 링크를 새 경로로
+      await flushEdit();
+      if(native && shown && shown.i===i) await leaveViewer();   // 처리기가 안의 파일을 쥐고 있으면 못 바꾼다
+      let mv;
+      try{ mv=await invoke('doc_rename_root', {root:i, name:v}); }
+      catch(e){ await appAlert('이름을 바꾸지 못했습니다\n'+e); renderTree(); return; }
+      await queueExt(()=>applyRootMoved(i, roots[i] ? roots[i].path : mv.from, mv.to));
+      return;
+    }
     if(ed && ed.i===i && (ed.rel===rel || ed.rel.startsWith(rel+'/'))) await flushEdit();
     if(native && shown && shown.i===i && (shown.rel===rel || shown.rel.startsWith(rel+'/'))) await leaveViewer();   // 처리기가 파일을 쥐고 있으면 못 바꾼다
     let to;
@@ -1118,6 +1171,11 @@ export function setNoteFold(on){
 }
 export function initDocs(){
   registerView({key:'docs', els:[{id:'view-docs'}], render:renderDocs});
+  const ev=window.__TAURI__ && window.__TAURI__.event;
+  if(ev && ev.listen){
+    ev.listen('wmhh://doc-renamed', e=>onExtRenamed(e.payload)).catch(()=>{});
+    ev.listen('wmhh://doc-root-moved', e=>onExtRootMoved(e.payload)).catch(()=>{});
+  }
   $('dc-root').addEventListener('click', addRoot);
   $('dc-root-empty').addEventListener('click', addRoot);
   initTreeDrag();
@@ -1229,7 +1287,7 @@ export function initDocs(){
   });
   document.addEventListener('keydown', e=>{
     if(e.key!=='F2' && e.key!=='Delete') return;
-    const v=$('view-docs'); if(!v || !v.classList.contains('on') || !sel || !sel.rel || searchHits || topId()) return;
+    const v=$('view-docs'); if(!v || !v.classList.contains('on') || !sel || (!sel.rel && e.key!=='F2') || searchHits || topId()) return;
     const t=e.target, tag=t && t.tagName;
     if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT' || (t && t.isContentEditable)) return;
     if(document.querySelector('.modal-bg.on, .form-panel.on, .alarm-bg.on, #appDialog.on, .dt-menu')) return;

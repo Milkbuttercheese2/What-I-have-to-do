@@ -1057,3 +1057,74 @@ test('v3.8.16 엑셀 보기(xlsx·xls): 보여 줄 시트·5000줄만 읽어도 
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, sheet(0,7000,0), 's');
   assert.match(xlsxBook(new Uint8Array(XLSX.write(wb,{type:'array', bookType:'xlsx'}))).html(0), /7002행 중 5000행 표시/);
 });
+
+test('rootMovedPath: 고른 표기(매핑 드라이브·공유 폴더)를 지키며 바뀐 꼬리만 바꾼다', async () => {
+  const {rootMovedPath} = await import('../../src/docs.js');
+  assert.equal(rootMovedPath('C:\\업무\\가', 'C:\\업무\\가', 'C:\\업무\\나'), 'C:\\업무\\나');
+  assert.equal(rootMovedPath('Z:\\팀\\가', '\\\\srv\\share\\팀\\가', '\\\\srv\\share\\팀\\나'), 'Z:\\팀\\나', '매핑 드라이브 표기 유지');
+  assert.equal(rootMovedPath('Z:\\팀\\가', '\\\\srv\\share\\팀\\가', '\\\\srv\\share\\새팀\\가'), 'Z:\\새팀\\가', '위 폴더 이름이 바뀐 경우');
+  assert.equal(rootMovedPath('\\\\srv\\share\\가', '\\\\srv\\share\\가', '\\\\srv\\share\\나'), '\\\\srv\\share\\나');
+  assert.equal(rootMovedPath('Z:\\', '\\\\srv\\share', '\\\\srv2\\share'), '\\\\srv2\\share', '못 맞추면 새 경로 그대로');
+  assert.equal(rootMovedPath('C:\\가', 'C:\\가', 'c:\\가'), 'C:\\가', '대소문자만 다르면 그대로');
+});
+
+test('바깥(탐색기)에서 바꾼 이름: doc-renamed 알림 → 트리·선택·진행/종료 업무 링크가 새 경로로 · 옛 폴더 목록의 알림은 무시', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['X:\\감시'];
+  let lists={'0:':[{name:'옛 폴더',rel:'옛 폴더',dir:true,size:0,mtime:1}], '0:옛 폴더':[{name:'보고서.txt',rel:'옛 폴더/보고서.txt',dir:false,size:1,mtime:1}]};
+  fakeFs(()=>lists);
+  env.onInvoke('doc_read_text', ()=>({text:'x', encoding:'utf-8', mtime:1}));
+  const live=mk({memo:'진행', files:['X:\\감시\\옛 폴더\\보고서.txt']});
+  const done=mk({memo:'종료', done:true, doneAt:Date.now(), files:['X:\\감시\\옛 폴더']});
+  const other=mk({memo:'남', files:['X:\\감시\\옛 폴더 2\\a.txt']});
+  S.items.push(live, done, other);
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:옛 폴더')); await env.flush(6);
+  click(row('0:옛 폴더/보고서.txt')); await env.flush(8);
+  /* 탐색기에서 폴더 이름을 바꿨다 */
+  lists={'0:':[{name:'새 폴더',rel:'새 폴더',dir:true,size:0,mtime:1}], '0:새 폴더':[{name:'보고서.txt',rel:'새 폴더/보고서.txt',dir:false,size:1,mtime:1}]};
+  env.fireEvent('wmhh://doc-renamed', {root:0, base:'X:\\감시', from:'옛 폴더', to:'새 폴더'}); await env.flush(14);
+  assert.deepEqual(live.files, ['X:\\감시\\새 폴더\\보고서.txt'], '진행 업무 링크');
+  assert.deepEqual(done.files, ['X:\\감시\\새 폴더'], '종료 업무 링크');
+  assert.ok(env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args.items.some(x=>x.id===done.id), '종료 업무도 저장에 실린다');
+  assert.deepEqual(other.files, ['X:\\감시\\옛 폴더 2\\a.txt'], '이름이 비슷한 다른 폴더는 그대로');
+  assert.ok(row('0:새 폴더/보고서.txt') && row('0:새 폴더/보고서.txt').classList.contains('on'), '고른 파일도 새 경로로');
+  assert.ok(env.invokeCalls.some(c=>c.cmd==='save_all'), '저장한다');
+  /* 다른 폴더 목록일 때 온 옛 알림 — 무시 */
+  env.fireEvent('wmhh://doc-renamed', {root:0, base:'Y:\\딴곳', from:'새 폴더', to:'엉뚱'}); await env.flush(10);
+  assert.deepEqual(live.files, ['X:\\감시\\새 폴더\\보고서.txt']);
+});
+
+test('문서 폴더 자체 이름: 바깥(doc-root-moved)·앱 안(맨 위 줄 이름 바꾸기 → doc_rename_root) 모두 목록·업무 링크가 따라간다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['W:\\팀\\가'];
+  let lists={'0:':[{name:'a.txt',rel:'a.txt',dir:false,size:1,mtime:1}]};
+  fakeFs(()=>lists);
+  const it=mk({memo:'링크', done:true, doneAt:Date.now(), files:['W:\\팀\\가\\a.txt', 'W:\\팀\\가']});
+  S.items.push(it);
+  await openDocs();
+  env.fireEvent('wmhh://doc-root-moved', {root:0, base:'W:\\팀\\가', to:'W:\\팀\\나'}); await env.flush(14);
+  assert.deepEqual(S.settings.docRoots, ['W:\\팀\\나']);
+  assert.deepEqual(it.files, ['W:\\팀\\나\\a.txt', 'W:\\팀\\나']);
+  assert.ok(env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args.items.some(x=>x.id===it.id), '종료 업무도 저장에 실린다');
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='doc_set_roots').at(-1).args.paths[0], 'W:\\팀\\나', 'Rust 에도 새 경로로 다시 알린다');
+  env.fireEvent('wmhh://doc-root-moved', {root:0, base:'W:\\팀\\가', to:'W:\\팀\\다'}); await env.flush(10);
+  assert.deepEqual(S.settings.docRoots, ['W:\\팀\\나'], '이미 처리한 옛 알림은 무시');
+  /* 앱 안에서 — 메뉴에 이름 바꾸기가 있고, 바꾸면 doc_rename_root */
+  const calls=[];
+  env.onInvoke('doc_rename_root', a=>{ calls.push(a); return {from:'W:\\팀\\나', to:'W:\\팀\\라'}; });
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  row('0:').dispatchEvent(new env.window.MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:20, clientY:20}));
+  click(doc.querySelector('.dt-menu [data-mren]')); await env.flush(2);
+  const inp=doc.querySelector('#dt-tree .dt-rename');
+  assert.equal(inp.value, '나', '지금 폴더 이름');
+  inp.value='라';
+  inp.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Enter', bubbles:true, cancelable:true})); await env.flush(16);
+  assert.deepEqual(calls, [{root:0, name:'라'}]);
+  assert.deepEqual(S.settings.docRoots, ['W:\\팀\\라']);
+  assert.deepEqual(it.files, ['W:\\팀\\라\\a.txt', 'W:\\팀\\라']);
+  /* 감시가 뒤늦게 같은 바뀜을 알려도 두 번 하지 않는다 */
+  env.fireEvent('wmhh://doc-root-moved', {root:0, base:'W:\\팀\\나', to:'W:\\팀\\라'}); await env.flush(10);
+  assert.deepEqual(S.settings.docRoots, ['W:\\팀\\라']);
+});

@@ -1,6 +1,6 @@
 [package]
 name = "wmhh-desktop"
-version = "3.8.19"
+version = "3.8.20"
 description = "뭐하려 했더라 — 전화받고 잊어버리기 전에 던져두는 업무 메모 보드"
 authors = ["Milkbuttercheese2"]
 edition = "2021"
@@ -32,5 +32,6 @@ thiserror = "1"
 
 [target.'cfg(windows)'.dependencies]
 # v3.8.1 문서 탭 — EUC-KR 글자 파일(Win32_Globalization) · 탐색기 미리 보기 창(COM·Shell·창). 이미 의존성 트리에 있는 windows 크레이트.
+# Win32_System_IO·Win32_System_Threading·Win32_Security: 문서 폴더 감시(docwatch.rs — 바깥에서 바꾼 이름 따라가기).
 # Win32_Storage_FileSystem: 휴지통 보내기 전 드라이브 종류(GetDriveTypeW) — 휴지통 없는 곳의 영구 삭제 막기.
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Environment", "Win32_UI_Input_KeyboardAndMouse", "Win32_Storage_FileSystem"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Environment", "Win32_UI_Input_KeyboardAndMouse", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading", "Win32_Security"] }

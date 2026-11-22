@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod db;
 mod docs;
+mod docwatch;
 mod preview;
 
 use std::path::PathBuf;
@@ -137,6 +138,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            docs::set_app(app.handle().clone());   // 문서 폴더 감시가 화면에 알릴 곳
             // conf에서 main을 visible:false로 바꾼 것은 '시작 시 최소화'를
             // 깜빡임 없이 지원하기 위해서다. 일반 실행은 즉시 표시하고,
             // 자동 시작(--autostart)일 때만 아래에서 설정을 보고 결정한다.
@@ -452,6 +454,7 @@ pub fn run() {
             docs::doc_search_warm,
             docs::key_shift_down,
             docs::doc_rename,
+            docs::doc_rename_root,
             preview::doc_preview_open,
             preview::doc_preview_place,
             preview::doc_preview_show,
