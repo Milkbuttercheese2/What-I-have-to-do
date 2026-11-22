@@ -13,7 +13,7 @@ import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigit
 /* v3.7.0: 인물 일괄 바꾸기가 업무를 고친 뒤 저장·재렌더해야 해서 persist 를 쓴다.
    render→form→phonebook→render 순환이지만 함수 호출만 오가므로(최상위 사용 없음) 안전하다 —
    CLAUDE.md 규칙 1(기능 모듈은 hoisted 함수 + init*() 만)이 지켜지는 동안. */
-import {persist} from './render.js';
+import {persist, dAt} from './render.js';
 import {registerView} from './views.js';
 import {openModal, closeModal} from './modals.js';
 
@@ -288,17 +288,19 @@ export function renderPbSide(){
   el.classList.add('on'); if(lay) lay.classList.add('has-side');
   /* v3.8.18 모양: 머리글자 동그라미 + 이름·소속, 연락처는 줄을 나눠(전화 / 이메일), 엮인 업무는 완료 탭 묶음과 같은 상자·한 줄 목록 */
   const ini=esc((String(en.who||en.org||'?').trim()[0])||'?');
-  el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}</div>`
+  el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}${[[en.phone,' num'],[en.email,'']].filter(x=>x[0]).map(([v,c])=>`<span class="pbs-line${c}">${esc(v)}</span>`).join('')}</div>`
     /* v3.8.18 수정·바꾸기·삭제는 고른 사람 칸의 머리에, 칸에 마우스를 올렸을 때만 보인다(소유자 지정 — 줄마다 hover 로 뜨던 것을 옮겼다) */
     +`<span class="pbs-acts"><button type="button" class="btn btn-tool" data-pbedit="${en.id}">수정</button><button type="button" class="btn btn-tool" data-pbswap="${en.id}">바꾸기</button><button type="button" class="btn btn-tool pbs-del" data-pbdel="${en.id}">삭제</button></span>`
-    +`<button type="button" class="fm-x side-x" id="pb-side-x" aria-label="칸 닫기" title="칸 닫기">⇥</button></div>`
-    +`<div class="pbs-info">${[['전화',en.phone,' num'],['이메일',en.email,'']].filter(x=>x[1]).map(([k,v,c])=>`<div class="pbs-line"><span class="pbs-k">${k}</span><span class="pbs-v${c}">${esc(v)}</span></div>`).join('')}</div>`
+    +`</div>`
+    /* v3.8.18 연락처는 이름표('전화'·'이메일') 없이 소속 아래에 소속과 같은 글자로(소유자 지정) */
     +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">관련 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
-    +`<div class="rel-list pbs-list">${list.length ? list.map(it=>{
+    /* 줄 = 진행/완료 · 메모 첫 줄 · 식별정보 · 종료(완료 탭 한 줄 목록과 같은 이름·같은 날짜 모양 — 소유자 요청) */
+    +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">종료</span></div>`+list.map(it=>{
       const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
-      const dv=it.done&&it.doneAt!=null?new Date(it.doneAt):null;
-      const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
-      return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
+      const ids=(it.ids||[]).filter(x=>x.val).map(x=>`${x.kind?x.kind+' ':''}${x.val}`).join(', ');
+      const end=it.done ? dAt(it.doneAt) : '';
+      return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>`
+        +`<span class="pbs-c"${ids?` title="${escAttr(ids)}"`:''}>${esc(ids)}</span><span class="pbs-c num">${esc(end)}</span></div>`;
     }).join('') : '<div class="pbs-empty">관련 업무 없음</div>'}</div></div>`;
 }
 
@@ -407,7 +409,7 @@ export function initPhonebook(){
   $('pbsw-cancel').addEventListener('click',closeSwap);
   $('pbsw-go').addEventListener('click',applySwap);
   $('pbSwapModal').addEventListener('click',e=>{ if(e.target.id==='pbSwapModal') closeSwap(); });
-  $('pb-side').addEventListener('click',e=>{ if(e.target.closest('#pb-side-x')){ pbSel=null; renderPhonebook(); return; } pbClick(e); });
+  $('pb-side').addEventListener('click',pbClick);   // v3.8.18: 칸 접기(⇥)는 없앴다 — 오른쪽 자리는 늘 비워 두므로(소유자 지정)
   $('pb-list').addEventListener('click',pbClick);
 }
 /* 목록·오른쪽 칸 공용 — 수정·바꾸기·삭제 단추(v3.8.18 부터 오른쪽 칸 머리에 있다) · 줄 누르기 */

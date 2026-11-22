@@ -1625,6 +1625,7 @@
   .pbs-name{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
   .pbs-name b{font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pbs-name span,.pbs-info,.pbs-count{font-size:12.5px;color:var(--ink-soft)}
+  .pbs-name .pbs-line{overflow-wrap:anywhere}
   .pbs-info{margin-top:6px;word-break:break-all}
   .pbs-count{margin:10px 0 8px;font-weight:600}
   .pbs-list{max-height:none}
@@ -1805,7 +1806,7 @@
   .pb-cnt.past{background:var(--chip-bg);color:var(--ink-soft)}
   .pb-cnt.none{background:transparent;color:var(--icon-muted);font-weight:600}
   /* 오른쪽 칸 */
-  .pbs-head{align-items:center;gap:10px}   /* 동그라미(36px)+사이(10px) = 아래 연락처 이름표 폭(36px)+사이(10px) — 이름과 번호, 동그라미와 '전화'가 세로로 맞는다(소유자 지정) */
+  .pbs-head{align-items:flex-start;gap:10px}   /* 동그라미(36px)+사이(10px) = 아래 연락처 이름표 폭(36px)+사이(10px) — 이름과 번호, 동그라미와 '전화'가 세로로 맞는다(소유자 지정) */
   .pbs-avatar{width:36px;height:36px;font-size:15px}
   .pbs-info{margin:12px 0 0;display:flex;flex-direction:column;gap:4px}
   .pbs-line{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
@@ -1820,6 +1821,14 @@
   .pbs-list .rel-hit:first-child{border-top:0}
   .pbs-list .rel-hit:hover{background:var(--sunk);border-color:var(--line-soft)}
   .pbs-empty{padding:14px;font-size:12.5px;color:var(--ink-soft)}
+  /* 관련 업무 줄의 칸: 진행/완료 · 메모 · 식별정보 · 종료 — 머리줄은 완료 탭 .drow-h 와 같은 글자 */
+  .pbs-list .rel-hit{display:grid;grid-template-columns:2.6rem minmax(0,1fr) minmax(0,9rem) 6.5rem;gap:10px}
+  .pbs-c{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--ink-soft)}
+  .pbs-list .pbs-h{cursor:default;padding-top:7px;padding-bottom:6px}
+  .pbs-list .pbs-h:hover{background:transparent}
+  .pbs-h .rel-txt,.pbs-h .pbs-c{font-size:11.5px;font-weight:600;color:var(--ink-soft)}
+  .pbs-list .rel-tag{justify-self:start}
+  @media(max-width:700px){ .pbs-list .rel-hit{grid-template-columns:2.6rem minmax(0,1fr) 5.5rem} .pbs-list .rel-hit > :nth-child(3){display:none} }
   /* 넓은 화면에선 목록 폭을 늘 오른쪽 칸이 있을 때의 폭으로 둔다(소유자 지정 — 줄이 화면 끝까지 펼쳐지면 눈이 멀리 간다).
      사람을 고르기 전엔 그 자리에 안내만(새 프리셋 상자와 같은 면 --dash-bg · 실선 — v3.7.0 점선 금지). 좁은 폭(≤1080)은 예전처럼 한 열 */
   @media(min-width:1081px){
@@ -1832,7 +1841,7 @@
   /* 평소엔 감추고, 오른쪽 칸에 마우스를 올렸을 때(또는 키보드 초점)만 잠깐 — 늘 떠 있으면 긴 이름과 겹친다(소유자 지정).
      자리를 차지하지 않고 머리줄 오른쪽(⇥ 왼쪽)에 칸 바탕(--card)으로 겹쳐 뜬다 */
   .pbs-head{position:relative}
-  .pbs-acts{position:absolute;right:34px;top:50%;transform:translateY(-50%);display:flex;gap:6px;padding-left:10px;background:var(--card);opacity:0;pointer-events:none;transition:opacity .12s}
+  .pbs-acts{position:absolute;right:0;top:0;display:flex;gap:6px;padding-left:10px;background:var(--card);opacity:0;pointer-events:none;transition:opacity .12s}
   .pb-side:hover .pbs-acts,.pb-side:focus-within .pbs-acts{opacity:1;pointer-events:auto}
   .pbs-acts .btn{height:28px;padding:0 10px;font-size:12px}
   .pbs-acts .pbs-del:hover{color:var(--red);border-color:var(--red)}

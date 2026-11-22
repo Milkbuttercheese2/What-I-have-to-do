@@ -333,14 +333,14 @@ test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 �
   $('pb-list').querySelector('[data-pbid="11"] .pb-who').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
   assert.ok(side.classList.contains('on'));
   assert.ok(!env.document.getElementById('relModal').classList.contains('on'), '팝업은 뜨지 않는다');
-  assert.match(side.textContent, /김철수/); assert.deepEqual([...side.querySelectorAll('.pbs-line')].map(x=>x.textContent), ['전화010-1','이메일k@x.kr'], 'v3.8.18: 전화·이메일은 줄을 나눈다'); assert.match(side.textContent, /진행 1 · 완료 1/);
-  assert.deepEqual([...side.querySelectorAll('.rel-hit')].map(x=>x.dataset.open), ['2','1'], '진행 먼저, 3칸이 같은 사람만');
+  assert.match(side.textContent, /김철수/); assert.deepEqual([...side.querySelectorAll('.pbs-line')].map(x=>x.textContent), ['010-1','k@x.kr'], 'v3.8.18: 전화·이메일은 이름표 없이 줄을 나눈다'); assert.match(side.textContent, /진행 1 · 완료 1/);
+  assert.deepEqual([...side.querySelectorAll('.rel-hit[data-open]')].map(x=>x.dataset.open), ['2','1'], '진행 먼저, 3칸이 같은 사람만');
   assert.ok($('pb-list').querySelector('[data-pbid="11"]').classList.contains('sel'));
   /* 업무가 바뀌면 칸도 따라 바뀐다 */
   S.items[1].done=true; S.items[1].doneAt=9; renderPhonebook();
   assert.match(side.textContent, /진행 0 · 완료 2/);
-  env.document.getElementById('pb-side-x').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
-  assert.ok(!side.classList.contains('on'));
+  assert.ok(!env.document.getElementById('pb-side-x'), 'v3.8.18: 칸 접기(⇥)는 없다');
+  assert.deepEqual([...side.querySelectorAll('.pbs-h span')].map(x=>x.textContent), ['','메모','식별정보','종료'], 'v3.8.18: 관련 업무 칸 머리줄');
 });
 
 test('v3.8.16 전화번호부 탭이 안 보이면 그리지 않고, 탭을 열면 그린다', async () => {

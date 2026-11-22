@@ -231,7 +231,7 @@ export function doneCalHtml(list, y, m, selDay, now){
 /* v3.8.4 완료 탭 — 늘 전체를 한 줄 목록으로 보여 준다(거르기·카드 보기 단추는 소유자 지정으로 뺐다) */
 /* 한 줄 = 종료시각 · 메모 첫 줄 · 식별정보 · 접수시각 · 마감시각 · 관련인 · 파일 (소유자 지정) */
 const DONE_COLS=['종료','메모','식별정보','접수','마감','관련인','파일'];
-const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
+export const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
   return `${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const baseName = p => String(p||'').split(/[\\/]/).filter(Boolean).pop()||'';
 function doneRowHtml(it){
