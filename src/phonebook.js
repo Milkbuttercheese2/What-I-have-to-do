@@ -68,20 +68,23 @@ export function renderPhonebook(){
   groups.sort((a,b)=>(b.n-a.n)||a.org.localeCompare(b.org,'ko'));
   groups.forEach(g=>g.rows.sort((a,b)=>(b.n-a.n)||(a.e.who||'').localeCompare(b.e.who||'','ko')));
   const initial=e=>esc((String(e.who||e.org||'?').trim()[0])||'?');
-  const row=({e,n})=>`<div class="pb-item${e.id===pbSel?' sel':''}" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
-    <span class="pb-org">${esc(e.org||'')}</span>
-    <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span>${esc(e.who||'')}</span>
+  /* v3.8.18 줄 모양: 소속은 묶음 머리줄에만(줄마다 되풀이하지 않는다) — 머리글자·이름이 줄 맨 앞.
+     '업무 N' 배지는 진행 중인 업무가 있는 사람만 강조(진행), 끝난 업무만 있으면 옅게(끝남), 0건은 글자만 흐리게(없음) */
+  const live=relatedCounts(S.items.filter(it=>!it.done));
+  const row=({e,n})=>{ const l=live.get(relKeyOf(e))||0;
+    return `<div class="pb-item${e.id===pbSel?' sel':''}" data-pbid="${e.id}" title="누르면 이 관련인과 엮인 업무를 보여줍니다">
+    <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span><span class="pb-name">${esc(e.who||'')}</span></span>
     <span class="pb-phone num">${esc(e.phone||'')}</span>
     <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
     <span class="pb-tail">
-      <span class="pb-cnt num" title="엮인 업무 수">업무 ${n}</span>
+      <span class="pb-cnt num ${l?'live':n?'past':'none'}" title="엮인 업무 ${n}건 · 진행 ${l} · 완료 ${n-l}">업무 ${n}</span>
       <!-- v3.6.2: 버튼에 title="" — 행의 '엮인 업무' 안내 툴팁이 상속돼 수정/삭제 위에서도
            떠서 눌렀을 때 하는 일과 어긋났다(빈 title 이 조상 툴팁을 막는다) -->
       <button class="ps-edit" data-pbedit="${e.id}" title="">수정</button>
       <button class="ps-swap" data-pbswap="${e.id}" title="">바꾸기</button>
       <button class="ps-del" data-pbdel="${e.id}" title="">삭제</button>
     </span>
-  </div>`;
+  </div>`; };
   w.innerHTML=groups.map(g=>`<section class="pb-group"><div class="pb-ghead"><span>${esc(g.org)}</span><span class="count num">${g.rows.length}명</span></div>`
     +g.rows.map(row).join('')+`</section>`).join('');
 }
@@ -288,16 +291,18 @@ export function renderPbSide(){
   const list=relatedItems(S.items, {entries:[en]}).slice().sort((a,b)=>((a.done?1:0)-(b.done?1:0)) || ((b.doneAt||b.id)-(a.doneAt||a.id)));
   const live=list.filter(it=>!it.done).length;
   el.classList.add('on'); if(lay) lay.classList.add('has-side');
-  el.innerHTML=`<div class="pbs-head"><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}</div>`
+  /* v3.8.18 모양: 머리글자 동그라미 + 이름·소속, 연락처는 줄을 나눠(전화 / 이메일), 엮인 업무는 완료 탭 묶음과 같은 상자·한 줄 목록 */
+  const ini=esc((String(en.who||en.org||'?').trim()[0])||'?');
+  el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}</div>`
     +`<button type="button" class="fm-x side-x" id="pb-side-x" aria-label="칸 닫기" title="칸 닫기">⇥</button></div>`
-    +`<div class="pbs-info num">${[en.phone, en.email].filter(Boolean).map(esc).join(' · ')}</div>`
-    +`<div class="pbs-count">진행 ${live} · 완료 ${list.length-live}</div>`
+    +`<div class="pbs-info">${[['전화',en.phone,' num'],['이메일',en.email,'']].filter(x=>x[1]).map(([k,v,c])=>`<div class="pbs-line"><span class="pbs-k">${k}</span><span class="pbs-v${c}">${esc(v)}</span></div>`).join('')}</div>`
+    +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">엮인 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
     +`<div class="rel-list pbs-list">${list.length ? list.map(it=>{
       const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
       const dv=it.done&&it.doneAt!=null?new Date(it.doneAt):null;
       const doneAt=(dv&&!isNaN(dv))?`<span class="rel-done num">${esc(fmtT(dv.toISOString()))}</span>`:'';
       return `<div class="rel-hit" data-open="${it.id}"><span class="rel-tag ${it.done?'done':'ongoing'}">${it.done?'완료':'진행'}</span><span class="rel-txt">${esc(memo)}</span>${doneAt}</div>`;
-    }).join('') : '<div class="empty" style="padding:14px">엮인 업무 없음</div>'}</div>`;
+    }).join('') : '<div class="pbs-empty">엮인 업무 없음</div>'}</div></div>`;
 }
 
 /* ── 인물 일괄 바꾸기 (v3.7.0, 소유자 요청) ──────────────────────────────────

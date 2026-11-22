@@ -1784,3 +1784,47 @@
      19.5px = .drow 한 줄의 내용 높이(Edge 실측 36.5px − 위아래 여백 16 − 윗줄 1). 이 값은 여백을 뺀 내용 높이라야 한다 —
      여백 포함 값을 넣으면 화면 밖 줄마다 17px씩 커져 스크롤 위치가 밀린다. auto 라 한 번 그린 뒤엔 실제 높이를 기억 */
   .drow:not(.drow-h){content-visibility:auto;contain-intrinsic-size:auto 19.5px}
+
+  /* ── v3.8.18 전화번호부 화면 다듬기(소유자 요청 "다른 UI랑 통일되지만 예쁘게") ──
+     새 색·글꼴·그림자 없음 — 값은 모두 기존 토큰과 다른 탭의 값을 쓴다:
+     · 줄: 완료 탭 한 줄 목록(.drow)과 같은 여백·구분선·hover(--sunk), 고른 줄 = 문서 트리 고른 줄(.dt-row.on: --slate-bg + --focus 글자)
+     · 묶음 상자·머리줄: 완료 탭 묶음(.done-group/.dg-head)과 같은 값(그대로 둠)
+     · 오른쪽 칸 엮인 업무: 완료 탭 묶음 상자 + 한 줄 목록 모양, 진행/완료 표시는 기존 .rel-tag
+     줄의 칸 폭은 내용에 맞춘 고정 폭이라 줄끼리·묶음끼리 세로로 맞는다(이름 11rem · 전화 9rem · 이메일 나머지). */
+  .pb-group .pb-item{grid-template-columns:minmax(0,11rem) 9rem minmax(0,1fr) auto;gap:14px;padding:8px 14px;font-size:13px}
+  .pb-group .pb-item .pb-who,.pb-group .pb-item .pb-phone,.pb-group .pb-item .pb-email{padding-left:0}
+  .pb-item .pb-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pb-item .pb-phone{color:var(--ink-2)}
+  .pb-item .pb-email{font-size:12px}
+  .pb-tail{padding-right:0}
+  .pb-tail .pb-cnt{order:2}   /* 배지는 늘 오른쪽 끝 — hover 때 나오는 수정·바꾸기·삭제는 그 왼쪽(평소엔 감춰진 단추 자리만큼 배지가 가운데로 떠 보였다) */
+  .pb-group .pb-item.sel,.pb-group .pb-item.sel:hover{background:var(--slate-bg)}
+  .pb-item.sel .pb-name{color:var(--focus)}
+  .pb-item.sel .pb-avatar,.pb-item.sel .pb-cnt.live,.pb-item.sel .pb-cnt.past{background:var(--card)}   /* 고른 줄 바탕(--slate-bg)과 같은 색이라 동그라미·배지가 묻히지 않게 */
+  /* 업무 수 배지 — 진행 중이 있으면 강조, 끝난 것만 있으면 옅게, 0건은 배경 없이 흐린 글자(정보는 그대로 남긴다) */
+  .pb-cnt.past{background:var(--chip-bg);color:var(--ink-soft)}
+  .pb-cnt.none{background:transparent;color:var(--icon-muted);font-weight:600}
+  /* 오른쪽 칸 */
+  .pbs-head{align-items:center;gap:10px}
+  .pbs-avatar{width:36px;height:36px;font-size:15px}
+  .pbs-info{margin:12px 0 0;display:flex;flex-direction:column;gap:4px}
+  .pbs-line{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--ink);min-width:0}
+  .pbs-k{flex:none;width:3.2rem;font-size:12px;color:var(--ink-soft)}
+  .pbs-v{min-width:0;overflow-wrap:anywhere}
+  .pbs-box{margin-top:14px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .pbs-bhead{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line)}
+  .pbs-btitle{font-size:13.5px;font-weight:700}
+  .pbs-box .pbs-count{margin:0 0 0 auto;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line-soft);color:var(--ink-soft);line-height:1;display:inline-flex;align-items:center;height:20px}
+  .pbs-list{display:flex;flex-direction:column;gap:0}
+  .pbs-list .rel-hit{border:0;border-top:1px solid var(--line-soft);border-radius:0;background:transparent;padding:8px 14px;font-size:13px}
+  .pbs-list .rel-hit:first-child{border-top:0}
+  .pbs-list .rel-hit:hover{background:var(--sunk);border-color:var(--line-soft)}
+  .pbs-empty{padding:14px;font-size:12.5px;color:var(--ink-soft)}
+  /* 좁은 폭(560px 단일 열, 반응형 정책): 이름 / 전화·이메일 두 줄, 꼬리(배지·수정·바꾸기·삭제)는 오른쪽 */
+  @media(max-width:1080px){
+    .pb-group .pb-item{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"who tail" "sub tail";row-gap:2px;column-gap:10px}
+    .pb-group .pb-item .pb-who{grid-area:who}
+    .pb-group .pb-item .pb-tail{grid-area:tail;grid-column:auto}
+    .pb-group .pb-item .pb-phone{grid-area:sub;padding-left:32px;font-size:12.5px}
+    .pb-group .pb-item .pb-email{grid-area:sub;justify-self:end;max-width:50%;text-align:right}
+  }

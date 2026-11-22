@@ -331,7 +331,7 @@ test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 �
   $('pb-list').querySelector('[data-pbid="11"] .pb-who').dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));
   assert.ok(side.classList.contains('on'));
   assert.ok(!env.document.getElementById('relModal').classList.contains('on'), '팝업은 뜨지 않는다');
-  assert.match(side.textContent, /김철수/); assert.match(side.textContent, /010-1 · k@x\.kr/); assert.match(side.textContent, /진행 1 · 완료 1/);
+  assert.match(side.textContent, /김철수/); assert.deepEqual([...side.querySelectorAll('.pbs-line')].map(x=>x.textContent), ['전화010-1','이메일k@x.kr'], 'v3.8.18: 전화·이메일은 줄을 나눈다'); assert.match(side.textContent, /진행 1 · 완료 1/);
   assert.deepEqual([...side.querySelectorAll('.rel-hit')].map(x=>x.dataset.open), ['2','1'], '진행 먼저, 3칸이 같은 사람만');
   assert.ok($('pb-list').querySelector('[data-pbid="11"]').classList.contains('sel'));
   /* 업무가 바뀌면 칸도 따라 바뀐다 */
@@ -351,4 +351,18 @@ test('v3.8.16 전화번호부 탭이 안 보이면 그리지 않고, 탭을 열�
   assert.equal($('pb-list').textContent, '', '숨은 탭은 그리지 않는다');
   env.document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='phone')); showView('phone');
   assert.match($('pb-list').textContent, /숨김/, '탭을 열면 그린다');
+});
+
+test('v3.8.18 전화번호부 줄: 소속은 묶음 머리줄에만 · 업무 배지는 진행 있음/끝난 것만/없음으로 구분', async () => {
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
+  adoptPhonebook([{id:1, who:'가가', org:'가과', phone:'010-1111-1111'},{id:2, who:'나나', org:'가과', phone:'010-2222-2222'},{id:3, who:'다다', org:'가과', phone:'010-3333-3333'}]);
+  const c = (who,phone)=>[{who, org:'가과', phone}];
+  S.items.push({id:101, memo:'a', done:false, f:{}, contacts:c('가가','010-1111-1111'), ids:[], subs:[], al:{}},
+               {id:102, memo:'b', done:true, doneAt:1, f:{}, contacts:c('나나','010-2222-2222'), ids:[], subs:[], al:{}});
+  renderPhonebook();
+  assert.equal($('pb-list').querySelectorAll('.pb-item .pb-org').length, 0, '줄에 소속 칸이 없다');
+  assert.equal($('pb-list').querySelector('.pb-ghead span').textContent, '가과', '소속은 머리줄에');
+  const cls = id => $('pb-list').querySelector(`[data-pbid="${id}"] .pb-cnt`).className;
+  assert.match(cls(1), /\blive\b/); assert.match(cls(2), /\bpast\b/); assert.match(cls(3), /\bnone\b/);
+  assert.equal($('pb-list').querySelector('[data-pbid="3"] .pb-cnt').textContent, '업무 0', '0건도 글자는 남긴다');
 });
