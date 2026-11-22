@@ -288,11 +288,11 @@ export function renderPbSide(){
   el.classList.add('on'); if(lay) lay.classList.add('has-side');
   /* v3.8.18 모양: 머리글자 동그라미 + 이름·소속, 연락처는 줄을 나눠(전화 / 이메일), 엮인 업무는 완료 탭 묶음과 같은 상자·한 줄 목록 */
   const ini=esc((String(en.who||en.org||'?').trim()[0])||'?');
-  el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}${[[en.phone,' num'],[en.email,'']].filter(x=>x[0]).map(([v,c])=>`<span class="pbs-line${c}">${esc(v)}</span>`).join('')}</div>`
+  el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b><span class="pbs-sub">${en.org&&en.who?`<span class="pbs-org">${esc(en.org)}</span>`:''}${[[en.phone,' num'],[en.email,'']].filter(x=>x[0]).map(([v,c])=>`<span class="pbs-line${c}">${esc(v)}</span>`).join('')}</span></div>`
     /* v3.8.18 수정·바꾸기·삭제는 고른 사람 칸의 머리에, 칸에 마우스를 올렸을 때만 보인다(소유자 지정 — 줄마다 hover 로 뜨던 것을 옮겼다) */
     +`<span class="pbs-acts"><button type="button" class="btn btn-tool" data-pbedit="${en.id}">수정</button><button type="button" class="btn btn-tool" data-pbswap="${en.id}">바꾸기</button><button type="button" class="btn btn-tool pbs-del" data-pbdel="${en.id}">삭제</button></span>`
     +`</div>`
-    /* v3.8.18 연락처는 이름표('전화'·'이메일') 없이 소속 아래에 소속과 같은 글자로(소유자 지정) */
+    /* v3.8.18 소속 · 전화 · 이메일은 이름 아래 한 줄에, 이름표 없이 같은 글자로(소유자 지정) */
     +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">관련 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
     /* 줄 = 진행/완료 · 메모 첫 줄 · 식별정보 · 종료(완료 탭 한 줄 목록과 같은 이름·같은 날짜 모양 — 소유자 요청) */
     +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">종료</span></div>`+list.map(it=>{

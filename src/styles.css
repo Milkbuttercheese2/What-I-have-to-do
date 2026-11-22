@@ -1625,7 +1625,8 @@
   .pbs-name{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
   .pbs-name b{font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pbs-name span,.pbs-info,.pbs-count{font-size:12.5px;color:var(--ink-soft)}
-  .pbs-name .pbs-line{overflow-wrap:anywhere}
+  .pbs-sub{display:flex;flex-wrap:wrap;column-gap:14px;row-gap:2px;font-size:12.5px;color:var(--ink-soft)}   /* 소속 · 전화 · 이메일 한 줄, 구분은 사이 띄움만(점 없음 — 소유자 지정) */
+  .pbs-sub > span{display:inline;font-size:inherit;color:inherit;overflow-wrap:anywhere}
   .pbs-info{margin-top:6px;word-break:break-all}
   .pbs-count{margin:10px 0 8px;font-weight:600}
   .pbs-list{max-height:none}
@@ -1755,7 +1756,7 @@
             mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M7 1.5 10 5H4zM7 12.5 4 9h6z'/%3E%3C/svg%3E") center/12px 12px no-repeat}
   .fm-memo-grip:hover,body.memo-resizing .fm-memo-grip{background-color:var(--focus)}
   body.memo-resizing,body.memo-resizing *{cursor:ns-resize !important;user-select:none}
-  .fm-ro .fm-memo-grip{display:none}
+  /* v3.8.18: 완료 업무(읽기 전용 양식)에도 높이 손잡이를 둔다(소유자 지정) — 높이는 보기만 바꾸고 저장하지 않으므로 읽기 전용과 부딪치지 않는다 */
 
   /* v3.8.9 문서 탭 오른쪽 메모 칸 접기(소유자 지정) — 접으면 좁은 띠(‹ 개수 메모)만 남고 가운데가 넓어진다. 좁은 화면(세로로 쌓일 때)에는 쓰지 않는다 */
   .dn-fold{flex:none;width:24px;height:24px;margin-left:2px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink-2);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0 0 2px}
