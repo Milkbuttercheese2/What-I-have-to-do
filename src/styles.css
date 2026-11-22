@@ -1624,8 +1624,9 @@
   .pbs-head{display:flex;align-items:flex-start;gap:8px}
   .pbs-name{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
   .pbs-name b{font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pbs-head .pbs-name b{line-height:28px}   /* v3.8.19 이름 줄 = 수정·바꾸기·삭제 단추 높이(28px) — 단추와 알약 줄이 붙어 답답하던 것(소유자 지정), 알약은 그 아래 10px */
   .pbs-name span,.pbs-info,.pbs-count{font-size:12.5px;color:var(--ink-soft)}
-  .pbs-sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}   /* 소속 · 전화 · 이메일 한 줄, 하나씩 알약(소유자 지정) — 기존 칩 면(--chip-bg)·999px */
+  .pbs-sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}   /* 소속 · 전화 · 이메일 한 줄, 하나씩 알약(소유자 지정) — 기존 칩 면(--chip-bg)·999px */
   .pbs-sub > span{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;background:var(--chip-bg);color:var(--ink-2);font-size:12px;font-weight:500;min-width:0;overflow-wrap:anywhere}
   .pbs-info{margin-top:6px;word-break:break-all}
   .pbs-count{margin:10px 0 8px;font-weight:600}
