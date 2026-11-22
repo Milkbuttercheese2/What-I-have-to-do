@@ -252,7 +252,13 @@ export function renderDone(){
   const matched=all.filter(it=>textMatch(it, dq));
   if(dcalY==null){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
   const dc=$('done-cal'); if(dc) dc.innerHTML=doneCalHtml(matched, dcalY, dcalM, dcalDay, Date.now());
-  const list=matched.filter(it=>dcalDay==null || (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
+  /* v3.8.18 달 단위(소유자 지정): 목록은 달력 띠가 보는 달을 따라간다. 오늘이 든 달이면 지금처럼 전체, 다른 달이면 그 달에
+     끝낸 업무만(끝낸 시각 doneAt 기준 — 시각이 없는 옛 완료 업무는 전체 보기에서만 보인다). 날짜를 고르면 그날만(예전 그대로),
+     검색어가 있으면 달과 상관없이 전체에서 찾는다. 보는 달은 화면 상태일 뿐 저장하지 않는다(dcalY/dcalM). */
+  const monthOnly=doneMonthOnly();
+  const mFrom=new Date(dcalY, dcalM, 1).getTime(), mTo=new Date(dcalY, dcalM+1, 1).getTime();
+  const inMonth=it=>!monthOnly || (it.doneAt!=null && it.doneAt>=mFrom && it.doneAt<mTo);
+  const list=matched.filter(it=>dcalDay==null ? inMonth(it) : (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
   $('done-count').textContent=all.length;
   const now=Date.now();
   const dm=$('done-metrics');
@@ -262,7 +268,9 @@ export function renderDone(){
     /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
     dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
-  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':'완료된 업무가 없습니다.'}</div>`; return; }
+  const mName=`${dcalY}년 ${dcalM+1}월`;
+  const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 끝낸 업무 <b class="num">${list.length}</b>건</div>` : '';
+  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 끝낸 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
     const g=doneGroupOf(it.doneAt, now);
@@ -276,7 +284,7 @@ export function renderDone(){
      다시 그리면(doneSeq) 이어 그리던 것은 멈춘다. 줄 수가 적으면 예전처럼 한 번에 그린다. */
   const seq=++doneSeq, later=[];
   let budget=DONE_SYNC_ROWS;
-  $('col-done').innerHTML=groups.map(g=>{
+  $('col-done').innerHTML=monthNote+groups.map(g=>{
     const open = (dq || dcalDay!=null) ? true : groupOpen(g.key);
     let rows='';
     if(open){
@@ -292,6 +300,11 @@ export function renderDone(){
   if(later.length) setTimeout(()=>fillDoneLater(seq, later), 0);
 }
 const DONE_SYNC_ROWS=300, DONE_CHUNK_ROWS=400;
+/* 다른 달을 보는 중이고 검색어가 없을 때만 그 달 것으로 거른다(오늘이 든 달 = 전체) */
+function doneMonthOnly(){
+  if(dq || dcalY==null) return false;
+  const d=new Date(); return !(dcalY===d.getFullYear() && dcalM===d.getMonth());
+}
 let doneSeq=0;
 function fillDoneLater(seq, later){
   if(seq!==doneSeq) return;                              // 그새 다시 그렸다 — 이 이어 그리기는 낡았다
