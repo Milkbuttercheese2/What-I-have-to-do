@@ -158,29 +158,33 @@ function enterSearchView(){
   t.el.classList.add('searching'); t.el.scrollTop=0;
   return t;
 }
+/* 그려 둔 트리 줄이 지금 상태와 같은 모양인가 — 폴더 목록(kidsGen)·펼친 폴더·문서 폴더가 그릴 때 그대로면 줄을 다시 만들 필요가 없다.
+   고른 줄(.on)·강조 줄(.reveal)은 patchMarks 가 두 줄만 고친다. ⚠️ 트리 줄 DOM 을 직접 바꾸는 곳(이름 바꾸기 입력칸)은 rowsSig=null 로 무효화할 것 */
+const rowsFresh = () => !!rowsSig && rowsSig.gen===kidsGen && rowsSig.open===openSig() && rowsSig.roots===docRoots().join('|');
+function patchMarks(rows){
+  const k=sel ? nodeKey(sel.i, sel.rel) : null;
+  if(rowsSig.sel!==k){ rowRef(rows, rowsSig.sel)?.classList.remove('on'); rowRef(rows, k)?.classList.add('on'); rowsSig.sel=k; }
+  if(rowsSig.reveal!==revealKey){ rowRef(rows, rowsSig.reveal)?.classList.remove('reveal'); rowRef(rows, revealKey)?.classList.add('reveal'); rowsSig.reveal=revealKey; }
+}
 function leaveSearchView(){
   const t=treeParts(); if(!t) return;
   const was=t.el.classList.contains('searching');
   t.hits.innerHTML='';
-  if(rowsSig && rowsSig.gen===kidsGen && rowsSig.open===openSig() && rowsSig.roots===docRoots().join('|')){
-    /* 그려 둔 트리 그대로 — 고른 줄·강조 줄 표시만 맞춘다 */
-    const k=sel ? nodeKey(sel.i, sel.rel) : null;
-    if(rowsSig.sel!==k){ rowRef(t.rows, rowsSig.sel)?.classList.remove('on'); rowRef(t.rows, k)?.classList.add('on'); rowsSig.sel=k; }
-    if(rowsSig.reveal!==revealKey){ rowRef(t.rows, rowsSig.reveal)?.classList.remove('reveal'); rowRef(t.rows, revealKey)?.classList.add('reveal'); rowsSig.reveal=revealKey; }
-    if(was){ t.el.classList.remove('searching'); t.el.scrollTop=treeScroll; }
-    centerRow();
-    return;
-  }
   t.el.classList.remove('searching');
-  renderTree();
+  if(rowsFresh()) patchMarks(t.rows); else buildRows(t);
   if(was) t.el.scrollTop=treeScroll;
   centerRow();
 }
 const rowRef = (box, k) => k==null ? null : box.querySelector(`.dt-row[data-dkey="${String(k).replace(/["\\]/g,'\\$&')}"]`);
+/* 트리 다시 그리기 — 모양이 그대로면(파일만 골랐을 때 등) 고른 줄 표시만 옮긴다(v3.8.16: 2만 줄 트리에서 클릭마다 줄 전체를 다시 만들었다) */
 function renderTree(){
   const t=treeParts(); if(!t) return;
   if(searchHits){ renderHits(); return; }                     // 찾는 중이면 결과 목록을 그대로
-  const {el}=t;
+  if(t.el.classList.contains('searching')){ leaveSearchView(); return; }
+  if(rowsFresh()) patchMarks(t.rows); else buildRows(t);
+  centerRow();
+}
+function buildRows(t){
   t.rows.innerHTML=docRoots().map((p,i)=>{
     const k=nodeKey(i,''), isOpen=open.has(k);
     return `<div class="dt-row dt-root dir${isSel(i,'')?' on':''}${revCls(k)}" data-dkey="${escAttr(k)}" data-ddir="1" title="${escAttr(p)}">`
@@ -189,8 +193,6 @@ function renderTree(){
       +(isOpen ? (()=>{ const out=[]; pushList(out, i, '', 1); return chunked(out); })() : '');
   }).join('');
   rowsSig={gen:kidsGen, open:openSig(), roots:docRoots().join('|'), sel:sel?nodeKey(sel.i, sel.rel):null, reveal:revealKey};
-  if(el.classList.contains('searching')){ el.classList.remove('searching'); t.hits.innerHTML=''; }
-  centerRow();
 }
 
 /* ── 가운데: 보기 ── */
@@ -804,7 +806,7 @@ function startRename(key, after){
   const nm=row.querySelector('.dt-name'); if(!nm) return;
   const {i, rel}=parseKey(key), old=nameOf(rel);
   const inp=document.createElement('input'); inp.className='dt-rename'; inp.value=old; inp.maxLength=200; inp.spellcheck=false;
-  nm.replaceWith(inp);
+  nm.replaceWith(inp); rowsSig=null;                   // 줄 DOM 을 직접 바꿨다 — 다음 renderTree 는 새로 그린다
   const dot=row.dataset.ddir==='1' ? -1 : old.lastIndexOf('.');
   inp.focus(); inp.setSelectionRange(0, dot>0 ? dot : old.length);
   let done=false;

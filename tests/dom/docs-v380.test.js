@@ -1006,3 +1006,22 @@ test('v3.8.16 찾기를 지우면 그려 둔 트리를 그대로 다시 보인�
   assert.notStrictEqual(row('0:큰/f200.txt'), kept, '펼침이 바뀌었으면 새로 그렸다');
   assert.equal(tree.querySelectorAll('.dt-rows .dt-row.on').length, 1);
 });
+
+test('v3.8.16 파일을 누르면 트리 줄을 다시 만들지 않고 고른 줄 표시만 옮긴다 · 이름 바꾸기를 그만두면 줄이 되돌아온다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  fakeFs(()=>({'0:':[{name:'가.txt',rel:'가.txt',dir:false,size:1,mtime:1},{name:'나.txt',rel:'나.txt',dir:false,size:1,mtime:1}]}));
+  env.onInvoke('doc_read_text', ()=>({text:'본문', encoding:'utf-8', mtime:1}));
+  await openDocs();
+  const ga=row('0:가.txt'), na=row('0:나.txt');
+  click(ga); await env.flush(10);
+  assert.strictEqual(row('0:가.txt'), ga, '같은 줄 그대로'); assert.ok(ga.classList.contains('on'));
+  click(na); await env.flush(10);
+  assert.strictEqual(row('0:나.txt'), na); assert.ok(na.classList.contains('on')); assert.ok(!ga.classList.contains('on'));
+  assert.equal(doc.querySelectorAll('#dt-tree .dt-row.on').length, 1);
+  /* 이름 바꾸기 입력칸은 줄을 직접 바꾼다 — ESC 로 그만두면 줄이 다시 그려져 이름이 돌아온다 */
+  na.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'F2', bubbles:true, cancelable:true})); await env.flush(4);
+  const inp=doc.querySelector('#dt-tree .dt-rename');
+  assert.ok(inp, 'F2 로 이름 바꾸기'); { inp.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape', bubbles:true, cancelable:true})); await env.flush(6);
+    assert.ok(!doc.querySelector('#dt-tree .dt-rename')); assert.equal(row('0:나.txt').querySelector('.dt-name').textContent, '나.txt'); }
+});
