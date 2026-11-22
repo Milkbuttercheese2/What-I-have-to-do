@@ -196,6 +196,22 @@ function buildRows(t){
 }
 
 /* ── 가운데: 보기 ── */
+/* 폴더를 고르면 가운데에 나오는 파일 목록 — 줄이 많으면(파일 6천 개 폴더 등) CHUNK 줄씩 묶는다(v3.8.16). 첫 묶음만 그대로 그리고
+   나머지는 content-visibility:auto(.dv-cv) 라 화면 밖 묶음은 건너뛴다. 줄 높이는 글꼴에 따라 달라 첫 묶음에서 재서(sizeFileChunks)
+   나머지 묶음의 높이로 적으므로 스크롤 길이는 묶기 전과 같다. 실측: 6천 줄 폴더를 고를 때 그리기 520ms → 아래 커밋 참조 */
+function fileRows(rows){
+  if(rows.length<=CHUNK*2) return rows.join('');
+  let h='';
+  for(let a=0;a<rows.length;a+=CHUNK) h+=`<div class="dv-fchunk${a?' dv-cv':''}" data-n="${Math.min(CHUNK, rows.length-a)}">${rows.slice(a, a+CHUNK).join('')}</div>`;
+  return h;
+}
+function sizeFileChunks(root){
+  const c0=root.querySelector('.dv-fchunk'); if(!c0) return;
+  const r=c0.children; if(r.length<2) return;
+  const hb=r[1].getBoundingClientRect().height;             // 둘째 줄(위 테두리 포함) — 첫 묶음만 그려져 있어 싸다
+  if(!(hb>0)) return;
+  for(const c of root.querySelectorAll('.dv-fchunk.dv-cv')) c.style.containIntrinsicHeight=`auto ${(Number(c.dataset.n)||0)*hb}px`;
+}
 function viewHead(i, rel, e, extra){
   const kind=docKind(rel), k=escAttr(nodeKey(i, rel));
   return `<div class="dv-head"><div class="dv-title"><span class="dt-ico ico-${kind}"></span><b>${esc(nameOf(rel))}</b>`
@@ -226,8 +242,9 @@ async function doRenderViewer(){
     const files=Array.isArray(list) ? list.filter(e=>!e.dir) : [];
     el.innerHTML=`<div class="dv-folder"><div class="dv-ftitle"><span class="dt-ico ico-dir"></span><b>${esc(sel.rel ? nameOf(sel.rel) : rootName(sel.i))}</b></div>`
       +(list && list.error ? `<div class="dv-empty dv-err">${esc(list.error)}</div>`
-        : files.length ? `<div class="dv-flist">${files.map(f=>`<div class="dv-frow" data-dkey="${escAttr(nodeKey(sel.i, f.rel))}" data-ddir="0"><span class="dt-ico ico-${docKind(f.name)}"></span><span class="dv-fname">${esc(f.name)}</span><span class="dv-meta num">${fmtSize(f.size)}</span><span class="dv-meta num">${fmtTime(f.mtime)}</span></div>`).join('')}</div>`
+        : files.length ? `<div class="dv-flist">${fileRows(files.map(f=>`<div class="dv-frow" data-dkey="${escAttr(nodeKey(sel.i, f.rel))}" data-ddir="0"><span class="dt-ico ico-${docKind(f.name)}"></span><span class="dv-fname">${esc(f.name)}</span><span class="dv-meta num">${fmtSize(f.size)}</span><span class="dv-meta num">${fmtTime(f.mtime)}</span></div>`))}</div>`
         : '<div class="dv-empty">파일 없음</div>')+`</div>`;
+    sizeFileChunks(el);
     return;
   }
   const {i, rel}=sel, e=entryOf(i, rel), kind=docKind(rel);

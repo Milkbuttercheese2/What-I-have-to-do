@@ -1025,3 +1025,20 @@ test('v3.8.16 파일을 누르면 트리 줄을 다시 만들지 않고 고른 �
   assert.ok(inp, 'F2 로 이름 바꾸기'); { inp.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape', bubbles:true, cancelable:true})); await env.flush(6);
     assert.ok(!doc.querySelector('#dt-tree .dt-rename')); assert.equal(row('0:나.txt').querySelector('.dt-name').textContent, '나.txt'); }
 });
+
+test('v3.8.16 큰 폴더를 고르면 가운데 파일 목록을 100줄 묶음으로(첫 묶음만 바로, 나머지는 화면 밖이면 건너뜀) · 작은 폴더는 예전 그대로', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  const many=n=>Array.from({length:n},(_,k)=>({name:'f'+k+'.txt', rel:'d'+n+'/f'+k+'.txt', dir:false, size:1, mtime:1}));
+  fakeFs(()=>({'0:':[{name:'d250',rel:'d250',dir:true,size:0,mtime:1},{name:'d200',rel:'d200',dir:true,size:0,mtime:1}], '0:d250':many(250), '0:d200':many(200)}));
+  S.settings.docOpen=['0:']; S.settings.docSeen=['A:\\하나'];
+  await openDocs();
+  click(row('0:d250').querySelector('.dt-name')); await env.flush(10);
+  const ch=[...doc.querySelectorAll('#dv-body .dv-flist > .dv-fchunk')];
+  assert.deepEqual(ch.map(c=>c.children.length), [100,100,50]);
+  assert.ok(!ch[0].classList.contains('dv-cv') && ch[1].classList.contains('dv-cv'), '첫 묶음은 늘 그린다');
+  assert.equal(doc.querySelectorAll('#dv-body .dv-frow').length, 250);
+  click(row('0:d200').querySelector('.dt-name')); await env.flush(10);
+  assert.equal(doc.querySelectorAll('#dv-body .dv-fchunk').length, 0, '200줄 이하는 묶지 않는다');
+  assert.equal(doc.querySelectorAll('#dv-body .dv-flist > .dv-frow').length, 200);
+});

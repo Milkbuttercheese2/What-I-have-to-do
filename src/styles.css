@@ -1521,7 +1521,8 @@
   .dv-ftitle{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:10px}
   .dv-flist{border:1px solid var(--line-soft);border-radius:10px;overflow:hidden}
   .dv-frow{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:7px 12px;font-size:13px;cursor:pointer;border-top:1px solid var(--line-soft)}
-  .dv-frow:first-child{border-top:0}
+  .dv-flist>.dv-frow:first-child,.dv-flist>.dv-fchunk:first-child>.dv-frow:first-child{border-top:0}
+  .dv-fchunk.dv-cv{content-visibility:auto}   /* v3.8.16 큰 폴더 파일 목록 묶음 — 높이는 docs.js sizeFileChunks 가 첫 묶음에서 재서 적는다 */
   .dv-frow:hover{background:var(--sunk)}
   .dv-fname{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dc-note{display:flex;flex-direction:column;overflow:hidden}
