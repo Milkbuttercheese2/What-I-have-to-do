@@ -31,7 +31,9 @@ import {openForm} from './form.js';
 import {topId} from './modals.js';
 import {syncGSearch} from './gsearch.js';
 
-const kids=new Map();             // nodeKey(폴더) → 항목 목록 | {error}
+/* 폴더 목록이 바뀔 때마다 kidsGen+1 — 찾기를 지울 때, 그려 둔 트리를 그대로 다시 보여도 되는지 가린다(v3.8.16) */
+let kidsGen=0;
+const kids=new (class extends Map{ set(k,v){ kidsGen++; return super.set(k,v); } delete(k){ kidsGen++; return super.delete(k); } clear(){ kidsGen++; return super.clear(); } })();   // nodeKey(폴더) → 항목 목록 | {error}
 let open=null, openFor=null;      // 펼친 폴더 nodeKey 의 Set · 그것을 읽은(또는 마지막으로 쓴) settings.docOpen 배열
 function keepOpen(){ S.settings.docOpen=openFor=[...open]; }
 let sel=null;                     // 고른 항목 {i, rel, dir}
@@ -103,31 +105,91 @@ function centerRow(){
   const top=row.getBoundingClientRect().top-el.getBoundingClientRect().top+el.scrollTop;
   el.scrollTop=Math.max(0, top-(el.clientHeight-row.offsetHeight)/2);
 }
-function rowHtml(i, e, depth){
+/* 트리 줄은 펼친 순서대로 한 줄씩 out 에 [html, 높이px] 로 쌓는다 — 높이는 CSS 와 짝(.dt-row 28px · .dt-note 26px) */
+const ROW_H=28, NOTE_H=26;
+function pushRow(out, i, e, depth){
   const k=nodeKey(i, e.rel), isOpen=e.dir && open.has(k);
   const kind=e.dir ? '' : docKind(e.name);
-  return `<div class="dt-row${isSel(i,e.rel)?' on':''}${revCls(k)}${e.dir?' dir':''}" data-dkey="${escAttr(k)}" data-ddir="${e.dir?1:0}" style="padding-left:${4+depth*16}px" title="${escAttr(e.name)}">`
+  out.push([`<div class="dt-row${isSel(i,e.rel)?' on':''}${revCls(k)}${e.dir?' dir':''}" data-dkey="${escAttr(k)}" data-ddir="${e.dir?1:0}" style="padding-left:${4+depth*16}px" title="${escAttr(e.name)}">`
     +`<span class="dt-caret"${e.dir?' data-caret="1"':''}>${e.dir?(isOpen?'▾':'▸'):''}</span>`
-    +`<span class="dt-ico ${e.dir?'ico-dir':'ico-'+kind}"></span><span class="dt-name">${esc(e.name)}</span></div>`
-    +(isOpen ? listHtml(i, e.rel, depth+1) : '');
+    +`<span class="dt-ico ${e.dir?'ico-dir':'ico-'+kind}"></span><span class="dt-name">${esc(e.name)}</span></div>`, ROW_H]);
+  if(isOpen) pushList(out, i, e.rel, depth+1);
 }
-function listHtml(i, rel, depth){
+function pushList(out, i, rel, depth){
   const list=kids.get(nodeKey(i, rel)), pad=`style="padding-left:${30+depth*16}px"`;
-  if(list===undefined) return `<div class="dt-note" ${pad}>읽는 중</div>`;
-  if(list.error) return `<div class="dt-note dt-err" ${pad}>${esc(list.error)}</div>`;
-  if(!list.length) return `<div class="dt-note" ${pad}>빈 폴더</div>`;
-  return list.map(e=>rowHtml(i, e, depth)).join('');
+  if(list===undefined) return out.push([`<div class="dt-note" ${pad}>읽는 중</div>`, NOTE_H]);
+  if(list.error) return out.push([`<div class="dt-note dt-err" ${pad}>${esc(list.error)}</div>`, NOTE_H]);
+  if(!list.length) return out.push([`<div class="dt-note" ${pad}>빈 폴더</div>`, NOTE_H]);
+  for(const e of list) pushRow(out, i, e, depth);
 }
+/* 폴더 아래 줄을 CHUNK 줄씩 묶음(.dt-chunk)에 담는다(v3.8.16). 묶음은 content-visibility:auto 라 화면 밖 묶음은
+   브라우저가 모양 계산·그리기·마우스 위치 찾기를 건너뛴다 — 2만 줄 트리에서 클릭·찾기·지우기마다 2만 줄을 다시 훑던 비용.
+   묶음의 높이는 줄 높이의 합을 미리 적어 두므로(contain-intrinsic-height) 스크롤 길이·자리는 예전과 똑같다. */
+const CHUNK=100;
+function chunked(out){
+  let html='';
+  for(let a=0;a<out.length;a+=CHUNK){
+    let h=0, s='';
+    for(let b=a;b<Math.min(out.length, a+CHUNK);b++){ s+=out[b][0]; h+=out[b][1]; }
+    html+=`<div class="dt-chunk" style="contain-intrinsic-height:auto ${h}px">${s}</div>`;
+  }
+  return html;
+}
+/* 트리 칸(#dt-tree) 안은 두 겹(v3.8.16): 찾기 결과(.dt-hitlist, 앞) · 트리 줄(.dt-rows, 뒤).
+   찾는 동안엔 트리 줄을 지우지 않고 접어(.searching → 높이 0, 그려 둔 배치를 그대로 둔다) 두었다가,
+   찾기를 지우면 그대로 다시 보인다. 예전엔 찾을 때 트리를 통째로 지우고 지울 때 처음부터 다시 만들어,
+   2만 줄 트리에서 지우는 순간 화면이 1.3초 멈췄고 스크롤 자리도 잃었다. 결과 겹을 앞에 두는 것은
+   '#dt-tree [data-dkey=…]' 가 찾는 동안 결과 줄을 먼저 잡게 하려는 것이다. */
+function treeParts(){
+  const el=$('dt-tree'); if(!el) return null;
+  let hits=el.firstElementChild, rows=hits && hits.nextElementSibling;
+  if(!hits || !hits.classList.contains('dt-hitlist') || !rows || !rows.classList.contains('dt-rows')){
+    el.innerHTML='<div class="dt-hitlist"></div><div class="dt-rows"></div>';
+    hits=el.firstElementChild; rows=hits.nextElementSibling; rowsSig=null;
+  }
+  return {el, hits, rows};
+}
+let rowsSig=null;                 // 트리 줄을 그릴 때의 {gen: kidsGen, open: 펼친 폴더, sel, reveal} — 같으면 다시 그리지 않아도 된다
+let treeScroll=0;                 // 찾기에 들어가기 전 트리 스크롤 자리
+const openSig = () => [...open].sort().join('|');
+function enterSearchView(){
+  const t=treeParts(); if(!t || t.el.classList.contains('searching')) return t;
+  treeScroll=t.el.scrollTop;
+  t.el.classList.add('searching'); t.el.scrollTop=0;
+  return t;
+}
+function leaveSearchView(){
+  const t=treeParts(); if(!t) return;
+  const was=t.el.classList.contains('searching');
+  t.hits.innerHTML='';
+  if(rowsSig && rowsSig.gen===kidsGen && rowsSig.open===openSig() && rowsSig.roots===docRoots().join('|')){
+    /* 그려 둔 트리 그대로 — 고른 줄·강조 줄 표시만 맞춘다 */
+    const k=sel ? nodeKey(sel.i, sel.rel) : null;
+    if(rowsSig.sel!==k){ rowRef(t.rows, rowsSig.sel)?.classList.remove('on'); rowRef(t.rows, k)?.classList.add('on'); rowsSig.sel=k; }
+    if(rowsSig.reveal!==revealKey){ rowRef(t.rows, rowsSig.reveal)?.classList.remove('reveal'); rowRef(t.rows, revealKey)?.classList.add('reveal'); rowsSig.reveal=revealKey; }
+    if(was){ t.el.classList.remove('searching'); t.el.scrollTop=treeScroll; }
+    centerRow();
+    return;
+  }
+  t.el.classList.remove('searching');
+  renderTree();
+  if(was) t.el.scrollTop=treeScroll;
+  centerRow();
+}
+const rowRef = (box, k) => k==null ? null : box.querySelector(`.dt-row[data-dkey="${String(k).replace(/["\\]/g,'\\$&')}"]`);
 function renderTree(){
-  const el=$('dt-tree'); if(!el) return;
+  const t=treeParts(); if(!t) return;
   if(searchHits){ renderHits(); return; }                     // 찾는 중이면 결과 목록을 그대로
-  el.innerHTML=docRoots().map((p,i)=>{
+  const {el}=t;
+  t.rows.innerHTML=docRoots().map((p,i)=>{
     const k=nodeKey(i,''), isOpen=open.has(k);
     return `<div class="dt-row dt-root dir${isSel(i,'')?' on':''}${revCls(k)}" data-dkey="${escAttr(k)}" data-ddir="1" title="${escAttr(p)}">`
       +`<span class="dt-caret" data-caret="1">${isOpen?'▾':'▸'}</span><span class="dt-ico ico-dir"></span><span class="dt-name">${esc(rootName(i))}</span>`
       +`<button type="button" class="dt-unroot" data-unroot="${i}" title="문서 폴더 해지(폴더는 그대로)" aria-label="문서 폴더 해지">×</button></div>`
-      +(isOpen ? listHtml(i, '', 1) : '');
+      +(isOpen ? (()=>{ const out=[]; pushList(out, i, '', 1); return chunked(out); })() : '');
   }).join('');
+  rowsSig={gen:kidsGen, open:openSig(), roots:docRoots().join('|'), sel:sel?nodeKey(sel.i, sel.rel):null, reveal:revealKey};
+  if(el.classList.contains('searching')){ el.classList.remove('searching'); t.hits.innerHTML=''; }
   centerRow();
 }
 
@@ -822,13 +884,13 @@ let searchQ='', searchSeq=0, searchTimer=0, searchHits=null;
 function onSearchInput(){
   clearTimeout(searchTimer);
   /* 지우면 바로 트리로 — 아직 돌고 있던 찾기는 번호를 올려 버린다(예전엔 지운 뒤 늦게 끝난 찾기가 '찾은 것 없음'을 덮어썼다) */
-  if(!$('dc-search').value.trim()){ searchQ=''; searchHits=null; searchSeq++; renderTree(); return; }
-  searchTimer=setTimeout(()=>{ searchQ=$('dc-search').value.trim(); if(searchQ) runSearch(); else { searchHits=null; searchSeq++; renderTree(); } }, 200);
+  if(!$('dc-search').value.trim()){ searchQ=''; searchHits=null; searchSeq++; leaveSearchView(); return; }
+  searchTimer=setTimeout(()=>{ searchQ=$('dc-search').value.trim(); if(searchQ) runSearch(); else { searchHits=null; searchSeq++; leaveSearchView(); } }, 200);
 }
 async function runSearch(){
   const q=searchQ, seq=++searchSeq;
-  const el=$('dt-tree'); if(!el) return;
-  if(!searchHits) el.innerHTML='<div class="dt-note" style="padding-left:12px">찾는 중</div>';   // 이미 결과가 있으면 그대로 두고 바꿔 끼운다(깜빡임 없음)
+  const t=treeParts(); if(!t) return;
+  if(!searchHits){ enterSearchView(); t.hits.innerHTML='<div class="dt-note" style="padding-left:12px">찾는 중</div>'; }   // 이미 결과가 있으면 그대로 두고 바꿔 끼운다(깜빡임 없음)
   /* 폴더마다 동시에(Rust 가 폴더별 색인을 30초 기억하므로 두 번째 글자부터는 디스크를 다시 훑지 않는다) */
   const per=await Promise.all(roots.map((r,i)=>!(r&&r.ok) ? [] :
     invoke('doc_search', {root:i, query:q}).then(hs=>hs.map(h=>({...h, i})), e=>[{i, rel:'', name:rootName(i), dir:true, hit:'err', snippet:String(e)}])));
@@ -837,7 +899,9 @@ async function runSearch(){
   renderHits();
 }
 function renderHits(){
-  const el=$('dt-tree'); if(!el || !searchHits) return;
+  if(!searchHits) return;
+  const t=enterSearchView(); if(!t) return;
+  const el=t.hits;
   if(!searchHits.length){ el.innerHTML='<div class="dt-note" style="padding-left:12px">찾은 것 없음</div>'; return; }
   const many=roots.length>1;
   el.innerHTML=searchHits.map(h=>{
@@ -860,7 +924,7 @@ async function pickHit(key, dir){
 }
 function clearSearch(){
   const s=$('dc-search'); if(s) s.value='';
-  searchQ=''; searchHits=null; searchSeq++; renderTree();
+  searchQ=''; searchHits=null; searchSeq++; leaveSearchView();
 }
 
 /* 트리 폭 — 트리와 가운데 사이 손잡이를 끌어 조절(180~560px), settings.docTreeW 에 기억. 두 번 누르면 기본(260) */

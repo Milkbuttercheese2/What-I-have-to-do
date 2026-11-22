@@ -1402,7 +1402,7 @@
   .dt-unroot{margin-left:auto;flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--ink-soft);font-size:15px;line-height:1;cursor:pointer;opacity:0}
   .dt-root:hover .dt-unroot,.dt-unroot:focus-visible{opacity:1}
   .dt-unroot:hover{background:var(--chip-bg);color:var(--red)}
-  .dt-root + .dt-row.dt-root,.dt-note + .dt-row.dt-root,.dt-row:not(.dt-root) + .dt-row.dt-root{margin-top:6px}
+  .dt-root + .dt-row.dt-root,.dt-note + .dt-row.dt-root,.dt-row:not(.dt-root) + .dt-row.dt-root,.dt-chunk + .dt-row.dt-root{margin-top:6px}
   .dt-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dt-note{height:26px;display:flex;align-items:center;font-size:12px;color:var(--ink-soft)}
   .dt-err{color:var(--red)}
@@ -1773,6 +1773,12 @@
      (Edge 실측: 2만 줄에서 글자당 23ms → 6~7ms). 크기 격리(size)는 넣지 않는다 — 좁은 화면에서 트리 높이가 내용으로 정해진다.
      메뉴(.dt-menu)·끌기 유령(.dt-ghost)은 body 에 붙으므로 잘리지 않는다 */
   .dc-tree{contain:content}
+  /* v3.8.16 찾는 동안 트리 줄은 지우지 않고 높이 0 으로 접어 둔다 — 그려 둔 배치를 그대로 두므로 찾기를 지울 때 2만 줄을 다시 만들지 않는다.
+     display:none·content-visibility:hidden 은 다시 보일 때 배치·읽기 도구용 정보를 처음부터 다시 만들어 0.6초 넘게 걸렸다(Edge 실측). 결과 겹은 찾을 때만 */
+  .dc-tree.searching>.dt-rows{height:0;overflow:hidden}
+  .dc-tree:not(.searching)>.dt-hitlist{display:none}
+  /* v3.8.16 트리 줄 묶음(docs.js chunked) — 화면 밖 묶음은 건너뛴다. 높이는 docs.js 가 줄 높이 합으로 적는다(.dt-row 28px · .dt-note 26px 를 바꾸면 ROW_H·NOTE_H 도) */
+  .dt-chunk{content-visibility:auto}
   /* 완료 탭 줄 — 화면 밖 줄은 배치·그리기를 미룬다(내용·찾기(Ctrl+F)는 그대로). render.js 의 나눠 그리기와 함께 완료 1만 건 탭 열기 1033ms → 62ms(Edge 실측).
      19.5px = .drow 한 줄의 내용 높이(Edge 실측 36.5px − 위아래 여백 16 − 윗줄 1). 이 값은 여백을 뺀 내용 높이라야 한다 —
      여백 포함 값을 넣으면 화면 밖 줄마다 17px씩 커져 스크롤 위치가 밀린다. auto 라 한 번 그린 뒤엔 실제 높이를 기억 */

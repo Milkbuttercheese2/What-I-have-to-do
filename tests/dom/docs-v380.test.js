@@ -962,3 +962,47 @@ test('v3.8.14 MD 편집 색 층: 제목 줄(# ~ ######, 앞 공백 3칸까지)�
   // md 가 아닌 언어는 예전 그대로
   const sql=await codeHtml('SELECT 1', 'sql'); assert.match(sql, /hljs-keyword">SELECT</);
 });
+
+test('v3.8.16 찾기를 지우면 그려 둔 트리를 그대로 다시 보인다(다시 만들지 않음) · 스크롤 자리 · 고른 줄 · 폴더가 바뀌었으면 다시 그린다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['A:\하나'];
+  const big=[]; for(let k=0;k<250;k++){ const n='f'+String(k).padStart(3,'0')+'.txt'; big.push({name:n, rel:'큰/'+n, dir:false, size:1, mtime:1}); }
+  fakeFs(()=>({'0:':[{name:'큰',rel:'큰',dir:true,size:0,mtime:1},{name:'작은',rel:'작은',dir:true,size:0,mtime:1}], '0:큰':big, '0:작은':[{name:'a.txt',rel:'작은/a.txt',dir:false,size:1,mtime:1}]}));
+  S.settings.docOpen=['0:','0:큰']; S.settings.docSeen=['A:\하나'];
+  let hit={rel:'큰/f005.txt', name:'f005.txt', dir:false, hit:'name', snippet:''};
+  env.onInvoke('doc_search', ()=>[hit]);
+  env.onInvoke('doc_read_text', ()=>({text:'본문', encoding:'utf-8', mtime:1}));
+  await openDocs();
+  const tree=$('dt-tree');
+  /* 줄 묶음: 100줄씩, 높이는 줄 높이 합(스크롤 길이가 예전과 같게) */
+  const chunks=[...tree.querySelectorAll('.dt-rows .dt-chunk')];
+  assert.equal(chunks.length, 3, '폴더 줄 2 + 큰 폴더 파일 250 = 252줄 → 100줄씩 3묶음');
+  assert.match(chunks[0].getAttribute('style'), /contain-intrinsic-height:auto 2800px/);
+  assert.match(chunks[2].getAttribute('style'), /contain-intrinsic-height:auto 1456px/, '52줄 × 28px');
+  assert.equal(chunks[0].querySelectorAll('.dt-row').length, 100);
+  const kept=row('0:큰/f200.txt'), rowsBox=tree.querySelector('.dt-rows');
+  tree.scrollTop=1234;
+  const s=$('dc-search'); s.value='f005'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(350); await env.flush(10);
+  assert.ok(tree.classList.contains('searching'));
+  assert.ok(row('0:큰/f005.txt').classList.contains('dt-hit'), '찾는 동안 같은 열쇠의 결과 줄이 먼저 잡힌다');
+  click(row('0:큰/f005.txt')); await env.flush(12);
+  assert.equal($('dv-ta').value, '본문');
+  s.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape', bubbles:true, cancelable:true})); await env.flush(4);
+  assert.ok(!tree.classList.contains('searching'));
+  assert.equal(tree.querySelector('.dt-hitlist').children.length, 0, '결과 줄은 치운다');
+  assert.strictEqual(tree.querySelector('.dt-rows'), rowsBox); assert.strictEqual(row('0:큰/f200.txt'), kept, '트리 줄을 다시 만들지 않았다');
+  assert.equal(tree.scrollTop, 1234, '찾기 전 스크롤 자리');
+  assert.ok(row('0:큰/f005.txt').classList.contains('on'), '결과에서 고른 파일이 트리에서도 골라져 있다');
+  assert.equal(tree.querySelectorAll('.dt-rows .dt-row.on').length, 1, '고른 줄은 하나');
+  /* 접혀 있던 폴더의 결과를 고르면 폴더가 펼쳐지므로, 지울 때 트리를 새로 그린다 */
+  hit={rel:'작은/a.txt', name:'a.txt', dir:false, hit:'name', snippet:''};
+  S.settings.docOpen=S.settings.docOpen.filter(k=>k!=='0:작은');
+  s.value='a.txt'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  mock.timers.tick(350); await env.flush(10);
+  click(row('0:작은/a.txt')); await env.flush(12);
+  s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true})); await env.flush(4);
+  assert.ok(row('0:작은/a.txt') && row('0:작은/a.txt').classList.contains('on'));
+  assert.notStrictEqual(row('0:큰/f200.txt'), kept, '펼침이 바뀌었으면 새로 그렸다');
+  assert.equal(tree.querySelectorAll('.dt-rows .dt-row.on').length, 1);
+});
