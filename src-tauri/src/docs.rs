@@ -1021,7 +1021,37 @@ async fn off_main<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Sen
 
 #[tauri::command]
 pub async fn doc_set_roots(paths: Vec<String>) -> Result<Vec<RootInfo>, String> {
-    off_main(move || Ok(set_roots(paths))).await
+    off_main(move || {
+        let out = set_roots(paths);
+        /* 폴더를 정할 때마다 감시도 새로 — 앱 밖에서 바꾼 이름을 따라가려고(docwatch.rs) */
+        if APP.get().is_some() {
+            let roots = ROOTS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            crate::docwatch::start(roots, watch_sink());
+        }
+        Ok(out)
+    }).await
+}
+
+/// 문서 폴더 감시가 화면에 알릴 곳(lib.rs setup 에서 한 번)
+static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+pub fn set_app(app: tauri::AppHandle) { let _ = APP.set(app); }
+
+/// 감시 알림 → 화면. 하위 항목 이름이 바뀌면 그 폴더 찾기 색인도 버린다(옛 이름이 찾아지지 않게)
+fn watch_sink() -> crate::docwatch::Sink {
+    use crate::docwatch::Ev;
+    use tauri::Emitter;
+    std::sync::Arc::new(|e: Ev| {
+        let Some(app) = APP.get() else { return };
+        match e {
+            Ev::Renamed { root: i, base, from, to } => {
+                if let Ok(r) = root(i) { invalidate_search_root(&r); }
+                let _ = app.emit("wmhh://doc-renamed", serde_json::json!({ "root": i, "base": base, "from": from, "to": to }));
+            }
+            Ev::RootMoved { root: i, base, to } => {
+                let _ = app.emit("wmhh://doc-root-moved", serde_json::json!({ "root": i, "base": base, "to": to }));
+            }
+        }
+    })
 }
 pub fn set_roots(paths: Vec<String>) -> Vec<RootInfo> {
     let mut roots = Vec::new();
@@ -1207,6 +1237,41 @@ pub async fn doc_rename(root: usize, rel: String, name: String) -> Result<String
     }).await
 }
 
+#[derive(Debug, Serialize)]
+pub struct RootMoved {
+    pub from: String,
+    pub to: String,
+}
+
+/// 문서 폴더 자체의 이름을 바꾼다(같은 위 폴더 안에서, 덮어쓰기 없음). 바꾼 뒤 이 폴더 번호는 새 경로를 가리킨다.
+#[tauri::command]
+pub async fn doc_rename_root(root: usize, name: String) -> Result<RootMoved, String> {
+    let r = self::root(root)?;
+    off_main(move || {
+        let dest = rename_root_in(&r, &name)?;
+        invalidate_search_root(&r);
+        if let Some(slot) = ROOTS.lock().unwrap_or_else(|e| e.into_inner()).get_mut(root) {
+            if slot.as_ref() == Some(&r) { *slot = Some(dest.clone()); }
+        }
+        Ok(RootMoved { from: display(&r), to: display(&dest) })
+    }).await
+}
+pub fn rename_root_in(root: &Path, new_name: &str) -> Result<PathBuf, String> {
+    let name = check_name(new_name)?;
+    let src = std::fs::canonicalize(root).map_err(|e| format!("문서 폴더를 열 수 없습니다: {e}"))?;
+    let parent = match (src.parent(), src.file_name()) {
+        (Some(p), Some(_)) => p,
+        _ => return Err("드라이브는 이름을 바꿀 수 없습니다".into()),
+    };
+    let dest = parent.join(&name);
+    let same_ci = src.file_name().map(|f| f.to_string_lossy().to_lowercase()) == Some(name.to_lowercase());
+    if dest.exists() && !same_ci {
+        return Err("같은 이름이 이미 있습니다".into());
+    }
+    rename_no_replace(&src, &dest).map_err(|e| if is_exists_err(&e) { "같은 이름이 이미 있습니다".to_string() } else { format!("이름을 바꾸지 못했습니다(폴더 안 파일을 다른 프로그램에서 사용 중일 수 있음): {e}") })?;
+    Ok(std::fs::canonicalize(&dest).unwrap_or(dest))
+}
+
 /// 열기·폴더에서 보기(이미 있는 open_file_path / reveal_file_path)에 넘길 절대 경로 — 역시 문서 폴더 안만.
 /// canonicalize 두 번 — 끊긴 공유 폴더에서는 수 초 걸릴 수 있어 화면 스레드 밖에서(P7)
 #[tauri::command]
@@ -1233,6 +1298,23 @@ mod tests {
         std::fs::write(d.join(".숨김"), b"x").unwrap();
         std::fs::write(d.join("표.xlsx"), b"abc").unwrap();
         d
+    }
+
+    #[test]
+    fn rename_root_renames_the_folder_itself() {
+        let top = std::env::temp_dir().join(format!("wmhh_docs_rootren_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&top);
+        std::fs::create_dir_all(top.join("업무/안")).unwrap();
+        std::fs::create_dir_all(top.join("있는 이름")).unwrap();
+        std::fs::write(top.join("업무/안/보고서.txt"), b"x").unwrap();
+        let r = top.join("업무");
+        assert!(rename_root_in(&r, "있는 이름").is_err(), "덮어쓰지 않는다");
+        assert!(rename_root_in(&r, "a/b").is_err());
+        let dest = rename_root_in(&r, "새 업무").unwrap();
+        assert!(dest.ends_with("새 업무"));
+        assert!(!r.exists());
+        assert!(top.join("새 업무/안/보고서.txt").exists(), "안의 것은 그대로");
+        let _ = std::fs::remove_dir_all(&top);
     }
 
     #[test]
