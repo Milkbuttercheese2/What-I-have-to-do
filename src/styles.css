@@ -1823,7 +1823,7 @@
   .pbs-list .rel-hit:hover{background:var(--sunk);border-color:var(--line-soft)}
   .pbs-empty{padding:14px;font-size:12.5px;color:var(--ink-soft)}
   /* 관련 업무 줄의 칸: 진행/완료 · 메모 · 식별정보 · 종료 — 머리줄은 완료 탭 .drow-h 와 같은 글자 */
-  .pbs-list .rel-hit{display:grid;grid-template-columns:2.6rem minmax(0,1fr) minmax(0,9rem) 6.5rem;gap:10px}
+  .pbs-list .rel-hit{display:grid;grid-template-columns:2.6rem minmax(6rem,1.6fr) minmax(0,1fr) 6.5rem;gap:10px}   /* 메모 : 식별정보 = 1.6 : 1 — 칸이 좁아도(넓은 화면 경계 1081px) 메모가 몇 글자로 눌리지 않게 */
   .pbs-c{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--ink-soft)}
   .pbs-list .pbs-h{cursor:default;padding-top:7px;padding-bottom:6px}
   .pbs-list .pbs-h:hover{background:transparent}
