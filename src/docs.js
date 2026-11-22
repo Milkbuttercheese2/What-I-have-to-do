@@ -22,7 +22,7 @@
    ========================================================================= */
 import {S} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, esc, escAttr, appAlert, appConfirm, showToast} from './dom-utils.js';
+import {$, esc, escAttr, appAlert, appConfirm, showToast, needXlsx} from './dom-utils.js';
 import {registerView, showView} from './views.js';
 import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp} from './docs-view.js';
 import {cardHtml, persist} from './render.js';
@@ -269,6 +269,7 @@ async function doRenderViewer(){
     if(kind==='zip'){
       const bytes=new Uint8Array(await invoke('doc_read', {root:i, rel}));
       if(!alive()) return;
+      await needXlsx(); if(!alive()) return;
       const list=zipList(bytes);
       box().innerHTML=`<div class="dv-ro">압축 파일 안 ${list.length}개</div><div class="dv-flist">${list.slice(0,2000).map(f=>`<div class="dv-frow dv-zrow"><span class="dt-ico ico-${docKind(f.name)}"></span><span class="dv-fname" title="${escAttr(f.name)}">${esc(f.name)}</span><span class="dv-meta num">${fmtSize(f.size)}</span></div>`).join('')}</div>`+(list.length>2000?'<div class="dv-cap">2,000개까지만</div>':'');
       return;
@@ -315,6 +316,8 @@ async function showFallback(i, rel, kind, seq, pre){
   const bytes=pre || new Uint8Array(await invoke('doc_read', {root:i, rel}));
   if(seq!==viewSeq || !box()) return;
   try{
+    await needXlsx();
+    if(seq!==viewSeq || !box()) return;
     if(kind==='xlsx'){
       book=xlsxBook(bytes); sheetIdx=Math.min(sheetIdx, book.names.length-1); if(sheetIdx<0) sheetIdx=0;
       box().innerHTML=`<div class="dv-ro">표만 보기</div>`
@@ -378,7 +381,7 @@ async function textMode(){
       ed.rows=parseCsv(text, csvDelim(ed.rel));
       const t=csvEditHtml(ed.rows);
       if(t) md.innerHTML=`<div class="dv-scroll">${t}</div><div class="dv-csvbar"><button type="button" class="btn btn-tool" data-csvadd="row">＋ 행</button><button type="button" class="btn btn-tool" data-csvadd="col">＋ 열</button></div>`;
-      else { ed.rows=null; md.innerHTML=`<div class="dv-ro">큰 표 — 고치려면 [글자]</div><div class="dv-scroll">${csvHtml(text, extOf(ed.rel)==='tsv')}</div>`; }
+      else { ed.rows=null; const tsv=extOf(ed.rel)==='tsv'; await needXlsx(); if(!md.isConnected) return; md.innerHTML=`<div class="dv-ro">큰 표 — 고치려면 [글자]</div><div class="dv-scroll">${csvHtml(text, tsv)}</div>`; }
     }catch(e){ ed.rows=null; md.innerHTML=`<div class="dv-empty dv-err">${esc(String(e))}</div>`; }
     return;
   }

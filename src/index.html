@@ -551,7 +551,7 @@
      연속 실패가 이어지면 store.js 가 비상 덤프 파일을 남기고 그 경로를 아랫줄에 적는다. -->
 <div class="save-alert" id="saveAlert" role="alert" aria-live="assertive">⚠ 저장이 지연되고 있습니다. 변경 내용이 아직 디스크에 기록되지 않아 계속 다시 시도 중입니다. 이 표시가 사라지지 않으면 [설정 → JSON파일 백업]으로 따로 저장해두세요.<span id="saveAlertDump" class="save-alert-dump" style="display:none"></span></div>
 
-<script src="vendor/xlsx.full.min.js"></script>
+<!-- vendor/xlsx.full.min.js 는 처음 쓸 때 불러온다(dom-utils.js needXlsx, v3.8.16) -->
 <script type="module" src="main.js"></script>
 </body>
 </html>

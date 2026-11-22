@@ -51,6 +51,19 @@ export function enableDragReorder(container, rowSelector, handleSelector, onDrop
 
 /* 실행취소 토스트 */
 let _toastTimer=null,_undoFn=null;
+/* 엑셀 도구(SheetJS, vendor/xlsx.full.min.js 880KB)는 처음 쓸 때 불러온다(v3.8.16). 예전엔 index.html 이 앱을 켤 때마다
+   읽어 시작이 약 30ms(15%) 늦었는데, 쓰는 곳은 XLSX 내보내기·전화번호부 엑셀·문서 탭의 표·압축·한글 대체 보기뿐이다.
+   쓰는 곳은 XLSX 를 쓰기 전에 반드시 await needXlsx() 할 것. 이미 있으면(시험 환경 등) 바로 돌려준다. */
+let xlsxP=null;
+export function needXlsx(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  return xlsxP || (xlsxP=new Promise((res, rej)=>{
+    const s=document.createElement('script'); s.src='vendor/xlsx.full.min.js';
+    s.onload=()=>window.XLSX ? res(window.XLSX) : (xlsxP=null, rej(new Error('엑셀 도구를 불러오지 못했습니다')));
+    s.onerror=()=>{ xlsxP=null; s.remove(); rej(new Error('엑셀 도구를 불러오지 못했습니다')); };
+    document.head.appendChild(s);
+  }));
+}
 export function showToast(msg,undoFn){ $('toast-msg').textContent=msg; _undoFn=undoFn||null; $('toast-undo').style.display=undoFn?'inline-block':'none';
   $('toast').classList.add('on'); clearTimeout(_toastTimer); _toastTimer=setTimeout(()=>{$('toast').classList.remove('on');_undoFn=null;},6000); }
 export function initToast(){

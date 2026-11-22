@@ -7,7 +7,7 @@
    ========================================================================= */
 import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
+import {$, esc, escAttr, showToast, appAlert, appConfirm, needXlsx} from './dom-utils.js';
 import {fmtT} from './datetime.js';
 import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, relatedCounts, relKeyOf, absorbContacts, swapPersonIn} from './phonebook-core.js';
 /* v3.7.0: 인물 일괄 바꾸기가 업무를 고친 뒤 저장·재렌더해야 해서 persist 를 쓴다.
@@ -160,6 +160,7 @@ async function importFromXlsx(file){
   reader.onload=async ()=>{
     let rows;
     try{
+      await needXlsx();
       const wb=XLSX.read(new Uint8Array(reader.result), {type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       rows=XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
@@ -207,6 +208,7 @@ async function importFromXlsx(file){
    Uint8Array 로 감싸지 않으면 0바이트 파일이 나온다. */
 async function saveXlsxTemplate(){
   try{
+    await needXlsx();
     const ws=XLSX.utils.aoa_to_sheet([['관련소속','관련인','연락처','이메일']]);   // 화면 입력칸과 같은 이름
     ws['!cols']=[{wch:24},{wch:14},{wch:20},{wch:26}];
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
