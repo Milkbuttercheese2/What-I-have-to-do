@@ -78,9 +78,6 @@ export function renderPhonebook(){
     <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
     <span class="pb-tail">
       <span class="pb-cnt num ${l?'live':n?'past':'none'}" title="관련 업무 ${n}건 · 진행 ${l} · 완료 ${n-l}">업무 ${n}</span>
-      <!-- v3.6.2: 버튼에 title="" — 행의 '엮인 업무' 안내 툴팁이 상속돼 수정/삭제 위에서도
-           떠서 눌렀을 때 하는 일과 어긋났다(빈 title 이 조상 툴팁을 막는다) -->
-      <span class="pb-rowacts"><button class="ps-edit" data-pbedit="${e.id}" title="">수정</button><button class="ps-swap" data-pbswap="${e.id}" title="">바꾸기</button><button class="ps-del" data-pbdel="${e.id}" title="">삭제</button></span>
     </span>
   </div>`; };
   w.innerHTML=groups.map(g=>`<section class="pb-group"><div class="pb-ghead"><span>${esc(g.org)}</span><span class="count num">${g.rows.length}명</span></div>`
@@ -292,6 +289,8 @@ export function renderPbSide(){
   /* v3.8.18 모양: 머리글자 동그라미 + 이름·소속, 연락처는 줄을 나눠(전화 / 이메일), 엮인 업무는 완료 탭 묶음과 같은 상자·한 줄 목록 */
   const ini=esc((String(en.who||en.org||'?').trim()[0])||'?');
   el.innerHTML=`<div class="pbs-head"><span class="pb-avatar pbs-avatar" aria-hidden="true">${ini}</span><div class="pbs-name"><b>${esc(en.who||en.org||en.phone)}</b>${en.org&&en.who?`<span>${esc(en.org)}</span>`:''}</div>`
+    /* v3.8.18 수정·바꾸기·삭제는 고른 사람 칸의 머리에, 칸에 마우스를 올렸을 때만 보인다(소유자 지정 — 줄마다 hover 로 뜨던 것을 옮겼다) */
+    +`<span class="pbs-acts"><button type="button" class="btn btn-tool" data-pbedit="${en.id}">수정</button><button type="button" class="btn btn-tool" data-pbswap="${en.id}">바꾸기</button><button type="button" class="btn btn-tool pbs-del" data-pbdel="${en.id}">삭제</button></span>`
     +`<button type="button" class="fm-x side-x" id="pb-side-x" aria-label="칸 닫기" title="칸 닫기">⇥</button></div>`
     +`<div class="pbs-info">${[['전화',en.phone,' num'],['이메일',en.email,'']].filter(x=>x[1]).map(([k,v,c])=>`<div class="pbs-line"><span class="pbs-k">${k}</span><span class="pbs-v${c}">${esc(v)}</span></div>`).join('')}</div>`
     +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">관련 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
@@ -408,8 +407,12 @@ export function initPhonebook(){
   $('pbsw-cancel').addEventListener('click',closeSwap);
   $('pbsw-go').addEventListener('click',applySwap);
   $('pbSwapModal').addEventListener('click',e=>{ if(e.target.id==='pbSwapModal') closeSwap(); });
-  $('pb-side').addEventListener('click',e=>{ if(e.target.closest('#pb-side-x')){ pbSel=null; renderPhonebook(); } });
-  $('pb-list').addEventListener('click',async e=>{
+  $('pb-side').addEventListener('click',e=>{ if(e.target.closest('#pb-side-x')){ pbSel=null; renderPhonebook(); return; } pbClick(e); });
+  $('pb-list').addEventListener('click',pbClick);
+}
+/* 목록·오른쪽 칸 공용 — 수정·바꾸기·삭제 단추(v3.8.18 부터 오른쪽 칸 머리에 있다) · 줄 누르기 */
+async function pbClick(e){
+  {
     const ed=e.target.closest('[data-pbedit]');
     if(ed){ openPbEdit(Number(ed.dataset.pbedit)); return; }
     const sw=e.target.closest('[data-pbswap]');
@@ -428,5 +431,5 @@ export function initPhonebook(){
     S.phonebook=S.phonebook.filter(x=>x.id!==id);
     if(editingPbId===id) closePbEdit();
     savePb(); renderPhonebook();
-  });
+  }
 }

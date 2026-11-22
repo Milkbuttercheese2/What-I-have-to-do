@@ -43,12 +43,14 @@ test('수정·삭제: 수정 저장이 항목을 갱신하고 삭제가 목록·
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1'}, {id:12, who:'이영희', org:'세무과', phone:'010-2'}]);
   renderPhonebook();
-  $('pb-list').querySelector('[data-pbedit="11"]').click();
+  $('pb-list').querySelector('[data-pbid="11"]').click();     // v3.8.18: 수정·삭제는 고른 사람 칸(오른쪽)에
+  $('pb-side').querySelector('[data-pbedit="11"]').click();
   assert.equal($('pb-who').value, '김철수');
   $('pb-phone').value='010-9999-0000';
   $('pb-save').click();
   assert.equal(S.phonebook.find(e=>e.id===11).phone, '010-9999-0000');
-  $('pb-list').querySelector('[data-pbdel="12"]').click();     // confirm 기본 true
+  $('pb-list').querySelector('[data-pbid="12"]').click();
+  $('pb-side').querySelector('[data-pbdel="12"]').click();     // confirm 기본 true
   await env.flush();                                           // v3.3.0: 확인 대화상자가 Promise 기반
   assert.equal(S.phonebook.length, 1);
   assert.ok(!$('pb-list').textContent.includes('이영희'));
@@ -365,4 +367,7 @@ test('v3.8.18 전화번호부 줄: 소속은 묶음 머리줄에만 · 업무 �
   const cls = id => $('pb-list').querySelector(`[data-pbid="${id}"] .pb-cnt`).className;
   assert.match(cls(1), /\blive\b/); assert.match(cls(2), /\bpast\b/); assert.match(cls(3), /\bnone\b/);
   assert.equal($('pb-list').querySelector('[data-pbid="3"] .pb-cnt').textContent, '업무 0', '0건도 글자는 남긴다');
+  assert.equal($('pb-list').querySelectorAll('[data-pbedit],[data-pbswap],[data-pbdel]').length, 0, '줄에는 수정·바꾸기·삭제가 없다');
+  $('pb-list').querySelector('[data-pbid="1"]').click();
+  assert.equal($('pb-side').querySelectorAll('[data-pbedit="1"],[data-pbswap="1"],[data-pbdel="1"]').length, 3, '고른 사람 칸 머리에 있다');
 });
