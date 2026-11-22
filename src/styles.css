@@ -1625,8 +1625,8 @@
   .pbs-name{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
   .pbs-name b{font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pbs-name span,.pbs-info,.pbs-count{font-size:12.5px;color:var(--ink-soft)}
-  .pbs-sub{display:flex;flex-wrap:wrap;column-gap:14px;row-gap:2px;font-size:12.5px;color:var(--ink-soft)}   /* 소속 · 전화 · 이메일 한 줄, 구분은 사이 띄움만(점 없음 — 소유자 지정) */
-  .pbs-sub > span{display:inline;font-size:inherit;color:inherit;overflow-wrap:anywhere}
+  .pbs-sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}   /* 소속 · 전화 · 이메일 한 줄, 하나씩 알약(소유자 지정) — 기존 칩 면(--chip-bg)·999px */
+  .pbs-sub > span{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;background:var(--chip-bg);color:var(--ink-2);font-size:12px;font-weight:500;min-width:0;overflow-wrap:anywhere}
   .pbs-info{margin-top:6px;word-break:break-all}
   .pbs-count{margin:10px 0 8px;font-weight:600}
   .pbs-list{max-height:none}
