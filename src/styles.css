@@ -34,6 +34,13 @@
     --cal-mid:#3E6FA8; --cal-mid-bg:#E9EFF8;   /* 점검 — 인디고 블루 */
     --done:#6b7787; --focus:#2a7c6e;
     --icon-muted:#aeb4be;   /* 삭제 × 아이콘 기본색 */
+    /* 코드 색 강조(v3.8.15) — VS Code 기본 밝은 테마(Light+ / Default Light Modern) 의 토큰 색 그대로.
+       출처: microsoft/vscode extensions/theme-defaults/themes/light_vs.json·light_plus.json. 앱 다른 곳은 이 색을 쓰지 않는다. */
+    --hl-comment:#008000; --hl-keyword:#0000FF; --hl-string:#A31515; --hl-regexp:#811F3F; --hl-number:#098658;
+    --hl-func:#795E26; --hl-type:#267F99; --hl-var:#001080; --hl-const:#0070C1; --hl-escape:#EE0000;
+    --hl-tag:#800000; --hl-tag-punct:#800000; --hl-attr-name:#E50000; --hl-attr-value:#0000FF; --hl-selector:#800000;
+    --hl-heading:#800000; --hl-bullet:#0451A5; --hl-quote:#0451A5; --hl-code:#800000; --hl-strong:#000080; --hl-emph:#800080;
+    --hl-inserted:#098658; --hl-deleted:#A31515;
 
     /* ===== v2.6.0 테마 토큰 =====
        컴포넌트 규칙은 색을 직접 쓰지 않는다(§1 '하드코딩 색 지양'). 아래 토큰만
@@ -91,6 +98,12 @@
     --cal-mid:#5cc8ff; --cal-mid-bg:#17263a;
     --done:#9aa6ba; --focus:#56bdab;
     --icon-muted:#7c8798;
+    /* 코드 색 강조(v3.8.15) — VS Code 기본 어두운 테마(Dark+ / Default Dark Modern). 출처: dark_vs.json·dark_plus.json */
+    --hl-comment:#6A9955; --hl-keyword:#569CD6; --hl-string:#CE9178; --hl-regexp:#D16969; --hl-number:#B5CEA8;
+    --hl-func:#DCDCAA; --hl-type:#4EC9B0; --hl-var:#9CDCFE; --hl-const:#4FC1FF; --hl-escape:#D7BA7D;
+    --hl-tag:#569CD6; --hl-tag-punct:#808080; --hl-attr-name:#9CDCFE; --hl-attr-value:#CE9178; --hl-selector:#D7BA7D;
+    --hl-heading:#569CD6; --hl-bullet:#6796E6; --hl-quote:#6A9955; --hl-code:#CE9178; --hl-strong:#569CD6; --hl-emph:#C586C0;
+    --hl-inserted:#B5CEA8; --hl-deleted:#CE9178;
     --on-accent:#0f1420;            /* 밝아진 강조색 위에는 어두운 글자가 또렷하다 */
     --focus-strong:#74cdbd;
     --tab-on-bg:#15302b;
@@ -1658,12 +1671,33 @@
   .dv-hl{position:absolute;inset:0;overflow:hidden;color:var(--ink);background:var(--card);pointer-events:none}
   .dv-ta.dv-ta-hl{color:transparent;caret-color:var(--ink)}
   .dv-ta.dv-ta-hl::selection{background:color-mix(in srgb, var(--focus) 28%, transparent);color:transparent}
-  .hljs-comment,.hljs-quote,.hljs-meta{color:var(--ink-soft)}
-  .hljs-keyword,.hljs-selector-tag,.hljs-built_in,.hljs-literal,.hljs-type,.hljs-operator{color:var(--cal-mid)}
-  .hljs-string,.hljs-regexp,.hljs-addition,.hljs-attr-value,.hljs-template-string{color:var(--green)}
-  .hljs-number,.hljs-symbol,.hljs-bullet,.hljs-variable,.hljs-template-variable{color:var(--cal-due)}
-  .hljs-title,.hljs-section,.hljs-name,.hljs-function .hljs-title,.hljs-attr,.hljs-attribute,.hljs-selector-class,.hljs-selector-id{color:var(--focus)}
-  .hljs-deletion{color:var(--red)}
+  /* 색 강조 색(v3.8.15) = VS Code 기본 테마(위 --hl-* 토큰). highlight.js 가 붙이는 실제 이름(11판: 'hljs-title function_' 처럼 하위 이름이 붙는다)에 맞췄다.
+     VS Code 와 1:1 이 안 되는 곳: 제어 흐름 예약어(if·return·import — VS Code 보라)는 highlight.js 가 다른 예약어와 구분하지 않아 예약어 파랑,
+     JSON 키(VS Code 밝은 테마 #0451A5)는 JS 객체 키와 같은 이름이라 변수 색, 연산자·괄호·링크 주소는 기본 글자색. 굵기·기울임은 주지 않는다(위 주의). */
+  .hljs-comment{color:var(--hl-comment)}
+  .hljs-keyword,.hljs-literal,.hljs-symbol,.hljs-meta,.hljs-doctag,.hljs-variable.language_{color:var(--hl-keyword)}
+  .hljs-string{color:var(--hl-string)}
+  .hljs-regexp{color:var(--hl-regexp)}
+  .hljs-number{color:var(--hl-number)}
+  .hljs-title,.hljs-title.function_{color:var(--hl-func)}
+  .hljs-type,.hljs-built_in,.hljs-title.class_{color:var(--hl-type)}
+  .hljs-variable,.hljs-template-variable,.hljs-params,.hljs-attr,.hljs-property{color:var(--hl-var)}
+  .hljs-variable.constant_{color:var(--hl-const)}
+  .hljs-char.escape_{color:var(--hl-escape)}
+  .hljs-subst{color:var(--ink)}
+  .hljs-tag{color:var(--hl-tag-punct)}
+  .hljs-name{color:var(--hl-tag)}
+  .hljs-tag .hljs-attr,.hljs-attribute,.hljs-selector-attr{color:var(--hl-attr-name)}
+  .hljs-tag .hljs-string{color:var(--hl-attr-value)}
+  .hljs-selector-tag,.hljs-selector-class,.hljs-selector-id,.hljs-selector-pseudo{color:var(--hl-selector)}
+  .hljs-section{color:var(--hl-heading)}
+  .hljs-bullet{color:var(--hl-bullet)}
+  .hljs-quote{color:var(--hl-quote)}
+  .hljs-code{color:var(--hl-code)}
+  .hljs-strong{color:var(--hl-strong)}
+  .hljs-emphasis{color:var(--hl-emph)}
+  .hljs-addition{color:var(--hl-inserted)}
+  .hljs-deletion{color:var(--hl-deleted)}
   .dv-mdv pre code.hljs{background:none;padding:0}
   /* 양식 파일 링크의 [문서]·[찾기] — [＋ 추가]와 같은 크기 */
   .ffile-doc,.ffile-browse{height:26px;padding:0 9px;font-size:12px;display:inline-flex;align-items:center}
