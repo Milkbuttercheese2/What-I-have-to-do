@@ -156,14 +156,84 @@ let pdfLib=null;
    지금 고르는 끝 글자 바로 뒤로 옮긴다. 줄 사이·여백 같은 빈 곳을 지나도 마우스 아래에는 받침이 있어
    선택 끝이 '층의 맨 끝/맨 앞'으로 튀지 않는다. 받침은 글자 아래(z-index 0)라 글자 위에서는 글자가 잡힌다. */
 const selLayers=new Map();   // 글자 층 → 받침
-let selOn=false, prevRange=null;
+let selOn=false, prevRange=null, dragFrom=null;
 function selReset(end, layer){ layer.append(end); end.style.width=''; end.style.height=''; layer.classList.remove('selecting'); }
+/* v3.8.21 끌어 고르기는 시작점·끝점을 앱이 직접 잡는다(한 번 눌러 끌 때 — 두세 번 눌러 낱말·줄 고르기와 Shift+누르기는 브라우저 그대로).
+   브라우저에 맡기면 세 가지로 어긋났다(tools/select-check.mjs 로 Edge 에서 잰 값):
+   ① 글자가 아닌 곳(줄 앞 여백·글자 사이·줄 사이)을 누르면 받침이 층을 덮은 채라 아무것도 안 골라졌고, 받침을 치우면 시작점이
+     엉뚱한 글자에 잡혔다 — 첫 글자 3px 왼쪽을 눌러 끌면 'nary b' 처럼 줄 가운데부터.
+   ② 좁은 창·큰 배율에서 작은 글자(4.5px) 위를 눌러도 시작점이 마우스를 따라 움직여(고른 것 없음) 끌기가 안 됐다.
+   그래서 눌린 자리에서 가장 가까운 글자 자리를 시작점으로, 끄는 동안 마우스 아래(없으면 가장 가까운) 글자 자리를 끝점으로 둔다.
+   보기 칸 위·아래(좌우) 끝으로 끌면 그쪽으로 저절로 넘긴다(여러 쪽에 걸쳐 고르기). */
+function layerSpans(layer){ return [...layer.querySelectorAll('span')].filter(s=>!s.classList.contains('markedContent') && s.firstChild && s.firstChild.nodeType===3 && s.firstChild.length); }
+function caretAt(x, y){
+  if(document.caretPositionFromPoint){ const p=document.caretPositionFromPoint(x, y); return p && p.offsetNode ? {node:p.offsetNode, offset:p.offset} : null; }
+  if(document.caretRangeFromPoint){ const r=document.caretRangeFromPoint(x, y); return r ? {node:r.startContainer, offset:r.startOffset} : null; }
+  return null;
+}
+/* (x, y) 에 가장 가까운 글자 자리 — 세로로 그 줄에 걸친 글자가 먼저, 그다음 가로로 가까운 것. 글자 왼쪽이면 그 글자 앞, 오른쪽이면 뒤 */
+export function nearestCaret(layer, x, y){
+  let best=null, bd=Infinity;
+  for(const s of layerSpans(layer)){
+    const r=s.getBoundingClientRect(); if(!r.width && !r.height) continue;
+    const dy=y<r.top ? r.top-y : y>r.bottom ? y-r.bottom : 0, dx=x<r.left ? r.left-x : x>r.right ? x-r.right : 0;
+    const d=dy*1e4+dx; if(d<bd){ bd=d; best={s, r}; }
+  }
+  if(!best) return null;
+  const {s, r}=best, t=s.firstChild;
+  if(x<=r.left) return {node:t, offset:0};
+  if(x>=r.right) return {node:t, offset:t.length};
+  const c=caretAt(x, (r.top+r.bottom)/2);
+  return c && c.node===t ? c : {node:t, offset:x-r.left<r.right-x ? 0 : t.length};
+}
+let lastPt=null, scrollTimer=0;
+function extendTo(x, y){
+  if(!dragFrom) return;
+  const f=focusAt(x, y, dragFrom.layer); if(!f) return;
+  const {a}=dragFrom; document.getSelection().setBaseAndExtent(a.node, a.offset, f.node, f.offset);
+}
+/* 끄는 마우스가 보기 칸 끝(안쪽 24px)이나 밖에 있으면 그쪽으로 넘기고 끝점을 다시 잡는다 */
+const EDGE=24;
+function autoScroll(){
+  const sc=dragFrom && dragFrom.layer.closest('.dv-content');
+  if(!sc || !lastPt){ clearInterval(scrollTimer); scrollTimer=0; return; }
+  const r=sc.getBoundingClientRect(), {x, y}=lastPt;
+  const dy=y<r.top+EDGE ? y-(r.top+EDGE) : y>r.bottom-EDGE ? y-(r.bottom-EDGE) : 0;
+  const dx=x<r.left+EDGE ? x-(r.left+EDGE) : x>r.right-EDGE ? x-(r.right-EDGE) : 0;
+  if(!dy && !dx) return;
+  const t0=sc.scrollTop, l0=sc.scrollLeft;
+  sc.scrollTop+=Math.max(-40, Math.min(40, dy)); sc.scrollLeft+=Math.max(-40, Math.min(40, dx));
+  if(sc.scrollTop!==t0 || sc.scrollLeft!==l0) extendTo(Math.max(r.left+1, Math.min(r.right-1, x)), Math.max(r.top+1, Math.min(r.bottom-1, y)));
+}
+const inLayerText = n => !!n && n.nodeType===3 && !!n.parentElement && n.parentElement.tagName==='SPAN' && !!n.parentElement.closest('.textLayer, .dv-hwp-tl');
+function focusAt(x, y, from){
+  const c=caretAt(x, y); if(c && inLayerText(c.node)) return c;
+  let L=from;
+  for(const l of selLayers.keys()){ if(!l.isConnected) continue; const r=l.getBoundingClientRect(); if(x>=r.left && x<=r.right && y>=r.top && y<=r.bottom){ L=l; break; } }
+  return nearestCaret(L, x, y);
+}
 export function guardSelection(layer){
   const end=document.createElement('div'); end.className='endOfContent'; layer.append(end);
   selLayers.set(layer, end);
-  layer.addEventListener('mousedown', ()=>layer.classList.add('selecting'));
+  layer.addEventListener('mousedown', e=>{
+    if(e.button!==0) return;
+    if(!e.shiftKey && e.detail<2){
+      const c=caretAt(e.clientX, e.clientY);
+      const a=c && inLayerText(c.node) && c.node.parentElement.closest('.textLayer, .dv-hwp-tl')===layer ? c : nearestCaret(layer, e.clientX, e.clientY);
+      if(a){ e.preventDefault(); layer.classList.add('selecting'); document.getSelection().setBaseAndExtent(a.node, a.offset, a.node, a.offset); dragFrom={layer, a}; lastPt=null; return; }
+    }
+    layer.classList.add('selecting');
+  });
   if(selOn) return; selOn=true;
-  const resetAll=()=>{ for(const [l, e] of selLayers){ if(!l.isConnected){ selLayers.delete(l); continue; } selReset(e, l); } prevRange=null; };
+  const resetAll=()=>{ dragFrom=null; lastPt=null; clearInterval(scrollTimer); scrollTimer=0; for(const [l, e] of selLayers){ if(!l.isConnected){ selLayers.delete(l); continue; } selReset(e, l); } prevRange=null; };
+  document.addEventListener('mousemove', e=>{
+    if(!dragFrom) return;
+    if(!(e.buttons&1)){ dragFrom=null; return; }
+    e.preventDefault();
+    lastPt={x:e.clientX, y:e.clientY};
+    extendTo(lastPt.x, lastPt.y);
+    if(!scrollTimer) scrollTimer=setInterval(autoScroll, 30);
+  });
   document.addEventListener('pointerup', resetAll);
   document.addEventListener('mouseup', resetAll);
   window.addEventListener('blur', resetAll);
@@ -215,9 +285,18 @@ export async function renderPdf(box, bytes){
   const size=p=>{ const w=fitW()*zoom; p.w.style.width=w+'px'; p.w.style.height=(w*p.ratio)+'px'; if(p.pw) p.w.style.setProperty('--scale-factor', String(w/p.pw)); };
   const text=p=>{
     if(p.tl || !pdfLib.TextLayer) return;
-    const d=document.createElement('div'); d.className='textLayer'; p.w.appendChild(d);
-    p.tl=new pdfLib.TextLayer({textContentSource:p.pg.streamTextContent(), container:d, viewport:p.pg.getViewport({scale:1})});
-    p.tl.render().then(()=>guardSelection(d), e=>console.warn('pdf 글자 층 실패', e));
+    const d=document.createElement('div'); d.className='textLayer'; p.w.appendChild(d); p.tl=true;
+    /* v3.8.21 pdf.js 가 글자 폭을 재는 숨은 canvas 와 글자 층이 같은 lang 을 쓰게 한다. pdf.js 는 canvas(lang=문서의 /Lang, 없으면 '')에
+       글자를 그려 재고 그만큼 늘이고 줄이는데, lang="" 이 canvas 에서는 영문 기본 글꼴, 글자 층(앱 lang="ko")에서는 한글 기본 글꼴로 풀려
+       'sans-serif' 가 서로 다른 글꼴이 됐다 — 영문·숫자 덩어리가 그림보다 6% 넓어져(잰 값: 줄 하나 515px → 546px) 줄 뒤로 갈수록
+       고른 칸이 밀렸다. 빈 값이 아닌 lang(문서 것, 없으면 앱 것)을 양쪽에 똑같이 준다 */
+    p.pg.getTextContent().then(tc=>{
+      if(dead) return null;
+      const lang=tc.lang || document.documentElement.lang || 'en';
+      tc.lang=lang; d.lang=lang;
+      const tl=new pdfLib.TextLayer({textContentSource:tc, container:d, viewport:p.pg.getViewport({scale:1})}); p.tl=tl;
+      return tl.render().then(()=>guardSelection(d));
+    }).catch(e=>console.warn('pdf 글자 층 실패', e));
   };
   const layout=()=>{ for(const p of pages){ size(p); p.drawn=0; } };
   const draw=async p=>{

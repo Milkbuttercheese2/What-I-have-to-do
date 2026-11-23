@@ -888,6 +888,53 @@ test('v3.8.10 한글 글자 층 — 줄마다 <br>(복사 때 줄바꿈), 끌어
   d.remove();
 });
 
+test('v3.8.21 끌어 고르기 시작점 — 줄 앞 여백을 눌러도 그 줄 첫 글자부터(브라우저에 맡기면 줄 가운데·다른 줄부터였다) · 끄는 동안 끝점도 앱이', async () => {
+  const {guardSelection, nearestCaret} = await import('../../src/docs-view.js');
+  const d=document.createElement('div'); d.className='textLayer';
+  d.innerHTML='<span>첫째 줄</span><br><span>둘째 줄 글자</span><br><span>셋째</span>';
+  document.body.appendChild(d);
+  /* 줄마다 높이 20px, 왼쪽 100px 에서 시작 — jsdom 엔 배치가 없어 상자를 정해 준다 */
+  const rect=(l,t,w,h)=>({left:l, top:t, right:l+w, bottom:t+h, width:w, height:h, x:l, y:t});
+  const sp=[...d.querySelectorAll('span')], boxes=[rect(100,0,80,20), rect(100,30,120,20), rect(130,60,40,20)];
+  sp.forEach((s,k)=>{ s.getBoundingClientRect=()=>boxes[k]; });
+  d.getBoundingClientRect=()=>rect(0,0,400,100);
+  guardSelection(d);
+  /* 순수: 가장 가까운 글자 자리 */
+  assert.deepEqual(nearestCaret(d, 40, 40), {node:sp[1].firstChild, offset:0}, '여백(왼쪽) → 그 줄 첫 글자 앞');
+  assert.deepEqual(nearestCaret(d, 390, 40), {node:sp[1].firstChild, offset:sp[1].firstChild.length}, '줄 끝 오른쪽 → 그 줄 끝');
+  assert.equal(nearestCaret(d, 140, 23).node, sp[0].firstChild, '줄 사이 — 세로로 더 가까운 줄(위 3px · 아래 7px)');
+  assert.equal(nearestCaret(d, 140, 27).node, sp[1].firstChild);
+  assert.equal(nearestCaret(d, 10, 70).node, sp[2].firstChild, '들여쓴 줄도 그 줄 첫 글자');
+  /* 여백을 눌러 오른쪽으로 끌기 */
+  const md=new window.MouseEvent('mousedown', {bubbles:true, cancelable:true, button:0, detail:1, clientX:60, clientY:40});
+  d.dispatchEvent(md);
+  assert.ok(md.defaultPrevented, '브라우저의 시작점 잡기를 막는다');
+  const s=document.getSelection();
+  assert.equal(s.anchorNode, sp[1].firstChild); assert.equal(s.anchorOffset, 0);
+  document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, cancelable:true, buttons:1, clientX:390, clientY:42}));
+  assert.equal(String(s), '둘째 줄 글자', '그 줄 첫 글자부터 끝까지');
+  document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, cancelable:true, buttons:1, clientX:390, clientY:70}));
+  assert.equal(s.focusNode, sp[2].firstChild, '아래 줄로 끌면 끝점이 따라간다');
+  document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+  assert.ok(!d.classList.contains('selecting'));
+  document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, buttons:0, clientX:100, clientY:5}));
+  assert.equal(s.focusNode, sp[2].firstChild, '손을 뗀 뒤엔 움직여도 그대로');
+  /* 두 번 누르기(낱말 고르기)·Shift+누르기는 브라우저 그대로 */
+  for(const o of [{detail:2}, {detail:1, shiftKey:true}]){
+    const e=new window.MouseEvent('mousedown', {bubbles:true, cancelable:true, button:0, clientX:60, clientY:40, ...o});
+    d.dispatchEvent(e); assert.ok(!e.defaultPrevented, JSON.stringify(o));
+    document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+  }
+  s.removeAllRanges(); d.remove();
+});
+
+test('v3.8.21 PDF 쪽은 margin-inline:auto 로 가운데 — align-items:center 는 확대한 쪽의 왼쪽(줄 앞)을 닿을 수 없게 잘랐다', () => {
+  const css=fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+  const rule=sel=>{ const m=css.match(new RegExp('\\n\\s*'+sel.replace(/[.]/g,'\\.')+'\\{([^}]*)\\}')); return m ? m[1] : ''; };
+  assert.doesNotMatch(rule('.dv-pdf'), /align-items:\s*center/);
+  assert.match(rule('.dv-pdf-pg'), /margin-inline:\s*auto/);
+});
+
 test('v3.8.11 한글 글자 층은 글자 하나 단위 — 글자마다 자기 자리, 띄어쓰기·줄바꿈은 복사 글에 살린다', async () => {
   const {hwpTextRuns} = await import('../../src/docs-view.js');
   const T=(x,y,c,sz=10)=>`<text x="${x}" y="${y}" font-size="${sz}">${c}</text>`;
