@@ -25,6 +25,8 @@
  *   - 같은 것을 보기 칸을 좁힌 뒤(옆 칸이 넓어짐 = 메모 칸 펼치기·트리 넓히기), (PDF) ＋ 확대 두 번 뒤에 다시
  *   허용: 자리·상자 1.5px(TOL), 폭 2%
  *
+ * FORCED=1: 강제 색 모드(Windows 대비 테마) — 글자 층이 보이지 않는지도 본다.
+ * NO_CPFP=1: caretPositionFromPoint 를 지워 Chromium 128 전(caretRangeFromPoint 만)처럼 — 내부망 WebView2 122 가 이 길이다.
  * 실행:  node tools/select-check.mjs        부분: ONLY=pdf,ko-pdf  WINS='[[620,800]]'  DPRS='[1.5]'  APP='[1.3]'  WV2=1
  * 준비:  npm i --no-save playwright-core   (Edge 사용)
  * 결과:  실패가 하나라도 있으면 종료 코드 1
@@ -42,6 +44,11 @@ const FX = path.join(ROOT, 'tests', 'fixtures');
 const pw = await import(pathToFileURL(path.join(ROOT, 'node_modules', 'playwright-core', 'index.js')).href);
 const chromium = (pw.default && pw.default.chromium) || pw.chromium;
 const WV2 = !!process.env.WV2;
+/* NO_CPFP=1: document.caretPositionFromPoint 를 지운 채로 — Chromium 128 전(내부망 WebView2 122 등)은 이것이 없어 caretRangeFromPoint 길만 탄다 */
+const NO_CPFP = !!process.env.NO_CPFP;
+/* FORCED=1 (Edge 만): Windows 대비 테마처럼 강제 색 모드 — 투명해야 할 글자 층이 검게 칠해지지 않는지(v3.8.23 한글 글자 층 번짐) */
+const FORCED = !!process.env.FORCED;
+const INIT_NO_CPFP = 'delete Document.prototype.caretPositionFromPoint; window.__noCPFP = !document.caretPositionFromPoint;';
 const HOST = path.join(ROOT, 'tools', 'wv2host', 'target', 'debug', 'wv2host.exe');
 
 /* 시험용 PDF ① — Helvetica(문서에 글꼴 없음 — 대체 글꼴로 그린다) 글자 줄 × 3쪽. 쪽 끝마다 'Page N end' */
@@ -297,6 +304,11 @@ async function runCase(page, kind, url){
     }
     await page.evaluate(()=>getSelection().removeAllRanges());
   };
+  /* 글자 층은 투명이어야 한다 — 보이면 쪽 그림 글자 위에 다른 글꼴로 겹쳐 '번진' 글자가 된다 */
+  const seen=await page.evaluate(()=>{ const s=document.querySelector('.textLayer span:not(.markedContent), .dv-hwp-tl span'); if(!s) return null;
+    const c=getComputedStyle(s).color, m=c.match(/rgba?\(([^)]+)\)/), a=m ? m[1].split(',').map(Number) : [];
+    return a.length===4 ? (a[3]>0 ? c : null) : (c==='transparent' ? null : c); });
+  if(seen) errs.push('글자 층이 보인다(color '+seen+')');
   const m0 = await page.evaluate(MEASURE, {pdf});
   if(!m0.err){ await paintLines(m0, 'first'); await dragLines(m0, 'first'); }
   if(pdf && !m0.err){
@@ -331,7 +343,9 @@ async function runCase(page, kind, url){
     if(!m2.err){ await paintLines(m2, 'zoomed'); await dragLines(m2, 'zoomed'); }
   }
   const dpr=await page.evaluate(()=>devicePixelRatio);
-  return {m0, m1, m2, drags, paints, errs, dpr};
+  const cpfp=await page.evaluate(()=>typeof document.caretPositionFromPoint==='function');
+  if(NO_CPFP && cpfp) errs.push('caretPositionFromPoint 를 지우지 못했다');
+  return {m0, m1, m2, drags, paints, errs, dpr, cpfp, ua:await page.evaluate(()=>navigator.userAgent.match(/(Edg|Chrome)\/[\d.]+/g)?.join(' '))};
 }
 
 const rows=[]; let fails=0;
@@ -339,7 +353,7 @@ const record=(kind, conf, r)=>{
   const dragBad=r.drags.filter(d=>!d.ok), paintBad=(r.paints||[]).filter(d=>!d.ok);
   const bad = paintBad.length>0 || badMeasure(r.m0) || badMeasure(r.m1) || (r.m2 && badMeasure(r.m2)) || dragBad.length>0 || r.errs.length>0;
   if (bad) fails++;
-  rows.push({kind, ...conf, dprSeen:+r.dpr.toFixed(3), ok:!bad, first:fmt(r.m0), narrow:fmt(r.m1), ...(r.m2?{zoomed:fmt(r.m2)}:{}), drags:r.drags.length, dragFail:dragBad, paints:(r.paints||[]).length, darkCells:(r.paints||[]).filter(p=>p.darkCell).length, paintFail:paintBad, errs:r.errs.slice(0,2)});
+  rows.push({kind, ...conf, cpfp:r.cpfp, ua:r.ua, dprSeen:+r.dpr.toFixed(3), ok:!bad, first:fmt(r.m0), narrow:fmt(r.m1), ...(r.m2?{zoomed:fmt(r.m2)}:{}), drags:r.drags.length, dragFail:dragBad, paints:(r.paints||[]).length, darkCells:(r.paints||[]).filter(p=>p.darkCell).length, paintFail:paintBad, errs:r.errs.slice(0,2)});
 };
 
 const edge = await chromium.launch({channel: process.env.PW_CHANNEL || 'msedge'});
@@ -350,7 +364,8 @@ const want = DOCS.filter(([k])=>!ONLY || ONLY.includes(k));
 if (!WV2) {
   for (const [kind, url] of want) for (const [W,Hh] of WINS) for (const dpr of DPRS) for (const app of APP) {
     const vw=Math.round(W/app), vh=Math.round(Hh/app);
-    const ctx = await edge.newContext({viewport:{width:vw, height:vh}, deviceScaleFactor:dpr*app});
+    const ctx = await edge.newContext({viewport:{width:vw, height:vh}, deviceScaleFactor:dpr*app, forcedColors:FORCED?'active':'none'});
+    if(NO_CPFP) await ctx.addInitScript(INIT_NO_CPFP);
     const page = await ctx.newPage();
     await page.goto(`http://127.0.0.1:${port}/__h.html`);
     record(kind, {win:`${W}x${Hh}`, dpr, app}, await runCase(page, kind, url));
@@ -358,7 +373,7 @@ if (!WV2) {
   }
 } else {
   if (!fs.existsSync(HOST)) { console.error('먼저: cargo build --offline --manifest-path tools/wv2host/Cargo.toml'); process.exit(2); }
-  let cdp = 9400;
+  let cdp = 9400 + Math.floor(Math.random()*400);
   for (const [kind, url] of want) for (const [W,Hh] of WINS) for (const app of APP) {
     cdp++;
     const proc = spawn(HOST, [`http://127.0.0.1:${port}/__h.html`, String(app), String(W), String(Hh)],
@@ -371,6 +386,7 @@ if (!WV2) {
       for(let k=0;k<50 && !page;k++){ page=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().includes('__h.html')); if(!page) await new Promise(r=>setTimeout(r,200)); }
       if(!page) throw new Error('창을 찾지 못함');
       await page.bringToFront();
+      if(NO_CPFP){ await page.context().addInitScript(INIT_NO_CPFP); await page.reload(); }
       zoomNow=app;
       record(kind, {win:`${W}x${Hh}`, app, wv2:true}, await runCase(page, kind, url));
     }catch(e){ fails++; rows.push({kind, win:`${W}x${Hh}`, app, wv2:true, ok:false, err:String(e)}); }

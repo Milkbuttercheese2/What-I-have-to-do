@@ -967,6 +967,47 @@ test('v3.8.22 글자 층 밖(쪽 밖 회색 여백·쪽 사이)에서 눌러도 
   s.removeAllRanges(); sc.remove(); other.remove();
 });
 
+test('v3.8.23 글자 자리는 caretPositionFromPoint·caretRangeFromPoint 없이 — elementFromPoint + 글자마다 Range 상자(Chromium 122 와 최신이 같게)', async () => {
+  const {guardSelection} = await import('../../src/docs-view.js');
+  const rect=(l,t,w,h)=>({left:l, top:t, right:l+w, bottom:t+h, width:w, height:h, x:l, y:t});
+  const d=document.createElement('div'); d.className='dv-hwp-tl'; d.innerHTML='<span>가나다라</span>';
+  document.body.appendChild(d);
+  const sp=d.querySelector('span'), t=sp.firstChild;
+  sp.getBoundingClientRect=()=>rect(100,10,80,20); d.getBoundingClientRect=()=>rect(0,0,400,100);
+  guardSelection(d);
+  /* 글자 하나 = 20px(100·120·140·160). 판마다 다르게 구는 브라우저 함수는 부르면 안 된다 */
+  const called=[];
+  const saved={cp:document.caretPositionFromPoint, cr:document.caretRangeFromPoint, ef:document.elementFromPoint, rb:window.Range.prototype.getBoundingClientRect};
+  document.caretPositionFromPoint=()=>{ called.push('caretPositionFromPoint'); return null; };
+  document.caretRangeFromPoint=()=>{ called.push('caretRangeFromPoint'); return null; };
+  document.elementFromPoint=()=>sp;
+  window.Range.prototype.getBoundingClientRect=function(){ return this.startContainer===t ? rect(100+this.startOffset*20, 10, 20, 20) : rect(0,0,0,0); };
+  try{
+    const s=document.getSelection();
+    const down=x=>{ const e=new window.MouseEvent('mousedown', {bubbles:true, cancelable:true, button:0, detail:1, clientX:x, clientY:20}); sp.dispatchEvent(e); return e; };
+    assert.ok(down(145).defaultPrevented);
+    assert.equal(s.anchorNode, t); assert.equal(s.anchorOffset, 2, '셋째 글자(140~160)의 왼쪽 반 → 셋째 글자 앞');
+    document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+    down(155); assert.equal(s.anchorOffset, 3, '셋째 글자 오른쪽 반 → 그 뒤');
+    document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, cancelable:true, buttons:1, clientX:171, clientY:20}));
+    assert.equal(s.focusOffset, 4, '끄는 끝도 같은 방법');
+    document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+    assert.deepEqual(called, [], '브라우저 판마다 다른 함수는 안 쓴다');
+    s.removeAllRanges();
+  } finally {
+    document.caretPositionFromPoint=saved.cp; document.caretRangeFromPoint=saved.cr; document.elementFromPoint=saved.ef; window.Range.prototype.getBoundingClientRect=saved.rb;
+    d.remove();
+  }
+});
+
+test('v3.8.23 한글 글자 층은 forced-color-adjust:none — Windows 대비 테마(강제 색)에서 투명 글자가 검게 칠해져 쪽 글자 위에 번져 보였다', () => {
+  const css=fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+  const m=css.match(/\n\s*\.dv-hwp-tl\{([^}]*)\}/);
+  assert.ok(m, '.dv-hwp-tl 규칙');
+  assert.match(m[1], /forced-color-adjust:\s*none/);
+  assert.match(css, /\.dv-pdf-pg \.textLayer\{[^}]*forced-color-adjust:\s*none/, 'PDF 글자 층도(pdf.js 규칙)');
+});
+
 test('v3.8.21 PDF 쪽은 margin-inline:auto 로 가운데 — align-items:center 는 확대한 쪽의 왼쪽(줄 앞)을 닿을 수 없게 잘랐다', () => {
   const css=fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
   const rule=sel=>{ const m=css.match(new RegExp('\\n\\s*'+sel.replace(/[.]/g,'\\.')+'\\{([^}]*)\\}')); return m ? m[1] : ''; };
