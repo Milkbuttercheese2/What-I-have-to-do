@@ -1470,8 +1470,11 @@
   .dv-media{width:100%;max-height:100%}
   .dv-pdf-bar{position:sticky;top:-14px;z-index:1;display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:-14px -18px 10px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--ink-soft)}
   .dv-pdf-bar .seg-btn{height:26px;width:28px;padding:0;border:1px solid var(--line);background:var(--card)}
-  .dv-pdf{display:flex;flex-direction:column;align-items:center;gap:12px}
-  .dv-pdf-pg{position:relative;flex:none;background:#fff;box-shadow:var(--shadow);border-radius:2px}
+  /* v3.8.21 쪽 가운데 맞춤은 margin-inline:auto 로 — align-items:center 는 확대해 보기 칸보다 넓어진 쪽을 양쪽으로 넘쳐 내서,
+     왼쪽으로 넘친 부분(줄 앞)은 가로로 끝까지 넘겨도 볼 수 없었다(잰 값: 1280px 창·150% 에서 112px 잘림 → 줄 가운데부터만 끌어 고를 수 있었다).
+     auto 여백은 자리가 모자라면 0 이 되어 오른쪽으로만 넘친다 */
+  .dv-pdf{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+  .dv-pdf-pg{position:relative;flex:none;margin-inline:auto;background:#fff;box-shadow:var(--shadow);border-radius:2px}
   .dv-pdf-pg>canvas{display:block;width:100%;height:100%}
   /* v3.8.9 PDF 글자 층(pdf.js 4.10 pdf_viewer.css 의 textLayer 규칙 중 필요한 것) — 투명 글자를 그림 위에 겹쳐 골라 복사 */
   .dv-pdf-pg .textLayer{position:absolute;text-align:initial;inset:0;overflow:clip;opacity:1;line-height:1;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;caret-color:CanvasText;z-index:0}
