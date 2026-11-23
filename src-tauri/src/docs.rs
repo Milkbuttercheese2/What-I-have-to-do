@@ -674,6 +674,59 @@ pub fn invalidate_search_root(root: &Path) {
     c.retain(|x| !(base.starts_with(&x.base) || x.base.starts_with(&base)));
 }
 
+/// 앱 밖에서 바뀐 항목들(`paths`, 문서 폴더 기준 '/' 상대 경로)을 색인에 반영한다 — 색인을 버리지 않고 그 자리만 디스크에서
+/// 다시 본다: 있으면 넣거나 바꾸고(폴더면 그 안까지), 없으면 뺀다. 다른 프로그램의 저장(임시 파일 → 바꿔치기)도 이렇게
+/// 받아서, 고치는 동안 공유 폴더를 처음부터 다시 훑지 않는다. 넘침(overflow)이면 버리고 뒤에서 새로 만든다.
+pub fn sync_search_external(root: &Path, paths: &[String], overflow: bool) {
+    let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    bump_search_gens(Some(&base));   // 만드는 중이던 색인은 바뀌기 전 디스크라 넣지 않는다
+    if overflow {
+        let had = c.iter().any(|x| x.base == base);
+        c.retain(|x| !(base.starts_with(&x.base) || x.base.starts_with(&base)));
+        drop(c);
+        if had { refresh_later_now(base); }
+        return;
+    }
+    for slot in c.iter_mut() {
+        let Ok(inner) = base.strip_prefix(&slot.base) else { continue };
+        let pre = inner.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+        let mut ents = slot.ents.clone();
+        for p in paths {
+            let rel = if pre.is_empty() { p.clone() } else { format!("{pre}/{p}") };
+            ents.retain(|e| e.rel != rel && !e.rel.starts_with(&format!("{rel}/")));
+            let full = rel.split('/').filter(|s| !s.is_empty()).fold(slot.base.clone(), |a, s| a.join(s));
+            index_add(&slot.base, &full, &mut ents);
+        }
+        *slot = std::sync::Arc::new(SearchIndex { base: slot.base.clone(), built: slot.built, ents });
+    }
+}
+/// 항목 하나(폴더면 그 안 전부)를 색인 목록에 더한다 — build_index 와 같은 규칙(숨김·링크 빼기, 작은 글자 파일만 내용)
+fn index_add(base: &Path, path: &Path, ents: &mut Vec<IdxEntry>) {
+    let rel = |p: &Path| p.strip_prefix(base).unwrap_or(p).to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(p) = stack.pop() {
+        if ents.len() >= SEARCH_MAX_ENTRIES { return }
+        let Ok(lmd) = std::fs::symlink_metadata(&p) else { continue };
+        if lmd.file_type().is_symlink() { continue }
+        let Ok(md) = std::fs::metadata(&p) else { continue };
+        let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if name.is_empty() || hidden(&name, &md) { continue }
+        let is_dir = md.is_dir();
+        if is_dir {
+            if let Ok(rd) = std::fs::read_dir(&p) { for e in rd.flatten() { stack.push(e.path()); } }
+        }
+        let mut text = None;
+        if !is_dir && md.len() <= SEARCH_TEXT_MAX {
+            let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if SEARCH_TEXT_EXT.contains(&ext.as_str()) {
+                if let Ok(bytes) = std::fs::read(&p) { text = decode_text(&bytes).map(|(t, _)| std::sync::Arc::from(t)); }
+            }
+        }
+        ents.push(IdxEntry { rel: rel(&p), low: name.to_lowercase(), name, dir: is_dir, text });
+    }
+}
+
 /// 글자 파일 하나를 저장한 뒤 — 색인을 버리지 않고 그 파일의 내용만 바꿔 끼운다. 글자 파일은 고치는 동안 1.2초마다
 /// 저장되는데, 그때마다 색인을 버리면 고치는 내내 찾기가 폴더를 처음부터 다시 훑었다(공유 폴더는 한 번에 10초 넘게).
 /// 색인에 없는 파일이면(새로 생긴 등) 그 폴더 색인을 버린다.
@@ -1049,6 +1102,13 @@ fn watch_sink() -> crate::docwatch::Sink {
             }
             Ev::RootMoved { root: i, base, to } => {
                 let _ = app.emit("wmhh://doc-root-moved", serde_json::json!({ "root": i, "base": base, "to": to }));
+            }
+            Ev::Changed { root: i, base, dirs, paths, overflow } => {
+                if let Ok(r) = root(i) { sync_search_external(&r, &paths, overflow); }
+                let _ = app.emit("wmhh://doc-changed", serde_json::json!({ "root": i, "base": base, "dirs": dirs, "paths": paths, "overflow": overflow }));
+            }
+            Ev::RootGone { root: i, base } => {
+                let _ = app.emit("wmhh://doc-root-gone", serde_json::json!({ "root": i, "base": base }));
             }
         }
     })
@@ -1589,6 +1649,37 @@ mod tests {
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 1);
         invalidate_search_root(&root);                                // 앱이 문서를 바꾸면 버린다
         assert_eq!(search_cached(&root, "첫").unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 앱 밖에서 바뀐 것(감시가 알린 경로들)은 색인을 버리지 않고 그 자리만 다시 본다 — 생긴 파일·폴더(안까지)는 들어가고,
+    /// 지운 것은 빠지고, 고친 글자는 새 내용으로. 알리지 않은 파일(몰래.txt)이 안 보이는 것이 '다시 훑지 않았다'는 증거다.
+    #[test]
+    fn external_changes_patch_the_index() {
+        let r = tmp("search-ext");
+        std::fs::write(r.join("가 폴더/옛글.txt"), "처음 글").unwrap();
+        std::fs::write(r.join("가 폴더/지울글.txt"), "지울 글").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        invalidate_search_root(&root);
+        assert_eq!(search_cached(&root, "지울").unwrap().len(), 1);
+        std::fs::write(r.join("가 폴더/옛글.txt"), "바뀐 글 새말").unwrap();
+        std::fs::remove_file(r.join("가 폴더/지울글.txt")).unwrap();
+        std::fs::create_dir_all(r.join("받은 자료/안쪽")).unwrap();
+        std::fs::write(r.join("받은 자료/안쪽/풀린파일.txt"), "새말 하나").unwrap();
+        std::fs::write(r.join("몰래.txt"), "새말").unwrap();
+        let paths: Vec<String> = ["가 폴더/옛글.txt", "가 폴더/지울글.txt", "받은 자료"].iter().map(|s| s.to_string()).collect();
+        sync_search_external(&root, &paths, false);
+        let mut got: Vec<String> = search_cached(&root, "새말").unwrap().into_iter().map(|h| h.rel).collect();
+        got.sort();
+        assert_eq!(got, vec!["가 폴더/옛글.txt".to_string(), "받은 자료/안쪽/풀린파일.txt".into()]);
+        assert!(search_cached(&root, "지울").unwrap().is_empty(), "지운 파일은 빠진다");
+        assert_eq!(search_cached(&root, "받은 자료").unwrap().len(), 1, "새 폴더도");
+        /* 넘침이면 버리고 새로 만든다 — 이번엔 몰래.txt 도 보인다 */
+        sync_search_external(&root, &[], true);
+        let t = std::time::Instant::now();
+        while search_cached(&root, "새말").unwrap().len() < 3 && t.elapsed().as_secs() < 5 { std::thread::sleep(std::time::Duration::from_millis(50)); }
+        assert_eq!(search_cached(&root, "새말").unwrap().len(), 3);
+        invalidate_search_root(&root);
         let _ = std::fs::remove_dir_all(&r);
     }
 
