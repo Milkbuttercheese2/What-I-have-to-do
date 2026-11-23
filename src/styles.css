@@ -1494,7 +1494,9 @@
   .dv-hwp-pg{position:relative;max-width:100%;background:#fff;box-shadow:var(--shadow);border-radius:2px;overflow:hidden}
   .dv-hwp-pg>img{display:block;max-width:100%;height:auto;user-select:none;-webkit-user-drag:none}
   /* v3.8.9 한글 글자 층 — 문서 좌표(px)로 놓고 쪽 그림 폭에 맞춰 통째로 줄인다(scale). 글자는 투명, 고르면 파랗게 */
-  .dv-hwp-tl{position:absolute;left:0;top:0;transform-origin:0 0;line-height:1;font-family:'Malgun Gothic',sans-serif}
+  /* v3.8.23 forced-color-adjust:none — Windows 대비 테마(강제 색 모드)에서는 브라우저가 color:transparent 를 무시하고 글자를 검게 칠해,
+     투명해야 할 글자 층(맑은 고딕)이 쪽 그림 글자 위에 겹쳐 '굵게 번진' 글자로 보였다(Edge forcedColors 로 재현). PDF 글자 층은 pdf.js 규칙대로 이미 있었다 */
+  .dv-hwp-tl{position:absolute;left:0;top:0;transform-origin:0 0;line-height:1;font-family:'Malgun Gothic',sans-serif;forced-color-adjust:none}
   .dv-hwp-tl :is(span,br){position:absolute;white-space:pre;color:transparent;cursor:text;transform-origin:0 0;z-index:1}
   .dv-hwp-tl br::selection{background:transparent}
   .dv-hwp-tl .endOfContent{display:block;position:absolute;inset:100% 0 0;z-index:0;cursor:default;user-select:none}

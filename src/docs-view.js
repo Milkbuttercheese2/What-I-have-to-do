@@ -166,10 +166,28 @@ function selReset(end, layer){ layer.append(end); end.style.width=''; end.style.
    그래서 눌린 자리에서 가장 가까운 글자 자리를 시작점으로, 끄는 동안 마우스 아래(없으면 가장 가까운) 글자 자리를 끝점으로 둔다.
    보기 칸 위·아래(좌우) 끝으로 끌면 그쪽으로 저절로 넘긴다(여러 쪽에 걸쳐 고르기). */
 function layerSpans(layer){ return [...layer.querySelectorAll('span')].filter(s=>!s.classList.contains('markedContent') && s.firstChild && s.firstChild.nodeType===3 && s.firstChild.length); }
+/* v3.8.23 마우스 자리 → 글자 자리를 브라우저의 caretPositionFromPoint·caretRangeFromPoint 없이 직접 구한다.
+   caretPositionFromPoint 는 Chromium 128 부터라 내부망 WebView2(122)는 caretRangeFromPoint 길만 탔는데, 이 둘은 판마다 다르게 군다
+   (투명·absolute·scaleX 글자 칸, 글자 밖 좌표). 어느 판에서나 같은 elementFromPoint(그 자리의 글자 칸) + 글자마다 Range 상자
+   (변환까지 반영)로 '그 칸 안에서 마우스가 몇 번째 글자 가운데의 왼쪽인가'를 센다 */
+function charOffsetAt(t, x){
+  const n=t.length; if(!n) return 0;
+  if(typeof document.createRange!=='function') return null;
+  const r=document.createRange(); if(typeof r.getBoundingClientRect!=='function') return null;
+  let seen=false;
+  for(let k=0;k<n;k++){
+    r.setStart(t, k); r.setEnd(t, k+1);
+    const b=r.getBoundingClientRect(); if(!b || !b.width) continue;
+    seen=true;
+    if(x < b.left+b.width/2) return k;
+  }
+  return seen ? n : null;                                                   // 글자 상자를 못 잼(배치 없음) — 부르는 쪽이 정한다
+}
 function caretAt(x, y){
-  if(document.caretPositionFromPoint){ const p=document.caretPositionFromPoint(x, y); return p && p.offsetNode ? {node:p.offsetNode, offset:p.offset} : null; }
-  if(document.caretRangeFromPoint){ const r=document.caretRangeFromPoint(x, y); return r ? {node:r.startContainer, offset:r.startOffset} : null; }
-  return null;
+  const el=typeof document.elementFromPoint==='function' ? document.elementFromPoint(x, y) : null;
+  if(!el || el.tagName!=='SPAN' || el.classList.contains('markedContent') || !el.closest('.textLayer, .dv-hwp-tl')) return null;
+  const t=el.firstChild; if(!t || t.nodeType!==3 || !t.length) return null;
+  return {node:t, offset:charOffsetAt(t, x) ?? 0};
 }
 /* (x, y) 에 가장 가까운 글자 자리 — 세로로 그 줄에 걸친 글자가 먼저, 그다음 가로로 가까운 것. 글자 왼쪽이면 그 글자 앞, 오른쪽이면 뒤 */
 export function nearestCaret(layer, x, y){
@@ -183,8 +201,8 @@ export function nearestCaret(layer, x, y){
   const {s, r}=best, t=s.firstChild;
   if(x<=r.left) return {node:t, offset:0};
   if(x>=r.right) return {node:t, offset:t.length};
-  const c=caretAt(x, (r.top+r.bottom)/2);
-  return c && c.node===t ? c : {node:t, offset:x-r.left<r.right-x ? 0 : t.length};
+  const k=charOffsetAt(t, x);
+  return {node:t, offset:k ?? (x-r.left<r.right-x ? 0 : t.length)};
 }
 let lastPt=null, scrollTimer=0;
 function extendTo(x, y){
@@ -372,11 +390,18 @@ export async function renderPdf(box, bytes){
   layout(); pages.forEach(p=>io.observe(p.w));
   const redraw=()=>{ layout(); pages.forEach(p=>{ if(p.on) draw(p); }); };
   const ro=new ResizeObserver(()=>{ if(Math.abs((ro.w||0)-wrap.clientWidth)>4){ ro.w=wrap.clientWidth; redraw(); } }); ro.w=wrap.clientWidth; ro.observe(wrap);
+  /* v3.8.23 화면 배율(devicePixelRatio)만 바뀌어도 다시 그린다 — 창을 배율이 다른 모니터로 옮기면 쪽 폭(CSS)은 그대로라 위에서 안 걸려,
+     예전 배율로 그린 그림이 늘어나 흐렸다 */
+  let dprMq=null;
+  const onDpr=()=>{ if(dead) return; redraw(); watchDpr(); };
+  const watchDpr=()=>{ if(dprMq) dprMq.removeEventListener('change', onDpr); if(typeof matchMedia!=='function') return;
+    dprMq=matchMedia(`(resolution: ${window.devicePixelRatio||1}dppx)`); dprMq.addEventListener('change', onDpr, {once:true}); };
+  watchDpr();
   box.querySelector('.dv-pdf-bar').addEventListener('click', e=>{
     const b=e.target.closest('[data-pdfz]'); if(!b) return;
     zoom=Math.min(3, Math.max(0.5, Math.round((zoom+Number(b.dataset.pdfz)*0.25)*100)/100)); zl.textContent=Math.round(zoom*100)+'%'; redraw();
   });
-  return ()=>{ dead=true; io.disconnect(); ro.disconnect(); try{ doc.destroy(); }catch{} };
+  return ()=>{ dead=true; io.disconnect(); ro.disconnect(); if(dprMq) dprMq.removeEventListener('change', onDpr); try{ doc.destroy(); }catch{} };
 }
 
 /* zip → {경로: Uint8Array} */
