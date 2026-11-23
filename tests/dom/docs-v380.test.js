@@ -928,6 +928,45 @@ test('v3.8.21 끌어 고르기 시작점 — 줄 앞 여백을 눌러도 그 줄
   s.removeAllRanges(); d.remove();
 });
 
+test('v3.8.22 글자 층 밖(쪽 밖 회색 여백·쪽 사이)에서 눌러도 그 높이의 줄 첫 글자부터 · 단추 줄·스크롤 막대는 그대로 · 마지막 쪽 아래로 끌어도 범위가 첫 쪽으로 줄지 않는다', async () => {
+  const {guardSelection} = await import('../../src/docs-view.js');
+  const rect=(l,t,w,h)=>({left:l, top:t, right:l+w, bottom:t+h, width:w, height:h, x:l, y:t});
+  const sc=document.createElement('div'); sc.className='dv-content';
+  sc.innerHTML='<div class="dv-hwp-bar num"><button type="button">단추</button>2쪽</div><div class="dv-hwp">'
+    +'<div class="dv-hwp-pg"><div class="dv-hwp-tl"><span>가나다</span><br><span>라마바</span></div></div>'
+    +'<div class="dv-hwp-pg"><div class="dv-hwp-tl"><span>사아자</span></div></div></div>';
+  document.body.appendChild(sc);
+  sc.getBoundingClientRect=()=>rect(0,0,500,400);
+  for(const [k,v] of Object.entries({clientWidth:489, clientHeight:400, clientLeft:0, clientTop:0})) Object.defineProperty(sc, k, {configurable:true, value:v});
+  const [l1, l2]=sc.querySelectorAll('.dv-hwp-tl');
+  l1.getBoundingClientRect=()=>rect(50,10,300,180); l2.getBoundingClientRect=()=>rect(50,210,300,180);
+  const sp=[...sc.querySelectorAll('span')], boxes=[rect(80,20,60,20), rect(80,60,60,20), rect(80,230,60,20)];
+  sp.forEach((s,k)=>{ s.getBoundingClientRect=()=>boxes[k]; });
+  guardSelection(l1); guardSelection(l2);
+  const s=document.getSelection();
+  const down=(target, x, y, o={})=>{ const e=new window.MouseEvent('mousedown', {bubbles:true, cancelable:true, button:0, detail:1, clientX:x, clientY:y, ...o}); target.dispatchEvent(e); return e; };
+  const move=(x, y)=>document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, cancelable:true, buttons:1, clientX:x, clientY:y}));
+  const up=()=>document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+  /* 쪽 밖 회색 여백(보기 칸 왼쪽 끝) — 그 높이의 줄 첫 글자부터 */
+  assert.ok(down(sc, 4, 70).defaultPrevented, '브라우저의 시작점 잡기를 막는다');
+  assert.equal(s.anchorNode, sp[1].firstChild); assert.equal(s.anchorOffset, 0);
+  move(400, 70); assert.equal(String(s), '라마바');
+  /* 마지막 쪽 아래(쪽이 없는 곳)로 끌면 가장 가까운 쪽(둘째 쪽) 끝까지 — 첫 쪽으로 되돌아가지 않는다 */
+  move(400, 395); assert.equal(s.focusNode, sp[2].firstChild); assert.equal(s.focusOffset, 3);
+  up();
+  /* 쪽 사이 — 세로로 더 가까운 쪽(둘째 쪽 위 5px)의 첫 줄 */
+  down(sc.querySelector('.dv-hwp'), 60, 205); assert.equal(s.anchorNode, sp[2].firstChild); up();
+  /* 단추 줄·단추·스크롤 막대(오른쪽 11px)·두 번 누르기는 그대로 */
+  assert.ok(!down(sc.querySelector('button'), 10, 5).defaultPrevented, '단추'); up();
+  assert.ok(!down(sc.querySelector('.dv-hwp-bar'), 30, 5).defaultPrevented, '단추 줄'); up();
+  assert.ok(!down(sc, 495, 100).defaultPrevented, '스크롤 막대'); up();
+  assert.ok(!down(sc, 4, 70, {detail:2}).defaultPrevented, '두 번 누르기(낱말 고르기)'); up();
+  /* 문서 보기 칸(.dv-content) 밖은 건드리지 않는다 */
+  const other=document.createElement('div'); document.body.appendChild(other);
+  assert.ok(!down(other, 4, 70).defaultPrevented); up();
+  s.removeAllRanges(); sc.remove(); other.remove();
+});
+
 test('v3.8.21 PDF 쪽은 margin-inline:auto 로 가운데 — align-items:center 는 확대한 쪽의 왼쪽(줄 앞)을 닿을 수 없게 잘랐다', () => {
   const css=fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
   const rule=sel=>{ const m=css.match(new RegExp('\\n\\s*'+sel.replace(/[.]/g,'\\.')+'\\{([^}]*)\\}')); return m ? m[1] : ''; };
