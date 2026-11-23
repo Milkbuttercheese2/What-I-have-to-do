@@ -170,6 +170,8 @@ const MEASURE = async ({pdf})=>{
         for(const ch of run.cs){ if(!ch.s.trim()) continue; L=Math.min(L, a.left+ch.x*s); Rr=Math.max(Rr, a.left+(ch.x+ch.w)*s); } }
     }
     if(Rr>L){ st.expL=L; st.expR=Rr; }
+    /* 그 줄 맨 앞 덩어리(빈칸 포함 — rhwp 는 상자 안 들여쓰기를 빈칸 글자로 둔다)의 왼쪽 — 선택 표시가 여기서 시작해도 맞다 */
+    st.spanL=Math.min(...[...tl.querySelectorAll('span:not(.markedContent)')].map(x=>R(x)).filter(r=>r.width>0 && r.top+r.height/2>=st.top && r.top+r.height/2<=st.bottom).map(r=>r.left), st.expL??1e9);
   }
   out.boxLeft=c.left; out.boxRight=c.right; out.boxTop=c.top; out.boxBottom=c.bottom; out.clientW=box.clientWidth;
   /* 쪽 사이(첫 쪽 아래 ↔ 둘째 쪽 위) — 둘째 쪽 첫 줄 */
@@ -272,9 +274,9 @@ async function runCase(page, kind, url){
         const hr=await page.evaluate(({t,b})=>{ const s=getSelection(); if(!s.rangeCount) return null; let L=1e9,R=-1e9;
           for(const r of s.getRangeAt(0).getClientRects()){ const cy=r.top+r.height/2; if(r.width<0.5 || cy<t || cy>b) continue; L=Math.min(L,r.left); R=Math.max(R,r.right); }
           return R>L ? [L,R] : null; }, {t:st.top, b:st.bottom});
-        const h=st.bottom-st.top, tol=Math.max(3, h*0.45), expR=Math.min(st.expR, x1-2);
+        const h=st.bottom-st.top, tol=Math.max(3, h*0.45), dragEnd=Math.min(st.right+30, x1-4), expR=st.expR>dragEnd ? dragEnd-h : st.expR;
         const res={tag, line:k, want:st.t, glyphs:[+st.expL.toFixed(1), +st.expR.toFixed(1)], hi:hr&&hr.map(v=>+v.toFixed(1)), by:'rects'};
-        res.ok=!!hr && hr[0]<=st.expL+2 && hr[0]>=st.expL-tol && hr[1]>=expR-tol;
+        res.ok=!!hr && hr[0]<=st.expL+2 && hr[0]>=Math.min(st.expL, st.spanL??st.expL)-tol && hr[1]>=expR-tol;
         paints.push(res); continue;
       }
       await page.evaluate(()=>getSelection().removeAllRanges()); await page.waitForTimeout(60);
@@ -295,11 +297,12 @@ async function runCase(page, kind, url){
       /* 선택 표시가 그 줄 글자 범위를 덮어야 — 왼쪽 끝은 첫 글자 자리에서 2px 안쪽 ~ 글자 크기 45% 바깥, 오른쪽 끝은 마지막 글자 끝 2px 안쪽까지 */
       /* 선택 표시는 '곱하기'(mix-blend-mode:multiply)로 칠해 진한 바탕(남색 장 번호 칸 등) 위에서는 보이지 않는다(소유자가 고른 방식 —
          반투명으로 하면 글자 칸이 겹친 곳이 얼룩진다). 첫 글자 자리 ~ 선택 표시 시작 사이가 진한 바탕이면 그 때문으로 본다(darkCell) */
-      const expR=Math.min(st.expR, x1-2);                                   // 보기 칸 밖(가로로 넘친 부분)은 캡처에 없다
+      /* 줄이 보기 칸 밖까지 이어지면(확대) 끌기는 보기 칸 안에서 끝나므로 선택 표시도 마우스 자리 바로 앞 글자 경계까지만 — 글자 하나(h)만큼 봐준다 */
+      const dragEnd=Math.min(st.right+30, x1-4), expR=st.expR>dragEnd ? dragEnd-h : st.expR, leftOk=v=>v>=Math.min(st.expL, st.spanL??st.expL)-tol;
       let dark=0, all=0;
       if(hiR>=0 && c(hiL)>st.expL+2) for(let y=Math.max(0,r0);y<Math.min(A.h,r1);y++) for(let x=Math.max(0,Math.floor((st.expL-x0)*sx));x<hiL;x++){ const i=(y*A.w+x)*4; all++; if(0.3*A.px[i]+0.59*A.px[i+1]+0.11*A.px[i+2]<110) dark++; }
       res.darkCell = all>0 && dark/all>0.5;
-      res.ok = hiR>=0 && (c(hiL) <= st.expL+2 || res.darkCell) && c(hiL) >= st.expL-tol && c(hiR) >= expR-tol;
+      res.ok = hiR>=0 && (c(hiL) <= st.expL+2 || res.darkCell) && leftOk(c(hiL)) && c(hiR) >= expR-tol;
       paints.push(res);
     }
     await page.evaluate(()=>getSelection().removeAllRanges());
