@@ -208,9 +208,28 @@ function autoScroll(){
 const inLayerText = n => !!n && n.nodeType===3 && !!n.parentElement && n.parentElement.tagName==='SPAN' && !!n.parentElement.closest('.textLayer, .dv-hwp-tl');
 function focusAt(x, y, from){
   const c=caretAt(x, y); if(c && inLayerText(c.node)) return c;
-  let L=from;
-  for(const l of selLayers.keys()){ if(!l.isConnected) continue; const r=l.getBoundingClientRect(); if(x>=r.left && x<=r.right && y>=r.top && y<=r.bottom){ L=l; break; } }
+  /* 마우스가 글자 위가 아니면 그 높이의 쪽(없으면 세로로 가장 가까운 쪽 — 쪽 사이·마지막 쪽 아래)에서 가장 가까운 글자.
+     v3.8.21 은 쪽 밖이면 끌기를 시작한 쪽으로 돌아가, 끝까지 넘긴 뒤 마지막 쪽 아래에 마우스가 있으면 고른 범위가 첫 쪽으로 줄었다 */
+  const sc=from.closest('.dv-content');
+  const L=(sc && layerNear(sc, y)) || from;
   return nearestCaret(L, x, y);
+}
+function startDrag(e, layer, a){
+  e.preventDefault();
+  layer.classList.add('selecting');
+  document.getSelection().setBaseAndExtent(a.node, a.offset, a.node, a.offset);
+  dragFrom={layer, a}; lastPt=null;
+}
+/* 보기 칸(sc) 안의 글자 층 중 그 높이(y)에 걸친 것, 없으면 세로로 가장 가까운 것(쪽 사이를 누른 경우) */
+export function layerNear(sc, y){
+  let best=null, bd=Infinity;
+  for(const l of selLayers.keys()){
+    if(!l.isConnected || !sc.contains(l)) continue;
+    const r=l.getBoundingClientRect(); if(!r.height) continue;
+    const d=y<r.top ? r.top-y : y>r.bottom ? y-r.bottom : 0;
+    if(d<bd){ bd=d; best=l; }
+  }
+  return best;
 }
 export function guardSelection(layer){
   const end=document.createElement('div'); end.className='endOfContent'; layer.append(end);
@@ -220,11 +239,23 @@ export function guardSelection(layer){
     if(!e.shiftKey && e.detail<2){
       const c=caretAt(e.clientX, e.clientY);
       const a=c && inLayerText(c.node) && c.node.parentElement.closest('.textLayer, .dv-hwp-tl')===layer ? c : nearestCaret(layer, e.clientX, e.clientY);
-      if(a){ e.preventDefault(); layer.classList.add('selecting'); document.getSelection().setBaseAndExtent(a.node, a.offset, a.node, a.offset); dragFrom={layer, a}; lastPt=null; return; }
+      if(a){ startDrag(e, layer, a); return; }
     }
     layer.classList.add('selecting');
   });
   if(selOn) return; selOn=true;
+  /* v3.8.22 글자 층 밖(쪽 밖 회색 여백·보기 칸 안쪽 여백·쪽 사이·쪽 가장자리)에서 눌러도 같은 규칙으로 — 그 높이에서 가장 가까운 쪽의
+     가장 가까운 줄·글자부터. 예전엔 글자 층 안만 잡아서, 줄 맨 왼쪽부터 고르려고 쪽 바깥을 누르면 브라우저가 시작점을 문서 첫 줄 등
+     엉뚱한 곳에 잡았다(실제 WebView2·앱 130% 에서 잰 값: 쪽 밖을 누르면 '1.전자입찰…' 첫 줄부터). 단추·입력칸·확대 단추 줄·스크롤 막대는 그대로 */
+  document.addEventListener('mousedown', e=>{
+    if(e.button!==0 || e.shiftKey || e.detail>=2 || e.defaultPrevented) return;
+    const t=e.target, sc=t && t.closest && t.closest('.dv-content'); if(!sc) return;
+    if(t.closest('button, input, select, textarea, a, label, [contenteditable], .dv-pdf-bar, .dv-hwp-bar, .dv-cap')) return;
+    const r=sc.getBoundingClientRect();
+    if(e.clientX>=r.left+sc.clientLeft+sc.clientWidth || e.clientY>=r.top+sc.clientTop+sc.clientHeight) return;   // 스크롤 막대
+    const L=layerNear(sc, e.clientY); if(!L) return;
+    const a=nearestCaret(L, e.clientX, e.clientY); if(a) startDrag(e, L, a);
+  });
   const resetAll=()=>{ dragFrom=null; lastPt=null; clearInterval(scrollTimer); scrollTimer=0; for(const [l, e] of selLayers){ if(!l.isConnected){ selLayers.delete(l); continue; } selReset(e, l); } prevRange=null; };
   document.addEventListener('mousemove', e=>{
     if(!dragFrom) return;
@@ -294,11 +325,31 @@ export async function renderPdf(box, bytes){
       if(dead) return null;
       const lang=tc.lang || document.documentElement.lang || 'en';
       tc.lang=lang; d.lang=lang;
-      const tl=new pdfLib.TextLayer({textContentSource:tc, container:d, viewport:p.pg.getViewport({scale:1})}); p.tl=tl;
-      return tl.render().then(()=>guardSelection(d));
+      const tl=new pdfLib.TextLayer({textContentSource:tc, container:d, viewport:p.pg.getViewport({scale:1})}); p.tl=tl; p.tc=tc;
+      return tl.render().then(()=>{ guardSelection(d); fitSpans(p); });
     }).catch(e=>console.warn('pdf 글자 층 실패', e));
   };
-  const layout=()=>{ for(const p of pages){ size(p); p.drawn=0; } };
+  /* v3.8.22 글자 덩어리 폭을 화면에서 잰 값으로 맞춘다. pdf.js 는 글자 폭을 '쪽 배율 1' 크기로 canvas 에서 재서 늘이고 줄이는데,
+     화면에는 배율을 곱한 크기로 그려진다 — 바탕·명조 같은 한글 글꼴은 크기에 따라 글자 폭이 비례하지 않아(힌팅) 덩어리가
+     그림보다 2~4% 넓거나 좁았다(잰 값: 한글 바탕 PDF 줄 하나 519.6px 이어야 할 것이 538.7px — 줄 뒤로 갈수록 고른 칸이 밀린다).
+     그려진 폭을 읽어 그 비율만큼 scaleX 를 고친다(모두 읽은 뒤 한꺼번에 쓴다 — 배치 한 번). 확대·창 크기가 바뀌면 다시 */
+  const fitSpans=p=>{
+    const tl=p.tl, tc=p.tc; if(!tl || tl===true || !tc || dead || !p.w.isConnected) return;
+    const sf=parseFloat(p.w.style.getPropertyValue('--scale-factor'))||0; if(!(sf>0)) return;
+    const its=tc.items.filter(it=>it.str!==undefined), divs=tl.textDivs||[], todo=[];
+    for(let k=0;k<Math.min(its.length, divs.length);k++){
+      const it=its[k], el=divs[k], tf=el.style.transform||'';
+      if(!it.str || it.str.length<2 || !el.isConnected || !/scaleX\(/.test(tf) || /rotate/.test(tf)) continue;
+      if(Math.abs(it.transform[1])>1e-6 || Math.abs(it.transform[2])>1e-6 || (tc.styles[it.fontName]||{}).vertical) continue;
+      todo.push([el, it.width*sf, tf]);
+    }
+    const got=todo.map(([el])=>el.getBoundingClientRect().width);
+    todo.forEach(([el, want, tf], k)=>{
+      const f=want/got[k]; if(!(f>0) || !isFinite(f) || Math.abs(f-1)<0.003) return;
+      el.style.transform=tf.replace(/scaleX\(([^)]+)\)/, (m, v)=>`scaleX(${(parseFloat(v)*f).toFixed(6)})`);
+    });
+  };
+  const layout=()=>{ for(const p of pages){ size(p); p.drawn=0; } requestAnimationFrame(()=>pages.forEach(fitSpans)); };
   const draw=async p=>{
     const key=Math.min(PDF_MAX_PX, Math.round(fitW()*zoom*(window.devicePixelRatio||1)));
     if(p.drawn===key || p.busy || dead) return;
