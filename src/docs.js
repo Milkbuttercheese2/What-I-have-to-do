@@ -464,6 +464,7 @@ function onEdit(){
    opts.leaving: 그 파일을 떠나는 중(가운데 보기 직렬 사슬 안) — 충돌이 나도 다시 그리지 않는다(자기를 기다려 멈추므로). */
 export function saveEdit(target, opts){
   const cur=target||ed; if(!cur) return Promise.resolve(true);
+  if(cur.gone) return Promise.resolve(false);              // 밖에서 지워진 파일 — 저장할 곳이 없다(selGone)
   if(opts && opts.leaving) cur.leaving=true;
   if(cur.saving){ cur.again=true; return cur.promise; }
   if(!cur.dirty) return Promise.resolve(true);
@@ -722,6 +723,98 @@ export function onExtRenamed(p){
 }
 export function onExtRootMoved(p){
   return queueExt(()=>applyRootMoved(Number(p&&p.root), p&&p.base, p&&p.to));
+}
+/* 앱 밖에서 만들기·지우기·옮기기·복사·내용 고침 — Rust 감시가 묶어서(최대 1초에 한 번) 알린다. 목록이 바뀐 폴더 중
+   읽어 둔 것만 다시 읽는다(펼침·선택·스크롤은 그대로). 업무 링크는 건드리지 않는다 — 지움+만듦을 옮김으로 추측하지 않고,
+   지워진 파일을 가리키는 링크도 그대로 둔다. overflow(알림이 넘침)면 그 문서 폴더의 읽어 둔 목록을 모두 다시 읽는다 */
+export function onExtChanged(p){
+  return queueExt(async()=>{
+    const i=Number(p&&p.root), r=roots[i];
+    if(!r || !r.ok || norm(r.path)!==norm(p.base)) return;
+    const dirs=new Set((p.dirs||[]).map(String)), paths=new Set((p.paths||[]).map(String)), all=!!p.overflow;
+    const keys=new Set([...kids.keys()].filter(k=>{ const q=parseKey(k); return q.i===i && (all || dirs.has(q.rel)); }));
+    if(shown && shown.i===i && (all || paths.has(shown.rel))) keys.add(nodeKey(i, parentOf(shown.rel)));   // 보던 파일의 고친 시각을 보려고
+    if(!keys.size) return;
+    await Promise.all([...keys].map(k=>{ const q=parseKey(k); return load(q.i, q.rel); }));
+    pruneGone(i);
+    renderTree(); renderNote();
+    checkShown(i);
+    checkSelGone();
+  });
+}
+/* 그 경로가 아직 있나 — 읽어 둔 위 폴더 목록 어디에서든 빠졌으면 없다(위 폴더를 아직 안 읽었으면 있다고 본다) */
+function stillThere(i, rel){
+  for(let r=rel; r; r=parentOf(r)){ const list=kids.get(nodeKey(i, parentOf(r))); if(Array.isArray(list) && !list.some(e=>e.rel===r)) return false; }
+  return true;
+}
+/* 없어진 폴더의 읽어 둔 목록은 버린다(다시 생기면 펼칠 때 새로 읽는다) — 펼침 표시는 남겨 둔다 */
+function pruneGone(i){
+  for(const k of [...kids.keys()]){ const q=parseKey(k); if(q.i===i && q.rel && !stillThere(i, q.rel)) kids.delete(k); }
+}
+/* 보던 파일의 고친 시각이 바뀌었으면 다시 읽는다 — 앱에서 고치던 글자가 있으면 덮어쓰지 않고 묻는다 */
+function checkShown(i){
+  if(!shown || shown.i!==i) return;
+  const e=entryOf(i, shown.rel);
+  if(e && e.mtime && e.mtime!==shown.mtime) extChangedShown(i, shown.rel, e.mtime);   // 기다리지 않는다(묻는 동안 다른 알림을 막지 않게)
+}
+async function extChangedShown(i, rel, mtime){
+  const isCur=()=>!!shown && shown.i===i && shown.rel===rel;
+  if(!isCur()) return;
+  if(ed && ed.i===i && ed.rel===rel){
+    const cur=ed;
+    if(cur.saving){ setTimeout(()=>{ const e=entryOf(i, rel); if(e && isCur()) extChangedShown(i, rel, e.mtime); }, 800); return; }
+    if(mtime===cur.mtime){ shown.mtime=mtime; return; }                     // 앱이 저장한 것
+    const ta=$('dv-ta');
+    const dirty=cur.dirty || (!!ta && ta.value.replace(/\r\n/g,'\n')!==String(cur.text).replace(/\r\n/g,'\n'));
+    if(dirty){
+      if(cur.askedMtime===mtime) return;
+      cur.askedMtime=mtime;
+      const ok=await appConfirm(`'${nameOf(rel)}' 을(를) 다른 프로그램이 고쳤습니다.\n고치던 글자를 버리고 새 내용을 볼까요?\n(취소하면 고치던 글자는 그대로 두고, 저장할 때 '… (내 고침)' 파일로 따로 남깁니다)`);
+      if(!ok || ed!==cur || !isCur()) return;
+      clearTimeout(cur.timer); cur.dirty=false;
+      const t2=$('dv-ta'); if(t2) t2.value=String(cur.text);                // 떠날 때 저장하지 않게
+    }
+  }
+  if(!isCur()) return;
+  await leaveViewer(); renderTree(); await renderViewer();
+}
+/* 고른 항목이 밖에서 없어졌다 — 바로 옮기지 않고 잠깐 기다린다: 이름 바뀜(1.5초 묵힘)이나 오피스 저장(잠깐 다른 이름)이면
+   그사이 선택이 새 경로로 옮겨지거나 파일이 다시 생긴다 */
+const GONE_WAIT_MS=2500;
+let goneTimer=0;
+function checkSelGone(){
+  clearTimeout(goneTimer);
+  if(!sel || !sel.rel || stillThere(sel.i, sel.rel)) return;
+  goneTimer=setTimeout(()=>queueExt(selGone), GONE_WAIT_MS);
+}
+async function selGone(){
+  const s=sel; if(!s || !s.rel) return;
+  await load(s.i, parentOf(s.rel));
+  if(stillThere(s.i, s.rel)){ renderTree(); return; }
+  if(ed && ed.i===s.i && ed.rel===s.rel){
+    const cur=ed, ta=$('dv-ta'), typed=ta ? ta.value : String(cur.text);
+    if(cur.dirty || typed.replace(/\r\n/g,'\n')!==String(cur.text).replace(/\r\n/g,'\n')){
+      clearTimeout(cur.timer); cur.dirty=false; cur.gone=true;
+      const kept=await keepMine(cur, cur.eol==='\r\n' ? typed.replace(/\r?\n/g,'\r\n') : typed);
+      appAlert(kept ? `'${nameOf(s.rel)}' 이(가) 밖에서 지워졌거나 옮겨졌습니다.\n고치던 글자는 '${nameOf(kept)}' 로 따로 저장했습니다.`
+        : `'${nameOf(s.rel)}' 이(가) 밖에서 지워졌거나 옮겨졌습니다.\n고치던 글자를 저장할 곳이 없어 화면에 남겨 둡니다 — 복사해 두세요.`);
+      if(!kept) return;                                                      // 화면을 그대로 둔다
+    }
+  }
+  let up=parentOf(s.rel); while(up && !stillThere(s.i, up)) up=parentOf(up);
+  if(S.settings.docLast===nodeKey(s.i, s.rel)){ S.settings.docLast=''; saveSettings(); }
+  await leaveViewer(); sel={i:s.i, rel:up, dir:true};
+  renderTree(); renderNote(); await renderViewer();
+}
+/* 문서 폴더 자체가 없어졌다(지움·휴지통) — 그 줄은 '열 수 없음'으로. 다시 생기면 창이 앞으로 올 때 다시 잡는다(recheck) */
+export function onExtRootGone(p){
+  return queueExt(async()=>{
+    const i=Number(p&&p.root), r=roots[i];
+    if(!r || !r.ok || norm(r.path)!==norm(p.base)) return;
+    if(shown && shown.i===i) await leaveViewer();
+    if(sel && sel.i===i) sel={i, rel:'', dir:true};
+    rootsFor=null; await ensureRoots(); await renderDocs();
+  });
 }
 async function doMove(i, from, toDir){
   const dest = toDir ? nameOf(toDir) : rootName(i);
@@ -1119,9 +1212,12 @@ async function removeRoot(i){
   await renderDocs();
 }
 /* 바깥 프로그램에서 고치고 돌아오면 보던 파일을 다시 읽는다 — 창이 앞으로 올 때 고친 시각만 비교(계속 지켜보지 않음).
-   고치던 글자(저장 안 됨)가 있으면 건드리지 않는다. */
+   고치던 글자(저장 안 됨)가 있으면 건드리지 않는다. 감시가 못 잡는 경우(공유 폴더가 알리지 않음)의 마지막 그물.
+   열 수 없던 문서 폴더가 있으면 다시 잡아 본다(지웠다가 되살린 폴더·다시 연결된 공유 폴더). */
 async function recheck(){
-  const view=$('view-docs'); if(!view || !view.classList.contains('on') || !shown) return;
+  const view=$('view-docs'); if(!view || !view.classList.contains('on')) return;
+  if(docRoots().length && roots.some(r=>!r || !r.ok)){ rootsFor=null; await renderDocs(); return; }
+  if(!shown) return;
   if(ed && (ed.dirty || ed.saving)) return;
   const {i, rel, mtime}=shown;
   await load(i, parentOf(rel));
@@ -1175,6 +1271,8 @@ export function initDocs(){
   if(ev && ev.listen){
     ev.listen('wmhh://doc-renamed', e=>onExtRenamed(e.payload)).catch(()=>{});
     ev.listen('wmhh://doc-root-moved', e=>onExtRootMoved(e.payload)).catch(()=>{});
+    ev.listen('wmhh://doc-changed', e=>onExtChanged(e.payload)).catch(()=>{});
+    ev.listen('wmhh://doc-root-gone', e=>onExtRootGone(e.payload)).catch(()=>{});
   }
   $('dc-root').addEventListener('click', addRoot);
   $('dc-root-empty').addEventListener('click', addRoot);

@@ -888,6 +888,53 @@ test('v3.8.10 한글 글자 층 — 줄마다 <br>(복사 때 줄바꿈), 끌어
   d.remove();
 });
 
+test('v3.8.21 끌어 고르기 시작점 — 줄 앞 여백을 눌러도 그 줄 첫 글자부터(브라우저에 맡기면 줄 가운데·다른 줄부터였다) · 끄는 동안 끝점도 앱이', async () => {
+  const {guardSelection, nearestCaret} = await import('../../src/docs-view.js');
+  const d=document.createElement('div'); d.className='textLayer';
+  d.innerHTML='<span>첫째 줄</span><br><span>둘째 줄 글자</span><br><span>셋째</span>';
+  document.body.appendChild(d);
+  /* 줄마다 높이 20px, 왼쪽 100px 에서 시작 — jsdom 엔 배치가 없어 상자를 정해 준다 */
+  const rect=(l,t,w,h)=>({left:l, top:t, right:l+w, bottom:t+h, width:w, height:h, x:l, y:t});
+  const sp=[...d.querySelectorAll('span')], boxes=[rect(100,0,80,20), rect(100,30,120,20), rect(130,60,40,20)];
+  sp.forEach((s,k)=>{ s.getBoundingClientRect=()=>boxes[k]; });
+  d.getBoundingClientRect=()=>rect(0,0,400,100);
+  guardSelection(d);
+  /* 순수: 가장 가까운 글자 자리 */
+  assert.deepEqual(nearestCaret(d, 40, 40), {node:sp[1].firstChild, offset:0}, '여백(왼쪽) → 그 줄 첫 글자 앞');
+  assert.deepEqual(nearestCaret(d, 390, 40), {node:sp[1].firstChild, offset:sp[1].firstChild.length}, '줄 끝 오른쪽 → 그 줄 끝');
+  assert.equal(nearestCaret(d, 140, 23).node, sp[0].firstChild, '줄 사이 — 세로로 더 가까운 줄(위 3px · 아래 7px)');
+  assert.equal(nearestCaret(d, 140, 27).node, sp[1].firstChild);
+  assert.equal(nearestCaret(d, 10, 70).node, sp[2].firstChild, '들여쓴 줄도 그 줄 첫 글자');
+  /* 여백을 눌러 오른쪽으로 끌기 */
+  const md=new window.MouseEvent('mousedown', {bubbles:true, cancelable:true, button:0, detail:1, clientX:60, clientY:40});
+  d.dispatchEvent(md);
+  assert.ok(md.defaultPrevented, '브라우저의 시작점 잡기를 막는다');
+  const s=document.getSelection();
+  assert.equal(s.anchorNode, sp[1].firstChild); assert.equal(s.anchorOffset, 0);
+  document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, cancelable:true, buttons:1, clientX:390, clientY:42}));
+  assert.equal(String(s), '둘째 줄 글자', '그 줄 첫 글자부터 끝까지');
+  document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, cancelable:true, buttons:1, clientX:390, clientY:70}));
+  assert.equal(s.focusNode, sp[2].firstChild, '아래 줄로 끌면 끝점이 따라간다');
+  document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+  assert.ok(!d.classList.contains('selecting'));
+  document.dispatchEvent(new window.MouseEvent('mousemove', {bubbles:true, buttons:0, clientX:100, clientY:5}));
+  assert.equal(s.focusNode, sp[2].firstChild, '손을 뗀 뒤엔 움직여도 그대로');
+  /* 두 번 누르기(낱말 고르기)·Shift+누르기는 브라우저 그대로 */
+  for(const o of [{detail:2}, {detail:1, shiftKey:true}]){
+    const e=new window.MouseEvent('mousedown', {bubbles:true, cancelable:true, button:0, clientX:60, clientY:40, ...o});
+    d.dispatchEvent(e); assert.ok(!e.defaultPrevented, JSON.stringify(o));
+    document.dispatchEvent(new window.MouseEvent('mouseup', {bubbles:true}));
+  }
+  s.removeAllRanges(); d.remove();
+});
+
+test('v3.8.21 PDF 쪽은 margin-inline:auto 로 가운데 — align-items:center 는 확대한 쪽의 왼쪽(줄 앞)을 닿을 수 없게 잘랐다', () => {
+  const css=fs.readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
+  const rule=sel=>{ const m=css.match(new RegExp('\\n\\s*'+sel.replace(/[.]/g,'\\.')+'\\{([^}]*)\\}')); return m ? m[1] : ''; };
+  assert.doesNotMatch(rule('.dv-pdf'), /align-items:\s*center/);
+  assert.match(rule('.dv-pdf-pg'), /margin-inline:\s*auto/);
+});
+
 test('v3.8.11 한글 글자 층은 글자 하나 단위 — 글자마다 자기 자리, 띄어쓰기·줄바꿈은 복사 글에 살린다', async () => {
   const {hwpTextRuns} = await import('../../src/docs-view.js');
   const T=(x,y,c,sz=10)=>`<text x="${x}" y="${y}" font-size="${sz}">${c}</text>`;
@@ -1127,4 +1174,124 @@ test('문서 폴더 자체 이름: 바깥(doc-root-moved)·앱 안(맨 위 줄 �
   /* 감시가 뒤늦게 같은 바뀜을 알려도 두 번 하지 않는다 */
   env.fireEvent('wmhh://doc-root-moved', {root:0, base:'W:\\팀\\나', to:'W:\\팀\\라'}); await env.flush(10);
   assert.deepEqual(S.settings.docRoots, ['W:\\팀\\라']);
+});
+
+test('바깥 바뀜(doc-changed): 바뀐 폴더 중 읽어 둔 것만 다시 읽는다 · 새 파일 보임·지운 파일 빠짐 · 펼침·선택 유지 · 링크는 그대로', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['K:\\바깥'];
+  let lists={'0:':[{name:'가',rel:'가',dir:true,size:0,mtime:1},{name:'나',rel:'나',dir:true,size:0,mtime:1},{name:'s.txt',rel:'s.txt',dir:false,size:1,mtime:1}],
+    '0:가':[{name:'a.txt',rel:'가/a.txt',dir:false,size:1,mtime:1},{name:'속',rel:'가/속',dir:true,size:0,mtime:1}], '0:가/속':[], '0:나':[]};
+  fakeFs(()=>lists);
+  env.onInvoke('doc_read_text', ()=>({text:'s', encoding:'utf-8', mtime:1}));
+  const it=mk({memo:'지운 파일 링크', files:['K:\\바깥\\가\\a.txt']}); S.items.push(it);
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:가')); await env.flush(6);
+  click(row('0:가/속')); await env.flush(6);
+  click(row('0:s.txt')); await env.flush(8);
+  const lists0=()=>env.invokeCalls.filter(c=>c.cmd==='doc_list').map(c=>c.args.rel);
+  const before=lists0().length;
+  /* 탐색기에서: 가/a.txt 지움, 가/새.txt 만듦, 가/속 폴더 지움 */
+  lists={...lists, '0:가':[{name:'새.txt',rel:'가/새.txt',dir:false,size:1,mtime:2}]};
+  delete lists['0:가/속'];
+  env.fireEvent('wmhh://doc-changed', {root:0, base:'K:\\바깥', dirs:['가','가/a.txt','가/속','저 멀리'], paths:['가/a.txt','가/새.txt','가/속'], overflow:false}); await env.flush(14);
+  assert.deepEqual(lists0().slice(before).sort(), ['가','가/속'], '읽어 둔 폴더만 — 안 읽은 폴더(저 멀리)는 읽지 않는다');
+  assert.ok(row('0:가/새.txt'), '새 파일이 보인다');
+  assert.ok(!row('0:가/a.txt'), '지운 파일은 빠진다');
+  assert.ok(!row('0:가/속'), '지운 폴더도');
+  assert.ok(row('0:가'), '펼친 폴더는 그대로 펼쳐져 있다');
+  assert.ok(row('0:s.txt').classList.contains('on'), '선택은 그대로');
+  assert.deepEqual(it.files, ['K:\\바깥\\가\\a.txt'], '지워진 파일을 가리키는 링크는 지우지 않는다');
+  /* 다른 폴더 목록에서 온 옛 알림은 무시 */
+  const n=lists0().length;
+  env.fireEvent('wmhh://doc-changed', {root:0, base:'Q:\\딴', dirs:['가'], paths:[], overflow:false}); await env.flush(8);
+  assert.equal(lists0().length, n);
+  /* 알림이 넘치면 읽어 둔 목록을 모두 다시 읽는다 */
+  env.fireEvent('wmhh://doc-changed', {root:0, base:'K:\\바깥', dirs:[], paths:[], overflow:true}); await env.flush(12);
+  assert.deepEqual(lists0().slice(n).sort(), ['', '가']);
+});
+
+test('바깥 바뀜: 보던 파일이 밖에서 고쳐지면 다시 읽는다 · 고치던 글자가 있으면 묻는다(취소=그대로, 확인=새 내용) · 앱이 저장한 것엔 묻지 않는다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['M:\\고침'];
+  let mt=100, body='처음';
+  const lists=()=>({'0:':[{name:'글.txt',rel:'글.txt',dir:false,size:4,mtime:mt}]});
+  fakeFs(lists);
+  env.onInvoke('doc_read_text', ()=>({text:body, encoding:'utf-8', mtime:mt}));
+  env.onInvoke('doc_write_text', a=>{ mt=a.baseMtime+1; body=a.text; return mt; });
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:글.txt')); await env.flush(10);
+  assert.equal($('dv-ta').value, '처음');
+  const changed=()=>env.fireEvent('wmhh://doc-changed', {root:0, base:'M:\\고침', dirs:[''], paths:['글.txt'], overflow:false});
+  /* 1) 고치던 것 없음 → 그냥 다시 읽는다 */
+  mt=200; body='밖에서 고침';
+  changed(); await env.flush(16);
+  assert.equal($('dv-ta').value, '밖에서 고침');
+  /* 2) 앱에서 고쳐 저장한 것 — 그 알림에는 묻지 않는다 */
+  typeIn($('dv-ta'), '내가 고침');
+  mock.timers.tick(1300); await env.flush(10);
+  env.alerts.length=0; const asked=[]; const oc=env.window.confirm; env.window.confirm=m=>{ asked.push(m); return false; };
+  changed(); await env.flush(12);
+  assert.equal(asked.length, 0, '앱이 저장한 것');
+  assert.equal($('dv-ta').value, '내가 고침');
+  /* 3) 고치던 글자가 있는데 밖에서 고침 → 묻는다. 취소면 글자는 그대로 */
+  typeIn($('dv-ta'), '저장 안 한 글자');
+  mt=300; body='또 밖에서';
+  changed(); await env.flush(12);
+  assert.equal(asked.length, 1);
+  assert.match(asked[0], /다른 프로그램이 고쳤습니다/);
+  assert.equal($('dv-ta').value, '저장 안 한 글자', '취소 — 덮어쓰지 않는다');
+  changed(); await env.flush(8);
+  assert.equal(asked.length, 1, '같은 바뀜은 다시 묻지 않는다');
+  /* 4) 다시 밖에서 고침 → 확인이면 새 내용 */
+  env.window.confirm=m=>{ asked.push(m); return true; };
+  mt=400; body='마지막 밖';
+  changed(); await env.flush(16);
+  assert.equal(asked.length, 2);
+  assert.equal($('dv-ta').value, '마지막 밖');
+  env.window.confirm=oc;
+  mock.timers.tick(1300); await env.flush(8);
+});
+
+test('바깥 바뀜: 고른 파일이 밖에서 지워지면 잠깐 기다렸다가 위 폴더로 — 그사이 다시 생기면(오피스 저장) 그대로', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['N:\\지움'];
+  let lists={'0:':[{name:'가',rel:'가',dir:true,size:0,mtime:1}], '0:가':[{name:'x.txt',rel:'가/x.txt',dir:false,size:1,mtime:1}]};
+  fakeFs(()=>lists);
+  env.onInvoke('doc_read_text', ()=>({text:'x', encoding:'utf-8', mtime:1}));
+  await openDocs();
+  { const t=Date.now(); while(Date.now()-t<350){} }
+  click(row('0:가')); await env.flush(6);
+  click(row('0:가/x.txt')); await env.flush(8);
+  const gone=()=>env.fireEvent('wmhh://doc-changed', {root:0, base:'N:\\지움', dirs:['가'], paths:['가/x.txt'], overflow:false});
+  /* 잠깐 없어졌다 다시 생김 */
+  const keep=lists['0:가'];
+  lists={...lists, '0:가':[]}; gone(); await env.flush(10);
+  lists={...lists, '0:가':keep};
+  mock.timers.tick(2600); await env.flush(14);
+  assert.ok(row('0:가/x.txt') && row('0:가/x.txt').classList.contains('on'), '다시 생겼으면 선택 그대로');
+  assert.ok($('dv-ta'), '보던 파일도 그대로');
+  /* 정말 지워짐 */
+  lists={...lists, '0:가':[]}; gone(); await env.flush(10);
+  assert.ok($('dv-ta'), '바로는 옮기지 않는다');
+  mock.timers.tick(2600); await env.flush(16);
+  assert.ok(row('0:가').classList.contains('on'), '위 폴더로');
+  assert.ok(!$('dv-ta'), '보던 파일은 닫는다');
+});
+
+test('바깥 바뀜: 문서 폴더가 없어지면(doc-root-gone) 그 줄은 열 수 없음으로 · 창이 앞으로 오면 다시 잡아 본다', async () => {
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['L:\\사라짐'];
+  const bad=[];
+  fakeFs(()=>({'0:':[{name:'a.txt',rel:'a.txt',dir:false,size:1,mtime:1}]}), {bad});
+  await openDocs();
+  assert.ok(row('0:a.txt'));
+  bad.push('L:\\사라짐');
+  env.fireEvent('wmhh://doc-root-gone', {root:0, base:'L:\\사라짐'}); await env.flush(14);
+  assert.match(doc.querySelector('#dt-tree').textContent, /폴더가 없습니다/);
+  assert.ok(!row('0:a.txt'));
+  bad.length=0;
+  env.window.dispatchEvent(new env.window.Event('focus')); await env.flush(14);
+  assert.ok(row('0:a.txt'), '되살아난 폴더를 다시 잡는다');
 });
