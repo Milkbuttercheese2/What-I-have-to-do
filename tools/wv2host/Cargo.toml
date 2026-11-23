@@ -1,0 +1,10 @@
+[package]
+name = "wv2host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wry = "=0.55.1"
+tao = "=0.35.3"
+
+[workspace]
