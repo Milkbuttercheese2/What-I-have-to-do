@@ -51,7 +51,7 @@ export function enableDragReorder(container, rowSelector, handleSelector, onDrop
 
 /* 실행취소 토스트 */
 let _toastTimer=null,_undoFn=null;
-/* 엑셀 도구(SheetJS, vendor/xlsx.full.min.js 880KB)는 처음 쓸 때 불러온다(v3.8.16). 예전엔 index.html 이 앱을 켤 때마다
+/* 엑셀 도구(SheetJS, vendor/xlsx.full.min.js 0.20.3, 950KB)는 처음 쓸 때 불러온다(v3.8.16). 예전엔 index.html 이 앱을 켤 때마다
    읽어 시작이 약 30ms(15%) 늦었는데, 쓰는 곳은 XLSX 내보내기·전화번호부 엑셀·문서 탭의 표·압축·한글 대체 보기뿐이다.
    쓰는 곳은 XLSX 를 쓰기 전에 반드시 await needXlsx() 할 것. 이미 있으면(시험 환경 등) 바로 돌려준다. */
 let xlsxP=null;

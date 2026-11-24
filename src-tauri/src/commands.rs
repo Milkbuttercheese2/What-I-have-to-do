@@ -938,11 +938,61 @@ pub async fn pick_folder_path(app: AppHandle) -> Result<Option<String>, String> 
     Ok(Some(picked.into_path().map_err(to_err)?.to_string_lossy().into_owned()))
 }
 
+/// 열면 곧 '실행'이 되는 형식(v3.8.24 보안 점검). 기본 연결 프로그램으로 열면 문서가 아니라
+/// 프로그램·스크립트가 돈다 — 링크 경로는 사람이 붙여 넣거나 끌어 넣은 값이라 믿을 수 없다.
+const EXEC_EXTS: &[&str] = &[
+    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "mst", "msc", "bat", "cmd", "ps1", "psm1",
+    "psd1", "ps1xml", "vbs", "vbe", "js", "jse", "wsf", "wsh", "wsc", "hta", "lnk", "url", "scf",
+    "reg", "inf", "jar", "appref-ms", "application", "gadget", "msh", "msh1", "msh2", "mshxml",
+    "sct", "settingcontent-ms", "library-ms", "appx", "appxbundle", "msix", "msixbundle", "xll",
+];
+/// 화면이 이 글을 보고 '실행 형식이라 확인'을 띄운다 — 바꾸면 store.js `openPath` 도 함께.
+pub const EXEC_BLOCKED: &str = "EXEC_BLOCKED";
+
+/// 경로의 마지막 확장자가 실행 형식인가. Windows 는 이름 끝의 점·공백을 버리고 여므로
+/// (`a.exe.` = `a.exe`) 그것을 먼저 떼고 본다. 대소문자 무시.
+pub fn is_exec_path(path: &str) -> bool {
+    let name = path.rsplit(['\\', '/']).next().unwrap_or("");
+    let name = name.trim_end_matches(['.', ' ']);
+    match name.rsplit_once('.') {
+        Some((_, ext)) => EXEC_EXTS.iter().any(|x| x.eq_ignore_ascii_case(ext)),
+        None => false,
+    }
+}
+
 /// 카드의 파일 링크 클릭 → 기본 연결 프로그램으로 파일 열기.
+/// v3.8.24: 실행 형식(EXEC_EXTS)은 `allow_exec: true` 가 아니면 열지 않고 `EXEC_BLOCKED` 를 돌려준다 —
+/// 화면이 사용자에게 한 번 묻고 '열기'를 고르면 그때 다시 부른다. 폴더는 이름과 무관하게 그대로 연다.
 #[tauri::command]
-pub fn open_file_path(app: AppHandle, path: String) -> Result<(), String> {
+pub fn open_file_path(app: AppHandle, path: String, allow_exec: Option<bool>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
+    if allow_exec != Some(true) && !std::path::Path::new(&path).is_dir() && is_exec_path(&path) {
+        return Err(EXEC_BLOCKED.into());
+    }
     app.opener().open_path(&path, None::<String>).map_err(to_err)
+}
+
+#[cfg(test)]
+mod exec_tests {
+    use super::is_exec_path;
+    #[test]
+    fn exec_kinds_are_caught() {
+        for p in [
+            r"C:\a\setup.exe", r"C:\a\run.BAT", "x.cmd", "s.ps1", "v.vbs", "j.js", "i.msi",
+            r"C:\Users\u\Desktop\바로 가기.lnk", "s.scr", "w.hta", "a.exe.", "a.exe . ", "c:/a/b.Com",
+        ] {
+            assert!(is_exec_path(p), "{p}");
+        }
+    }
+    #[test]
+    fn documents_and_odd_names_pass() {
+        for p in [
+            r"C:\a\보고서.hwp", "a.pdf", "a.xlsx", "a.docx", "a.txt", "a.csv", "a.json", "a.jpg",
+            r"C:\a\exe", r"C:\a\exe.d\보고서.hwp", "a.exe.txt", "", r"C:\a\폴더\", "a.jsx",
+        ] {
+            assert!(!is_exec_path(p), "{p}");
+        }
+    }
 }
 
 /// 파일 링크의 📂 버튼 → 탐색기에서 해당 파일이 선택된 폴더 열기.

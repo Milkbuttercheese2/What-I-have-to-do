@@ -4,9 +4,22 @@
    IndexedDB)는 더 이상 쓰지 않는다.
    ========================================================================= */
 import {S, backupObj} from './state.js';
-import {showSaveError, clearSaveError, appAlert} from './dom-utils.js';
+import {showSaveError, clearSaveError, appAlert, appConfirm} from './dom-utils.js';
 
 export const { invoke } = window.__TAURI__.core;
+
+/* v3.8.24 보안 점검: 파일 링크 열기는 모두 이걸 거친다(`invoke('open_file_path')` 를 직접 부르지 말 것).
+   Rust 가 실행 형식(exe·bat·ps1·lnk …)이면 'EXEC_BLOCKED' 로 거절하고, 여기서 한 번 물어
+   [확인]일 때만 allowExec 로 다시 연다. 취소하면 false, 그 밖의 실패는 예전처럼 던진다. */
+export async function openPath(path){
+  try{ await invoke('open_file_path', {path}); return true; }
+  catch(err){
+    if(String(err)!=='EXEC_BLOCKED') throw err;
+    const name=String(path).split(/[\\/]/).pop()||path;
+    if(!await appConfirm(`'${name}' 은(는) 프로그램(실행 파일)입니다.\n열면 그 프로그램이 바로 실행됩니다.\n\n믿을 수 있는 파일일 때만 [확인]을 누르세요.\n${path}`, '실행 파일 열기')) return false;
+    await invoke('open_file_path', {path, allowExec:true}); return true;
+  }
+}
 
 /* ── v3.3.4 저장 실패 복구 ────────────────────────────────────────────────
    예전에는 저장이 실패하면 그 배치를 **버렸다**(_pending 을 비운 뒤 invoke 했고,
