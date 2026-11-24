@@ -940,46 +940,138 @@ pub async fn pick_folder_path(app: AppHandle) -> Result<Option<String>, String> 
 
 /// 열면 곧 '실행'이 되는 형식(v3.8.24 보안 점검). 기본 연결 프로그램으로 열면 문서가 아니라
 /// 프로그램·스크립트가 돈다 — 링크 경로는 사람이 붙여 넣거나 끌어 넣은 값이라 믿을 수 없다.
+/// v3.8.25(보안 2차): 매크로 문서·디스크 이미지·도움말·인터넷 바로 가기·진단 꾸러미 등도 더했다 —
+/// 모두 '열면 그 안의 것이 돌거나(매크로·스크립트) 다른 것을 끌어와 여는(이미지 마운트·바로 가기)' 형식이다.
 const EXEC_EXTS: &[&str] = &[
-    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "mst", "msc", "bat", "cmd", "ps1", "psm1",
-    "psd1", "ps1xml", "vbs", "vbe", "js", "jse", "wsf", "wsh", "wsc", "hta", "lnk", "url", "scf",
-    "reg", "inf", "jar", "appref-ms", "application", "gadget", "msh", "msh1", "msh2", "mshxml",
-    "sct", "settingcontent-ms", "library-ms", "appx", "appxbundle", "msix", "msixbundle", "xll",
+    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "mst", "msc", "msu", "bat", "cmd", "ps1", "psm1",
+    "psd1", "ps1xml", "ps2", "ps2xml", "psc1", "psc2", "vb", "vbs", "vbe", "js", "jse", "ws", "wsf",
+    "wsh", "wsc", "hta", "lnk", "url", "website", "scf", "reg", "inf", "ins", "isp", "jar", "jnlp",
+    "appref-ms", "application", "gadget", "msh", "msh1", "msh2", "mshxml", "msh1xml", "msh2xml",
+    "sct", "settingcontent-ms", "library-ms", "searchconnector-ms", "search-ms", "appx",
+    "appxbundle", "msix", "msixbundle", "appinstaller", "xll", "xla", "xlam", "xlsm", "xltm",
+    "docm", "dotm", "pptm", "potm", "ppsm", "ppam", "sldm", "chm", "hlp", "mht", "mhtml", "iso",
+    "img", "vhd", "vhdx", "diagcab", "diagpkg", "diagcfg", "rdp", "theme", "themepack",
+    "desktopthemepackfile", "xbap", "xnk", "ocx", "dll", "sys", "drv", "ade", "adp", "mda",
+    "mde", "accde", "mam", "maq", "mar", "mat", "mau", "mav", "maw", "crt", "der", "pcd", "plg",
+    "prf", "shb", "shs", "wiz", "py", "pyw", "pl", "rb", "sh", "bash", "lua", "tcl",
 ];
 /// 화면이 이 글을 보고 '실행 형식이라 확인'을 띄운다 — 바꾸면 store.js `openPath` 도 함께.
 pub const EXEC_BLOCKED: &str = "EXEC_BLOCKED";
+/// v3.8.25: 공유 폴더(`\\서버\…`)를 처음 열 때 — 여는 순간 Windows 가 그 서버에 내 로그인 정보(NTLM)를 보낸다.
+/// 화면이 서버 이름을 보여 주고 한 번 묻는다. 문서 폴더로 정한 곳·이번 실행에 한 번 허락한 서버는 묻지 않는다.
+pub const NET_BLOCKED: &str = "NET_BLOCKED";
 
 /// 경로의 마지막 확장자가 실행 형식인가. Windows 는 이름 끝의 점·공백을 버리고 여므로
 /// (`a.exe.` = `a.exe`) 그것을 먼저 떼고 본다. 대소문자 무시.
 pub fn is_exec_path(path: &str) -> bool {
-    let name = path.rsplit(['\\', '/']).next().unwrap_or("");
-    let name = name.trim_end_matches(['.', ' ']);
-    match name.rsplit_once('.') {
-        Some((_, ext)) => EXEC_EXTS.iter().any(|x| x.eq_ignore_ascii_case(ext)),
+    match ext_of(path) {
+        Some(ext) => EXEC_EXTS.iter().any(|x| x.eq_ignore_ascii_case(ext)),
         None => false,
     }
+}
+/// 마지막 이름의 확장자(끝의 점·공백은 뗀 뒤). 확장자가 없으면 None.
+fn ext_of(path: &str) -> Option<&str> {
+    let name = path.rsplit(['\\', '/']).next().unwrap_or("");
+    let name = name.trim_end_matches(['.', ' ']);
+    name.rsplit_once('.').map(|(_, e)| e).filter(|e| !e.is_empty())
+}
+
+/// 링크 경로의 생김새 검사(디스크를 만지지 않는다). 통과하면 `Some(서버 이름)`(공유 폴더) 또는 `None`(드라이브 경로).
+/// 거부: 빈 값·제어 문자 / `\\?\`·`\\.\` 장치 경로 / 절대 경로가 아닌 것(`calc`, `a\b.pdf`, `\a`, `C:a`) /
+/// 드라이브 자리가 아닌 `:`(`ms-msdt:…`·`search-ms:…` 같은 프로토콜 주소, `a.txt:숨은.exe` 같은 대체 데이터 스트림).
+/// 링크 경로는 사람이 붙여 넣거나 백업 JSON(`item_files.path`)으로 들어오는 값이라 믿을 수 없다.
+pub fn link_shape(path: &str) -> Result<Option<String>, String> {
+    const BAD: &str = "열 수 없는 경로입니다(드라이브나 공유 폴더로 시작하는 전체 경로만 열 수 있습니다)";
+    if path.trim().is_empty() || path.chars().any(|c| c.is_control()) {
+        return Err(BAD.into());
+    }
+    let s = path.replace('/', "\\");
+    let (host, rest) = if let Some(r) = s.strip_prefix(r"\\") {
+        if r.starts_with('?') || r.starts_with('.') {
+            return Err(BAD.into());
+        }
+        let mut it = r.splitn(3, '\\');
+        let host = it.next().unwrap_or("");
+        let share = it.next().unwrap_or("");
+        if host.is_empty() || share.is_empty() {
+            return Err(BAD.into());
+        }
+        (Some(host.to_string()), r)
+    } else {
+        let b = s.as_bytes();
+        if b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' || b[2] != b'\\' {
+            return Err(BAD.into());
+        }
+        (None, &s[2..])
+    };
+    if rest.contains(':') {
+        return Err(BAD.into());
+    }
+    Ok(host)
+}
+
+/// 이번 실행에 사용자가 [확인]한 공유 폴더 서버들(소문자). 앱을 끄면 잊는다 — 저장하지 않는다.
+static NET_OK: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+fn net_trusted(path: &str, host: &str) -> bool {
+    let h = host.to_lowercase();
+    NET_OK.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| *x == h) || crate::docs::inside_any_root(path)
+}
+
+/// 여는 길·탐색기에서 보이기 공용 관문. `exec` 이 false 면 실행 형식 검사를 하지 않는다(보이기는 실행하지 않으므로).
+/// 순서가 중요하다: 공유 폴더 확인은 **디스크를 만지기 전에** 한다 — 있는지 보는 것만으로도 그 서버에 로그인 정보가 간다.
+pub fn check_link(path: &str, allow_exec: bool, allow_net: bool, exec: bool, trusted: impl Fn(&str, &str) -> bool) -> Result<(), String> {
+    if let Some(host) = link_shape(path)? {
+        if !allow_net && !trusted(path, &host) {
+            return Err(NET_BLOCKED.into());
+        }
+    }
+    let canon = std::fs::canonicalize(path).map_err(|_| format!("파일을 찾을 수 없습니다: {path}"))?;
+    if !exec || canon.is_dir() {
+        return Ok(()); // 폴더는 이름과 무관하게 탐색기로 연다
+    }
+    /* 확장자는 적은 이름과 정규화한 이름 둘 다로 본다 — 짧은 이름(`EVIL~1.EXE`)·정션·심볼릭 링크 뒤의 진짜 이름이 다를 수 있다.
+       확장자가 없는 파일도 묻는다: Windows 가 무엇으로 열지 내용·설정에 따라 정하므로 문서라고 볼 수 없다. */
+    let cname = canon.to_string_lossy();
+    if !allow_exec && (is_exec_path(path) || is_exec_path(&cname) || ext_of(path).is_none() || ext_of(&cname).is_none()) {
+        return Err(EXEC_BLOCKED.into());
+    }
+    Ok(())
 }
 
 /// 카드의 파일 링크 클릭 → 기본 연결 프로그램으로 파일 열기.
 /// v3.8.24: 실행 형식(EXEC_EXTS)은 `allow_exec: true` 가 아니면 열지 않고 `EXEC_BLOCKED` 를 돌려준다 —
 /// 화면이 사용자에게 한 번 묻고 '열기'를 고르면 그때 다시 부른다. 폴더는 이름과 무관하게 그대로 연다.
+/// v3.8.25: 생김새(`link_shape`)·공유 폴더(`NET_BLOCKED`)·있는지·정규화한 이름까지 본다 — `check_link`.
 #[tauri::command]
-pub fn open_file_path(app: AppHandle, path: String, allow_exec: Option<bool>) -> Result<(), String> {
+pub fn open_file_path(app: AppHandle, path: String, allow_exec: Option<bool>, allow_net: Option<bool>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    if allow_exec != Some(true) && !std::path::Path::new(&path).is_dir() && is_exec_path(&path) {
-        return Err(EXEC_BLOCKED.into());
-    }
+    let allow_net = allow_net == Some(true);
+    check_link(&path, allow_exec == Some(true), allow_net, true, net_trusted)?;
+    remember_net(&path, allow_net);
     app.opener().open_path(&path, None::<String>).map_err(to_err)
+}
+/// 사용자가 이 서버를 허락했으면 이번 실행 동안 다시 묻지 않는다
+fn remember_net(path: &str, allow_net: bool) {
+    if !allow_net { return; }
+    if let Ok(Some(h)) = link_shape(path) {
+        let h = h.to_lowercase();
+        let mut v = NET_OK.lock().unwrap_or_else(|e| e.into_inner());
+        if !v.contains(&h) { v.push(h); }
+    }
 }
 
 #[cfg(test)]
 mod exec_tests {
-    use super::is_exec_path;
+    use super::*;
     #[test]
     fn exec_kinds_are_caught() {
         for p in [
             r"C:\a\setup.exe", r"C:\a\run.BAT", "x.cmd", "s.ps1", "v.vbs", "j.js", "i.msi",
             r"C:\Users\u\Desktop\바로 가기.lnk", "s.scr", "w.hta", "a.exe.", "a.exe . ", "c:/a/b.Com",
+            // v3.8.25 추가분
+            "h.chm", "w.ws", "w.wsf", "v.vb", "m.mht", "m.MHTML", "d.iso", "d.img", "d.vhd", "d.vhdx",
+            "t.diagcab", "s.searchConnector-ms", "w.website", "u.url", "a.appref-ms", "a.application",
+            "m.docm", "m.xlsm", "m.pptm", "h.hta", "c.cpl", "j.jar", "x.xlam", "r.rdp", "t.theme",
         ] {
             assert!(is_exec_path(p), "{p}");
         }
@@ -989,16 +1081,102 @@ mod exec_tests {
         for p in [
             r"C:\a\보고서.hwp", "a.pdf", "a.xlsx", "a.docx", "a.txt", "a.csv", "a.json", "a.jpg",
             r"C:\a\exe", r"C:\a\exe.d\보고서.hwp", "a.exe.txt", "", r"C:\a\폴더\", "a.jsx",
+            "a.hwpx", "a.pptx", "a.png", "a.zip", "a.md", "a.html",
         ] {
             assert!(!is_exec_path(p), "{p}");
         }
     }
+
+    #[test]
+    fn link_shape_rejects_protocols_relative_ads_devices() {
+        for p in [
+            "", "   ", "calc", "notepad.exe", r"a\b.pdf", r"\a\b.pdf", "C:a.pdf", "C:",
+            "ms-msdt:/id PCWDiagnostic", "search-ms:query=x", "file:///C:/a.pdf", "shell:startup",
+            "https://x.example/a.pdf", r"C:\a\b.txt:evil.exe", r"C:\a\b.txt::$DATA", r"\\?\C:\a.pdf",
+            r"\\.\pipe\x", r"\\server", r"\\server\", r"\\server\share\a:b", "C:\\a\nb.pdf", r"1:\a.pdf",
+        ] {
+            assert!(link_shape(p).is_err(), "거부해야 함: {p:?}");
+        }
+        assert_eq!(link_shape(r"C:\a\보고서.hwp"), Ok(None));
+        assert_eq!(link_shape("d:/a/b.pdf"), Ok(None));
+        assert_eq!(link_shape(r"C:\"), Ok(None));
+        assert_eq!(link_shape(r"\\srv\공유\a.pdf"), Ok(Some("srv".into())));
+        assert_eq!(link_shape("//srv/share/a.pdf"), Ok(Some("srv".into())));
+    }
+
+    fn tmp(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("wmhh_link_{name}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+    const NO: fn(&str, &str) -> bool = |_, _| false;
+
+    #[test]
+    fn check_link_folders_and_documents_open_directly() {
+        let d = tmp("docs");
+        std::fs::write(d.join("보고서.hwp"), b"x").unwrap();
+        std::fs::create_dir(d.join("setup.exe")).unwrap(); // 폴더 이름이 실행 형식이어도 폴더는 연다
+        let ds = d.to_string_lossy().into_owned();
+        assert_eq!(check_link(&format!(r"{ds}\보고서.hwp"), false, false, true, NO), Ok(()));
+        assert_eq!(check_link(&ds, false, false, true, NO), Ok(()));
+        assert_eq!(check_link(&format!(r"{ds}\setup.exe"), false, false, true, NO), Ok(()));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn check_link_exec_extensionless_missing() {
+        let d = tmp("exec");
+        std::fs::write(d.join("evil"), b"MZ").unwrap();
+        std::fs::write(d.join("run.cmd"), b"x").unwrap();
+        std::fs::write(d.join("m.xlsm"), b"x").unwrap();
+        std::fs::write(d.join("a.exe."), b"x").ok(); // Windows 는 끝 점을 버려 a.exe 가 된다
+        let ds = d.to_string_lossy().into_owned();
+        for p in [format!(r"{ds}\evil"), format!(r"{ds}\run.cmd"), format!(r"{ds}\RUN.CMD"), format!(r"{ds}\m.xlsm"), format!(r"{ds}\a.exe.")] {
+            assert_eq!(check_link(&p, false, false, true, NO), Err(EXEC_BLOCKED.into()), "{p}");
+            assert_eq!(check_link(&p, true, false, true, NO), Ok(()), "허락하면 연다: {p}");
+            assert_eq!(check_link(&p, false, false, false, NO), Ok(()), "보이기는 실행이 아니다: {p}");
+        }
+        let missing = format!(r"{ds}\없음.pdf");
+        assert!(check_link(&missing, true, true, true, NO).unwrap_err().contains("찾을 수 없습니다"));
+        // 허락(allowExec)해도 생김새 거부는 그대로다
+        assert!(check_link("calc", true, true, true, NO).unwrap_err().contains("열 수 없는 경로"));
+        assert!(check_link("ms-msdt:/id x", true, true, true, NO).unwrap_err().contains("열 수 없는 경로"));
+        assert!(check_link(&format!(r"{ds}\evil:x.exe"), true, true, true, NO).unwrap_err().contains("열 수 없는 경로"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// 정규화한 이름으로도 본다: 짧은 이름(8.3)으로 적은 실행 파일. 8.3 이름을 꺼 둔 디스크면 건너뛴다.
+    #[cfg(windows)]
+    #[test]
+    fn check_link_sees_through_short_names() {
+        let d = tmp("short");
+        std::fs::write(d.join("longname_program.exe"), b"x").unwrap();
+        let short = d.join("LONGNA~1.EXE");
+        if !short.exists() { eprintln!("8.3 이름이 꺼져 있어 건너뜀"); let _ = std::fs::remove_dir_all(&d); return; }
+        let s = short.to_string_lossy().into_owned();
+        assert_eq!(check_link(&s, false, false, true, NO), Err(EXEC_BLOCKED.into()));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn check_link_unc_asks_before_touching_disk() {
+        // 없는 서버라도 '찾을 수 없음'이 아니라 먼저 NET_BLOCKED — 디스크(=서버)를 만지기 전에 묻는다는 뜻
+        let p = r"\\wmhh-no-such-host-xyz\share\a.pdf";
+        assert_eq!(check_link(p, false, false, true, NO), Err(NET_BLOCKED.into()));
+        assert_eq!(check_link(p, false, false, false, NO), Err(NET_BLOCKED.into()), "보이기도 묻는다");
+        assert_eq!(check_link(p, false, false, true, |_, h| h == "wmhh-no-such-host-xyz").map_err(|e| e.contains("찾을 수 없습니다")), Err(true), "믿는 서버면 묻지 않는다");
+    }
 }
 
 /// 파일 링크의 📂 버튼 → 탐색기에서 해당 파일이 선택된 폴더 열기.
+/// v3.8.25: 여는 길과 같은 생김새·공유 폴더 검사(실행 형식 검사는 없음 — 보이기만 하므로).
 #[tauri::command]
-pub fn reveal_file_path(app: AppHandle, path: String) -> Result<(), String> {
+pub fn reveal_file_path(app: AppHandle, path: String, allow_net: Option<bool>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
+    let allow_net = allow_net == Some(true);
+    check_link(&path, false, allow_net, false, net_trusted)?;
+    remember_net(&path, allow_net);
     app.opener().reveal_item_in_dir(&path).map_err(to_err)
 }
 

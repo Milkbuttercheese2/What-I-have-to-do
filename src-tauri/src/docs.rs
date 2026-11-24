@@ -38,11 +38,77 @@ fn root(i: usize) -> Result<PathBuf, String> {
 }
 
 fn canon_dir(path: &str) -> Result<PathBuf, String> {
+    crate::commands::link_shape(path)?;   // v3.8.25: 전체 경로(드라이브·공유 폴더)만 — 상대 경로·장치 경로·프로토콜 거부
     let p = std::fs::canonicalize(path).map_err(|e| format!("폴더를 열 수 없습니다: {e}"))?;
     if !p.is_dir() {
         return Err("폴더가 아닙니다".into());
     }
+    root_allowed(&p, &SysDirs::from_env())?;
     Ok(p)
+}
+
+/// 문서 폴더로 삼으면 안 되는 곳(v3.8.25 보안 2차). 문서 폴더 안에서는 옮기기·휴지통·글자 쓰기가 되므로,
+/// 화면이 잘못(또는 끼어든 스크립트가) 시스템 폴더를 문서 폴더로 보내면 그 안을 만질 수 있게 된다.
+/// - 그 안 전체 거부: Windows 폴더, Program Files(두 개), ProgramData
+/// - 그 폴더 자체만 거부: Windows 가 깔린 드라이브의 맨 위(`C:\`), 사용자 폴더 모음(`C:\Users`), 내 사용자 폴더(`C:\Users\나`)
+///   — 그 아래(바탕 화면·문서 등)와 다른 드라이브·공유 드라이브의 맨 위(`D:\`, `Z:\`)는 예전처럼 된다.
+pub struct SysDirs { pub subtree: Vec<PathBuf>, pub exact: Vec<PathBuf> }
+impl SysDirs {
+    fn from_env() -> SysDirs {
+        let c = |k: &str| std::env::var_os(k).and_then(|v| std::fs::canonicalize(v).ok());
+        let subtree = ["SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"].iter().filter_map(|k| c(k)).collect();
+        let mut exact: Vec<PathBuf> = ["USERPROFILE"].iter().filter_map(|k| c(k)).collect();
+        if let Some(d) = std::env::var_os("SystemDrive") {
+            let d = d.to_string_lossy().into_owned();
+            if let Ok(p) = std::fs::canonicalize(format!("{d}\\")) { exact.push(p); }
+            if let Ok(p) = std::fs::canonicalize(format!("{d}\\Users")) { exact.push(p); }
+        }
+        SysDirs { subtree, exact }
+    }
+}
+pub fn root_allowed(c: &Path, sys: &SysDirs) -> Result<(), String> {
+    let low = |p: &Path| p.to_string_lossy().to_lowercase();
+    let lc = low(c);
+    let lc = lc.trim_end_matches('\\');
+    let bad = sys.exact.iter().any(|x| low(x).trim_end_matches('\\') == lc)
+        || sys.subtree.iter().any(|x| { let x = low(x); let x = x.trim_end_matches('\\'); lc == x || lc.starts_with(&format!("{x}\\")) });
+    if bad {
+        return Err("Windows·프로그램 폴더나 드라이브 맨 위·사용자 폴더 자체는 문서 폴더로 쓸 수 없습니다. 그 아래 폴더를 골라 주세요".into());
+    }
+    Ok(())
+}
+
+/// 이 경로(보기용·`/` 섞여도 됨)가 지금 문서 폴더들 중 하나 안인가 — 디스크를 만지지 않는다(공유 폴더 확인 전에 쓰므로).
+pub fn inside_any_root(path: &str) -> bool {
+    let p = path.replace('/', "\\").to_lowercase();
+    if p.split('\\').any(|c| c == "..") { return false; }
+    ROOTS.lock().unwrap_or_else(|e| e.into_inner()).iter().flatten().any(|r| {
+        let r = display(r).to_lowercase();
+        let r = r.trim_end_matches('\\');
+        p == r || p.starts_with(&format!("{r}\\"))
+    })
+}
+
+/* ── 바깥에서 끌어 놓은 경로만 가져오기 (v3.8.25 보안 2차) ─────────────────────
+   doc_import(특히 옮기기 = 원본 지우기)는 화면이 보낸 경로를 믿을 수 없다. 그래서 **Windows 가 방금 이 창에 놓았다고 알린
+   경로**(lib.rs 의 끌어 놓기 이벤트 → note_dropped)만 받는다. 놓은 지 오래된 목록은 쓰지 않는다. */
+static DROPPED: Mutex<Option<(std::time::Instant, Vec<PathBuf>)>> = Mutex::new(None);
+const DROP_TTL: std::time::Duration = std::time::Duration::from_secs(120);
+pub fn note_dropped(paths: &[PathBuf]) {
+    *DROPPED.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), paths.to_vec()));
+}
+fn dropped_ok(paths: &[String]) -> Result<(), String> {
+    let g = DROPPED.lock().unwrap_or_else(|e| e.into_inner());
+    let Some((at, list)) = g.as_ref() else { return Err("끌어 놓은 파일만 넣을 수 있습니다".into()) };
+    if at.elapsed() > DROP_TTL { return Err("끌어 놓은 지 오래되었습니다. 다시 끌어 놓아 주세요".into()); }
+    let canon = |p: &Path| std::fs::canonicalize(p).ok();
+    let have: Vec<PathBuf> = list.iter().filter_map(|p| canon(p)).collect();
+    for p in paths {
+        let ok = list.iter().any(|d| d.as_os_str() == std::ffi::OsStr::new(p))
+            || canon(Path::new(p)).is_some_and(|c| have.contains(&c));
+        if !ok { return Err(format!("끌어 놓은 파일이 아닙니다: {p}")); }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -454,6 +520,16 @@ fn copy_tree(src: &Path, dest: &Path, budget: &mut u32) -> std::io::Result<()> {
         std::fs::copy(src, dest).map(|_| ())
     }
 }
+/// 복사본 확인: 원본의 파일·폴더마다 복사본에 같은 종류·같은 크기로 있는가(링크는 copy_tree 가 건너뛰므로 여기서도 건너뜀).
+/// 원본에 링크가 있으면 false — 지우면 그 링크가 사라지는데 복사본에는 없다.
+fn same_tree(src: &Path, dest: &Path) -> bool {
+    let (Ok(a), Ok(b)) = (std::fs::symlink_metadata(src), std::fs::symlink_metadata(dest)) else { return false };
+    if a.file_type().is_symlink() { return false; }
+    if a.is_dir() != b.is_dir() { return false; }
+    if !a.is_dir() { return a.len() == b.len(); }
+    let Ok(rd) = std::fs::read_dir(src) else { return false };
+    rd.flatten().all(|e| same_tree(&e.path(), &dest.join(e.file_name())))
+}
 /// 바깥 경로들을 dir 안으로 복사(mv=true 면 옮기기). 새로 생긴 항목들의 rel. 하나라도 실패하면 그 이유를 모아 Err(이미 한 것은 남긴다).
 /// 옮기기: 같은 드라이브면 이름만 바꾸고(rename), 다른 드라이브면 **복사가 끝난 뒤에만** 원본을 지운다.
 pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<Vec<String>, String> {
@@ -465,6 +541,7 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
     let mut errs = Vec::new();
     let mut budget: u32 = 20_000;
     for p in paths {
+        if let Err(e) = crate::commands::link_shape(p) { errs.push(format!("{p}: {e}")); continue; }   // 있는 전체 경로만(v3.8.25)
         let src = match std::fs::canonicalize(p) {
             Ok(s) => s,
             Err(e) => { errs.push(format!("{p}: {e}")); continue; }
@@ -485,7 +562,10 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
         match copy_tree(&src, &dest, &mut budget) {
             Ok(()) => {
                 if mv {
-                    let gone = if src.is_dir() { std::fs::remove_dir_all(&src) } else { std::fs::remove_file(&src) };
+                    /* v3.8.25: 원본은 **복사본이 원본과 같다고 확인된 뒤에만** 지운다(파일 수·크기). 다르면 원본을 남긴다. */
+                    let gone = if !same_tree(&src, &dest) {
+                        Err(std::io::Error::new(std::io::ErrorKind::Other, "복사본이 원본과 달라 원본을 남겼습니다"))
+                    } else if src.is_dir() { std::fs::remove_dir_all(&src) } else { std::fs::remove_file(&src) };
                     if let Err(e) = gone {
                         errs.push(format!("{}: 복사는 했지만 원본을 지우지 못했습니다({e})", name.to_string_lossy()));
                     }
@@ -519,6 +599,25 @@ pub fn percent_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+/// `wmhhdoc` 응답의 보안 정책. 그 문서가 바깥(인터넷)으로 나가지 못하게 자기 폴더·인라인·data/blob 만.
+/// v3.8.25: `sandbox allow-scripts` 를 응답에도 건다 — 화면의 프레임 속성(docs.js)이 어떻게 바뀌어도 이 문서는 늘
+/// 불투명 출처(앱 IPC 에 닿지 않음)·팝업 없음이다. ⚠️ 여기에 `allow-same-origin` 을 넣지 말 것(시험이 막는다).
+pub const DOC_CSP: &str = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; form-action 'none'; base-uri 'self'; sandbox allow-scripts";
+/// `wmhhdoc` 응답 만들기. 머리글 값이 잘못돼 만들 수 없으면(예: 이상한 mime) 앱을 죽이지 않고 빈 500 을 돌려준다.
+pub fn doc_response(status: u16, mime: &str, body: Vec<u8>) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(status)
+        .header("Content-Type", mime)
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Cache-Control", "no-store")
+        .header("Content-Security-Policy", DOC_CSP)
+        .body(body)
+        .unwrap_or_else(|_| {
+            let mut r = tauri::http::Response::new(Vec::new());
+            *r.status_mut() = tauri::http::StatusCode::INTERNAL_SERVER_ERROR;
+            r
+        })
 }
 pub fn mime_of(path: &Path) -> &'static str {
     match path.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
@@ -1022,6 +1121,15 @@ pub fn read_text_in(root: &Path, rel: &str) -> Result<TextFile, String> {
 
 /// 글자 파일 저장 — base_mtime(읽을 때의 고친 시각)과 지금이 다르면 거부한다(다른 프로그램이 그 사이 고쳤음).
 /// 같은 폴더의 임시 파일(~$ 로 시작 — 트리에 안 보임)에 쓴 뒤 바꿔치기한다(쓰다 끊겨도 원본이 반쪽이 되지 않게).
+/// 임시 파일 이름용 예측하기 어려운 수 — 표준 라이브러리 해시의 무작위 열쇠 + 시각 + 프로세스 번호(암호용은 아니다)
+fn rand_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    h.write_u32(std::process::id());
+    h.finish()
+}
+
 pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mtime: i64) -> Result<i64, String> {
     let p = resolve(root, rel)?;
     let md = std::fs::metadata(&p).map_err(|e| format!("찾을 수 없습니다: {e}"))?;
@@ -1040,13 +1148,25 @@ pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mt
         return Err("글자 파일 상한(5MB) 초과".into());
     }
     let name = p.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_string_lossy().into_owned();
-    let tmp = p.with_file_name(format!("~${name}.wmhh-tmp"));
     /* 임시 파일에 쓰고 디스크까지 내린 뒤, 그 **열린 파일**에서 고친 시각을 읽는다(바꿔치기는 고친 시각을 바꾸지 않는다).
        예전엔 바꿔치기 뒤에 다시 읽었고, 그게 실패하면 0 을 돌려줘 다음 자동 저장마다 '다른 프로그램이 고쳤다'로 판정돼
-       쓸데없는 '(내 고침)' 파일이 생겼다. 또 쓰다 실패하면(디스크 가득 등) 임시 파일이 남아 쌓였다 — 지운다. */
+       쓸데없는 '(내 고침)' 파일이 생겼다. 또 쓰다 실패하면(디스크 가득 등) 임시 파일이 남아 쌓였다 — 지운다.
+       v3.8.25(보안 2차): 임시 이름에 무작위 꼬리를 붙이고 **새로 만들 때만**(create_new) 쓴다 — 이름을 미리 알 수 있으면
+       공유 폴더에서 남이 같은 이름의 링크·파일을 먼저 놓아 두고 우리 쓰기를 엉뚱한 곳으로 보낼 수 있다. */
+    let mut tmp = PathBuf::new();
     let written = (|| -> std::io::Result<i64> {
         use std::io::Write;
-        let mut f = std::fs::File::create(&tmp)?;
+        let mut f = {
+            let mut tries = 0;
+            loop {
+                tmp = p.with_file_name(format!("~${name}.{:016x}.wmhh-tmp", rand_u64()));
+                match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+                    Ok(f) => break f,
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < 8 => tries += 1,
+                    Err(e) => { tmp = PathBuf::new(); return Err(e); }
+                }
+            }
+        };
         f.write_all(&bytes)?;
         f.sync_all()?;
         Ok(mtime_ms(&f.metadata()?))
@@ -1178,6 +1298,7 @@ pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<Strin
 #[tauri::command]
 pub async fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
     let r = self::root(root)?;
+    dropped_ok(&paths)?;   // v3.8.25: 방금 이 창에 끌어 놓은 경로만
     off_main(move || {
         let out = import_in(&r, &dir, &paths, mv.unwrap_or(false));
         invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
@@ -1824,5 +1945,111 @@ mod tests {
         }
         // 대소문자 있는 비ASCII 글자가 검색어에 있으면 예전 길(é ↔ É)
         assert!(find_in_text("CAFÉ 메뉴", "café", true).is_some());
+    }
+
+    /* ── v3.8.25 보안 2차 ── */
+    #[test]
+    fn root_allowed_blocks_system_folders_but_not_below_profile() {
+        let sys = SysDirs {
+            subtree: vec![PathBuf::from(r"\\?\C:\Windows"), PathBuf::from(r"\\?\C:\Program Files")],
+            exact: vec![PathBuf::from(r"\\?\C:\"), PathBuf::from(r"\\?\C:\Users"), PathBuf::from(r"\\?\C:\Users\나")],
+        };
+        for bad in [r"\\?\C:\", r"\\?\c:\windows", r"\\?\C:\Windows\System32", r"\\?\C:\Program Files\x", r"\\?\C:\Users", r"\\?\C:\Users\나"] {
+            assert!(root_allowed(Path::new(bad), &sys).is_err(), "{bad}");
+        }
+        for ok in [r"\\?\C:\Users\나\Desktop", r"\\?\C:\Users\나\Documents\업무", r"\\?\D:\", r"\\?\C:\Windows2", r"\\?\UNC\srv\공유", r"\\?\C:\업무"] {
+            assert!(root_allowed(Path::new(ok), &sys).is_ok(), "{ok}");
+        }
+        // 실제 환경값으로도: Windows 폴더는 거부, 임시 폴더(사용자 폴더 아래)는 된다
+        if let Some(w) = std::env::var_os("SystemRoot") { assert!(canon_dir(&w.to_string_lossy()).is_err()); }
+        assert!(canon_dir(&std::env::temp_dir().to_string_lossy()).is_ok());
+        assert!(canon_dir("상대\\경로").is_err());
+    }
+
+    #[test]
+    fn import_only_paths_that_were_dropped() {
+        let outside = tmp("dropgate");
+        std::fs::write(outside.join("놓은.txt"), "a").unwrap();
+        std::fs::write(outside.join("안놓은.txt"), "b").unwrap();
+        let dropped = outside.join("놓은.txt");
+        note_dropped(&[dropped.clone()]);
+        assert!(dropped_ok(&[dropped.to_string_lossy().into_owned()]).is_ok());
+        // '/' 로 적어도 정규화해 같은 파일이면 된다
+        assert!(dropped_ok(&[dropped.to_string_lossy().replace('\\', "/")]).is_ok());
+        assert!(dropped_ok(&[outside.join("안놓은.txt").to_string_lossy().into_owned()]).is_err(), "놓지 않은 파일은 거부");
+        assert!(dropped_ok(&[r"C:\Windows".into()]).is_err());
+        // 하나라도 놓지 않은 것이 섞이면 전부 거부
+        assert!(dropped_ok(&[dropped.to_string_lossy().into_owned(), outside.join("안놓은.txt").to_string_lossy().into_owned()]).is_err());
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn import_rejects_relative_and_stream_paths() {
+        let r = tmp("importshape");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        for p in ["상대.txt", r"C:\a.txt:숨은.exe", "ms-msdt:/id x"] {
+            let e = import_in(&root, "", &[p.to_string()], true).unwrap_err();
+            assert!(e.contains("열 수 없는 경로"), "{p}: {e}");
+        }
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn same_tree_checks_copy_before_delete() {
+        let a = tmp("same_a");
+        std::fs::create_dir_all(a.join("x/y")).unwrap();
+        std::fs::write(a.join("x/y/1.txt"), "abc").unwrap();
+        std::fs::write(a.join("2.txt"), "de").unwrap();
+        let b = tmp("same_b");
+        let _ = std::fs::remove_dir_all(&b);
+        let mut budget = 100;
+        copy_tree(&a, &b, &mut budget).unwrap();
+        assert!(same_tree(&a, &b));
+        std::fs::write(b.join("x/y/1.txt"), "ab").unwrap();
+        assert!(!same_tree(&a, &b), "크기가 다르면 다르다");
+        std::fs::remove_file(b.join("x/y/1.txt")).unwrap();
+        assert!(!same_tree(&a, &b), "빠진 파일이 있으면 다르다");
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn text_save_temp_names_are_unpredictable_and_never_reuse_a_file() {
+        let r = tmp("tmpname");
+        std::fs::write(r.join("a.txt"), "1").unwrap();
+        // 예전 고정 이름을 누가 먼저 만들어 둬도(링크든 파일이든) 건드리지 않는다
+        std::fs::write(r.join("~$a.txt.wmhh-tmp"), "남의 것").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let m = mtime_ms(&std::fs::metadata(r.join("a.txt")).unwrap());
+        write_text_in(&root, "a.txt", "2", "utf-8", m).unwrap();
+        assert_eq!(std::fs::read_to_string(r.join("a.txt")).unwrap(), "2");
+        assert_eq!(std::fs::read_to_string(r.join("~$a.txt.wmhh-tmp")).unwrap(), "남의 것");
+        assert_ne!(rand_u64(), rand_u64());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn inside_any_root_matches_display_form_without_disk() {
+        let r = tmp("insideroot");
+        set_roots(vec![r.to_string_lossy().into_owned()]);
+        let shown = display(&std::fs::canonicalize(&r).unwrap());
+        assert!(inside_any_root(&format!(r"{shown}\a.pdf")));
+        assert!(inside_any_root(&shown.to_uppercase()));
+        assert!(!inside_any_root(&format!(r"{shown}x\a.pdf")), "이름이 이어 붙은 옆 폴더는 아니다");
+        assert!(!inside_any_root(&format!(r"{shown}\..\밖.pdf")));
+        assert!(!inside_any_root(r"\\srv\s\a.pdf"));
+        set_roots(vec![]);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn doc_response_has_sandbox_csp_and_never_panics() {
+        let ok = doc_response(200, "text/html; charset=utf-8", b"x".to_vec());
+        let csp = ok.headers().get("Content-Security-Policy").unwrap().to_str().unwrap();
+        assert!(csp.contains("sandbox allow-scripts"));
+        assert!(!csp.contains("allow-same-origin") && !csp.contains("allow-popups"));
+        // 머리글에 넣을 수 없는 값(줄바꿈)이 와도 죽지 않고 500
+        let bad = doc_response(200, "text/html\n", b"x".to_vec());
+        assert_eq!(bad.status(), 500);
     }
 }

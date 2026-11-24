@@ -2,7 +2,7 @@
    렌더 — 보드/완료 카드 재생성 + persist()
    ========================================================================= */
 import {S, toggleDone, markDoneRemoved} from './state.js';
-import {STORE, invoke, openPath} from './store.js';
+import {STORE, invoke, openPath, revealPath} from './store.js';
 import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
 import {doneGroupOf, groupOpenByDefault} from './done-weeks.js';
 import {fmtDue, fmtT} from './datetime.js';
@@ -425,7 +425,7 @@ export function initRender(){
     const fo=e.target.closest('[data-fopen]');
     if(fo){ e.stopPropagation(); openPath(fo.dataset.fopen).catch(err=>appAlert('파일을 열 수 없습니다:\n'+fo.dataset.fopen+'\n\n'+err)); return; }
     const fr=e.target.closest('[data-freveal]');
-    if(fr){ e.stopPropagation(); invoke('reveal_file_path',{path:fr.dataset.freveal}).catch(err=>appAlert('폴더를 열 수 없습니다:\n'+err)); return; }
+    if(fr){ e.stopPropagation(); revealPath(fr.dataset.freveal).catch(err=>appAlert('폴더를 열 수 없습니다:\n'+err)); return; }
     const chk=e.target.closest('.chk');
     if(chk&&chk.dataset.id){ e.stopPropagation(); const it=S.items.find(x=>x.id==chk.dataset.id);
       if(it){ toggleDone(it); persist(); } return; }

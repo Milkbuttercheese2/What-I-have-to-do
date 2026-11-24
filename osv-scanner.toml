@@ -70,3 +70,11 @@ reason = "zbus_names unmaintained (informational, no fixed version; already at l
 id = "RUSTSEC-2026-0372"
 ignoreUntil = 2027-05-07
 reason = "zvariant_derive unmaintained (informational, no fixed version; already at latest 5.15.1). Linux D-Bus stack via tauri."
+
+# ── chrono 0.4.45: 관리 중단 안내 (v3.8.25 보안 2차에서 추가, 2026-11-24) ──
+# 고친 판이 없다(patched = [], 'all versions are affected'). Cargo.lock 에는 serde_with(tauri-utils 가 씀)의 선택 의존성으로
+# 적혀 있을 뿐 실제로 컴파일되지 않는다 — `cargo tree -i chrono --target all -e all` 결과가 비어 있다. 이 앱은 chrono 를 쓰지 않는다.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-05-24
+reason = "chrono unmaintained (informational, no fixed version). Lockfile-only: optional dependency of serde_with via tauri-utils, not compiled (cargo tree -i chrono --target all -e all is empty). Removable only by an upstream tauri-utils/serde_with change."

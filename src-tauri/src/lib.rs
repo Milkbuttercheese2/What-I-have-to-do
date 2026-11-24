@@ -67,25 +67,22 @@ pub fn run() {
     tauri::Builder::default()
         /* v3.8.4 문서 탭 HTML 보기 — 문서 폴더 안 파일만 내주는 전용 주소(docs.rs serve_path 가 폴더 안인지 확인) */
         .register_asynchronous_uri_scheme_protocol("wmhhdoc", |_ctx, request, responder| {
-            let build = |status: u16, mime: &str, body: Vec<u8>| {
-                tauri::http::Response::builder()
-                    .status(status)
-                    .header("Content-Type", mime)
-                    .header("X-Content-Type-Options", "nosniff")
-                    .header("Cache-Control", "no-store")
-                    /* 그 문서가 바깥(인터넷)으로 나가지 못하게: 자기 폴더·인라인·data/blob 만 */
-                    .header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; form-action 'none'; base-uri 'self'")
-                    .body(body)
-                    .unwrap()
-            };
             /* 파일 읽기는 별도 스레드에서(큰 HTML·그림을 메인 스레드에서 읽으면 그동안 화면이 멈춘다) */
             let path = request.uri().path().to_string();
             std::thread::spawn(move || {
                 responder.respond(match docs::serve_path(&path) {
-                    Ok((bytes, mime)) => build(200, mime, bytes),
-                    Err(e) => build(404, "text/plain; charset=utf-8", e.into_bytes()),
+                    Ok((bytes, mime)) => docs::doc_response(200, mime, bytes),
+                    Err(e) => docs::doc_response(404, "text/plain; charset=utf-8", e.into_bytes()),
                 });
             });
+        })
+        /* v3.8.25 보안 2차: Windows 가 이 창에 놓았다고 알린 경로를 기억한다 — doc_import 는 이것만 받는다(docs.rs dropped_ok).
+           어느 쪽 이벤트로 오는지는 창 종류에 따라 달라 둘 다 받는다(같은 목록을 두 번 적어도 무해). */
+        .on_webview_event(|w, ev| {
+            if w.label() != "main" { return; }
+            if let tauri::WebviewEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = ev {
+                docs::note_dropped(paths);
+            }
         })
         // Single-instance MUST be the first plugin registered. This app's
         // save model is a whole-dataset replace (save_all rewrites every
@@ -113,6 +110,10 @@ pub fn run() {
         // 종료 경로는 여기(app.exit)와 트레이 '종료' 둘로 일원화 — 숨은
         // capture 창이 프로세스를 몰래 살려두는 좀비 경로를 만들지 않는다.
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                if window.label() == "main" { docs::note_dropped(paths); }
+                return;
+            }
             if window.label() != "main" {
                 return;
             }

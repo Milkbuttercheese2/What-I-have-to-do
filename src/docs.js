@@ -21,7 +21,7 @@
    init*() 외 최상위 실행문 없음.
    ========================================================================= */
 import {S} from './state.js';
-import {STORE, invoke, openPath} from './store.js';
+import {STORE, invoke, openPath, revealPath as revealLink} from './store.js';
 import {$, esc, escAttr, appAlert, appConfirm, showToast, needXlsx} from './dom-utils.js';
 import {registerView, showView} from './views.js';
 import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp} from './docs-view.js';
@@ -408,12 +408,14 @@ async function textMode(){
 /* HTML 보기 — 앱이 쓰는 브라우저 엔진(WebView2 = Edge) 그대로, 모래상자 프레임 안에서 그 파일을 연다.
    주소는 문서 폴더 전용(`http://wmhhdoc.localhost/<폴더번호>/<상대경로>` — docs.rs serve_path)이라 그 문서의 스크립트·CSS·그림
    (상대 경로)까지 그대로 돈다. 앱 화면과 다른 출처 + sandbox(allow-scripts 만)라 앱 화면·앱 기능에는 닿지 못한다.
+   v3.8.25(보안 2차): allow-popups 를 뺐다 — 팝업 창은 모래상자 밖 새 창이 될 수 있어서. 그 문서의 새 창 링크(target=_blank)는 열리지 않는다.
+   ⚠️ allow-same-origin 을 넣지 말 것 — 넣으면 그 문서가 앱 기능(IPC)에 닿을 수 있다. 응답 머리글(docs.rs DOC_CSP)에도 같은 모래상자를 건다.
    고치던 글자가 있으면 먼저 저장하고 연다(프레임은 저장된 파일을 읽는다). */
 export const docUrl = (i, rel) => `http://wmhhdoc.localhost/${i}/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
 async function htmlFrame(box, want){
   if(want.dirty || want.saving) await saveEdit(want);
   if(ed!==want) return;
-  box.innerHTML='<iframe class="dv-frame" sandbox="allow-scripts allow-popups" referrerpolicy="no-referrer" title="HTML 보기"></iframe>';
+  box.innerHTML='<iframe class="dv-frame" sandbox="allow-scripts" referrerpolicy="no-referrer" title="HTML 보기"></iframe>';
   box.querySelector('iframe').src=`${docUrl(want.i, want.rel)}?t=${want.mtime||0}`;
 }
 /* 상대 경로 → 문서 폴더 안 rel(밖으로 나가면 null) */
@@ -910,7 +912,7 @@ function openMenu(x, y, key, dir){
     if(b.dataset.mcopy) return copyItem(key);
     if(b.dataset.mopen || b.dataset.mreveal){
       if(b.dataset.mopen) await flushEdit();
-      try{ const ap=await invoke('doc_abs', {root:p.i, rel:p.rel}); if(b.dataset.mopen) await openPath(ap); else await invoke('reveal_file_path', {path:ap}); }
+      try{ const ap=await invoke('doc_abs', {root:p.i, rel:p.rel}); if(b.dataset.mopen) await openPath(ap); else await revealLink(ap); }
       catch(err){ appAlert('열 수 없습니다:\n'+err); }
     }
   });
@@ -1308,6 +1310,8 @@ export function initDocs(){
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && document.querySelector('.dt-menu')){ e.stopPropagation(); closeMenu(); } }, true);
   window.addEventListener('blur', closeMenu);
   $('dt-tree').addEventListener('scroll', closeMenu);
+  /* v3.8.25: MD·문서 보기 속 링크의 가운데 클릭(auxclick)도 막는다 — 막지 않으면 웹뷰가 그 주소를 새 창으로 연다 */
+  $('view-docs').addEventListener('auxclick', e=>{ if(e.target.closest && e.target.closest('.dv-mdv a, .dv-doc a')) e.preventDefault(); });
   $('view-docs').addEventListener('click', async e=>{
     if(Date.now()<swallowUntil) return;
     const un=e.target.closest('[data-unroot]');
@@ -1325,7 +1329,7 @@ export function initDocs(){
       return;
     }
     const r=e.target.closest('[data-dreveal]');
-    if(r){ const p=parseKey(r.dataset.dreveal); try{ await invoke('reveal_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }catch(err){ appAlert('폴더를 열 수 없습니다:\n'+err); } return; }
+    if(r){ const p=parseKey(r.dataset.dreveal); try{ await revealLink(await invoke('doc_abs', {root:p.i, rel:p.rel})); }catch(err){ appAlert('폴더를 열 수 없습니다:\n'+err); } return; }
     const tm=e.target.closest('[data-tmode]');
     if(tm && ed){
       if(ed.kind==='md') S.settings.docMdMode=tm.dataset.tmode; else if(ed.kind==='html') S.settings.docHtmlMode=tm.dataset.tmode; else S.settings.docCsvMode=tm.dataset.tmode;

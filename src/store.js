@@ -9,15 +9,31 @@ import {showSaveError, clearSaveError, appAlert, appConfirm} from './dom-utils.j
 export const { invoke } = window.__TAURI__.core;
 
 /* v3.8.24 보안 점검: 파일 링크 열기는 모두 이걸 거친다(`invoke('open_file_path')` 를 직접 부르지 말 것).
-   Rust 가 실행 형식(exe·bat·ps1·lnk …)이면 'EXEC_BLOCKED' 로 거절하고, 여기서 한 번 물어
-   [확인]일 때만 allowExec 로 다시 연다. 취소하면 false, 그 밖의 실패는 예전처럼 던진다. */
-export async function openPath(path){
-  try{ await invoke('open_file_path', {path}); return true; }
-  catch(err){
-    if(String(err)!=='EXEC_BLOCKED') throw err;
-    const name=String(path).split(/[\\/]/).pop()||path;
-    if(!await appConfirm(`'${name}' 은(는) 프로그램(실행 파일)입니다.\n열면 그 프로그램이 바로 실행됩니다.\n\n믿을 수 있는 파일일 때만 [확인]을 누르세요.\n${path}`, '실행 파일 열기')) return false;
-    await invoke('open_file_path', {path, allowExec:true}); return true;
+   Rust 가 실행 형식(exe·bat·ps1·lnk·매크로 문서·확장자 없는 파일 …)이면 'EXEC_BLOCKED' 로 거절하고, 여기서 한 번 물어
+   [확인]일 때만 allowExec 로 다시 연다. 취소하면 false, 그 밖의 실패(없는 파일·상대 경로·프로토콜 주소)는 예전처럼 던진다. */
+/* v3.8.25 보안 2차: 공유 폴더(`\\서버\…`)는 'NET_BLOCKED' — 여는 순간 Windows 가 그 서버에 로그인 정보를 보내므로
+   서버 이름을 보여 주고 한 번 묻는다(문서 폴더 안·이번 실행에 허락한 서버는 Rust 가 묻지 않는다). 두 확인은 따로 묻는다. */
+export const openPath = path => linkAct('open_file_path', path);
+/* 탐색기에서 보이기(📂) — 실행 형식 확인은 없고 공유 폴더 확인만 같다. `invoke('reveal_file_path')` 를 직접 부르지 말 것. */
+export const revealPath = path => linkAct('reveal_file_path', path);
+async function linkAct(cmd, path){
+  const a={path};
+  for(;;){
+    try{ await invoke(cmd, a); return true; }
+    catch(err){
+      const s=String(err);
+      if(s==='EXEC_BLOCKED' && !a.allowExec){
+        const name=String(path).split(/[\\/]/).pop()||path;
+        if(!await appConfirm(`'${name}' 은(는) 프로그램(실행 파일)이거나 무엇으로 열릴지 알 수 없는 파일입니다.\n열면 그 안의 프로그램·매크로가 바로 실행될 수 있습니다.\n\n믿을 수 있는 파일일 때만 [확인]을 누르세요.\n${path}`, '실행 파일 열기')) return false;
+        a.allowExec=true; continue;
+      }
+      if(s==='NET_BLOCKED' && !a.allowNet){
+        const host=String(path).replace(/\//g,'\\').replace(/^\\\\/,'').split('\\')[0];
+        if(!await appConfirm(`공유 폴더(서버 '${host}')의 파일입니다.\n열면 Windows 가 그 서버에 내 로그인 정보를 보냅니다.\n\n아는 서버일 때만 [확인]을 누르세요(이번 실행 동안은 다시 묻지 않습니다).\n${path}`, '공유 폴더 열기')) return false;
+        a.allowNet=true; continue;
+      }
+      throw err;
+    }
   }
 }
 
