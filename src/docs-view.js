@@ -50,10 +50,18 @@ export async function mdHtml(text){
   if(!mdLib){
     const [{marked}, pur]=await Promise.all([import('./vendor/marked.esm.js'), import('./vendor/purify.es.mjs')]);
     const DOMPurify=(pur.default && pur.default.sanitize) ? pur.default : pur.default(window);
+    /* v3.8.24 보안 점검: class 는 코드 블록의 언어 표시(`<code class="language-sql">` — highlightBlocks 가 읽는다)만 남긴다.
+       앱 화면의 class(예: modal-bg on)를 문서가 빌려 가짜 팝업을 덮지 못하게 한다. 이 DOMPurify 는 MD 보기 전용 인스턴스다. */
+    DOMPurify.addHook('uponSanitizeAttribute', (node, d)=>{
+      if(d.attrName==='class' && !(node.nodeName==='CODE' && /^language-[\w+-]+$/.test(d.attrValue))) d.keepAttr=false;
+    });
     mdLib={marked, DOMPurify};
   }
   const raw=mdLib.marked.parse(String(text||''), {gfm:true, breaks:true, async:false});
-  return mdLib.DOMPurify.sanitize(raw, {FORBID_TAGS:['style','form','input','button','iframe','object','embed'], FORBID_ATTR:['style']});
+  /* v3.8.24 보안 점검: 앱은 body 에 data-* 로 동작을 거는 위임 클릭(data-fopen 열기, data-del 지우기 …)을 쓴다 —
+     문서가 data-* 를 달면 문서 안을 누르는 것만으로 그 동작이 돈다. id/name 은 앱 요소를 가린다(DOM clobbering). */
+  return mdLib.DOMPurify.sanitize(raw, {FORBID_TAGS:['style','form','input','button','iframe','object','embed'],
+    FORBID_ATTR:['style','id'], ALLOW_DATA_ATTR:false, SANITIZE_NAMED_PROPS:true});
 }
 /* ── 코드·쿼리 색 강조(v3.8.4) — highlight.js 11(BSD-3, vendor/highlight.min.js: 자주 쓰는 언어 36종). 처음 쓸 때만 불러온다.
    확장자 → 언어. 여기 없는 확장자(txt·csv·log 등)는 색을 입히지 않는다. */

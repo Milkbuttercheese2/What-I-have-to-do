@@ -234,7 +234,7 @@ function fillForm(pre){
   enabled().forEach(f=>{
     const v=(pre.f||{})[f.key] ?? (f.key==='received'?new Date().toISOString():'');
     g.insertAdjacentHTML('beforeend',
-      `<div class="fm-field"><label>${esc(f.label)}</label>${dtInputHtml('fm-dt', v, `data-fkey="${f.key}"`)}</div>`);
+      `<div class="fm-field"><label>${esc(f.label)}</label>${dtInputHtml('fm-dt', v, `data-fkey="${escAttr(f.key)}"`)}</div>`);
   });
   g.querySelectorAll('.dt-inp').forEach(refreshDow);
 
