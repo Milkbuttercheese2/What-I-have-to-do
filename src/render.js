@@ -2,7 +2,7 @@
    렌더 — 보드/완료 카드 재생성 + persist()
    ========================================================================= */
 import {S, toggleDone, markDoneRemoved} from './state.js';
-import {STORE, invoke} from './store.js';
+import {STORE, invoke, openPath} from './store.js';
 import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
 import {doneGroupOf, groupOpenByDefault} from './done-weeks.js';
 import {fmtDue, fmtT} from './datetime.js';
@@ -423,7 +423,7 @@ export function initRender(){
   document.body.addEventListener('click',async e=>{
     /* 파일 링크 클릭 — 카드 열기(data-open)보다 먼저 처리 */
     const fo=e.target.closest('[data-fopen]');
-    if(fo){ e.stopPropagation(); invoke('open_file_path',{path:fo.dataset.fopen}).catch(err=>appAlert('파일을 열 수 없습니다:\n'+fo.dataset.fopen+'\n\n'+err)); return; }
+    if(fo){ e.stopPropagation(); openPath(fo.dataset.fopen).catch(err=>appAlert('파일을 열 수 없습니다:\n'+fo.dataset.fopen+'\n\n'+err)); return; }
     const fr=e.target.closest('[data-freveal]');
     if(fr){ e.stopPropagation(); invoke('reveal_file_path',{path:fr.dataset.freveal}).catch(err=>appAlert('폴더를 열 수 없습니다:\n'+err)); return; }
     const chk=e.target.closest('.chk');

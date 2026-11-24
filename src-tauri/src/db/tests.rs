@@ -1310,3 +1310,20 @@ fn completing_many_at_once_is_not_a_shrink() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// v3.8.24 보안 점검: 화면은 업무·세부 할 일·전화번호부 id 를 이스케이프 없이 HTML 속성(data-open="…")에 넣는다.
+/// 그게 안전한 이유는 백업 복원(backup_import)이 이 id 들을 i64 로만 받아들이기 때문이다 —
+/// 글자·소수 id 가 든 백업은 통째로 거절되고, 화면은 Rust 가 받아들인 뒤에만 그 데이터로 바꾼다(backup.js).
+#[test]
+fn backup_payload_rejects_non_numeric_ids() {
+    let ok = r#"{"items":[{"id":1,"memo":"","f":{},"subs":[{"id":2,"title":"t"}]}],"phonebook":[{"id":3}]}"#;
+    assert!(serde_json::from_str::<BackupPayload>(ok).is_ok(), "정상 백업은 받아들여야 한다");
+    for bad in [
+        r#"{"items":[{"id":"1\" onfocus=\"x","memo":"","f":{}}]}"#,
+        r#"{"items":[{"id":1.5,"memo":"","f":{}}]}"#,
+        r#"{"items":[{"id":1,"memo":"","f":{},"subs":[{"id":"x\"","title":"t"}]}]}"#,
+        r#"{"phonebook":[{"id":"x\" y=\""}]}"#,
+    ] {
+        assert!(serde_json::from_str::<BackupPayload>(bad).is_err(), "{bad}");
+    }
+}

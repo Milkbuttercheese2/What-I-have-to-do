@@ -21,7 +21,7 @@
    init*() 외 최상위 실행문 없음.
    ========================================================================= */
 import {S} from './state.js';
-import {STORE, invoke} from './store.js';
+import {STORE, invoke, openPath} from './store.js';
 import {$, esc, escAttr, appAlert, appConfirm, showToast, needXlsx} from './dom-utils.js';
 import {registerView, showView} from './views.js';
 import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp} from './docs-view.js';
@@ -910,7 +910,7 @@ function openMenu(x, y, key, dir){
     if(b.dataset.mcopy) return copyItem(key);
     if(b.dataset.mopen || b.dataset.mreveal){
       if(b.dataset.mopen) await flushEdit();
-      try{ await invoke(b.dataset.mopen?'open_file_path':'reveal_file_path', {path:await invoke('doc_abs', {root:p.i, rel:p.rel})}); }
+      try{ const ap=await invoke('doc_abs', {root:p.i, rel:p.rel}); if(b.dataset.mopen) await openPath(ap); else await invoke('reveal_file_path', {path:ap}); }
       catch(err){ appAlert('열 수 없습니다:\n'+err); }
     }
   });
@@ -933,7 +933,7 @@ async function copyItem(key){
 }
 async function openExternal(i, rel){
   await flushEdit();
-  try{ await invoke('open_file_path', {path:await invoke('doc_abs', {root:i, rel})}); }
+  try{ await openPath(await invoke('doc_abs', {root:i, rel})); }
   catch(err){ appAlert('열 수 없습니다:\n'+err); }
 }
 async function createItem(i, dirRel, kind){
@@ -954,7 +954,7 @@ async function createItem(i, dirRel, kind){
   /* 오피스 문서: 이름을 정하면(그대로 두어도) 바로 그 프로그램으로 연다 — 열린 뒤엔 이름을 못 바꾸므로 순서가 이렇다 */
   startRename(nodeKey(i, rel), office ? async finalRel=>{
     if(native) await leaveViewer();
-    try{ await invoke('open_file_path', {path:await invoke('doc_abs', {root:i, rel:finalRel})}); }
+    try{ await openPath(await invoke('doc_abs', {root:i, rel:finalRel})); }
     catch(err){ appAlert('열 수 없습니다:\n'+err); }
   } : null);
 }

@@ -2,7 +2,7 @@
    바로 입력 + 양식 패널
    ========================================================================= */
 import {S, newId, makeItem, toggleDone} from './state.js';
-import {invoke, STORE} from './store.js';
+import {invoke, STORE, openPath} from './store.js';
 import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm, showToast} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {persist} from './render.js';
@@ -234,7 +234,7 @@ function fillForm(pre){
   enabled().forEach(f=>{
     const v=(pre.f||{})[f.key] ?? (f.key==='received'?new Date().toISOString():'');
     g.insertAdjacentHTML('beforeend',
-      `<div class="fm-field"><label>${esc(f.label)}</label>${dtInputHtml('fm-dt', v, `data-fkey="${f.key}"`)}</div>`);
+      `<div class="fm-field"><label>${esc(f.label)}</label>${dtInputHtml('fm-dt', v, `data-fkey="${escAttr(f.key)}"`)}</div>`);
   });
   g.querySelectorAll('.dt-inp').forEach(refreshDow);
 
@@ -395,7 +395,7 @@ function addFormFileRow(path, active){
     if(!on) input.focus();                        // 비활성화: 수정 편의상 포커스
   });
   link.addEventListener('click',async ()=>{ const p=input.value.trim();
-    if(p) invoke('open_file_path',{path:p}).catch(err=>appAlert('파일을 열 수 없습니다:\n'+p+'\n\n'+err)); });
+    if(p) openPath(p).catch(err=>appAlert('파일을 열 수 없습니다:\n'+p+'\n\n'+err)); });
   browse.addEventListener('click',async()=>{     // 비활성화 모드에서 이 행의 경로를 새로 선택
     let p=null; try{ p=await invoke('pick_file_path'); }catch(e){ await appAlert('파일 선택 실패: '+e); return; }
     if(p) input.value=p;
