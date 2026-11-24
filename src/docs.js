@@ -737,12 +737,19 @@ export function onExtChanged(p){
     const keys=new Set([...kids.keys()].filter(k=>{ const q=parseKey(k); return q.i===i && (all || dirs.has(q.rel)); }));
     if(shown && shown.i===i && (all || paths.has(shown.rel))) keys.add(nodeKey(i, parentOf(shown.rel)));   // 보던 파일의 고친 시각을 보려고
     if(!keys.size) return;
-    await Promise.all([...keys].map(k=>{ const q=parseKey(k); return load(q.i, q.rel); }));
+    /* v3.8.25 한 번에 4개까지만 — 넘침(overflow)이면 읽어 둔 폴더 수백 개를 한꺼번에 읽으러 가 공유 폴더·디스크를 붙잡았다 */
+    await poolRun([...keys], 4, k=>{ const q=parseKey(k); return load(q.i, q.rel); });
     pruneGone(i);
     renderTree(); renderNote();
     checkShown(i);
     checkSelGone();
   });
+}
+/* 목록을 n 개씩 동시에 돌린다(하나가 끝나면 다음) — 하나가 실패해도 나머지는 돈다(Promise.all 과 달리 거절하지 않는다; load 는 원래 스스로 실패를 처리한다) */
+async function poolRun(list, n, fn){
+  let k=0;
+  const worker=async()=>{ while(k<list.length){ const x=list[k++]; try{ await fn(x); }catch(e){ console.warn('폴더 다시 읽기 실패', e); } } };
+  await Promise.all(Array.from({length:Math.min(n, list.length)}, worker));
 }
 /* 그 경로가 아직 있나 — 읽어 둔 위 폴더 목록 어디에서든 빠졌으면 없다(위 폴더를 아직 안 읽었으면 있다고 본다) */
 function stillThere(i, rel){

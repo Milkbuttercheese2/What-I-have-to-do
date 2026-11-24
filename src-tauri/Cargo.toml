@@ -27,6 +27,8 @@ tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
+# v3.8.25 찾기 — 영문 대소문자 무시 찾기의 첫 글자 거르기(SIMD). 이미 다른 크레이트가 쓰는 판이라 새로 받는 것은 없다
+memchr = "2"
 rusqlite_migration = "2"
 thiserror = "1"
 
@@ -35,3 +37,10 @@ thiserror = "1"
 # Win32_System_IO·Win32_System_Threading·Win32_Security: 문서 폴더 감시(docwatch.rs — 바깥에서 바꾼 이름 따라가기).
 # Win32_Storage_FileSystem: 휴지통 보내기 전 드라이브 종류(GetDriveTypeW) — 휴지통 없는 곳의 영구 삭제 막기.
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Environment", "Win32_UI_Input_KeyboardAndMouse", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading", "Win32_Security"] }
+
+# v3.8.25 배포 판 — 크레이트 경계를 넘는 인라인(thin LTO)·한 덩어리 최적화(codegen-units=1)·디버그 기호 빼기(strip).
+# 실행 파일이 작아지고 조금 빨라지는 대신 release 빌드가 오래 걸린다(CHANGELOG 에 잰 값). 개발용 dev 빌드는 그대로.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

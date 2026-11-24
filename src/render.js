@@ -20,6 +20,18 @@ import {registerView, refreshView} from './views.js';
 const onBoard = it => !it.recur;
 
 let q='', dq='';
+/* v3.8.25 검색칸 입력은 120ms 쉬었다가 그린다 — 예전엔 글자 하나마다 보드·완료 목록을 통째로 다시 그렸다(업무가 많으면 칠 때마다 멈칫) */
+const SEARCH_DEBOUNCE=120;
+let qT=null, dqT=null;
+/* v3.8.25 id → 업무 찾기 — 카드마다 S.items.find 로 처음부터 훑던 것(주기 업무에서 생긴 카드의 원본 찾기)을 색인으로.
+   색인은 자리(번호)를 기억하고, 꺼낼 때 그 자리에 아직 같은 id 가 있는지 본다 — 업무를 바꿔 끼우거나 지워도 낡은 것을 돌려주지 않는다 */
+let idIdx=null;
+function itemById(id){
+  const a=S.items;
+  if(idIdx && idIdx.a===a){ const k=idIdx.m.get(id); if(k===undefined && idIdx.n===a.length) return undefined; const x=k===undefined?undefined:a[k]; if(x && x.id===id) return x; }
+  idIdx={a, n:a.length, m:new Map(a.map((x,k)=>[x.id,k]))};
+  const k=idIdx.m.get(id); return k===undefined ? undefined : a[k];
+}
 
 function matchesQ(it){ return textMatch(it, q); }
 
@@ -81,7 +93,7 @@ export function cardHtml(it,place){
     </div></div>`;
   }
   const es=earliestSub(it);
-  const parent = it.recurId!=null ? S.items.find(x=>x.id===it.recurId) : null;
+  const parent = it.recurId!=null ? itemById(it.recurId) : null;
   /* v2.5.3: 주기 배지에 recur 클래스 — 5열 모드 시각 줄에서도 시각과 한 줄에 들어가게 축소 표기 */
   const recurTag = it.recurId!=null?`<span class="tag mid recur" title="${escAttr(parent&&parent.recur?recurLabel(parent.recur):'주기 업무에서 생성됨')}">주기</span>`:'';
   /* v2.5.1 시각 표시 정책 — 마감보다 앞서는 미완료 세부가 있으면 그 세부의 점검시각만
@@ -462,8 +474,8 @@ export function initRender(){
     if(a&&(a.matches('#search,#done-search,.dt-date,.dt-time')||a.closest('#formPanel,#presetModal')))return;
     render(); },60000);
   /* 검색 */
-  $('search').addEventListener('input',e=>{q=e.target.value.trim().toLowerCase();render();});
-  $('done-search').addEventListener('input',e=>{dq=e.target.value.trim().toLowerCase();renderDone();});
+  $('search').addEventListener('input',e=>{q=e.target.value.trim().toLowerCase(); clearTimeout(qT); qT=setTimeout(render, SEARCH_DEBOUNCE);});
+  $('done-search').addEventListener('input',e=>{dq=e.target.value.trim().toLowerCase(); clearTimeout(dqT); dqT=setTimeout(renderDone, SEARCH_DEBOUNCE);});
   /* v3.8.0 완료 묶음: 머리줄 = 접기·펼치기 */
   $('col-done').addEventListener('click',e=>{
     const hd=e.target.closest('[data-dgtoggle]'); if(!hd) return;

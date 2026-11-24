@@ -342,10 +342,10 @@ test('완료 탭: 주별 묶음은 기본 펼침(v3.8.1)이고 머리줄로 접�
   click(grp().querySelector('.dg-head'));
   assert.ok(!grp().classList.contains('dg-closed'), '다시 누르면 펼친다');
   click(grp().querySelector('.dg-head'));
-  $('done-search').value='옛날'; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  $('done-search').value='옛날'; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   assert.equal(doc.querySelectorAll('#col-done .done-group').length, 1);
   assert.ok(!doc.querySelector('#col-done .done-group').classList.contains('dg-closed'), '검색 중엔 펼친다');
-  $('done-search').value=''; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  $('done-search').value=''; $('done-search').dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   assert.deepEqual([...doc.querySelectorAll('#done-metrics span')].map(s=>s.textContent), ['1오늘','1이번 주']);
 });
 
@@ -489,10 +489,10 @@ test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마
   doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='done'));
   const g=$('g-search'); g.dispatchEvent(new env.window.Event('focus'));
   assert.equal(g.placeholder, '완료 업무 검색');
-  g.value='남의'; g.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  g.value='남의'; g.dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   assert.equal($('done-search').value, '남의');
   assert.deepEqual(rows().map(r=>r.dataset.open), [String(b.id)]);
-  g.value=''; g.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  g.value=''; g.dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='cal'));
   g.dispatchEvent(new env.window.Event('focus'));
   assert.equal(g.style.visibility, 'hidden', '캘린더엔 검색이 없다');
@@ -522,9 +522,9 @@ test('v3.8.18 완료 탭 달 단위: 이번 달=전체 · 다른 달=그 달에 
   click($('done-cal').querySelector(`[data-dcalday="${new Date(pm.getFullYear(),pm.getMonth(),10).getTime()}"]`));
   assert.equal(memos().length, 2, '풀면 그 달 기준');
   /* 검색어가 있으면 달과 상관없이 전체에서 */
-  const s=$('done-search'); s.value='두 달'; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  const s=$('done-search'); s.value='두 달'; s.dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   assert.deepEqual(memos(), ['두 달 전']);
-  s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   /* 끝낸 것이 없는 달 */
   nav(-1); nav(-1);
   const em=new Date(now.getFullYear(), now.getMonth()-3, 1);

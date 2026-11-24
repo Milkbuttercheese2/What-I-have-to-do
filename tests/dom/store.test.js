@@ -351,3 +351,28 @@ test('저장 실패: 완료 업무 표시가 유실되지 않고 재시도에 �
   await STORE._saving;
   assert.equal(S.doneDirty.has(1), false, '성공하면 지운다');
 });
+
+/* v3.8.25: 사이드카 저장은 Rust 에서 화면 스레드 밖에서 돌아 도착 순서가 보장되지 않는다 —
+   종류마다 한 번에 하나만 보내고, 보내는 중에 들어온 값은 끝난 뒤 최신 것 하나로 보낸다 */
+test('사이드카 저장: 같은 종류는 한 번에 하나, 비행 중 들어온 값은 최신 하나만 이어서', async () => {
+  await env.resetS(); S.loaded = true;
+  const gates = [];
+  env.onInvoke('save_settings', () => new Promise(r => gates.push(r)));
+  STORE.saveSettings({n:1});
+  STORE.saveSettings({n:2});
+  STORE.saveSettings({n:3});
+  await env.flush();
+  let sent = env.invokeCalls.filter(c=>c.cmd==='save_settings').map(c=>c.args.settings.n);
+  assert.deepEqual(sent, [1], '첫 저장이 끝나기 전엔 더 보내지 않는다');
+  STORE.savePresets([{x:1}]);                 // 다른 종류는 기다리지 않는다
+  await env.flush();
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_presets').length, 1);
+  gates.shift()();
+  await env.flush();
+  sent = env.invokeCalls.filter(c=>c.cmd==='save_settings').map(c=>c.args.settings.n);
+  assert.deepEqual(sent, [1, 3], '끝난 뒤 최신 값 하나만');
+  gates.shift()();
+  await env.flush();
+  assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_settings').length, 2, '더는 보내지 않는다');
+  env.onInvoke('save_settings', () => null);
+});

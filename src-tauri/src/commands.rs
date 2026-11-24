@@ -40,8 +40,12 @@ fn ensure_integrity(state: &AppDb) -> Result<(), String> {
 /// 공유 폴더면 그동안 앱 전체가 멈췄다. 옮긴 것은 **순서가 문제 되지 않는** 명령뿐이다:
 /// - save_all: 프런트(store.js)가 한 번에 하나만 보낸다(단일 비행) — 순서가 프런트에서 정해진다
 /// - load_all·backup_export: 읽기 / backup_import·emergency_dump: 사람이 누르는 한 번짜리
-/// 설정·전화번호부 같은 사이드카 저장은 프런트가 같은 종류를 앞의 것이 끝나기 전에 또 보낼 수 있어서,
-/// 메인 스레드가 지켜 주던 도착 순서를 잃으면 옛 값이 새 값을 덮을 수 있다 — 그래서 그대로 둔다.
+/// - (v3.8.25) 설정·필드·프리셋·식별정보 명칭·전화번호부 저장: 예전엔 프런트가 같은 종류를 앞의 것이 끝나기 전에 또
+///   보낼 수 있어서 메인 스레드의 도착 순서에 기대 메인에 남겨 뒀다(옛 값이 새 값을 덮지 않게). 이제 프런트(store.js
+///   _saveSide)가 **종류마다 한 번에 하나만** 보내고 그 사이 들어온 값은 끝난 뒤 최신 것 하나로 보내므로, 순서가 프런트에서 정해진다.
+///   종류가 다르면 표가 달라 서로 순서가 상관없다.
+/// - (v3.8.25) quick_search·phonebook_search·phonebook_list: 읽기 — 미니 창이 요청마다 번호(searchSeq·pbSeq)를 붙여
+///   늦게 온 옛 답을 버린다.
 /// DB 잠금(AppDb.conn)은 예전과 같은 하나뿐이라 잠금 순서는 바뀌지 않는다.
 async fn on_db_thread<T: Send + 'static>(
     app: AppHandle,
@@ -162,87 +166,99 @@ fn save_all_now(
         );
     }
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
-    // Best-effort: a failed backup rotation must not fail the save itself
-    // (the save already committed by this point). The copy must run while
-    // the connection lock is still held — every write command serializes
-    // on this Mutex, so holding it guarantees no other command is
-    // mid-transaction and the snapshot can't be torn.
-    if let Err(e) = db::rotate_backup_throttled(
-        &state.db_path,
-        &state.backups_dir,
-        &stamp,
-        BACKUP_KEEP,
-        BACKUP_MIN_INTERVAL,
-    ) {
-        /* v3.4.2: 백업 회전 실패를 로그에도 남긴다. 백업은 최후의 방어선인데
-           예전엔 stderr 만 찍고 넘어가, 디스크 부족·권한 문제로 몇 주간 백업이
-           하나도 안 쌓여도 아무도 몰랐다. 저장 자체는 이미 커밋됐으므로
-           실패시키지는 않는다(부수 작업). */
-        eprintln!("backup rotation failed: {e}");
-        db::log_line(&state.base_dir, &format!("BACKUP rotation failed: {e}"));
-    }
     drop(conn);
+    /* Best-effort: a failed backup rotation must not fail the save itself
+       (the save already committed by this point).
+       v3.8.25: 예전엔 DB 잠금(AppDb.conn)을 쥔 채 파일을 복사했다 — 복사(공유 폴더면 수 초)하는 동안 다른 모든
+       저장·읽기가 기다렸고, 저장 응답도 그만큼 늦었다. 이제는 잠금을 놓고 **뒤에서** 복사한다. 찢어진 사본을 막는 것은
+       이제 SQLite 읽기 잠금이다(db::rotate_backup_consistent — 복사하는 동안 다른 쓰기가 커밋하지 못한다).
+       저장 순서: 이 저장은 이미 커밋됐으므로 사본은 '이 저장 또는 그 뒤'의 상태다(앞으로 되돌아간 사본은 생기지 않는다). */
+    let (db_path, backups_dir, base_dir) = (state.db_path.clone(), state.backups_dir.clone(), state.base_dir.clone());
+    std::thread::spawn(move || {
+        if let Err(e) = db::rotate_backup_throttled(&db_path, &backups_dir, &stamp, BACKUP_KEEP, BACKUP_MIN_INTERVAL) {
+            /* v3.4.2: 백업 회전 실패를 로그에도 남긴다. 백업은 최후의 방어선인데
+               예전엔 stderr 만 찍고 넘어가, 디스크 부족·권한 문제로 몇 주간 백업이
+               하나도 안 쌓여도 아무도 몰랐다. 저장 자체는 이미 커밋됐으므로
+               실패시키지는 않는다(부수 작업). */
+            eprintln!("backup rotation failed: {e}");
+            db::log_line(&base_dir, &format!("BACKUP rotation failed: {e}"));
+        }
+    });
     Ok(SaveResult::Saved { version })
 }
 
 #[tauri::command]
-pub fn save_fields(state: State<AppDb>, fields: Vec<FieldDef>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::fields::save_fields(&mut conn, &fields)).map_err(to_err)
+pub async fn save_fields(app: AppHandle, fields: Vec<FieldDef>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::fields::save_fields(&mut conn, &fields)).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
-pub fn save_presets(state: State<AppDb>, presets: Vec<Preset>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::presets::save_presets(&mut conn, &presets)).map_err(to_err)
+pub async fn save_presets(app: AppHandle, presets: Vec<Preset>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::presets::save_presets(&mut conn, &presets)).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
-pub fn save_id_kinds(state: State<AppDb>, id_kinds: Vec<String>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::id_kinds::save_id_kinds(&mut conn, &id_kinds)).map_err(to_err)
+pub async fn save_id_kinds(app: AppHandle, id_kinds: Vec<String>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::id_kinds::save_id_kinds(&mut conn, &id_kinds)).map_err(to_err)
+    }).await
 }
 
 /* ===== v2.7.0 전화번호부 ===== */
 
 #[tauri::command]
-pub fn save_phonebook(state: State<AppDb>, phonebook: Vec<PhonebookEntry>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::phonebook::save_phonebook(&mut conn, &phonebook)).map_err(to_err)
+pub async fn save_phonebook(app: AppHandle, phonebook: Vec<PhonebookEntry>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::phonebook::save_phonebook(&mut conn, &phonebook)).map_err(to_err)
+    }).await
 }
 
 /// 미니 캡처 창의 @ 자동완성 — quick_search 와 같은 이유(캡처 웹뷰는 메인
 /// 모듈의 S.phonebook 에 접근할 수 없다)로 존재하는 읽기 전용 검색.
 /// 무결성 게이트에 걸려도 빈 목록만 돌려준다.
 #[tauri::command]
-pub fn phonebook_search(state: State<AppDb>, query: String) -> Result<Vec<PhonebookEntry>, String> {
-    let q = query.trim();
-    if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
-        return Ok(vec![]);
-    }
-    db::phonebook::search_phonebook(&state.conn(), q, 50).map_err(to_err)
+pub async fn phonebook_search(app: AppHandle, query: String) -> Result<Vec<PhonebookEntry>, String> {
+    on_db_thread(app, move |state| {
+        let q = query.trim();
+        if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
+        db::phonebook::search_phonebook(&state.conn(), q, 50).map_err(to_err)
+    }).await
 }
 
 /// 미니 창 본문 @태그 하이라이트용 전체 목록 (v3.1.0) — 읽기 전용.
 /// 캡처 웹뷰는 메인 모듈의 S.phonebook 에 접근할 수 없어(quick_search 와 같은
 /// 사유) 실존 관련인 판정에 쓸 목록을 이 커맨드로 받는다.
 #[tauri::command]
-pub fn phonebook_list(state: State<AppDb>) -> Result<Vec<PhonebookEntry>, String> {
-    if !state.integrity_ok.load(Ordering::Relaxed) {
-        return Ok(vec![]);
-    }
-    db::phonebook::load_phonebook(&state.conn()).map_err(to_err)
+pub async fn phonebook_list(app: AppHandle) -> Result<Vec<PhonebookEntry>, String> {
+    on_db_thread(app, |state| {
+        if !state.integrity_ok.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
+        db::phonebook::load_phonebook(&state.conn()).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<AppDb>, settings: Settings) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::settings::save_settings(&mut conn, &settings)).map_err(to_err)
+pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::settings::save_settings(&mut conn, &settings)).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
@@ -755,16 +771,18 @@ const QUICK_SEARCH_LIMIT: i64 = 100;
 /// 미니 캡처 창(메인 모듈 접근 불가)의 업무 검색 — 읽기 전용이므로 무결성
 /// 게이트에 걸려도 빈 목록만 돌려준다 (검색이 복구를 방해할 이유가 없다).
 #[tauri::command]
-pub fn quick_search(state: State<AppDb>, query: String) -> Result<Vec<QuickHit>, String> {
-    let q = query.trim();
-    if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
-        return Ok(vec![]);
-    }
-    Ok(db::items::quick_search(&state.conn(), q, QUICK_SEARCH_LIMIT)
-        .map_err(to_err)?
-        .into_iter()
-        .map(|(id, memo, done)| QuickHit { id, memo, done })
-        .collect())
+pub async fn quick_search(app: AppHandle, query: String) -> Result<Vec<QuickHit>, String> {
+    on_db_thread(app, move |state| {
+        let q = query.trim();
+        if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
+        Ok(db::items::quick_search(&state.conn(), q, QUICK_SEARCH_LIMIT)
+            .map_err(to_err)?
+            .into_iter()
+            .map(|(id, memo, done)| QuickHit { id, memo, done })
+            .collect())
+    }).await
 }
 
 /* ===== v2.5.15 화면 크기 ===== */

@@ -144,8 +144,8 @@ setInterval(()=>{ if(S.loaded) runRecurSpawn(); }, 60000);
     /* v3.7.0 자동 실행: 매 실행마다 설정값(기본 켬)에 레지스트리를 맞춘다(켜는 쪽은 exe 경로 자가 치유).
        설정에 키가 아직 없어도(업데이트 직후) 기본값으로 동작한다 — Rust 쪽 기본값도 같은 방향이다. */
     try{ syncAutostart(true); }catch(e){ console.warn('자동 실행 동기화 실패',e); }
-    /* v3.8.9: 문서 폴더 찾기 색인을 미리 — 첫 화면을 먼저 그리도록 2초 뒤 */
-    setTimeout(primeDocRoots, 2000);
+    /* v3.8.9: 문서 폴더 찾기 색인을 미리 — 첫 화면을 먼저 그리도록 뒤로. v3.8.25: 2초 → 5초(첫 조작과 겹치지 않게; Rust 쪽도 한 폴더씩 낮은 우선순위로) */
+    setTimeout(primeDocRoots, 5000);
     /* v3.0.3: 로드 전 타이핑분의 @태그 하이라이트를 전화번호부 도착 후 다시 그린다 */
     try{ refreshTagHl(); }catch(e){ console.warn('태그 하이라이트 갱신 실패',e); }
     /* 캡처 초안 회수(v3.1.0): 지난 세션이 미등록 초안을 남긴 채 꺼졌다면

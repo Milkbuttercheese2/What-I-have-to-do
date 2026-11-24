@@ -222,23 +222,29 @@ export const STORE = {
      성공해도 경고 배너를 끄지는 않는다 — 설정 저장 성공이 아이템 저장 실패를
      가리면 안 되므로, 해제는 아이템 저장(save_all) 성공만 담당한다. */
   _side:{},                                  // kind -> {cmd, args, tries, timer}
+  /* v3.8.25: 종류마다 **한 번에 하나만** 보낸다(cur.busy). 이 저장들은 이제 Rust 에서 화면 스레드 밖(on_db_thread)에서
+     돌아 도착 순서가 보장되지 않는다 — 앞의 것이 끝나기 전에 또 보내면 옛 값이 새 값을 덮을 수 있다. 보내는 중에 들어온
+     값은 args 만 최신으로 바꿔 두고, 끝나면 그 최신 값 하나를 이어서 보낸다(설정 저장은 통째 교체라 중간 값은 필요 없다). */
   _saveSide(kind, cmd, args, label){
     if(!S.loaded) return;
-    const cur=this._side[kind] || (this._side[kind]={tries:0, timer:null});
+    const cur=this._side[kind] || (this._side[kind]={tries:0, timer:null, busy:false});
     cur.cmd=cmd; cur.args=args; cur.label=label;      // 항상 최신 값으로 갱신
+    if(cur.busy) return;                              // 보내는 중 — 끝나면 이 값을 이어서 보낸다
     if(cur.timer){ clearTimeout(cur.timer); cur.timer=null; }
     this._runSide(kind);
   },
   _runSide(kind){
-    const cur=this._side[kind]; if(!cur||!cur.args) return;
+    const cur=this._side[kind]; if(!cur||!cur.args||cur.busy) return;
     const {cmd, args}=cur;
+    cur.busy=true;
     invoke(cmd, args).then(()=>{
+      cur.busy=false;
       /* 성공: 이 종류의 대기를 비운다. 그 사이 더 새 값이 들어왔다면 그 값이
-         args 에 들어와 있으므로, 보낸 것과 같을 때만 비운다. */
-      if(this._side[kind] && this._side[kind].args===args){
-        this._side[kind].args=null; this._side[kind].tries=0;
-      }
+         args 에 들어와 있으므로, 보낸 것과 같을 때만 비우고, 아니면 그 새 값을 이어서 보낸다. */
+      if(cur.args===args){ cur.args=null; cur.tries=0; }
+      else { cur.tries=0; this._runSide(kind); }
     }).catch(e=>{
+      cur.busy=false;
       console.warn(`${cur.label} 저장 실패`, e);
       showSaveError();
       cur.tries++;

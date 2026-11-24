@@ -198,14 +198,14 @@ test('검색: 보드 필터 + 결과 없음 문구', async () => {
   S.items.push(mk({memo:'사과 관련', staged:true}), mk({memo:'바나나 관련', staged:true}));
   const search = $('search');
   search.value = '사과';
-  search.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  search.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);   // v3.8.25 검색 120ms 디바운스
   assert.ok($('col-inbox').textContent.includes('사과 관련'));
   assert.ok(!$('col-inbox').textContent.includes('바나나 관련'));
   search.value = '없는말';
-  search.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  search.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);   // v3.8.25 검색 120ms 디바운스
   assert.ok($('col-inbox').textContent.includes('검색 결과가 없습니다'));
   search.value = '';
-  search.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  search.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);   // v3.8.25 검색 120ms 디바운스
 });
 
 test('완료 탭 검색(dq)은 보드 검색과 독립', async () => {
@@ -214,11 +214,11 @@ test('완료 탭 검색(dq)은 보드 검색과 독립', async () => {
   renderDone();
   const ds = $('done-search');
   ds.value = '완료a';                      // haystack은 소문자 비교
-  ds.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  ds.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);   // v3.8.25 검색 120ms 디바운스
   assert.ok($('col-done').textContent.includes('완료A'));
   assert.ok(!$('col-done').textContent.includes('완료B'));
   ds.value = '';
-  ds.dispatchEvent(new env.window.Event('input', {bubbles:true}));
+  ds.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);   // v3.8.25 검색 120ms 디바운스
 });
 
 test('v3.8.16 render: 바뀌지 않은 칸은 카드를 다시 만들지 않는다 · 바뀐 칸만 새로 · 정렬은 그대로', async () => {
