@@ -994,21 +994,24 @@ fn find_in_text<'a>(text: &'a str, q: &str, slow: bool) -> Option<(&'a str, usiz
     let line = line.strip_suffix('\r').unwrap_or(line);
     Some((line, pos - start))
 }
-/// ASCII 대소문자를 무시하고 q 가 처음 나오는 바이트 위치. q 는 올바른 UTF-8 이라 맞은 자리는 늘 글자 경계다
-/// (첫 바이트가 ASCII 거나 글자 첫 바이트). 첫 바이트(대·소문자 둘)로 후보를 빨리 거른 뒤 나머지를 견준다.
+/// ASCII 대소문자를 무시하고 q(소문자) 가 처음 나오는 바이트 위치. 64KB 씩 ASCII 만 소문자로 바꿔 작은 버퍼에 옮기고
+/// 그 안을 SIMD 로 찾는다(memchr::memmem) — 파일 통째 사본을 만들지 않고, 맞으면 바로 멈춘다. 첫 글자로만 거르던 방식은
+/// 첫 글자가 흔한 글자(e·a 등)면 오히려 예전보다 느렸다. 조각 경계는 q 길이-1 만큼 겹쳐 놓치지 않는다.
+/// q 는 올바른 UTF-8 이고 바뀌는 것은 ASCII 뿐이라, 맞은 자리는 늘 글자 경계다.
 fn find_ascii_ci(hay: &[u8], q: &[u8]) -> Option<usize> {
-    let (&f, rest) = q.split_first()?;
-    if hay.len() < q.len() { return None }
-    let (a, b) = (f.to_ascii_lowercase(), f.to_ascii_uppercase());
-    let last = hay.len() - q.len();
-    let mut i = 0;
-    while i <= last {
-        let off = memchr::memchr2(a, b, &hay[i..=last])?;
-        i += off;
-        if hay[i + 1..i + q.len()].eq_ignore_ascii_case(rest) { return Some(i) }
-        i += 1;
+    if q.is_empty() || hay.len() < q.len() { return None }
+    const CH: usize = 64 * 1024;
+    let finder = memchr::memmem::Finder::new(q);
+    let mut buf = vec![0u8; (CH + q.len() - 1).min(hay.len())];
+    let mut start = 0;
+    loop {
+        let end = (start + CH + q.len() - 1).min(hay.len());
+        let n = end - start;
+        for (d, s) in buf[..n].iter_mut().zip(&hay[start..end]) { *d = s.to_ascii_lowercase(); }
+        if let Some(p) = finder.find(&buf[..n]) { return Some(start + p) }
+        if end == hay.len() { return None }
+        start += CH;
     }
-    None
 }
 
 /// 색인을 새로 만들어 찾는다(시험·한 번 쓰기용)
