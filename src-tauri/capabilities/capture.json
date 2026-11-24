@@ -1,7 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "capture",
-  "description": "Capability for the mini capture window: emit to main + hide itself. core:window:default has getters only, so allow-hide must be granted explicitly.",
-  "windows": ["capture"],
-  "permissions": ["core:default", "core:window:allow-hide"]
+  "description": "Capability for the mini capture window: emit to main + hide itself. core:window:default has getters only, so allow-hide must be granted explicitly. v3.8.25: only the five app commands the mini window uses (capture-win.js).",
+  "windows": [
+    "capture"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "allow-focus-main-window",
+    "allow-phonebook-list",
+    "allow-phonebook-search",
+    "allow-quick-search",
+    "allow-resize-capture"
+  ]
 }

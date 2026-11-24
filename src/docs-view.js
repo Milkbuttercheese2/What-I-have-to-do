@@ -513,34 +513,61 @@ function hwpTextLayer(svg){
   d.appendChild(frag);
   return d;
 }
-/* 첫 쪽은 바로(실패하면 예외 → 부르는 쪽이 글자·표 보기로), 나머지는 쉬어 가며 그려 화면을 멈추지 않는다. 돌려주는 함수 = 정리 */
+/* 첫 쪽은 바로(실패하면 예외 → 부르는 쪽이 글자·표 보기로). 돌려주는 함수 = 정리.
+   v3.8.25: 예전엔 열자마자 모든 쪽(최대 300쪽)의 SVG 를 차례로 만들어 그림으로 두고, 글자 층을 만들 때 그 쪽 SVG 를 한 번 더 만들었다
+   (긴 문서는 여는 동안 CPU 를 오래 붙잡고, 그림 300장이 메모리에 남았다). 이제는 PDF 처럼:
+   · 쪽 자리는 rhwp 쪽 정보(getPageInfo — 그리지 않고 크기만)로 미리 잡아 두고(스크롤 길이·위치가 처음부터 맞다)
+   · 화면 근처(위아래 1200px)에 온 쪽만 SVG 를 만들어 그림을 넣고, 그 SVG 로 글자 층도 만든다(두 번 만들지 않는다)
+   · 멀어진 쪽은 그림만 놓는다. 글자 층은 한 번 만들면 남긴다 — 끌어 고르기가 쪽을 넘어 이어질 때(v3.8.21~23) 지나간 쪽 글자가 없어지면 안 된다
+   · 글자 층 크기 맞추기(fit)는 모든 쪽 폭을 먼저 읽고 한꺼번에 쓴다(읽기·쓰기를 번갈아 하면 쪽마다 배치를 다시 계산한다) */
 export async function renderHwp(box, bytes, rhwp){
   const doc=new rhwp.HwpDocument(bytes);
-  const urls=[]; let dead=false, cleanupRO=null;
-  const cleanup=()=>{ dead=true; if(cleanupRO) cleanupRO(); urls.forEach(u=>URL.revokeObjectURL(u)); urls.length=0; try{ doc.free(); }catch{} };
+  const urls=new Map(); let dead=false, cleanupRO=null;
+  const cleanup=()=>{ dead=true; if(cleanupRO) cleanupRO(); urls.forEach(u=>URL.revokeObjectURL(u)); urls.clear(); try{ doc.free(); }catch{} };
   try{
     const n=doc.pageCount(); if(!(n>0)) throw new Error('쪽이 없습니다');
     const total=Math.min(n, HWP_MAX_PAGES);
     box.innerHTML=`<div class="dv-hwp-bar num">${n}쪽</div><div class="dv-hwp"></div>`+(n>HWP_MAX_PAGES?`<div class="dv-cap">앞 ${HWP_MAX_PAGES}쪽까지만 — 나머지는 [한글에서 열기]</div>`:'');
     const list=box.querySelector('.dv-hwp');
-    const fit=()=>{ for(const pg of list.children){ const tl=pg.querySelector('.dv-hwp-tl'), im=pg.querySelector('img'); if(tl&&im&&im.clientWidth) tl.style.transform=`scale(${im.clientWidth/parseFloat(tl.style.width)})`; } };
-    const layer=(pg, svg)=>{
-      if(pg.dataset.tl || dead) return; pg.dataset.tl='1';
-      let tl=null; try{ tl=hwpTextLayer(svg || doc.renderPageSvg(Number(pg.dataset.pg))); }catch(e){ console.warn('한글 글자 층 실패', Number(pg.dataset.pg)+1, e); }
-      if(!tl) return;
-      pg.appendChild(tl); guardSelection(tl); fit();
+    const fitPages=pgs=>{
+      const todo=[]; for(const pg of pgs){ const tl=pg.tl; if(tl) todo.push([tl, pg.clientWidth, parseFloat(tl.style.width)]); }
+      for(const [tl, w, tw] of todo) if(w>0 && tw>0) tl.style.transform=`scale(${w/tw})`;
     };
-    const io=typeof IntersectionObserver==='function' ? new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ io.unobserve(e.target); layer(e.target); } }, {root:box.closest('.dv-content')||null, rootMargin:'1200px 0px'}) : null;
-    const page=i=>{ const svg=doc.renderPageSvg(i); const u=URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'})); urls.push(u);
+    const fit=()=>fitPages(list.children);
+    const svg0=doc.renderPageSvg(0);                   // 첫 쪽 — 여기서 실패하면 예외(글자·표 보기로)
+    const vb=String((/viewBox="([^"]*)"/.exec(svg0)||[])[1]||'').split(/[s,]+/).map(Number);
+    const size0=vb.length===4 && vb[2]>0 && vb[3]>0 ? [vb[2], vb[3]] : [794, 1123];
+    const sizeOf=i=>{
+      if(i===0) return size0;
+      try{ const p=typeof doc.getPageInfo==='function' ? JSON.parse(doc.getPageInfo(i)) : null; if(p && p.width>0 && p.height>0) return [p.width, p.height]; }catch{}
+      return size0;
+    };
+    const show=(pg, svg)=>{
+      if(dead || pg.querySelector('img')) return;
+      const i=Number(pg.dataset.pg);
+      if(svg==null){ try{ svg=doc.renderPageSvg(i); }catch(e){ console.warn('rhwp 쪽 그리기 실패', i+1, e); return; } }
+      const u=URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'})); urls.set(pg, u);
+      const im=document.createElement('img'); im.alt=`${i+1}쪽`; im.src=u; im.draggable=false; pg.insertBefore(im, pg.firstChild);
+      if(!pg.tl && !pg.dataset.tl){
+        pg.dataset.tl='1';
+        let tl=null; try{ tl=hwpTextLayer(svg); }catch(e){ console.warn('한글 글자 층 실패', i+1, e); }
+        if(tl){ pg.tl=tl; pg.appendChild(tl); guardSelection(tl); fitPages([pg]); }
+      }
+    };
+    const hide=pg=>{ const u=urls.get(pg); if(!u) return; const im=pg.querySelector('img'); if(im) im.remove(); URL.revokeObjectURL(u); urls.delete(pg); };
+    const io=typeof IntersectionObserver==='function' ? new IntersectionObserver(es=>{ for(const e of es){ if(e.isIntersecting) show(e.target); else hide(e.target); } }, {root:box.closest('.dv-content')||null, rootMargin:'1200px 0px'}) : null;
+    const pgs=[];
+    for(let i=0;i<total;i++){
+      const [w, h]=sizeOf(i);
       const pg=document.createElement('div'); pg.className='dv-hwp-pg'; pg.dataset.pg=String(i);
-      const im=document.createElement('img'); im.alt=`${i+1}쪽`; im.src=u; im.draggable=false; pg.appendChild(im);
-      im.addEventListener('load', fit, {once:true});
-      list.appendChild(pg);
-      if(io) io.observe(pg); else layer(pg, svg); };
+      pg.style.width=w+'px'; pg.style.aspectRatio=`${w} / ${h}`;    // 그림이 없어도 쪽 자리는 그대로(max-width:100% 는 CSS)
+      list.appendChild(pg); pgs.push(pg);
+    }
     const ro=typeof ResizeObserver==='function' ? new ResizeObserver(fit) : null; if(ro) ro.observe(list);
     cleanupRO=()=>{ if(ro) ro.disconnect(); if(io) io.disconnect(); };
-    page(0);
-    (async()=>{ for(let i=1;i<total && !dead;i++){ await new Promise(r=>setTimeout(r, 0)); if(dead || !list.isConnected) return; try{ page(i); }catch(e){ console.warn('rhwp 쪽 그리기 실패', i+1, e); return; } } })();
+    show(pgs[0], svg0);
+    if(io) pgs.forEach(pg=>io.observe(pg));
+    else (async()=>{ for(let i=1;i<total && !dead;i++){ await new Promise(r=>setTimeout(r, 0)); if(dead || !list.isConnected) return; show(pgs[i]); } })();   // 보이는 곳을 모를 때(시험 환경)는 예전처럼 모두
     return cleanup;
   }catch(e){ cleanup(); throw e; }
 }

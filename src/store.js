@@ -9,15 +9,31 @@ import {showSaveError, clearSaveError, appAlert, appConfirm} from './dom-utils.j
 export const { invoke } = window.__TAURI__.core;
 
 /* v3.8.24 보안 점검: 파일 링크 열기는 모두 이걸 거친다(`invoke('open_file_path')` 를 직접 부르지 말 것).
-   Rust 가 실행 형식(exe·bat·ps1·lnk …)이면 'EXEC_BLOCKED' 로 거절하고, 여기서 한 번 물어
-   [확인]일 때만 allowExec 로 다시 연다. 취소하면 false, 그 밖의 실패는 예전처럼 던진다. */
-export async function openPath(path){
-  try{ await invoke('open_file_path', {path}); return true; }
-  catch(err){
-    if(String(err)!=='EXEC_BLOCKED') throw err;
-    const name=String(path).split(/[\\/]/).pop()||path;
-    if(!await appConfirm(`'${name}' 은(는) 프로그램(실행 파일)입니다.\n열면 그 프로그램이 바로 실행됩니다.\n\n믿을 수 있는 파일일 때만 [확인]을 누르세요.\n${path}`, '실행 파일 열기')) return false;
-    await invoke('open_file_path', {path, allowExec:true}); return true;
+   Rust 가 실행 형식(exe·bat·ps1·lnk·매크로 문서·확장자 없는 파일 …)이면 'EXEC_BLOCKED' 로 거절하고, 여기서 한 번 물어
+   [확인]일 때만 allowExec 로 다시 연다. 취소하면 false, 그 밖의 실패(없는 파일·상대 경로·프로토콜 주소)는 예전처럼 던진다. */
+/* v3.8.25 보안 2차: 공유 폴더(`\\서버\…`)는 'NET_BLOCKED' — 여는 순간 Windows 가 그 서버에 로그인 정보를 보내므로
+   서버 이름을 보여 주고 한 번 묻는다(문서 폴더 안·이번 실행에 허락한 서버는 Rust 가 묻지 않는다). 두 확인은 따로 묻는다. */
+export const openPath = path => linkAct('open_file_path', path);
+/* 탐색기에서 보이기(📂) — 실행 형식 확인은 없고 공유 폴더 확인만 같다. `invoke('reveal_file_path')` 를 직접 부르지 말 것. */
+export const revealPath = path => linkAct('reveal_file_path', path);
+async function linkAct(cmd, path){
+  const a={path};
+  for(;;){
+    try{ await invoke(cmd, a); return true; }
+    catch(err){
+      const s=String(err);
+      if(s==='EXEC_BLOCKED' && !a.allowExec){
+        const name=String(path).split(/[\\/]/).pop()||path;
+        if(!await appConfirm(`'${name}' 은(는) 프로그램(실행 파일)이거나 무엇으로 열릴지 알 수 없는 파일입니다.\n열면 그 안의 프로그램·매크로가 바로 실행될 수 있습니다.\n\n믿을 수 있는 파일일 때만 [확인]을 누르세요.\n${path}`, '실행 파일 열기')) return false;
+        a.allowExec=true; continue;
+      }
+      if(s==='NET_BLOCKED' && !a.allowNet){
+        const host=String(path).replace(/\//g,'\\').replace(/^\\\\/,'').split('\\')[0];
+        if(!await appConfirm(`공유 폴더(서버 '${host}')의 파일입니다.\n열면 Windows 가 그 서버에 내 로그인 정보를 보냅니다.\n\n아는 서버일 때만 [확인]을 누르세요(이번 실행 동안은 다시 묻지 않습니다).\n${path}`, '공유 폴더 열기')) return false;
+        a.allowNet=true; continue;
+      }
+      throw err;
+    }
   }
 }
 
@@ -206,23 +222,29 @@ export const STORE = {
      성공해도 경고 배너를 끄지는 않는다 — 설정 저장 성공이 아이템 저장 실패를
      가리면 안 되므로, 해제는 아이템 저장(save_all) 성공만 담당한다. */
   _side:{},                                  // kind -> {cmd, args, tries, timer}
+  /* v3.8.25: 종류마다 **한 번에 하나만** 보낸다(cur.busy). 이 저장들은 이제 Rust 에서 화면 스레드 밖(on_db_thread)에서
+     돌아 도착 순서가 보장되지 않는다 — 앞의 것이 끝나기 전에 또 보내면 옛 값이 새 값을 덮을 수 있다. 보내는 중에 들어온
+     값은 args 만 최신으로 바꿔 두고, 끝나면 그 최신 값 하나를 이어서 보낸다(설정 저장은 통째 교체라 중간 값은 필요 없다). */
   _saveSide(kind, cmd, args, label){
     if(!S.loaded) return;
-    const cur=this._side[kind] || (this._side[kind]={tries:0, timer:null});
+    const cur=this._side[kind] || (this._side[kind]={tries:0, timer:null, busy:false});
     cur.cmd=cmd; cur.args=args; cur.label=label;      // 항상 최신 값으로 갱신
+    if(cur.busy) return;                              // 보내는 중 — 끝나면 이 값을 이어서 보낸다
     if(cur.timer){ clearTimeout(cur.timer); cur.timer=null; }
     this._runSide(kind);
   },
   _runSide(kind){
-    const cur=this._side[kind]; if(!cur||!cur.args) return;
+    const cur=this._side[kind]; if(!cur||!cur.args||cur.busy) return;
     const {cmd, args}=cur;
+    cur.busy=true;
     invoke(cmd, args).then(()=>{
+      cur.busy=false;
       /* 성공: 이 종류의 대기를 비운다. 그 사이 더 새 값이 들어왔다면 그 값이
-         args 에 들어와 있으므로, 보낸 것과 같을 때만 비운다. */
-      if(this._side[kind] && this._side[kind].args===args){
-        this._side[kind].args=null; this._side[kind].tries=0;
-      }
+         args 에 들어와 있으므로, 보낸 것과 같을 때만 비우고, 아니면 그 새 값을 이어서 보낸다. */
+      if(cur.args===args){ cur.args=null; cur.tries=0; }
+      else { cur.tries=0; this._runSide(kind); }
     }).catch(e=>{
+      cur.busy=false;
       console.warn(`${cur.label} 저장 실패`, e);
       showSaveError();
       cur.tries++;

@@ -40,8 +40,12 @@ fn ensure_integrity(state: &AppDb) -> Result<(), String> {
 /// 공유 폴더면 그동안 앱 전체가 멈췄다. 옮긴 것은 **순서가 문제 되지 않는** 명령뿐이다:
 /// - save_all: 프런트(store.js)가 한 번에 하나만 보낸다(단일 비행) — 순서가 프런트에서 정해진다
 /// - load_all·backup_export: 읽기 / backup_import·emergency_dump: 사람이 누르는 한 번짜리
-/// 설정·전화번호부 같은 사이드카 저장은 프런트가 같은 종류를 앞의 것이 끝나기 전에 또 보낼 수 있어서,
-/// 메인 스레드가 지켜 주던 도착 순서를 잃으면 옛 값이 새 값을 덮을 수 있다 — 그래서 그대로 둔다.
+/// - (v3.8.25) 설정·필드·프리셋·식별정보 명칭·전화번호부 저장: 예전엔 프런트가 같은 종류를 앞의 것이 끝나기 전에 또
+///   보낼 수 있어서 메인 스레드의 도착 순서에 기대 메인에 남겨 뒀다(옛 값이 새 값을 덮지 않게). 이제 프런트(store.js
+///   _saveSide)가 **종류마다 한 번에 하나만** 보내고 그 사이 들어온 값은 끝난 뒤 최신 것 하나로 보내므로, 순서가 프런트에서 정해진다.
+///   종류가 다르면 표가 달라 서로 순서가 상관없다.
+/// - (v3.8.25) quick_search·phonebook_search·phonebook_list: 읽기 — 미니 창이 요청마다 번호(searchSeq·pbSeq)를 붙여
+///   늦게 온 옛 답을 버린다.
 /// DB 잠금(AppDb.conn)은 예전과 같은 하나뿐이라 잠금 순서는 바뀌지 않는다.
 async fn on_db_thread<T: Send + 'static>(
     app: AppHandle,
@@ -162,87 +166,99 @@ fn save_all_now(
         );
     }
     let stamp = db::now_stamp(&conn).map_err(to_err)?;
-    // Best-effort: a failed backup rotation must not fail the save itself
-    // (the save already committed by this point). The copy must run while
-    // the connection lock is still held — every write command serializes
-    // on this Mutex, so holding it guarantees no other command is
-    // mid-transaction and the snapshot can't be torn.
-    if let Err(e) = db::rotate_backup_throttled(
-        &state.db_path,
-        &state.backups_dir,
-        &stamp,
-        BACKUP_KEEP,
-        BACKUP_MIN_INTERVAL,
-    ) {
-        /* v3.4.2: 백업 회전 실패를 로그에도 남긴다. 백업은 최후의 방어선인데
-           예전엔 stderr 만 찍고 넘어가, 디스크 부족·권한 문제로 몇 주간 백업이
-           하나도 안 쌓여도 아무도 몰랐다. 저장 자체는 이미 커밋됐으므로
-           실패시키지는 않는다(부수 작업). */
-        eprintln!("backup rotation failed: {e}");
-        db::log_line(&state.base_dir, &format!("BACKUP rotation failed: {e}"));
-    }
     drop(conn);
+    /* Best-effort: a failed backup rotation must not fail the save itself
+       (the save already committed by this point).
+       v3.8.25: 예전엔 DB 잠금(AppDb.conn)을 쥔 채 파일을 복사했다 — 복사(공유 폴더면 수 초)하는 동안 다른 모든
+       저장·읽기가 기다렸고, 저장 응답도 그만큼 늦었다. 이제는 잠금을 놓고 **뒤에서** 복사한다. 찢어진 사본을 막는 것은
+       이제 SQLite 읽기 잠금이다(db::rotate_backup_consistent — 복사하는 동안 다른 쓰기가 커밋하지 못한다).
+       저장 순서: 이 저장은 이미 커밋됐으므로 사본은 '이 저장 또는 그 뒤'의 상태다(앞으로 되돌아간 사본은 생기지 않는다). */
+    let (db_path, backups_dir, base_dir) = (state.db_path.clone(), state.backups_dir.clone(), state.base_dir.clone());
+    std::thread::spawn(move || {
+        if let Err(e) = db::rotate_backup_throttled(&db_path, &backups_dir, &stamp, BACKUP_KEEP, BACKUP_MIN_INTERVAL) {
+            /* v3.4.2: 백업 회전 실패를 로그에도 남긴다. 백업은 최후의 방어선인데
+               예전엔 stderr 만 찍고 넘어가, 디스크 부족·권한 문제로 몇 주간 백업이
+               하나도 안 쌓여도 아무도 몰랐다. 저장 자체는 이미 커밋됐으므로
+               실패시키지는 않는다(부수 작업). */
+            eprintln!("backup rotation failed: {e}");
+            db::log_line(&base_dir, &format!("BACKUP rotation failed: {e}"));
+        }
+    });
     Ok(SaveResult::Saved { version })
 }
 
 #[tauri::command]
-pub fn save_fields(state: State<AppDb>, fields: Vec<FieldDef>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::fields::save_fields(&mut conn, &fields)).map_err(to_err)
+pub async fn save_fields(app: AppHandle, fields: Vec<FieldDef>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::fields::save_fields(&mut conn, &fields)).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
-pub fn save_presets(state: State<AppDb>, presets: Vec<Preset>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::presets::save_presets(&mut conn, &presets)).map_err(to_err)
+pub async fn save_presets(app: AppHandle, presets: Vec<Preset>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::presets::save_presets(&mut conn, &presets)).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
-pub fn save_id_kinds(state: State<AppDb>, id_kinds: Vec<String>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::id_kinds::save_id_kinds(&mut conn, &id_kinds)).map_err(to_err)
+pub async fn save_id_kinds(app: AppHandle, id_kinds: Vec<String>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::id_kinds::save_id_kinds(&mut conn, &id_kinds)).map_err(to_err)
+    }).await
 }
 
 /* ===== v2.7.0 전화번호부 ===== */
 
 #[tauri::command]
-pub fn save_phonebook(state: State<AppDb>, phonebook: Vec<PhonebookEntry>) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::phonebook::save_phonebook(&mut conn, &phonebook)).map_err(to_err)
+pub async fn save_phonebook(app: AppHandle, phonebook: Vec<PhonebookEntry>) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::phonebook::save_phonebook(&mut conn, &phonebook)).map_err(to_err)
+    }).await
 }
 
 /// 미니 캡처 창의 @ 자동완성 — quick_search 와 같은 이유(캡처 웹뷰는 메인
 /// 모듈의 S.phonebook 에 접근할 수 없다)로 존재하는 읽기 전용 검색.
 /// 무결성 게이트에 걸려도 빈 목록만 돌려준다.
 #[tauri::command]
-pub fn phonebook_search(state: State<AppDb>, query: String) -> Result<Vec<PhonebookEntry>, String> {
-    let q = query.trim();
-    if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
-        return Ok(vec![]);
-    }
-    db::phonebook::search_phonebook(&state.conn(), q, 50).map_err(to_err)
+pub async fn phonebook_search(app: AppHandle, query: String) -> Result<Vec<PhonebookEntry>, String> {
+    on_db_thread(app, move |state| {
+        let q = query.trim();
+        if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
+        db::phonebook::search_phonebook(&state.conn(), q, 50).map_err(to_err)
+    }).await
 }
 
 /// 미니 창 본문 @태그 하이라이트용 전체 목록 (v3.1.0) — 읽기 전용.
 /// 캡처 웹뷰는 메인 모듈의 S.phonebook 에 접근할 수 없어(quick_search 와 같은
 /// 사유) 실존 관련인 판정에 쓸 목록을 이 커맨드로 받는다.
 #[tauri::command]
-pub fn phonebook_list(state: State<AppDb>) -> Result<Vec<PhonebookEntry>, String> {
-    if !state.integrity_ok.load(Ordering::Relaxed) {
-        return Ok(vec![]);
-    }
-    db::phonebook::load_phonebook(&state.conn()).map_err(to_err)
+pub async fn phonebook_list(app: AppHandle) -> Result<Vec<PhonebookEntry>, String> {
+    on_db_thread(app, |state| {
+        if !state.integrity_ok.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
+        db::phonebook::load_phonebook(&state.conn()).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<AppDb>, settings: Settings) -> Result<(), String> {
-    ensure_integrity(&state)?;
-    let mut conn = state.conn();
-    db::with_write_retry(|| db::settings::save_settings(&mut conn, &settings)).map_err(to_err)
+pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+    on_db_thread(app, move |state| {
+        ensure_integrity(state)?;
+        let mut conn = state.conn();
+        db::with_write_retry(|| db::settings::save_settings(&mut conn, &settings)).map_err(to_err)
+    }).await
 }
 
 #[tauri::command]
@@ -755,16 +771,18 @@ const QUICK_SEARCH_LIMIT: i64 = 100;
 /// 미니 캡처 창(메인 모듈 접근 불가)의 업무 검색 — 읽기 전용이므로 무결성
 /// 게이트에 걸려도 빈 목록만 돌려준다 (검색이 복구를 방해할 이유가 없다).
 #[tauri::command]
-pub fn quick_search(state: State<AppDb>, query: String) -> Result<Vec<QuickHit>, String> {
-    let q = query.trim();
-    if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
-        return Ok(vec![]);
-    }
-    Ok(db::items::quick_search(&state.conn(), q, QUICK_SEARCH_LIMIT)
-        .map_err(to_err)?
-        .into_iter()
-        .map(|(id, memo, done)| QuickHit { id, memo, done })
-        .collect())
+pub async fn quick_search(app: AppHandle, query: String) -> Result<Vec<QuickHit>, String> {
+    on_db_thread(app, move |state| {
+        let q = query.trim();
+        if q.is_empty() || !state.integrity_ok.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
+        Ok(db::items::quick_search(&state.conn(), q, QUICK_SEARCH_LIMIT)
+            .map_err(to_err)?
+            .into_iter()
+            .map(|(id, memo, done)| QuickHit { id, memo, done })
+            .collect())
+    }).await
 }
 
 /* ===== v2.5.15 화면 크기 ===== */
@@ -940,46 +958,138 @@ pub async fn pick_folder_path(app: AppHandle) -> Result<Option<String>, String> 
 
 /// 열면 곧 '실행'이 되는 형식(v3.8.24 보안 점검). 기본 연결 프로그램으로 열면 문서가 아니라
 /// 프로그램·스크립트가 돈다 — 링크 경로는 사람이 붙여 넣거나 끌어 넣은 값이라 믿을 수 없다.
+/// v3.8.25(보안 2차): 매크로 문서·디스크 이미지·도움말·인터넷 바로 가기·진단 꾸러미 등도 더했다 —
+/// 모두 '열면 그 안의 것이 돌거나(매크로·스크립트) 다른 것을 끌어와 여는(이미지 마운트·바로 가기)' 형식이다.
 const EXEC_EXTS: &[&str] = &[
-    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "mst", "msc", "bat", "cmd", "ps1", "psm1",
-    "psd1", "ps1xml", "vbs", "vbe", "js", "jse", "wsf", "wsh", "wsc", "hta", "lnk", "url", "scf",
-    "reg", "inf", "jar", "appref-ms", "application", "gadget", "msh", "msh1", "msh2", "mshxml",
-    "sct", "settingcontent-ms", "library-ms", "appx", "appxbundle", "msix", "msixbundle", "xll",
+    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "mst", "msc", "msu", "bat", "cmd", "ps1", "psm1",
+    "psd1", "ps1xml", "ps2", "ps2xml", "psc1", "psc2", "vb", "vbs", "vbe", "js", "jse", "ws", "wsf",
+    "wsh", "wsc", "hta", "lnk", "url", "website", "scf", "reg", "inf", "ins", "isp", "jar", "jnlp",
+    "appref-ms", "application", "gadget", "msh", "msh1", "msh2", "mshxml", "msh1xml", "msh2xml",
+    "sct", "settingcontent-ms", "library-ms", "searchconnector-ms", "search-ms", "appx",
+    "appxbundle", "msix", "msixbundle", "appinstaller", "xll", "xla", "xlam", "xlsm", "xltm",
+    "docm", "dotm", "pptm", "potm", "ppsm", "ppam", "sldm", "chm", "hlp", "mht", "mhtml", "iso",
+    "img", "vhd", "vhdx", "diagcab", "diagpkg", "diagcfg", "rdp", "theme", "themepack",
+    "desktopthemepackfile", "xbap", "xnk", "ocx", "dll", "sys", "drv", "ade", "adp", "mda",
+    "mde", "accde", "mam", "maq", "mar", "mat", "mau", "mav", "maw", "crt", "der", "pcd", "plg",
+    "prf", "shb", "shs", "wiz", "py", "pyw", "pl", "rb", "sh", "bash", "lua", "tcl",
 ];
 /// 화면이 이 글을 보고 '실행 형식이라 확인'을 띄운다 — 바꾸면 store.js `openPath` 도 함께.
 pub const EXEC_BLOCKED: &str = "EXEC_BLOCKED";
+/// v3.8.25: 공유 폴더(`\\서버\…`)를 처음 열 때 — 여는 순간 Windows 가 그 서버에 내 로그인 정보(NTLM)를 보낸다.
+/// 화면이 서버 이름을 보여 주고 한 번 묻는다. 문서 폴더로 정한 곳·이번 실행에 한 번 허락한 서버는 묻지 않는다.
+pub const NET_BLOCKED: &str = "NET_BLOCKED";
 
 /// 경로의 마지막 확장자가 실행 형식인가. Windows 는 이름 끝의 점·공백을 버리고 여므로
 /// (`a.exe.` = `a.exe`) 그것을 먼저 떼고 본다. 대소문자 무시.
 pub fn is_exec_path(path: &str) -> bool {
-    let name = path.rsplit(['\\', '/']).next().unwrap_or("");
-    let name = name.trim_end_matches(['.', ' ']);
-    match name.rsplit_once('.') {
-        Some((_, ext)) => EXEC_EXTS.iter().any(|x| x.eq_ignore_ascii_case(ext)),
+    match ext_of(path) {
+        Some(ext) => EXEC_EXTS.iter().any(|x| x.eq_ignore_ascii_case(ext)),
         None => false,
     }
+}
+/// 마지막 이름의 확장자(끝의 점·공백은 뗀 뒤). 확장자가 없으면 None.
+fn ext_of(path: &str) -> Option<&str> {
+    let name = path.rsplit(['\\', '/']).next().unwrap_or("");
+    let name = name.trim_end_matches(['.', ' ']);
+    name.rsplit_once('.').map(|(_, e)| e).filter(|e| !e.is_empty())
+}
+
+/// 링크 경로의 생김새 검사(디스크를 만지지 않는다). 통과하면 `Some(서버 이름)`(공유 폴더) 또는 `None`(드라이브 경로).
+/// 거부: 빈 값·제어 문자 / `\\?\`·`\\.\` 장치 경로 / 절대 경로가 아닌 것(`calc`, `a\b.pdf`, `\a`, `C:a`) /
+/// 드라이브 자리가 아닌 `:`(`ms-msdt:…`·`search-ms:…` 같은 프로토콜 주소, `a.txt:숨은.exe` 같은 대체 데이터 스트림).
+/// 링크 경로는 사람이 붙여 넣거나 백업 JSON(`item_files.path`)으로 들어오는 값이라 믿을 수 없다.
+pub fn link_shape(path: &str) -> Result<Option<String>, String> {
+    const BAD: &str = "열 수 없는 경로입니다(드라이브나 공유 폴더로 시작하는 전체 경로만 열 수 있습니다)";
+    if path.trim().is_empty() || path.chars().any(|c| c.is_control()) {
+        return Err(BAD.into());
+    }
+    let s = path.replace('/', "\\");
+    let (host, rest) = if let Some(r) = s.strip_prefix(r"\\") {
+        if r.starts_with('?') || r.starts_with('.') {
+            return Err(BAD.into());
+        }
+        let mut it = r.splitn(3, '\\');
+        let host = it.next().unwrap_or("");
+        let share = it.next().unwrap_or("");
+        if host.is_empty() || share.is_empty() {
+            return Err(BAD.into());
+        }
+        (Some(host.to_string()), r)
+    } else {
+        let b = s.as_bytes();
+        if b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' || b[2] != b'\\' {
+            return Err(BAD.into());
+        }
+        (None, &s[2..])
+    };
+    if rest.contains(':') {
+        return Err(BAD.into());
+    }
+    Ok(host)
+}
+
+/// 이번 실행에 사용자가 [확인]한 공유 폴더 서버들(소문자). 앱을 끄면 잊는다 — 저장하지 않는다.
+static NET_OK: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+fn net_trusted(path: &str, host: &str) -> bool {
+    let h = host.to_lowercase();
+    NET_OK.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| *x == h) || crate::docs::inside_any_root(path)
+}
+
+/// 여는 길·탐색기에서 보이기 공용 관문. `exec` 이 false 면 실행 형식 검사를 하지 않는다(보이기는 실행하지 않으므로).
+/// 순서가 중요하다: 공유 폴더 확인은 **디스크를 만지기 전에** 한다 — 있는지 보는 것만으로도 그 서버에 로그인 정보가 간다.
+pub fn check_link(path: &str, allow_exec: bool, allow_net: bool, exec: bool, trusted: impl Fn(&str, &str) -> bool) -> Result<(), String> {
+    if let Some(host) = link_shape(path)? {
+        if !allow_net && !trusted(path, &host) {
+            return Err(NET_BLOCKED.into());
+        }
+    }
+    let canon = std::fs::canonicalize(path).map_err(|_| format!("파일을 찾을 수 없습니다: {path}"))?;
+    if !exec || canon.is_dir() {
+        return Ok(()); // 폴더는 이름과 무관하게 탐색기로 연다
+    }
+    /* 확장자는 적은 이름과 정규화한 이름 둘 다로 본다 — 짧은 이름(`EVIL~1.EXE`)·정션·심볼릭 링크 뒤의 진짜 이름이 다를 수 있다.
+       확장자가 없는 파일도 묻는다: Windows 가 무엇으로 열지 내용·설정에 따라 정하므로 문서라고 볼 수 없다. */
+    let cname = canon.to_string_lossy();
+    if !allow_exec && (is_exec_path(path) || is_exec_path(&cname) || ext_of(path).is_none() || ext_of(&cname).is_none()) {
+        return Err(EXEC_BLOCKED.into());
+    }
+    Ok(())
 }
 
 /// 카드의 파일 링크 클릭 → 기본 연결 프로그램으로 파일 열기.
 /// v3.8.24: 실행 형식(EXEC_EXTS)은 `allow_exec: true` 가 아니면 열지 않고 `EXEC_BLOCKED` 를 돌려준다 —
 /// 화면이 사용자에게 한 번 묻고 '열기'를 고르면 그때 다시 부른다. 폴더는 이름과 무관하게 그대로 연다.
+/// v3.8.25: 생김새(`link_shape`)·공유 폴더(`NET_BLOCKED`)·있는지·정규화한 이름까지 본다 — `check_link`.
 #[tauri::command]
-pub fn open_file_path(app: AppHandle, path: String, allow_exec: Option<bool>) -> Result<(), String> {
+pub fn open_file_path(app: AppHandle, path: String, allow_exec: Option<bool>, allow_net: Option<bool>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    if allow_exec != Some(true) && !std::path::Path::new(&path).is_dir() && is_exec_path(&path) {
-        return Err(EXEC_BLOCKED.into());
-    }
+    let allow_net = allow_net == Some(true);
+    check_link(&path, allow_exec == Some(true), allow_net, true, net_trusted)?;
+    remember_net(&path, allow_net);
     app.opener().open_path(&path, None::<String>).map_err(to_err)
+}
+/// 사용자가 이 서버를 허락했으면 이번 실행 동안 다시 묻지 않는다
+fn remember_net(path: &str, allow_net: bool) {
+    if !allow_net { return; }
+    if let Ok(Some(h)) = link_shape(path) {
+        let h = h.to_lowercase();
+        let mut v = NET_OK.lock().unwrap_or_else(|e| e.into_inner());
+        if !v.contains(&h) { v.push(h); }
+    }
 }
 
 #[cfg(test)]
 mod exec_tests {
-    use super::is_exec_path;
+    use super::*;
     #[test]
     fn exec_kinds_are_caught() {
         for p in [
             r"C:\a\setup.exe", r"C:\a\run.BAT", "x.cmd", "s.ps1", "v.vbs", "j.js", "i.msi",
             r"C:\Users\u\Desktop\바로 가기.lnk", "s.scr", "w.hta", "a.exe.", "a.exe . ", "c:/a/b.Com",
+            // v3.8.25 추가분
+            "h.chm", "w.ws", "w.wsf", "v.vb", "m.mht", "m.MHTML", "d.iso", "d.img", "d.vhd", "d.vhdx",
+            "t.diagcab", "s.searchConnector-ms", "w.website", "u.url", "a.appref-ms", "a.application",
+            "m.docm", "m.xlsm", "m.pptm", "h.hta", "c.cpl", "j.jar", "x.xlam", "r.rdp", "t.theme",
         ] {
             assert!(is_exec_path(p), "{p}");
         }
@@ -989,16 +1099,102 @@ mod exec_tests {
         for p in [
             r"C:\a\보고서.hwp", "a.pdf", "a.xlsx", "a.docx", "a.txt", "a.csv", "a.json", "a.jpg",
             r"C:\a\exe", r"C:\a\exe.d\보고서.hwp", "a.exe.txt", "", r"C:\a\폴더\", "a.jsx",
+            "a.hwpx", "a.pptx", "a.png", "a.zip", "a.md", "a.html",
         ] {
             assert!(!is_exec_path(p), "{p}");
         }
     }
+
+    #[test]
+    fn link_shape_rejects_protocols_relative_ads_devices() {
+        for p in [
+            "", "   ", "calc", "notepad.exe", r"a\b.pdf", r"\a\b.pdf", "C:a.pdf", "C:",
+            "ms-msdt:/id PCWDiagnostic", "search-ms:query=x", "file:///C:/a.pdf", "shell:startup",
+            "https://x.example/a.pdf", r"C:\a\b.txt:evil.exe", r"C:\a\b.txt::$DATA", r"\\?\C:\a.pdf",
+            r"\\.\pipe\x", r"\\server", r"\\server\", r"\\server\share\a:b", "C:\\a\nb.pdf", r"1:\a.pdf",
+        ] {
+            assert!(link_shape(p).is_err(), "거부해야 함: {p:?}");
+        }
+        assert_eq!(link_shape(r"C:\a\보고서.hwp"), Ok(None));
+        assert_eq!(link_shape("d:/a/b.pdf"), Ok(None));
+        assert_eq!(link_shape(r"C:\"), Ok(None));
+        assert_eq!(link_shape(r"\\srv\공유\a.pdf"), Ok(Some("srv".into())));
+        assert_eq!(link_shape("//srv/share/a.pdf"), Ok(Some("srv".into())));
+    }
+
+    fn tmp(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("wmhh_link_{name}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+    const NO: fn(&str, &str) -> bool = |_, _| false;
+
+    #[test]
+    fn check_link_folders_and_documents_open_directly() {
+        let d = tmp("docs");
+        std::fs::write(d.join("보고서.hwp"), b"x").unwrap();
+        std::fs::create_dir(d.join("setup.exe")).unwrap(); // 폴더 이름이 실행 형식이어도 폴더는 연다
+        let ds = d.to_string_lossy().into_owned();
+        assert_eq!(check_link(&format!(r"{ds}\보고서.hwp"), false, false, true, NO), Ok(()));
+        assert_eq!(check_link(&ds, false, false, true, NO), Ok(()));
+        assert_eq!(check_link(&format!(r"{ds}\setup.exe"), false, false, true, NO), Ok(()));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn check_link_exec_extensionless_missing() {
+        let d = tmp("exec");
+        std::fs::write(d.join("evil"), b"MZ").unwrap();
+        std::fs::write(d.join("run.cmd"), b"x").unwrap();
+        std::fs::write(d.join("m.xlsm"), b"x").unwrap();
+        std::fs::write(d.join("a.exe."), b"x").ok(); // Windows 는 끝 점을 버려 a.exe 가 된다
+        let ds = d.to_string_lossy().into_owned();
+        for p in [format!(r"{ds}\evil"), format!(r"{ds}\run.cmd"), format!(r"{ds}\RUN.CMD"), format!(r"{ds}\m.xlsm"), format!(r"{ds}\a.exe.")] {
+            assert_eq!(check_link(&p, false, false, true, NO), Err(EXEC_BLOCKED.into()), "{p}");
+            assert_eq!(check_link(&p, true, false, true, NO), Ok(()), "허락하면 연다: {p}");
+            assert_eq!(check_link(&p, false, false, false, NO), Ok(()), "보이기는 실행이 아니다: {p}");
+        }
+        let missing = format!(r"{ds}\없음.pdf");
+        assert!(check_link(&missing, true, true, true, NO).unwrap_err().contains("찾을 수 없습니다"));
+        // 허락(allowExec)해도 생김새 거부는 그대로다
+        assert!(check_link("calc", true, true, true, NO).unwrap_err().contains("열 수 없는 경로"));
+        assert!(check_link("ms-msdt:/id x", true, true, true, NO).unwrap_err().contains("열 수 없는 경로"));
+        assert!(check_link(&format!(r"{ds}\evil:x.exe"), true, true, true, NO).unwrap_err().contains("열 수 없는 경로"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// 정규화한 이름으로도 본다: 짧은 이름(8.3)으로 적은 실행 파일. 8.3 이름을 꺼 둔 디스크면 건너뛴다.
+    #[cfg(windows)]
+    #[test]
+    fn check_link_sees_through_short_names() {
+        let d = tmp("short");
+        std::fs::write(d.join("longname_program.exe"), b"x").unwrap();
+        let short = d.join("LONGNA~1.EXE");
+        if !short.exists() { eprintln!("8.3 이름이 꺼져 있어 건너뜀"); let _ = std::fs::remove_dir_all(&d); return; }
+        let s = short.to_string_lossy().into_owned();
+        assert_eq!(check_link(&s, false, false, true, NO), Err(EXEC_BLOCKED.into()));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn check_link_unc_asks_before_touching_disk() {
+        // 없는 서버라도 '찾을 수 없음'이 아니라 먼저 NET_BLOCKED — 디스크(=서버)를 만지기 전에 묻는다는 뜻
+        let p = r"\\wmhh-no-such-host-xyz\share\a.pdf";
+        assert_eq!(check_link(p, false, false, true, NO), Err(NET_BLOCKED.into()));
+        assert_eq!(check_link(p, false, false, false, NO), Err(NET_BLOCKED.into()), "보이기도 묻는다");
+        assert_eq!(check_link(p, false, false, true, |_, h| h == "wmhh-no-such-host-xyz").map_err(|e| e.contains("찾을 수 없습니다")), Err(true), "믿는 서버면 묻지 않는다");
+    }
 }
 
 /// 파일 링크의 📂 버튼 → 탐색기에서 해당 파일이 선택된 폴더 열기.
+/// v3.8.25: 여는 길과 같은 생김새·공유 폴더 검사(실행 형식 검사는 없음 — 보이기만 하므로).
 #[tauri::command]
-pub fn reveal_file_path(app: AppHandle, path: String) -> Result<(), String> {
+pub fn reveal_file_path(app: AppHandle, path: String, allow_net: Option<bool>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
+    let allow_net = allow_net == Some(true);
+    check_link(&path, false, allow_net, false, net_trusted)?;
+    remember_net(&path, allow_net);
     app.opener().reveal_item_in_dir(&path).map_err(to_err)
 }
 

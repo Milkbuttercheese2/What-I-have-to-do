@@ -176,6 +176,28 @@ pub fn start(roots: Vec<Option<PathBuf>>, sink: Sink) {
         });
     }
 }
+/// 지금 알림을 받고 있는 문서 폴더들(v3.8.25) — 찾기 색인이 '감시가 살아 있으면 30초마다 다시 훑지 않는다'를 정할 때 본다.
+/// 감시를 건 뒤(첫 ReadDirectoryChangesW 성공) 넣고, 감시가 끝나면(멈춤·폴더 없어짐·오류) 뺀다. 같은 폴더를 잠깐 두 감시가
+/// 겹쳐 볼 수 있어(폴더를 다시 정할 때) 하나씩 넣고 하나씩 뺀다.
+static LIVE: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+pub fn is_live(base: &Path) -> bool { LIVE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|p| p == base) }
+#[allow(dead_code)]
+struct LiveMark(Option<PathBuf>);
+#[allow(dead_code)]
+impl LiveMark {
+    fn set(&mut self, p: &Path) {
+        if self.0.is_none() { LIVE.lock().unwrap_or_else(|e| e.into_inner()).push(p.to_path_buf()); self.0 = Some(p.to_path_buf()); }
+    }
+}
+impl Drop for LiveMark {
+    fn drop(&mut self) {
+        if let Some(p) = self.0.take() {
+            let mut l = LIVE.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(k) = l.iter().position(|x| *x == p) { l.remove(k); }
+        }
+    }
+}
+
 /// 모든 감시를 멈춘다(시험용)
 #[allow(dead_code)]
 pub fn stop_all() {
@@ -228,13 +250,14 @@ mod imp {
         let mut gone_since: Option<Instant> = None;
         let mut ov = OVERLAPPED::default();
         let mut armed = false;
+        let mut live = LiveMark(None);
         let filter = FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE;
         while !stop.load(Ordering::SeqCst) {
             if !armed && gone_since.is_none() {
                 ov = OVERLAPPED { hEvent: h.ev, ..Default::default() };
                 let r = unsafe { ReadDirectoryChangesW(h.dir, buf.as_mut_ptr().cast(), (buf.len() * 4) as u32, true, filter, None, Some(&mut ov), None) };
                 match r {
-                    Ok(()) => armed = true,
+                    Ok(()) => { armed = true; live.set(root); }
                     // 지워지는 중인 폴더 등 — 아래 '없어졌나' 확인이 맡는다. 폴더가 멀쩡한데 못 거는 것이면 감시를 접는다
                     Err(e) => { if Path::new(&cur).is_dir() { return Err(e.to_string()); } gone_since = Some(Instant::now()); }
                 }
@@ -490,6 +513,21 @@ mod tests {
     #[cfg(windows)]
     impl Drop for Probe {
         fn drop(&mut self) { self.stop.store(true, Ordering::SeqCst); if let Some(t) = self.th.take() { let _ = t.join(); } }
+    }
+    /// v3.8.25 감시가 걸려 있는 동안만 '살아 있음' — 찾기 색인이 30초마다 다시 훑을지 정할 때 본다
+    #[cfg(windows)]
+    #[test]
+    fn live_while_watching_only() {
+        let d = std::env::temp_dir().join(format!("wmhh_watch_live_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let root = std::fs::canonicalize(&d).unwrap();
+        assert!(!is_live(&root));
+        let pr = Probe::start(&d);
+        assert!(is_live(&root), "감시를 걸면 살아 있다");
+        drop(pr);
+        assert!(!is_live(&root), "감시가 끝나면 빠진다");
+        let _ = std::fs::remove_dir_all(&d);
     }
     #[cfg(windows)]
     fn changed(evs: &[Ev]) -> (std::collections::BTreeSet<String>, std::collections::BTreeSet<String>) {

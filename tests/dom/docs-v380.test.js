@@ -717,7 +717,7 @@ test('v3.8.4 HTML [보기|편집] · ZIP 목록 · 큰 파일은 오류 대신 �
   click(row('0:p.html')); await env.flush(40);
   const fr=$('dv-md').querySelector('iframe.dv-frame');
   assert.ok(fr, 'HTML 은 모래상자 프레임에');
-  assert.ok(!/allow-same-origin|allow-top-navigation/.test(fr.getAttribute('sandbox')), '앱 화면에 닿는 권한은 주지 않는다');
+  assert.ok(!/allow-same-origin|allow-top-navigation|allow-popups/.test(fr.getAttribute("sandbox")), '앱 화면에 닿는 권한은 주지 않는다');
   assert.match(fr.getAttribute('src'), /^http:\/\/wmhhdoc\.localhost\/0\/p\.html\?t=/, '문서 폴더 전용 주소(폴더 번호 + 상대 경로)');
   const {docUrl} = await import('../../src/docs.js');
   assert.equal(docUrl(1, '가 폴더/a+b #1.html'), 'http://wmhhdoc.localhost/1/%EA%B0%80%20%ED%8F%B4%EB%8D%94/a%2Bb%20%231.html');

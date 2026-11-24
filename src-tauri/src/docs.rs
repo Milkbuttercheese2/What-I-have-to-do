@@ -38,11 +38,77 @@ fn root(i: usize) -> Result<PathBuf, String> {
 }
 
 fn canon_dir(path: &str) -> Result<PathBuf, String> {
+    crate::commands::link_shape(path)?;   // v3.8.25: 전체 경로(드라이브·공유 폴더)만 — 상대 경로·장치 경로·프로토콜 거부
     let p = std::fs::canonicalize(path).map_err(|e| format!("폴더를 열 수 없습니다: {e}"))?;
     if !p.is_dir() {
         return Err("폴더가 아닙니다".into());
     }
+    root_allowed(&p, &SysDirs::from_env())?;
     Ok(p)
+}
+
+/// 문서 폴더로 삼으면 안 되는 곳(v3.8.25 보안 2차). 문서 폴더 안에서는 옮기기·휴지통·글자 쓰기가 되므로,
+/// 화면이 잘못(또는 끼어든 스크립트가) 시스템 폴더를 문서 폴더로 보내면 그 안을 만질 수 있게 된다.
+/// - 그 안 전체 거부: Windows 폴더, Program Files(두 개), ProgramData
+/// - 그 폴더 자체만 거부: Windows 가 깔린 드라이브의 맨 위(`C:\`), 사용자 폴더 모음(`C:\Users`), 내 사용자 폴더(`C:\Users\나`)
+///   — 그 아래(바탕 화면·문서 등)와 다른 드라이브·공유 드라이브의 맨 위(`D:\`, `Z:\`)는 예전처럼 된다.
+pub struct SysDirs { pub subtree: Vec<PathBuf>, pub exact: Vec<PathBuf> }
+impl SysDirs {
+    fn from_env() -> SysDirs {
+        let c = |k: &str| std::env::var_os(k).and_then(|v| std::fs::canonicalize(v).ok());
+        let subtree = ["SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"].iter().filter_map(|k| c(k)).collect();
+        let mut exact: Vec<PathBuf> = ["USERPROFILE"].iter().filter_map(|k| c(k)).collect();
+        if let Some(d) = std::env::var_os("SystemDrive") {
+            let d = d.to_string_lossy().into_owned();
+            if let Ok(p) = std::fs::canonicalize(format!("{d}\\")) { exact.push(p); }
+            if let Ok(p) = std::fs::canonicalize(format!("{d}\\Users")) { exact.push(p); }
+        }
+        SysDirs { subtree, exact }
+    }
+}
+pub fn root_allowed(c: &Path, sys: &SysDirs) -> Result<(), String> {
+    let low = |p: &Path| p.to_string_lossy().to_lowercase();
+    let lc = low(c);
+    let lc = lc.trim_end_matches('\\');
+    let bad = sys.exact.iter().any(|x| low(x).trim_end_matches('\\') == lc)
+        || sys.subtree.iter().any(|x| { let x = low(x); let x = x.trim_end_matches('\\'); lc == x || lc.starts_with(&format!("{x}\\")) });
+    if bad {
+        return Err("Windows·프로그램 폴더나 드라이브 맨 위·사용자 폴더 자체는 문서 폴더로 쓸 수 없습니다. 그 아래 폴더를 골라 주세요".into());
+    }
+    Ok(())
+}
+
+/// 이 경로(보기용·`/` 섞여도 됨)가 지금 문서 폴더들 중 하나 안인가 — 디스크를 만지지 않는다(공유 폴더 확인 전에 쓰므로).
+pub fn inside_any_root(path: &str) -> bool {
+    let p = path.replace('/', "\\").to_lowercase();
+    if p.split('\\').any(|c| c == "..") { return false; }
+    ROOTS.lock().unwrap_or_else(|e| e.into_inner()).iter().flatten().any(|r| {
+        let r = display(r).to_lowercase();
+        let r = r.trim_end_matches('\\');
+        p == r || p.starts_with(&format!("{r}\\"))
+    })
+}
+
+/* ── 바깥에서 끌어 놓은 경로만 가져오기 (v3.8.25 보안 2차) ─────────────────────
+   doc_import(특히 옮기기 = 원본 지우기)는 화면이 보낸 경로를 믿을 수 없다. 그래서 **Windows 가 방금 이 창에 놓았다고 알린
+   경로**(lib.rs 의 끌어 놓기 이벤트 → note_dropped)만 받는다. 놓은 지 오래된 목록은 쓰지 않는다. */
+static DROPPED: Mutex<Option<(std::time::Instant, Vec<PathBuf>)>> = Mutex::new(None);
+const DROP_TTL: std::time::Duration = std::time::Duration::from_secs(120);
+pub fn note_dropped(paths: &[PathBuf]) {
+    *DROPPED.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), paths.to_vec()));
+}
+fn dropped_ok(paths: &[String]) -> Result<(), String> {
+    let g = DROPPED.lock().unwrap_or_else(|e| e.into_inner());
+    let Some((at, list)) = g.as_ref() else { return Err("끌어 놓은 파일만 넣을 수 있습니다".into()) };
+    if at.elapsed() > DROP_TTL { return Err("끌어 놓은 지 오래되었습니다. 다시 끌어 놓아 주세요".into()); }
+    let canon = |p: &Path| std::fs::canonicalize(p).ok();
+    let have: Vec<PathBuf> = list.iter().filter_map(|p| canon(p)).collect();
+    for p in paths {
+        let ok = list.iter().any(|d| d.as_os_str() == std::ffi::OsStr::new(p))
+            || canon(Path::new(p)).is_some_and(|c| have.contains(&c));
+        if !ok { return Err(format!("끌어 놓은 파일이 아닙니다: {p}")); }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -454,6 +520,16 @@ fn copy_tree(src: &Path, dest: &Path, budget: &mut u32) -> std::io::Result<()> {
         std::fs::copy(src, dest).map(|_| ())
     }
 }
+/// 복사본 확인: 원본의 파일·폴더마다 복사본에 같은 종류·같은 크기로 있는가(링크는 copy_tree 가 건너뛰므로 여기서도 건너뜀).
+/// 원본에 링크가 있으면 false — 지우면 그 링크가 사라지는데 복사본에는 없다.
+fn same_tree(src: &Path, dest: &Path) -> bool {
+    let (Ok(a), Ok(b)) = (std::fs::symlink_metadata(src), std::fs::symlink_metadata(dest)) else { return false };
+    if a.file_type().is_symlink() { return false; }
+    if a.is_dir() != b.is_dir() { return false; }
+    if !a.is_dir() { return a.len() == b.len(); }
+    let Ok(rd) = std::fs::read_dir(src) else { return false };
+    rd.flatten().all(|e| same_tree(&e.path(), &dest.join(e.file_name())))
+}
 /// 바깥 경로들을 dir 안으로 복사(mv=true 면 옮기기). 새로 생긴 항목들의 rel. 하나라도 실패하면 그 이유를 모아 Err(이미 한 것은 남긴다).
 /// 옮기기: 같은 드라이브면 이름만 바꾸고(rename), 다른 드라이브면 **복사가 끝난 뒤에만** 원본을 지운다.
 pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<Vec<String>, String> {
@@ -465,6 +541,7 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
     let mut errs = Vec::new();
     let mut budget: u32 = 20_000;
     for p in paths {
+        if let Err(e) = crate::commands::link_shape(p) { errs.push(format!("{p}: {e}")); continue; }   // 있는 전체 경로만(v3.8.25)
         let src = match std::fs::canonicalize(p) {
             Ok(s) => s,
             Err(e) => { errs.push(format!("{p}: {e}")); continue; }
@@ -485,7 +562,10 @@ pub fn import_in(root: &Path, dir: &str, paths: &[String], mv: bool) -> Result<V
         match copy_tree(&src, &dest, &mut budget) {
             Ok(()) => {
                 if mv {
-                    let gone = if src.is_dir() { std::fs::remove_dir_all(&src) } else { std::fs::remove_file(&src) };
+                    /* v3.8.25: 원본은 **복사본이 원본과 같다고 확인된 뒤에만** 지운다(파일 수·크기). 다르면 원본을 남긴다. */
+                    let gone = if !same_tree(&src, &dest) {
+                        Err(std::io::Error::new(std::io::ErrorKind::Other, "복사본이 원본과 달라 원본을 남겼습니다"))
+                    } else if src.is_dir() { std::fs::remove_dir_all(&src) } else { std::fs::remove_file(&src) };
                     if let Err(e) = gone {
                         errs.push(format!("{}: 복사는 했지만 원본을 지우지 못했습니다({e})", name.to_string_lossy()));
                     }
@@ -519,6 +599,25 @@ pub fn percent_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+/// `wmhhdoc` 응답의 보안 정책. 그 문서가 바깥(인터넷)으로 나가지 못하게 자기 폴더·인라인·data/blob 만.
+/// v3.8.25: `sandbox allow-scripts` 를 응답에도 건다 — 화면의 프레임 속성(docs.js)이 어떻게 바뀌어도 이 문서는 늘
+/// 불투명 출처(앱 IPC 에 닿지 않음)·팝업 없음이다. ⚠️ 여기에 `allow-same-origin` 을 넣지 말 것(시험이 막는다).
+pub const DOC_CSP: &str = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; form-action 'none'; base-uri 'self'; sandbox allow-scripts";
+/// `wmhhdoc` 응답 만들기. 머리글 값이 잘못돼 만들 수 없으면(예: 이상한 mime) 앱을 죽이지 않고 빈 500 을 돌려준다.
+pub fn doc_response(status: u16, mime: &str, body: Vec<u8>) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(status)
+        .header("Content-Type", mime)
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Cache-Control", "no-store")
+        .header("Content-Security-Policy", DOC_CSP)
+        .body(body)
+        .unwrap_or_else(|_| {
+            let mut r = tauri::http::Response::new(Vec::new());
+            *r.status_mut() = tauri::http::StatusCode::INTERNAL_SERVER_ERROR;
+            r
+        })
 }
 pub fn mime_of(path: &Path) -> &'static str {
     match path.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
@@ -638,13 +737,31 @@ fn snippet_of(line: &str, at: usize, qlen: usize) -> String {
 /// 찾기 색인(v3.8.4) — 폴더를 한 번 훑어 이름과 작은 글자 파일의 내용을 메모리에 둔다.
 /// 예전엔 글자를 칠 때마다 디스크를 처음부터 다시 훑고 파일을 다시 읽어(최대 64MB) 느렸다.
 /// 색인이 SEARCH_CACHE_SECS 보다 오래되면 뒤에서 새로 만들고(그동안은 있던 색인으로 답한다), 앱이 문서를 바꾸면(만들기·이름·옮기기·휴지통) 그 폴더 색인만 버리고, 글자 저장은 그 파일 내용만 바꿔 끼운다.
-/// 내용은 `Arc<str>` — 글자 파일 하나를 저장할 때 색인을 복사해 그 줄만 바꿔 끼우는데(patch_search_text),
-/// 그때 다른 파일들의 내용(최대 64MB)까지 복사하지 않게.
+/// 글자는 모두 `Arc<str>` — 색인을 고칠 때(patch_search_text·sync_search_external) 찾기가 같은 색인을 읽고 있으면
+/// 목록을 복사해야 하는데, 그때 문자열을 새로 만들지 않고 가리키는 수만 올린다(v3.8.25 — 예전엔 이름·경로를 모두 새로 만들었다).
+type ArcStr = std::sync::Arc<str>;
 #[derive(Clone)]
-struct IdxEntry { rel: String, name: String, low: String, dir: bool, text: Option<std::sync::Arc<str>> }
-struct SearchIndex { base: PathBuf, built: std::time::Instant, ents: Vec<IdxEntry> }
+struct IdxEntry { rel: ArcStr, name: ArcStr, low: ArcStr, dir: bool, text: Option<ArcStr> }
+#[derive(Clone)]
+struct SearchIndex { base: PathBuf, built: std::time::Instant, ents: Vec<IdxEntry>, text_bytes: u64 }
+impl SearchIndex {
+    fn new(base: &Path, ents: Vec<IdxEntry>) -> Self {
+        let text_bytes = ents.iter().map(|e| e.text.as_ref().map_or(0, |t| t.len() as u64)).sum();
+        SearchIndex { base: base.to_path_buf(), built: std::time::Instant::now(), ents, text_bytes }
+    }
+    /// 메모리에서 차지하는 양(어림) — 글자 내용 + 항목마다 경로·이름 두 벌 + 덧붙는 몫
+    fn mem(&self) -> u64 {
+        self.text_bytes + self.ents.iter().map(|e| (e.rel.len() + e.name.len() + e.low.len()) as u64 + 96).sum::<u64>()
+    }
+}
 static SEARCH_CACHE: Mutex<Vec<std::sync::Arc<SearchIndex>>> = Mutex::new(Vec::new());
 const SEARCH_CACHE_SECS: u64 = 30;
+/// 감시가 살아 있는 폴더는 바뀐 것을 감시가 알려 주므로(sync_search_external) 30초마다 다시 훑지 않는다(v3.8.25).
+/// 다만 공유 폴더 중에는 알림을 걸어도 조용히 아무것도 안 보내는 것이 있어, 이만큼 지나면 그래도 한 번 다시 훑는다.
+const SEARCH_WATCHED_SECS: u64 = 600;
+/// 모든 색인을 합친 메모리 상한(v3.8.25) — 폴더 하나는 글자 내용 64MB(SEARCH_TEXT_BUDGET)까지인데 폴더 수에는 상한이 없었다.
+/// 넘으면 가장 오래 전에 만든 다른 폴더 색인부터 버린다(그 폴더는 다음 찾기 때 다시 만든다).
+const SEARCH_CACHE_TOTAL: u64 = 160 * 1024 * 1024;
 /// 색인 세대 — 문서가 바뀔 때마다 하나 올린다. 만들기 시작할 때의 세대와 넣을 때의 세대가 다르면 그 색인은
 /// 바뀌기 전 디스크를 훑은 것이라 넣지 않는다(예전엔 만드는 도중 저장·휴지통이 있어도 낡은 색인을 다시 넣었다).
 /// 세대는 **폴더별**이다 — 한 폴더의 변화가 다른 폴더 색인 넣기를 막지 않게.
@@ -677,33 +794,67 @@ pub fn invalidate_search_root(root: &Path) {
 /// 앱 밖에서 바뀐 항목들(`paths`, 문서 폴더 기준 '/' 상대 경로)을 색인에 반영한다 — 색인을 버리지 않고 그 자리만 디스크에서
 /// 다시 본다: 있으면 넣거나 바꾸고(폴더면 그 안까지), 없으면 뺀다. 다른 프로그램의 저장(임시 파일 → 바꿔치기)도 이렇게
 /// 받아서, 고치는 동안 공유 폴더를 처음부터 다시 훑지 않는다. 넘침(overflow)이면 버리고 뒤에서 새로 만든다.
+///
+/// v3.8.25: 예전엔 바뀐 경로 하나마다 색인 전체를 복사하고, 항목마다 `format!("{rel}/")` 를 새로 만들어 견줬다
+/// (경로 수 × 항목 수 — 6만 항목에 경로 200개면 문자열 1200만 개). 그것도 디스크를 읽는 동안 색인 잠금을 쥔 채여서
+/// 그동안 찾기가 멈췄다. 이제는 ① 디스크는 잠금 밖에서 먼저 읽고 ② 지울 경로를 한 묶음(HashSet)으로 만들어
+/// 항목마다 '그 경로이거나 그 아래인가'를 위 폴더 몇 단계만 견줘 한 번에 거르고 ③ 아무도 안 읽는 색인이면 복사하지 않고 고친다.
 pub fn sync_search_external(root: &Path, paths: &[String], overflow: bool) {
     let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    bump_search_gens(Some(&base));   // 만드는 중이던 색인은 바뀌기 전 디스크라 넣지 않는다
     if overflow {
+        let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        bump_search_gens(Some(&base));   // 만드는 중이던 색인은 바뀌기 전 디스크라 넣지 않는다
         let had = c.iter().any(|x| x.base == base);
         c.retain(|x| !(base.starts_with(&x.base) || x.base.starts_with(&base)));
         drop(c);
         if had { refresh_later_now(base); }
         return;
     }
+    bump_search_gens(Some(&base));       // 만드는 중이던 색인은 바뀌기 전 디스크라 넣지 않는다
+    if !SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|s| base.strip_prefix(&s.base).is_ok()) { return }
+    /* 바뀐 경로 정리: '/' 로 맞추고, 같은 것·위 폴더가 이미 든 것은 뺀다(위 폴더를 다시 읽으면 그 안이 함께 들어온다 — 두 번 넣지 않게) */
+    let mut ps: Vec<String> = paths.iter().map(|p| p.replace('\\', "/").trim_matches('/').to_string()).filter(|p| !p.is_empty()).collect();
+    ps.sort();
+    ps.dedup();
+    let all: std::collections::HashSet<&str> = ps.iter().map(|s| s.as_str()).collect();
+    let tops: Vec<&String> = ps.iter().filter(|p| !p.match_indices('/').any(|(i, _)| all.contains(&p[..i]))).collect();
+    /* ① 디스크 — 잠금 밖에서 */
+    let mut fresh = Vec::new();
+    for p in &tops {
+        let full = p.split('/').fold(base.clone(), |a, s| a.join(s));
+        index_add(&base, &full, &mut fresh);
+    }
+    /* ② 색인에 반영 — 잠금 안에서는 메모리 일만 */
+    let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     for slot in c.iter_mut() {
         let Ok(inner) = base.strip_prefix(&slot.base) else { continue };
         let pre = inner.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
-        let mut ents = slot.ents.clone();
-        for p in paths {
-            let rel = if pre.is_empty() { p.clone() } else { format!("{pre}/{p}") };
-            ents.retain(|e| e.rel != rel && !e.rel.starts_with(&format!("{rel}/")));
-            let full = rel.split('/').filter(|s| !s.is_empty()).fold(slot.base.clone(), |a, s| a.join(s));
-            index_add(&slot.base, &full, &mut ents);
+        let full_rel = |r: &str| -> String { if pre.is_empty() { r.to_string() } else { format!("{pre}/{r}") } };
+        let gone: std::collections::HashSet<String> = tops.iter().map(|p| full_rel(p)).collect();
+        let ix = std::sync::Arc::make_mut(slot);   // 찾기가 지금 이 색인을 읽고 있을 때만 복사한다(글자는 Arc 라 싸다)
+        ix.ents.retain(|e| !under_any(&e.rel, &gone));
+        ix.text_bytes = ix.ents.iter().map(|e| e.text.as_ref().map_or(0, |t| t.len() as u64)).sum();
+        for e in &fresh {
+            if ix.ents.len() >= SEARCH_MAX_ENTRIES { break }
+            let mut e = e.clone();
+            if !pre.is_empty() { e.rel = ArcStr::from(full_rel(&e.rel)); }
+            if let Some(t) = &e.text {
+                // 폴더 하나의 글자 예산(64MB)은 고칠 때도 지킨다 — 넘으면 이름으로만 찾힌다(build_index 와 같은 규칙)
+                if ix.text_bytes + t.len() as u64 > SEARCH_TEXT_BUDGET { e.text = None } else { ix.text_bytes += t.len() as u64 }
+            }
+            ix.ents.push(e);
         }
-        *slot = std::sync::Arc::new(SearchIndex { base: slot.base.clone(), built: slot.built, ents });
     }
+}
+/// rel 이 gone 에 든 경로이거나 그 아래인가 — 위 폴더를 몇 단계만 본다(문자열을 새로 만들지 않는다)
+fn under_any(rel: &str, gone: &std::collections::HashSet<String>) -> bool {
+    if gone.is_empty() { return false }
+    gone.contains(rel) || rel.match_indices('/').any(|(i, _)| gone.contains(&rel[..i]))
 }
 /// 항목 하나(폴더면 그 안 전부)를 색인 목록에 더한다 — build_index 와 같은 규칙(숨김·링크 빼기, 작은 글자 파일만 내용)
 fn index_add(base: &Path, path: &Path, ents: &mut Vec<IdxEntry>) {
     let rel = |p: &Path| p.strip_prefix(base).unwrap_or(p).to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+    let mut budget = SEARCH_TEXT_BUDGET;   // 한 번에 읽는 글자 총량도 build_index 처럼 64MB 까지(v3.8.25 — 예전엔 끝없이 읽었다)
     let mut stack = vec![path.to_path_buf()];
     while let Some(p) = stack.pop() {
         if ents.len() >= SEARCH_MAX_ENTRIES { return }
@@ -717,36 +868,44 @@ fn index_add(base: &Path, path: &Path, ents: &mut Vec<IdxEntry>) {
             if let Ok(rd) = std::fs::read_dir(&p) { for e in rd.flatten() { stack.push(e.path()); } }
         }
         let mut text = None;
-        if !is_dir && md.len() <= SEARCH_TEXT_MAX {
+        if !is_dir && md.len() <= SEARCH_TEXT_MAX && md.len() <= budget {
             let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
             if SEARCH_TEXT_EXT.contains(&ext.as_str()) {
-                if let Ok(bytes) = std::fs::read(&p) { text = decode_text(&bytes).map(|(t, _)| std::sync::Arc::from(t)); }
+                if let Ok(bytes) = std::fs::read(&p) {
+                    budget = budget.saturating_sub(bytes.len() as u64);
+                    text = decode_text(&bytes).map(|(t, _)| ArcStr::from(t));
+                }
             }
         }
-        ents.push(IdxEntry { rel: rel(&p), low: name.to_lowercase(), name, dir: is_dir, text });
+        ents.push(IdxEntry { rel: ArcStr::from(rel(&p)), low: ArcStr::from(name.to_lowercase()), name: ArcStr::from(name), dir: is_dir, text });
     }
 }
 
 /// 글자 파일 하나를 저장한 뒤 — 색인을 버리지 않고 그 파일의 내용만 바꿔 끼운다. 글자 파일은 고치는 동안 1.2초마다
 /// 저장되는데, 그때마다 색인을 버리면 고치는 내내 찾기가 폴더를 처음부터 다시 훑었다(공유 폴더는 한 번에 10초 넘게).
 /// 색인에 없는 파일이면(새로 생긴 등) 그 폴더 색인을 버린다.
+/// v3.8.25: 예전엔 저장마다 색인 목록 전체(6만 항목이면 문자열 18만 개)를 새로 만들었다 — 이제 아무도 안 읽는 색인이면 그 자리만 고친다.
 pub fn patch_search_text(root: &Path, rel: &str, text: &str) {
     let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     // 성분 단위로 붙인다 — `\\?\` 경로에는 '/' 가 구분자로 읽히지 않는다
     let full = rel.replace('\\', "/").split('/').filter(|s| !s.is_empty() && *s != ".").fold(base.clone(), |p, s| p.join(s));
     let ext = full.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let keep_text = text.len() as u64 <= SEARCH_TEXT_MAX && SEARCH_TEXT_EXT.contains(&ext.as_str());
+    let new_text: Option<ArcStr> = if keep_text { Some(ArcStr::from(text)) } else { None };   // 잠금 밖에서 만든다
     let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     bump_search_gens(Some(&base));   // 만드는 중이던 색인은 이 저장 전 내용이라 넣지 않는다
     let mut drop_bases = Vec::new();
     for slot in c.iter_mut() {
         let Ok(inner) = full.strip_prefix(&slot.base) else { continue };
         let r = inner.to_string_lossy().replace('\\', "/");
-        match slot.ents.iter().position(|e| e.rel == r && !e.dir) {
+        match slot.ents.iter().position(|e| &*e.rel == r && !e.dir) {
             Some(pos) => {
-                let mut ents = slot.ents.clone();
-                ents[pos].text = if keep_text { Some(std::sync::Arc::from(text)) } else { None };
-                *slot = std::sync::Arc::new(SearchIndex { base: slot.base.clone(), built: slot.built, ents });
+                let ix = std::sync::Arc::make_mut(slot);
+                let old = ix.ents[pos].text.as_ref().map_or(0, |t| t.len() as u64);
+                let add = new_text.as_ref().map_or(0, |t| t.len() as u64);
+                let fits = ix.text_bytes - old + add <= SEARCH_TEXT_BUDGET;
+                ix.ents[pos].text = if fits { new_text.clone() } else { None };
+                ix.text_bytes = ix.text_bytes - old + if fits { add } else { 0 };
             }
             None => drop_bases.push(slot.base.clone()),
         }
@@ -779,14 +938,14 @@ fn build_index(base: &Path) -> SearchIndex {
                 if SEARCH_TEXT_EXT.contains(&ext.as_str()) {
                     if let Ok(bytes) = std::fs::read(&path) {
                         budget = budget.saturating_sub(bytes.len() as u64);
-                        text = decode_text(&bytes).map(|(t, _)| std::sync::Arc::from(t));
+                        text = decode_text(&bytes).map(|(t, _)| ArcStr::from(t));
                     }
                 }
             }
-            ents.push(IdxEntry { rel: rel(&path), low: name.to_lowercase(), name, dir: is_dir, text });
+            ents.push(IdxEntry { rel: ArcStr::from(rel(&path)), low: ArcStr::from(name.to_lowercase()), name: ArcStr::from(name), dir: is_dir, text });
         }
     }
-    SearchIndex { base: base.to_path_buf(), built: std::time::Instant::now(), ents }
+    SearchIndex::new(base, ents)
 }
 
 fn query_index(ix: &SearchIndex, query: &str) -> Vec<SearchHit> {
@@ -798,12 +957,12 @@ fn query_index(ix: &SearchIndex, query: &str) -> Vec<SearchHit> {
     for e in &ix.ents {
         if out.len() >= SEARCH_MAX_HITS { break }
         if e.low.contains(&q) {
-            out.push(SearchHit { rel: e.rel.clone(), name: e.name.clone(), dir: e.dir, hit: "name".into(), snippet: String::new() });
+            out.push(SearchHit { rel: e.rel.to_string(), name: e.name.to_string(), dir: e.dir, hit: "name".into(), snippet: String::new() });
             continue;
         }
         let Some(text) = &e.text else { continue };
         if let Some((line, at)) = find_in_text(text, &q, slow) {
-            out.push(SearchHit { rel: e.rel.clone(), name: e.name.clone(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, qlen) });
+            out.push(SearchHit { rel: e.rel.to_string(), name: e.name.to_string(), dir: false, hit: "text".into(), snippet: snippet_of(line, at, qlen) });
         }
     }
     out
@@ -813,7 +972,8 @@ fn query_index(ix: &SearchIndex, query: &str) -> Vec<SearchHit> {
 /// 예전엔 찾을 때마다 모든 파일의 모든 줄을 소문자로 바꿔(줄마다 새 문자열) 맞는 게 적은 검색어는
 /// 글자를 칠 때마다 0.28초 걸렸다(글자 파일 63MB 색인). 이제는:
 /// · 검색어에 대소문자가 있는 글자가 없으면(한글·숫자 등) 원문에서 바로 찾는다(복사 없음)
-/// · 대소문자가 있는 글자가 ASCII 영문뿐이면 파일마다 ASCII 만 소문자로 한 번 바꿔 찾는다(바이트 위치가 그대로라 줄을 바로 찾는다)
+/// · 대소문자가 있는 글자가 ASCII 영문뿐이면 ASCII 대소문자를 무시하고 원문에서 바로 찾는다(v3.8.25 — 예전엔 파일마다
+///   소문자 사본을 만들었다: 영문 한 글자 칠 때마다 최대 64MB 복사). 바이트 위치가 그대로라 줄을 바로 찾는다
 /// · 그 밖(é·Ω 같은 대소문자 있는 비ASCII 글자가 검색어에 있으면)은 예전처럼 줄마다 유니코드 소문자로 맞춘다(slow)
 fn find_in_text<'a>(text: &'a str, q: &str, slow: bool) -> Option<(&'a str, usize)> {
     if slow {
@@ -827,12 +987,31 @@ fn find_in_text<'a>(text: &'a str, q: &str, slow: bool) -> Option<(&'a str, usiz
         }
         return None;
     }
-    let pos = if q.bytes().any(|b| b.is_ascii_alphabetic()) { text.to_ascii_lowercase().find(q)? } else { text.find(q)? };
+    let pos = if q.bytes().any(|b| b.is_ascii_alphabetic()) { find_ascii_ci(text.as_bytes(), q.as_bytes())? } else { text.find(q)? };
     let start = text[..pos].rfind('\n').map_or(0, |i| i + 1);
     let end = text[pos..].find('\n').map_or(text.len(), |i| pos + i);
     let line = &text[start..end];
     let line = line.strip_suffix('\r').unwrap_or(line);
     Some((line, pos - start))
+}
+/// ASCII 대소문자를 무시하고 q(소문자) 가 처음 나오는 바이트 위치. 64KB 씩 ASCII 만 소문자로 바꿔 작은 버퍼에 옮기고
+/// 그 안을 SIMD 로 찾는다(memchr::memmem) — 파일 통째 사본을 만들지 않고, 맞으면 바로 멈춘다. 첫 글자로만 거르던 방식은
+/// 첫 글자가 흔한 글자(e·a 등)면 오히려 예전보다 느렸다. 조각 경계는 q 길이-1 만큼 겹쳐 놓치지 않는다.
+/// q 는 올바른 UTF-8 이고 바뀌는 것은 ASCII 뿐이라, 맞은 자리는 늘 글자 경계다.
+fn find_ascii_ci(hay: &[u8], q: &[u8]) -> Option<usize> {
+    if q.is_empty() || hay.len() < q.len() { return None }
+    const CH: usize = 64 * 1024;
+    let finder = memchr::memmem::Finder::new(q);
+    let mut buf = vec![0u8; (CH + q.len() - 1).min(hay.len())];
+    let mut start = 0;
+    loop {
+        let end = (start + CH + q.len() - 1).min(hay.len());
+        let n = end - start;
+        for (d, s) in buf[..n].iter_mut().zip(&hay[start..end]) { *d = s.to_ascii_lowercase(); }
+        if let Some(p) = finder.find(&buf[..n]) { return Some(start + p) }
+        if end == hay.len() { return None }
+        start += CH;
+    }
 }
 
 /// 색인을 새로 만들어 찾는다(시험·한 번 쓰기용)
@@ -842,7 +1021,13 @@ pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
     Ok(query_index(&build_index(&base), query))
 }
 
-/// 30초 안에 만든 같은 폴더의 색인이 있으면 그대로 쓴다
+/// 색인을 다시 훑어야 하나 — 감시가 살아 있으면 바뀐 것을 감시가 알려 주므로 오래 둔다(SEARCH_WATCHED_SECS)
+fn index_stale(ix: &SearchIndex) -> bool {
+    let age = ix.built.elapsed().as_secs();
+    if crate::docwatch::is_live(&ix.base) { age >= SEARCH_WATCHED_SECS } else { age >= SEARCH_CACHE_SECS }
+}
+
+/// 30초 안에 만든 같은 폴더의 색인이 있으면 그대로 쓴다(감시 중인 폴더는 SEARCH_WATCHED_SECS)
 pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
     if query.trim().is_empty() { return Ok(vec![]) }
     let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
@@ -852,47 +1037,61 @@ pub fn search_cached(root: &Path, query: &str) -> Result<Vec<SearchHit>, String>
     };
     let ix = match have {
         /* 오래된 색인이라도 바로 답하고, 새 색인은 뒤에서 만든다 — 공유 폴더는 한 번 훑는 데 10초가 넘을 수 있어
-           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search_root(글자 저장은 patch_search_text)가 맡는다 */
+           30초마다 그만큼 기다리게 할 수 없다. 앱이 문서를 바꾼 경우는 invalidate_search_root(글자 저장은 patch_search_text)가,
+           앱 밖에서 바뀐 것은 감시(sync_search_external)가 맡는다 */
         Some(ix) => {
-            if ix.built.elapsed().as_secs() >= SEARCH_CACHE_SECS { refresh_later(base.clone()); }
+            if index_stale(&ix) { refresh_later(base.clone()); }
             ix
         }
-        None => match wait_for_build(&base) {
-            /* 문서 탭을 열 때 시작한 미리 만들기가 아직 도는 중이면 끝나길 기다렸다가 그 색인을 쓴다(v3.8.9) —
-               같은 폴더를 두 번 훑지 않는다(공유 폴더는 한 번 훑는 데 10초가 넘는다) */
-            Some(ix) => ix,
-            None => {
-                let g = search_gen(&base);
-                let ix = std::sync::Arc::new(build_index(&base));
-                store_index_if(ix.clone(), g);   // 훑는 사이 문서가 바뀌었으면 이번 답에만 쓰고 넣지 않는다
-                ix
-            }
-        },
+        None => build_or_wait(&base),
     };
     Ok(query_index(&ix, query))
 }
 
-/// 같은 폴더 색인을 다른 스레드가 만드는 중이면 끝날 때까지(최대 SEARCH_WAIT_SECS) 기다려 그 색인을 돌려준다.
-/// 아무도 안 만들고 있거나, 만들다 실패해 색인이 없으면 None — 부르는 쪽이 직접 만든다.
+/// 색인이 없을 때: 다른 스레드가 같은 폴더를 만드는 중이면 끝날 때까지(최대 SEARCH_WAIT_SECS) 기다려 그 색인을 쓰고(v3.8.9 —
+/// 같은 폴더를 두 번 훑지 않는다, 공유 폴더는 한 번 훑는 데 10초가 넘는다), 아무도 안 만들고 있으면 '만드는 중' 표시를 하고 직접 만든다
+/// (v3.8.25 — 표시를 해야 켤 때 미리 만들기 차례가 와도 같은 폴더를 또 훑지 않는다).
 const SEARCH_WAIT_SECS: u64 = 120;
-fn wait_for_build(base: &Path) -> Option<std::sync::Arc<SearchIndex>> {
+fn build_or_wait(base: &Path) -> std::sync::Arc<SearchIndex> {
     let t0 = std::time::Instant::now();
     loop {
-        let building = REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x == base);
         let have = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|x| x.base == base).cloned();
-        if have.is_some() { return have; }
-        if !building || t0.elapsed().as_secs() >= SEARCH_WAIT_SECS { return None; }
+        if let Some(ix) = have { return ix; }
+        let waited_out = t0.elapsed().as_secs() >= SEARCH_WAIT_SECS;
+        let claimed = {
+            let mut r = REFRESHING.lock().unwrap_or_else(|e| e.into_inner());
+            if r.iter().any(|x| x == base) { false } else { r.push(base.to_path_buf()); true }
+        };
+        if claimed || waited_out {
+            let g = search_gen(base);
+            let ix = std::sync::Arc::new(build_index(base));
+            store_index_if(ix.clone(), g);   // 훑는 사이 문서가 바뀌었으면 이번 답에만 쓰고 넣지 않는다
+            if claimed { REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != base); }
+            return ix;
+        }
         std::thread::sleep(std::time::Duration::from_millis(40));
     }
 }
 
-/// 만들기 시작할 때의 세대(gen)가 지금도 같을 때만 넣는다 — 위 SEARCH_GEN 설명. 넣었으면 true
+/// 만들기 시작할 때의 세대(gen)가 지금도 같을 때만 넣는다 — 위 SEARCH_GEN 설명. 넣었으면 true.
+/// 넣은 뒤 모든 색인의 메모리가 SEARCH_CACHE_TOTAL 을 넘으면 가장 오래 전에 만든 다른 폴더 색인부터 버린다(v3.8.25).
 fn store_index_if(ix: std::sync::Arc<SearchIndex>, gen: u64) -> bool {
     let mut c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     if search_gen(&ix.base) != gen { return false }
     c.retain(|x| x.base != ix.base);
+    let keep = ix.base.clone();
     c.push(ix);
+    evict_over(&mut c, &keep, SEARCH_CACHE_TOTAL);
     true
+}
+/// 모든 색인의 메모리가 cap 을 넘으면 keep 이 아닌 것 중 가장 오래 전에 만든 것부터 버린다
+fn evict_over(c: &mut Vec<std::sync::Arc<SearchIndex>>, keep: &Path, cap: u64) {
+    let mut total: u64 = c.iter().map(|x| x.mem()).sum();
+    while total > cap {
+        let Some(k) = c.iter().enumerate().filter(|(_, x)| x.base != keep).min_by_key(|(_, x)| x.built).map(|(k, _)| k) else { break };
+        total -= c[k].mem();
+        c.remove(k);
+    }
 }
 
 static REFRESHING: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
@@ -909,6 +1108,45 @@ fn refresh_later(base: PathBuf) {
         store_index_if(ix, g);
         REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &base);
     });
+}
+
+/// 켤 때·폴더를 정할 때 미리 만들기(v3.8.9)는 **한 번에 한 폴더씩**, 낮은 우선순위의 스레드 하나에서(v3.8.25).
+/// 예전엔 폴더마다 스레드를 따로 띄워 모든 문서 폴더(공유 폴더 포함)를 동시에 훑었다 — 앱을 켠 직후 디스크·네트워크를
+/// 한꺼번에 붙잡았다. 사용자가 그 폴더를 찾으면 차례를 기다리지 않는다(build_or_wait 가 직접 만든다).
+static PRIME: Mutex<(std::collections::VecDeque<PathBuf>, bool)> = Mutex::new((std::collections::VecDeque::new(), false));
+fn prime_later(bases: Vec<PathBuf>) {
+    let mut q = PRIME.lock().unwrap_or_else(|e| e.into_inner());
+    for b in bases { if !q.0.contains(&b) { q.0.push_back(b); } }
+    if q.1 || q.0.is_empty() { return }
+    q.1 = true;
+    drop(q);
+    std::thread::spawn(|| {
+        lower_thread_priority();
+        loop {
+            let next = {
+                let mut q = PRIME.lock().unwrap_or_else(|e| e.into_inner());
+                match q.0.pop_front() { Some(b) => b, None => { q.1 = false; return; } }
+            };
+            if SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.base == next) { continue }
+            {
+                let mut r = REFRESHING.lock().unwrap_or_else(|e| e.into_inner());
+                if r.contains(&next) { continue }          // 찾기가 직접 만드는 중
+                r.push(next.clone());
+            }
+            let g = search_gen(&next);
+            let ix = std::sync::Arc::new(build_index(&next));
+            store_index_if(ix, g);
+            REFRESHING.lock().unwrap_or_else(|e| e.into_inner()).retain(|x| x != &next);
+        }
+    });
+}
+/// 미리 만들기 스레드는 CPU 를 화면보다 뒤에 쓴다(입출력 우선순위는 건드리지 않는다 — 찾기가 이 색인을 기다릴 수 있어서)
+fn lower_thread_priority() {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL};
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    }
 }
 
 /* ── 글자 파일 (v3.8.1) — 읽기·쓰기, 인코딩 보존 ─────────────────────────── */
@@ -1022,6 +1260,15 @@ pub fn read_text_in(root: &Path, rel: &str) -> Result<TextFile, String> {
 
 /// 글자 파일 저장 — base_mtime(읽을 때의 고친 시각)과 지금이 다르면 거부한다(다른 프로그램이 그 사이 고쳤음).
 /// 같은 폴더의 임시 파일(~$ 로 시작 — 트리에 안 보임)에 쓴 뒤 바꿔치기한다(쓰다 끊겨도 원본이 반쪽이 되지 않게).
+/// 임시 파일 이름용 예측하기 어려운 수 — 표준 라이브러리 해시의 무작위 열쇠 + 시각 + 프로세스 번호(암호용은 아니다)
+fn rand_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    h.write_u32(std::process::id());
+    h.finish()
+}
+
 pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mtime: i64) -> Result<i64, String> {
     let p = resolve(root, rel)?;
     let md = std::fs::metadata(&p).map_err(|e| format!("찾을 수 없습니다: {e}"))?;
@@ -1040,13 +1287,25 @@ pub fn write_text_in(root: &Path, rel: &str, text: &str, encoding: &str, base_mt
         return Err("글자 파일 상한(5MB) 초과".into());
     }
     let name = p.file_name().ok_or_else(|| "이름을 알 수 없습니다".to_string())?.to_string_lossy().into_owned();
-    let tmp = p.with_file_name(format!("~${name}.wmhh-tmp"));
     /* 임시 파일에 쓰고 디스크까지 내린 뒤, 그 **열린 파일**에서 고친 시각을 읽는다(바꿔치기는 고친 시각을 바꾸지 않는다).
        예전엔 바꿔치기 뒤에 다시 읽었고, 그게 실패하면 0 을 돌려줘 다음 자동 저장마다 '다른 프로그램이 고쳤다'로 판정돼
-       쓸데없는 '(내 고침)' 파일이 생겼다. 또 쓰다 실패하면(디스크 가득 등) 임시 파일이 남아 쌓였다 — 지운다. */
+       쓸데없는 '(내 고침)' 파일이 생겼다. 또 쓰다 실패하면(디스크 가득 등) 임시 파일이 남아 쌓였다 — 지운다.
+       v3.8.25(보안 2차): 임시 이름에 무작위 꼬리를 붙이고 **새로 만들 때만**(create_new) 쓴다 — 이름을 미리 알 수 있으면
+       공유 폴더에서 남이 같은 이름의 링크·파일을 먼저 놓아 두고 우리 쓰기를 엉뚱한 곳으로 보낼 수 있다. */
+    let mut tmp = PathBuf::new();
     let written = (|| -> std::io::Result<i64> {
         use std::io::Write;
-        let mut f = std::fs::File::create(&tmp)?;
+        let mut f = {
+            let mut tries = 0;
+            loop {
+                tmp = p.with_file_name(format!("~${name}.{:016x}.wmhh-tmp", rand_u64()));
+                match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+                    Ok(f) => break f,
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < 8 => tries += 1,
+                    Err(e) => { tmp = PathBuf::new(); return Err(e); }
+                }
+            }
+        };
         f.write_all(&bytes)?;
         f.sync_all()?;
         Ok(mtime_ms(&f.metadata()?))
@@ -1123,11 +1382,13 @@ pub fn set_roots(paths: Vec<String>) -> Vec<RootInfo> {
         }
     }
     /* v3.8.9: 폴더를 정하는 순간 찾기 색인을 뒤에서 만들기 시작한다(앱이 켜질 때·폴더를 추가할 때) — 공유 폴더는 한 번 훑는 데
-       10초가 넘어, 처음 찾을 때 시작하면 그만큼 기다렸다. 이미 색인이 있거나 만드는 중이면 아무것도 안 한다. 디스크에는 저장하지 않는다(소유자 결정) */
-    for c in roots.iter().flatten() {
-        let have = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|x| &x.base == c);
-        if !have { refresh_later_now(c.clone()); }
-    }
+       10초가 넘어, 처음 찾을 때 시작하면 그만큼 기다렸다. 이미 색인이 있거나 만드는 중이면 아무것도 안 한다. 디스크에는 저장하지 않는다(소유자 결정).
+       v3.8.25: 폴더마다 동시에 훑지 않고 한 폴더씩 차례로, 낮은 우선순위로(prime_later) */
+    let todo: Vec<PathBuf> = {
+        let c = SEARCH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        roots.iter().flatten().filter(|r| !c.iter().any(|x| &x.base == *r)).cloned().collect()
+    };
+    prime_later(todo);
     *ROOTS.lock().unwrap_or_else(|e| e.into_inner()) = roots;
     out
 }
@@ -1178,6 +1439,7 @@ pub async fn doc_move(root: usize, from: String, to_dir: String) -> Result<Strin
 #[tauri::command]
 pub async fn doc_import(root: usize, dir: String, paths: Vec<String>, mv: Option<bool>) -> Result<Vec<String>, String> {
     let r = self::root(root)?;
+    dropped_ok(&paths)?;   // v3.8.25: 방금 이 창에 끌어 놓은 경로만
     off_main(move || {
         let out = import_in(&r, &dir, &paths, mv.unwrap_or(false));
         invalidate_search_root(&r);   // 바꾼 뒤에, 이 폴더만(실패해도 반쯤 바뀌었을 수 있으니 버린다)
@@ -1734,6 +1996,120 @@ mod tests {
         let _ = std::fs::remove_dir_all(&r);
     }
 
+    /// v3.8.25 영문 대소문자 무시 찾기 — 예전 방식(소문자 사본에서 find)과 늘 같은 자리를 돌려준다
+    #[test]
+    fn ascii_ci_find_matches_lowercase_copy() {
+        let texts = ["Hello World\nsecond LINE here", "가나다 ABC 라마\r\nxyz", "aaaB", "", "ab", "한글만", "MiXeD mixed MIXED", "끝에 Ab"];
+        let qs = ["hello", "line", "abc", "aab", "ab", "b", "mixed", "x 라", "ab 라마", "zz"];
+        for t in texts {
+            for q in qs {
+                let old = t.to_ascii_lowercase().find(q);
+                assert_eq!(find_ascii_ci(t.as_bytes(), q.as_bytes()), old, "{t:?} / {q:?}");
+            }
+        }
+        assert_eq!(find_in_text("첫 줄\n둘째 Report 줄", "report", false), Some(("둘째 Report 줄", "둘째 ".len())));
+    }
+
+    /// 바뀐 경로를 한 번에 거르기 — 그 경로와 그 아래만 빠지고, 이름이 같은 앞부분('가 폴더' vs '가 폴더2')은 남는다.
+    /// 위 폴더와 그 안이 함께 알려져도 두 번 들어가지 않는다.
+    #[test]
+    fn external_sync_removes_only_listed_subtrees_and_no_duplicates() {
+        let r = tmp("search-ext2");
+        std::fs::create_dir_all(r.join("가 폴더2")).unwrap();
+        std::fs::write(r.join("가 폴더/a.txt"), "말").unwrap();
+        std::fs::write(r.join("가 폴더2/b.txt"), "말").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        invalidate_search_root(&root);
+        assert_eq!(search_cached(&root, "말").unwrap().len(), 2);
+        std::fs::write(r.join("가 폴더/안쪽/c.txt"), "말").unwrap();
+        let paths: Vec<String> = ["가 폴더", "가 폴더/안쪽/c.txt", "가 폴더/안쪽"].iter().map(|s| s.to_string()).collect();
+        sync_search_external(&root, &paths, false);
+        let mut got: Vec<String> = search_cached(&root, "말").unwrap().into_iter().map(|h| h.rel).collect();
+        got.sort();
+        assert_eq!(got, vec!["가 폴더/a.txt".to_string(), "가 폴더/안쪽/c.txt".into(), "가 폴더2/b.txt".into()]);
+        invalidate_search_root(&root);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// 색인 메모리 상한 — 넘으면 가장 오래 전에 만든 다른 폴더 색인부터 버리고, 방금 넣은 것은 남긴다
+    #[test]
+    fn cache_total_cap_evicts_oldest_other_index() {
+        let mk = |name: &str, kb: usize| {
+            let t: ArcStr = ArcStr::from("a".repeat(kb * 1024).as_str());
+            std::sync::Arc::new(SearchIndex::new(Path::new(name), vec![IdxEntry { rel: "1.txt".into(), name: "1.txt".into(), low: "1.txt".into(), dir: false, text: Some(t) }]))
+        };
+        let a = mk("a", 100);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let b = mk("b", 100);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let c = mk("c", 100);
+        let mut v = vec![a, b, c.clone()];
+        evict_over(&mut v, Path::new("a"), 250 * 1024);   // 방금 넣은 것이 가장 오래된 a 라도 남긴다
+        assert_eq!(v.iter().map(|x| x.base.to_string_lossy().into_owned()).collect::<Vec<_>>(), vec!["a", "c"]);
+        let mut v = vec![mk("x", 300)];
+        evict_over(&mut v, Path::new("x"), 100 * 1024);   // 혼자 넘어도 방금 넣은 것은 버리지 않는다
+        assert_eq!(v.len(), 1);
+        assert!(c.mem() >= 100 * 1024 && c.text_bytes == 100 * 1024);
+    }
+
+    /// 전후 측정(평소엔 건너뜀): `cargo test --lib --release -- --ignored perf_search --nocapture`
+    /// 1) 바깥 바뀜 반영: 6만 항목 색인에 경로 200개 — 예전(경로마다 전체 견주며 format!, 색인 통째 복사) vs 지금(HashSet 한 번 거르기)
+    /// 5) 영문 내용 찾기: 글자 64MB(파일 2000개)에서 없는 영문 검색어 — 예전(파일마다 소문자 사본) vs 지금(대소문자 무시 바로 찾기)
+    #[test]
+    #[ignore]
+    fn perf_search() {
+        use std::time::Instant;
+        #[derive(Clone)]
+        struct Old { rel: String, name: String, low: String, dir: bool, text: Option<std::sync::Arc<str>> }
+        let n = 60_000;
+        let rels: Vec<String> = (0..n).map(|i| format!("부서{}/과제{}/하위{}/문서_{i}.hwp", i % 40, i % 300, i % 7)).collect();
+        let old_ents: Vec<Old> = rels.iter().map(|r| Old { rel: r.clone(), name: r.rsplit('/').next().unwrap().into(), low: r.to_lowercase(), dir: false, text: None }).collect();
+        let paths: Vec<String> = (0..200).map(|i| format!("부서{}/과제{}/하위{}/문서_{}.hwp", i % 40, i % 300, i % 7, i * 37)).collect();
+        // 예전
+        let t = Instant::now();
+        let mut ents = old_ents.clone();
+        for rel in &paths { ents.retain(|e| e.rel != *rel && !e.rel.starts_with(&format!("{rel}/"))); }
+        let old_ms = t.elapsed().as_secs_f64() * 1000.0;
+        let old_left = ents.len();
+        let _ = ents.iter().map(|e| (&e.name, &e.low, e.dir, &e.text)).count();
+        // 지금(잠금 안에서 하는 일과 같다 — 아무도 안 읽는 색인이라 복사 없음)
+        let mut ix = SearchIndex::new(Path::new("x"), rels.iter().map(|r| IdxEntry { rel: r.as_str().into(), name: r.rsplit('/').next().unwrap().into(), low: r.to_lowercase().into(), dir: false, text: None }).collect());
+        let t = Instant::now();
+        let gone: std::collections::HashSet<String> = paths.iter().cloned().collect();
+        ix.ents.retain(|e| !under_any(&e.rel, &gone));
+        let new_ms = t.elapsed().as_secs_f64() * 1000.0;
+        assert_eq!(ix.ents.len(), old_left);
+        // 찾기가 같은 색인을 읽는 중이라 복사해야 할 때(최악) — 예전 복사 vs 지금 복사
+        let t = Instant::now(); let c1 = old_ents.clone(); let old_clone = t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now(); let c2 = ix.ents.clone(); let new_clone = t.elapsed().as_secs_f64() * 1000.0;
+        drop((c1, c2));
+        println!("[1] 바깥 바뀜 반영 6만 항목×경로200: 예전 {old_ms:.1}ms → 지금 {new_ms:.1}ms | 색인 복사 예전 {old_clone:.1}ms → 지금 {new_clone:.1}ms");
+
+        let files: Vec<ArcStr> = (0..2000).map(|i| {
+            let line = format!("{i}번 문서 Meeting Notes 회의 내용 정리 Budget Report 예산 집행 현황 abcdefghij\n");
+            ArcStr::from(line.repeat(32 * 1024 / line.len() + 1).as_str())
+        }).collect();
+        let total: usize = files.iter().map(|f| f.len()).sum();
+        let q = "zqxw";
+        let t = Instant::now();
+        let mut hits = 0;
+        for f in &files { if f.to_ascii_lowercase().find(q).is_some() { hits += 1 } }
+        let old_ms = t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now();
+        for f in &files { if find_in_text(f, q, false).is_some() { hits += 1 } }
+        let new_ms = t.elapsed().as_secs_f64() * 1000.0;
+        assert_eq!(hits, 0);
+        let q2 = "budget report";
+        let t = Instant::now(); for f in &files { assert!(f.to_ascii_lowercase().find(q2).is_some()) } let old2 = t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now(); for f in &files { assert!(find_in_text(f, q2, false).is_some()) } let new2 = t.elapsed().as_secs_f64() * 1000.0;
+        // 첫 글자가 흔한 글자(e)인데 없는 말 — 첫 글자 거르기가 거의 안 걸러지는 나쁜 경우
+        let q3 = "eqzz";
+        let t = Instant::now(); for f in &files { assert!(f.to_ascii_lowercase().find(q3).is_none()) } let old3 = t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now(); for f in &files { assert!(find_in_text(f, q3, false).is_none()) } let new3 = t.elapsed().as_secs_f64() * 1000.0;
+        println!("[5b] 흔한 첫 글자 없는 말: 예전 {old3:.1}ms → 지금 {new3:.1}ms");
+        println!("[5] 영문 내용 찾기 {}MB/2000파일: 없는 말 예전 {old_ms:.1}ms → 지금 {new_ms:.1}ms | 있는 말 예전 {old2:.1}ms → 지금 {new2:.1}ms", total / 1024 / 1024);
+    }
+
     /// 실제 Windows 휴지통에 시험 파일을 넣으므로 평소엔 건너뛴다: `cargo test --lib -- --ignored trash`
     #[cfg(windows)]
     #[test]
@@ -1824,5 +2200,111 @@ mod tests {
         }
         // 대소문자 있는 비ASCII 글자가 검색어에 있으면 예전 길(é ↔ É)
         assert!(find_in_text("CAFÉ 메뉴", "café", true).is_some());
+    }
+
+    /* ── v3.8.25 보안 2차 ── */
+    #[test]
+    fn root_allowed_blocks_system_folders_but_not_below_profile() {
+        let sys = SysDirs {
+            subtree: vec![PathBuf::from(r"\\?\C:\Windows"), PathBuf::from(r"\\?\C:\Program Files")],
+            exact: vec![PathBuf::from(r"\\?\C:\"), PathBuf::from(r"\\?\C:\Users"), PathBuf::from(r"\\?\C:\Users\나")],
+        };
+        for bad in [r"\\?\C:\", r"\\?\c:\windows", r"\\?\C:\Windows\System32", r"\\?\C:\Program Files\x", r"\\?\C:\Users", r"\\?\C:\Users\나"] {
+            assert!(root_allowed(Path::new(bad), &sys).is_err(), "{bad}");
+        }
+        for ok in [r"\\?\C:\Users\나\Desktop", r"\\?\C:\Users\나\Documents\업무", r"\\?\D:\", r"\\?\C:\Windows2", r"\\?\UNC\srv\공유", r"\\?\C:\업무"] {
+            assert!(root_allowed(Path::new(ok), &sys).is_ok(), "{ok}");
+        }
+        // 실제 환경값으로도: Windows 폴더는 거부, 임시 폴더(사용자 폴더 아래)는 된다
+        if let Some(w) = std::env::var_os("SystemRoot") { assert!(canon_dir(&w.to_string_lossy()).is_err()); }
+        assert!(canon_dir(&std::env::temp_dir().to_string_lossy()).is_ok());
+        assert!(canon_dir("상대\\경로").is_err());
+    }
+
+    #[test]
+    fn import_only_paths_that_were_dropped() {
+        let outside = tmp("dropgate");
+        std::fs::write(outside.join("놓은.txt"), "a").unwrap();
+        std::fs::write(outside.join("안놓은.txt"), "b").unwrap();
+        let dropped = outside.join("놓은.txt");
+        note_dropped(&[dropped.clone()]);
+        assert!(dropped_ok(&[dropped.to_string_lossy().into_owned()]).is_ok());
+        // '/' 로 적어도 정규화해 같은 파일이면 된다
+        assert!(dropped_ok(&[dropped.to_string_lossy().replace('\\', "/")]).is_ok());
+        assert!(dropped_ok(&[outside.join("안놓은.txt").to_string_lossy().into_owned()]).is_err(), "놓지 않은 파일은 거부");
+        assert!(dropped_ok(&[r"C:\Windows".into()]).is_err());
+        // 하나라도 놓지 않은 것이 섞이면 전부 거부
+        assert!(dropped_ok(&[dropped.to_string_lossy().into_owned(), outside.join("안놓은.txt").to_string_lossy().into_owned()]).is_err());
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn import_rejects_relative_and_stream_paths() {
+        let r = tmp("importshape");
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        for p in ["상대.txt", r"C:\a.txt:숨은.exe", "ms-msdt:/id x"] {
+            let e = import_in(&root, "", &[p.to_string()], true).unwrap_err();
+            assert!(e.contains("열 수 없는 경로"), "{p}: {e}");
+        }
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn same_tree_checks_copy_before_delete() {
+        let a = tmp("same_a");
+        std::fs::create_dir_all(a.join("x/y")).unwrap();
+        std::fs::write(a.join("x/y/1.txt"), "abc").unwrap();
+        std::fs::write(a.join("2.txt"), "de").unwrap();
+        let b = tmp("same_b");
+        let _ = std::fs::remove_dir_all(&b);
+        let mut budget = 100;
+        copy_tree(&a, &b, &mut budget).unwrap();
+        assert!(same_tree(&a, &b));
+        std::fs::write(b.join("x/y/1.txt"), "ab").unwrap();
+        assert!(!same_tree(&a, &b), "크기가 다르면 다르다");
+        std::fs::remove_file(b.join("x/y/1.txt")).unwrap();
+        assert!(!same_tree(&a, &b), "빠진 파일이 있으면 다르다");
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn text_save_temp_names_are_unpredictable_and_never_reuse_a_file() {
+        let r = tmp("tmpname");
+        std::fs::write(r.join("a.txt"), "1").unwrap();
+        // 예전 고정 이름을 누가 먼저 만들어 둬도(링크든 파일이든) 건드리지 않는다
+        std::fs::write(r.join("~$a.txt.wmhh-tmp"), "남의 것").unwrap();
+        let root = canon_dir(&r.to_string_lossy()).unwrap();
+        let m = mtime_ms(&std::fs::metadata(r.join("a.txt")).unwrap());
+        write_text_in(&root, "a.txt", "2", "utf-8", m).unwrap();
+        assert_eq!(std::fs::read_to_string(r.join("a.txt")).unwrap(), "2");
+        assert_eq!(std::fs::read_to_string(r.join("~$a.txt.wmhh-tmp")).unwrap(), "남의 것");
+        assert_ne!(rand_u64(), rand_u64());
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn inside_any_root_matches_display_form_without_disk() {
+        let r = tmp("insideroot");
+        set_roots(vec![r.to_string_lossy().into_owned()]);
+        let shown = display(&std::fs::canonicalize(&r).unwrap());
+        assert!(inside_any_root(&format!(r"{shown}\a.pdf")));
+        assert!(inside_any_root(&shown.to_uppercase()));
+        assert!(!inside_any_root(&format!(r"{shown}x\a.pdf")), "이름이 이어 붙은 옆 폴더는 아니다");
+        assert!(!inside_any_root(&format!(r"{shown}\..\밖.pdf")));
+        assert!(!inside_any_root(r"\\srv\s\a.pdf"));
+        set_roots(vec![]);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn doc_response_has_sandbox_csp_and_never_panics() {
+        let ok = doc_response(200, "text/html; charset=utf-8", b"x".to_vec());
+        let csp = ok.headers().get("Content-Security-Policy").unwrap().to_str().unwrap();
+        assert!(csp.contains("sandbox allow-scripts"));
+        assert!(!csp.contains("allow-same-origin") && !csp.contains("allow-popups"));
+        // 머리글에 넣을 수 없는 값(줄바꿈)이 와도 죽지 않고 500
+        let bad = doc_response(200, "text/html\n", b"x".to_vec());
+        assert_eq!(bad.status(), 500);
     }
 }

@@ -436,6 +436,9 @@ pub fn rotate_backup_throttled(
     keep: usize,
     min_interval: std::time::Duration,
 ) -> DbResult<bool> {
+    /* v3.8.25: 저장 뒤 회전은 이제 DB 잠금(AppDb.conn) 밖, 뒤 스레드에서 돈다 — 둘이 겹쳐 같은 30분에 두 장을 만들지 않게 차례로 */
+    static ROTATING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = ROTATING.lock().unwrap_or_else(|e| e.into_inner());
     let newest_mtime = fs::read_dir(backups_dir)
         .ok()
         .into_iter()
@@ -453,8 +456,22 @@ pub fn rotate_backup_throttled(
             }
         }
     }
-    rotate_backup(db_path, backups_dir, stamp, keep)?;
+    rotate_backup_consistent(db_path, backups_dir, stamp, keep)?;
     Ok(true)
+}
+
+/// rotate_backup 과 같되, 복사하는 동안 **SQLite 읽기 잠금(SHARED)** 을 쥔다(v3.8.25).
+/// 예전엔 AppDb.conn 잠금을 쥔 채 복사해서 사본이 찢어지지 않게 했는데, 그 대가로 복사 동안 앱의 모든 DB 일이 멈췄다.
+/// 이 앱은 WAL 이 아닌 롤백 저널이라, 누군가 읽기 잠금을 쥐고 있으면 쓰기는 DB 파일에 손대지 못하고(EXCLUSIVE 를 못 얻어)
+/// busy_timeout 만큼 기다린다 — 그래서 복사하는 동안 파일은 커밋 하나의 경계에 멈춰 있다.
+fn rotate_backup_consistent(db_path: &Path, backups_dir: &Path, stamp: &str, keep: usize) -> DbResult<()> {
+    let conn = Connection::open(db_path)?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    conn.execute_batch("BEGIN DEFERRED")?;
+    let _: i64 = conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get(0))?;   // 여기서 읽기 잠금을 얻는다
+    let out = rotate_backup(db_path, backups_dir, stamp, keep);
+    let _ = conn.execute_batch("COMMIT");
+    out
 }
 
 /// Had at least this many rows AND the new set is at most half → force a
