@@ -14,7 +14,7 @@ const COMMANDS: &[&str] = &[
     "restart_app", "quit_now", "emergency_dump", "focus_main_window", "alarm_attention", "save_text_file",
     "save_binary_file", "import_backup_file", "cancel_pending_import", "pick_file_path", "pick_folder_path",
     "open_file_path", "reveal_file_path", "quick_search", "resize_capture", "set_capture_form_mode", "set_ui_scale",
-    "set_autostart",
+    "set_autostart", "client_log",
 ];
 
 fn main() {

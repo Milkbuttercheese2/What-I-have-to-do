@@ -484,6 +484,7 @@ pub fn run() {
             commands::set_capture_form_mode,
             commands::set_ui_scale,
             commands::set_autostart,
+            commands::client_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

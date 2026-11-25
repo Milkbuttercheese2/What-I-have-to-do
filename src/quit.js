@@ -14,6 +14,7 @@
    ========================================================================= */
 import {STORE, invoke} from './store.js';
 import {flushEdit as flushDocEdit} from './docs.js';
+import {logged} from './logs.js';
 
 let quitting=false;
 
@@ -27,5 +28,5 @@ async function onQuitRequest(){
 }
 
 export function initQuit(){
-  window.__TAURI__.event.listen('wmhh://request-quit', onQuitRequest).catch(()=>{});
+  window.__TAURI__.event.listen('wmhh://request-quit', onQuitRequest).catch(logged('listen-request-quit'));   // 실패하면 종료 플러시 없이 Rust 감시 타이머가 끈다
 }

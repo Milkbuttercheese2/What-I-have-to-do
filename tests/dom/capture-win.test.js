@@ -613,3 +613,23 @@ test('@ 자동완성: 목록 밖에서 굴린 휠도 그 목록을 스크롤한�
   hint.dispatchEvent(ev);
   assert.equal(pb.scrollTop, 90, '자동완성 목록으로 넘어가 스크롤돼야 한다');
 });
+
+test('메모 넘기기가 실패하면 입력칸에 되돌리고 진단 로그를 남긴다(예전엔 사라졌다)', async () => {
+  reset();
+  const ev = env.window.__TAURI__.event, orig = ev.emitTo;
+  ev.emitTo = async (target, name, payload) => {
+    if(name==='wmhh://capture-memo') throw new Error('no main');
+    return orig(target, name, payload);
+  };
+  try{
+    inp.value = '잃으면 안 되는 메모';
+    key({key:'Enter', ctrlKey:true});
+    assert.equal(inp.value, '');                       // 성공 경로와 같게 일단 비운다
+    for(let i=0;i<5;i++) await Promise.resolve();      // 거절이 처리될 때까지
+    assert.equal(inp.value, '잃으면 안 되는 메모');
+    const draft = env.emitted.filter(e=>e.name==='wmhh://capture-draft').at(-1);
+    assert.deepEqual(draft.payload, {text:'잃으면 안 되는 메모'});
+    const log = env.invokeCalls.filter(c=>c.cmd==='client_log').at(-1);
+    assert.deepEqual(log.args, {tag:'cap-emit-memo', msg:'no main'});
+  } finally { ev.emitTo = orig; mock.timers.tick(400); reset(); }
+});

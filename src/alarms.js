@@ -7,6 +7,7 @@ import {$, esc, showToast} from './dom-utils.js';
 import {fmtT} from './datetime.js';
 import {persist} from './render.js';
 import {openModal, closeModal} from './modals.js';
+import {logWarn, logged} from './logs.js';
 
 function saveSettings(){ window.SETTINGS=S.settings; STORE.saveSettings(S.settings); }
 
@@ -14,7 +15,7 @@ function saveSettings(){ window.SETTINGS=S.settings; STORE.saveSettings(S.settin
    상한(약 6개)에 걸려 몇 번 울린 뒤부터 소리가 조용히 죽는다 */
 let _audioCtx=null;
 function beep(){ try{ const ctx=_audioCtx=_audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(ctx.state==='suspended')ctx.resume(); const g=ctx.createGain(); g.connect(ctx.destination); g.gain.value=.15;
-  [0,.28].forEach(t=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=880;o.connect(g);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.16);}); }catch{} }
+  [0,.28].forEach(t=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=880;o.connect(g);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.16);}); }catch(e){ logWarn('alarm-beep', e); } }
 let firedNow=[];
 export function checkAlarms(){
   if(!S.settings.alarmOn) return;
@@ -31,12 +32,12 @@ export function checkAlarms(){
      떠서 알림창이 길어지던 문제. 세부 점검(title)은 원래 한 줄이라 영향 없음. */
   $('alarmList').innerHTML=fire.map(a=>`<div class="a-item ${a.key==='due'?'a-due':'a-mid'}"><b>${a.label}</b>${esc((a.title||'').split(/\r?\n/)[0].trim()||'(메모 없음)')}<span class="num">${fmtT(a.iso)}</span></div>`).join('');
   openModal('alarmBg',{close:()=>$('alarmOk').click()}); beep(); try{window.focus();}catch{} startTitleFlash(fire.length);
-  invoke('focus_main_window').catch(()=>{}); // window.focus() can't steal OS focus from another app; this can
-  invoke('alarm_attention',{on:true}).catch(()=>{}); // v2.5.3 작업표시줄 깜빡임 + 빨간 배지 (확인 전까지 유지)
+  invoke('focus_main_window').catch(logged('alarm-focus-main')); // window.focus() can't steal OS focus from another app; this can
+  invoke('alarm_attention',{on:true}).catch(logged('alarm-attention-on')); // v2.5.3 작업표시줄 깜빡임 + 빨간 배지 (확인 전까지 유지)
   if('Notification'in window&&Notification.permission==='granted'){ fire.forEach(a=>{try{
     const nt=new Notification('뭐하려 했더라 · '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
     nt.onclick=()=>{ try{window.focus();}catch{} try{nt.close();}catch{} };
-  }catch{}}); }
+  }catch(e){ logWarn('alarm-notification', e); }}); }
 }
 let _titleFlash=null, _baseTitle='';
 function startTitleFlash(n){
@@ -60,7 +61,7 @@ export function initAlarms(){
   window.addEventListener('focus',stopTitleFlash);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) stopTitleFlash(); });
   /* v2.5.3: 확인·미룸·알람 끔이 작업표시줄 배지도 함께 걷는다 (미룸은 재울림 때 다시 켜짐) */
-  attentionOff=()=>invoke('alarm_attention',{on:false}).catch(()=>{});
+  attentionOff=()=>invoke('alarm_attention',{on:false}).catch(logged('alarm-attention-off'));
   $('alarmOk').addEventListener('click',()=>{ firedNow.forEach(a=>{a.obj.al=a.obj.al||{};a.obj.al[a.key]=true;}); firedNow=[]; closeModal('alarmBg'); stopTitleFlash(); attentionOff(); persist(); });
   /* v2.5.11: '10분 뒤 다시'(스누즈) 기능 제거 — 알람창은 [확인]만. 옛 데이터의 snooze-until
      값은 Rust가 계속 디코드하고 카드 점은 '울림'으로 접어 표시하므로 호환 문제 없음. */

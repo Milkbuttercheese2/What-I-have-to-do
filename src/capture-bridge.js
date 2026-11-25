@@ -13,6 +13,7 @@ import {STORE, invoke} from './store.js';
 import {showToast} from './dom-utils.js';
 import {captureMemo, openForm} from './form.js';
 import {captureConfig} from './theme.js';
+import {logged} from './logs.js';
 
 let trayNoticePending=false;
 let draftSaveTimer=null;
@@ -22,10 +23,10 @@ let draftSaveTimer=null;
    미니 창이 DB를 직접 읽지 않게 해 설정의 소유자를 메인 창 하나로 유지한다. */
 export function sendCaptureConfig(){
   const cfg=captureConfig(S.settings);
-  window.__TAURI__.event.emitTo('capture','wmhh://capture-config',cfg).catch(()=>{});
+  window.__TAURI__.event.emitTo('capture','wmhh://capture-config',cfg).catch(logged('emit-capture-config'));
   /* 첫 화면이 '양식 메모'면 단축키가 미니 창 대신 메인 양식을 열어야 한다. 이 분기는
      단축키를 받는 Rust 가 해야 미니 창이 떴다 사라지는 깜빡임이 없다. */
-  invoke('set_capture_form_mode',{form:cfg.capStart==='form'}).catch(()=>{});
+  invoke('set_capture_form_mode',{form:cfg.capStart==='form'}).catch(logged('set-capture-form-mode'));
 }
 
 /* 캡처 초안 → settings.captureDraft. 앱이 초안을 남긴 채 꺼지면(전원 차단 포함)
@@ -51,32 +52,32 @@ export function initCapture(){
          앱이 꺼지면 다음 실행의 초안 회수가 같은 메모를 한 번 더 등록(중복)하던 문제. */
       S.settings.captureDraft=''; window.SETTINGS=S.settings; STORE.saveSettings(S.settings);
     }
-  });
+  }).catch(logged('listen-capture-memo'));
 
   /* 미니 창이 구성을 요청 (부팅 직후·창이 뜰 때마다) */
-  window.__TAURI__.event.listen('wmhh://capture-hello', ()=>sendCaptureConfig());
+  window.__TAURI__.event.listen('wmhh://capture-hello', ()=>sendCaptureConfig()).catch(logged('listen-capture-hello'));
 
   /* '양식 메모' 설정에서 단축키를 누르면 Rust 가 메인 창을 띄우고 이 이벤트를 보낸다 */
-  window.__TAURI__.event.listen('wmhh://open-blank-form', ()=>openForm({}));
+  window.__TAURI__.event.listen('wmhh://open-blank-form', ()=>openForm({})).catch(logged('listen-open-blank-form'));
 
   /* 캡처 창 초안 흘려받기 (입력 시마다·숨김 직전 플러시) */
   window.__TAURI__.event.listen('wmhh://capture-draft', ev=>{
     saveDraft((ev.payload||{}).text);
-  });
+  }).catch(logged('listen-capture-draft'));
 
   /* 캡처 검색 모드에서 업무 클릭 → 메인 창에서 양식 열기 */
   window.__TAURI__.event.listen('wmhh://open-item', ev=>{
     const id=(ev.payload||{}).id;
     const it=S.items.find(x=>x.id===id);
     if(it && !it.recur) openForm(it,{readonly:!!it.done});   // 부모(주기 정의)는 양식으로 열지 않음
-  });
+  }).catch(logged('listen-open-item'));
 
   /* X→트레이 전환 알림(Rust) — 첫 회에 한해, 창이 다시 보일 때 안내 토스트.
      숨은 창에서 바로 토스트를 띄워봐야 아무도 못 본다. */
   window.__TAURI__.event.listen('wmhh://hidden-to-tray', ()=>{
     if(S.settings.trayNoticeShown) return;
     trayNoticePending=true;
-  });
+  }).catch(logged('listen-hidden-to-tray'));
   window.addEventListener('focus',()=>{
     if(!trayNoticePending) return;
     trayNoticePending=false;
