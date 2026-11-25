@@ -1327,3 +1327,84 @@ fn backup_payload_rejects_non_numeric_ids() {
         assert!(serde_json::from_str::<BackupPayload>(bad).is_err(), "{bad}");
     }
 }
+
+/// 맨 처음 판(마이그레이션 001 만 돈) DB 를 지금 앱으로 연다 — 내부망엔 자동 업데이트가 없어
+/// 여러 판을 건너뛰고 바로 최신으로 올라오는 경우가 실제로 있다. 데이터가 그대로이고, 뒤에 생긴
+/// 칸(담당·이메일·파일·주기)은 기본값, 그 뒤 저장도 된다.
+#[test]
+fn oldest_schema_upgrades_to_latest_keeping_data() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_upgrade_{}", std::process::id()));
+    let db_path = dir.join("old.sqlite");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    {
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(include_str!("migrations/001_init.sql")).unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        conn.execute_batch(
+            "INSERT INTO items(id,memo,due_at,staged,done,due_alarm) VALUES (1700000000001,'옛 업무','2024-01-02T09:00:00.000Z',0,0,'true');
+             INSERT INTO contacts(item_id,who,org,phone,sort_order) VALUES (1700000000001,'홍길동','총무과','010-1234-5678',0);
+             INSERT INTO identifiers(item_id,kind,val,sort_order) VALUES (1700000000001,'SR번호','SR-1',0);
+             INSERT INTO subtasks(id,item_id,title,mid_at,done,alarm,sort_order) VALUES (1700000000002,1700000000001,'점검','2024-01-01T09:00:00.000Z',1,NULL,0);",
+        )
+        .unwrap();
+    }
+    let mut conn = super::open(&db_path).unwrap();
+    let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    assert_eq!(v, 8, "마이그레이션 수가 늘면 이 숫자도 함께 올릴 것");
+    let st = backup::load_app_state(&conn).unwrap();
+    assert_eq!(st.items.len(), 1);
+    let it = &st.items[0];
+    assert_eq!((it.id, it.memo.as_str(), it.owner.as_str()), (1700000000001, "옛 업무", ""));
+    assert_eq!(it.f.get("due").map(String::as_str), Some("2024-01-02T09:00:00.000Z"));
+    assert_eq!(it.contacts.len(), 1);
+    assert_eq!((it.contacts[0].who.as_str(), it.contacts[0].phone.as_str(), it.contacts[0].email.as_str()), ("홍길동", "010-1234-5678", ""));
+    assert_eq!((it.ids[0].kind.as_str(), it.ids[0].val.as_str()), ("SR번호", "SR-1"));
+    assert_eq!((it.subs.len(), it.subs[0].id, it.subs[0].done), (1, 1700000000002, true));
+    assert!(it.files.is_empty());
+    assert!(phonebook::load_phonebook(&conn).unwrap().is_empty());
+    // 올라온 DB 에 그대로 저장할 수 있다
+    let mut items2 = st.items.clone();
+    items2[0].memo = "고친 업무".into();
+    items2[0].contacts[0].email = "a@b.kr".into();
+    items::save_items(&mut conn, &items2).unwrap();
+    let back = items::load_items(&conn).unwrap();
+    assert_eq!((back[0].memo.as_str(), back[0].contacts[0].email.as_str()), ("고친 업무", "a@b.kr"));
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 어느 중간 판(user_version 1~7)에서 올라와도 최신까지 가고, 백업 내보내기·저장이 된다.
+#[test]
+fn every_intermediate_schema_upgrades_to_latest() {
+    const STEPS: [&str; 8] = [
+        include_str!("migrations/001_init.sql"),
+        include_str!("migrations/002_recurrence.sql"),
+        include_str!("migrations/003_item_files.sql"),
+        include_str!("migrations/004_recur.sql"),
+        include_str!("migrations/005_assignee.sql"),
+        include_str!("migrations/006_phonebook.sql"),
+        include_str!("migrations/007_data_version.sql"),
+        include_str!("migrations/008_contact_email.sql"),
+    ];
+    for k in 1..STEPS.len() {
+        let dir = std::env::temp_dir().join(format!("wmhh_test_upg{k}_{}", std::process::id()));
+        let db_path = dir.join("old.sqlite");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            for s in &STEPS[..k] { conn.execute_batch(s).unwrap(); }
+            conn.pragma_update(None, "user_version", k as i64).unwrap();
+            conn.execute("INSERT INTO items(id,memo) VALUES (1700000000001, ?1)", [format!("판 {k}")]).unwrap();
+        }
+        let mut conn = super::open(&db_path).unwrap_or_else(|e| panic!("판 {k} 에서 열기 실패: {e}"));
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, STEPS.len() as i64, "판 {k}");
+        let st = backup::load_app_state(&conn).unwrap();
+        assert_eq!(st.items[0].memo, format!("판 {k}"));
+        items::save_items(&mut conn, &st.items).unwrap();
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
