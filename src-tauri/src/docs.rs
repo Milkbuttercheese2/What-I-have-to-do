@@ -1014,7 +1014,8 @@ fn find_ascii_ci(hay: &[u8], q: &[u8]) -> Option<usize> {
     }
 }
 
-/// 색인을 새로 만들어 찾는다(시험·한 번 쓰기용)
+/// 색인을 새로 만들어 찾는다 — 시험 전용(앱은 search_cached 를 쓴다; 배포 빌드의 쓰지 않는 함수 경고를 없앤다)
+#[cfg(test)]
 pub fn search_in(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
     if query.trim().is_empty() { return Ok(vec![]) }
     let base = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());

@@ -28,8 +28,6 @@ export function normCapPair(settings){
   if(second===start) second=CAP_SCREENS.find(x=>x!==start);
   return {capStart:start, capSecond:second};
 }
-/* 예전 이름 유지 — 첫 화면만 필요한 곳에서 쓴다 */
-export function normCapStart(v){ return normCapScreen(v); }
 
 /* 설정값 → 캡처 창에 보낼 구성 (capture-bridge 가 이 모양 그대로 emit) */
 export function captureConfig(settings){
