@@ -68,9 +68,23 @@ export function closeById(id){
   try{ m.close(); }catch(e){ console.warn('팝업 닫기 실패', id, e); }
 }
 
+/* 화면 읽기 프로그램용 이름표 — 팝업 판에 role=dialog·aria-modal 과 제목(h2/h3)을 이름으로 단다. 보이는 것·초점은 그대로다.
+   (예전엔 팝업이 그냥 div 라 '대화 상자'로 읽히지 않고 제목도 알려 주지 않았다.) 이미 role 이 있으면 손대지 않는다. */
+let dlgSeq = 0;
+function ensureDialogRole(el){
+  const panel = el.querySelector('.modal, .alarm, .fm-inner') || el;
+  if(panel.getAttribute('role')) return;
+  panel.setAttribute('role', el.id === 'alarmBg' ? 'alertdialog' : 'dialog');
+  /* 양식은 옆 칸(fm-dock)으로 붙어 나머지 화면과 함께 쓰이기도 하므로 aria-modal 을 달지 않는다 */
+  if(el.id !== 'formPanel') panel.setAttribute('aria-modal', 'true');
+  const h = panel.querySelector('h1, h2, h3, .fm-title');
+  if(h){ if(!h.id) h.id = 'dlg-title-' + (++dlgSeq); panel.setAttribute('aria-labelledby', h.id); }
+}
+
 export function openModal(id, opts = {}){
   const el = $(id); if(!el) return;
   ensureCloseX(id, el);
+  ensureDialogRole(el);
   const i = stack.findIndex(m => m.id === id);
   if(i >= 0) stack.splice(i, 1);                 // 이미 열려 있으면 맨 위로 다시 올린다
   el.classList.add('on');

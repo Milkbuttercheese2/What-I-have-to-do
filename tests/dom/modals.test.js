@@ -142,3 +142,18 @@ test('v3.8.0 배경 클릭 닫기: 팝업 안에서 누르고 배경에서 놓�
   assert.equal(closed, 1, '안쪽 클릭은 원래대로 닫지 않는다');
   bg.remove();
 });
+
+test('화면 읽기용: 열면 팝업 판에 role=dialog·aria-modal·제목 이름표, 알림은 alertdialog, 양식은 aria-modal 없음', () => {
+  openModal('relModal');
+  const p = $('relModal').querySelector('.modal');
+  assert.equal(p.getAttribute('role'), 'dialog');
+  assert.equal(p.getAttribute('aria-modal'), 'true');
+  assert.equal(env.document.getElementById(p.getAttribute('aria-labelledby')).textContent, '관련 업무');
+  openModal('alarmBg');
+  assert.equal($('alarmBg').querySelector('.alarm').getAttribute('role'), 'alertdialog');
+  openModal('formPanel');
+  const f = $('formPanel').querySelector('.fm-inner');
+  assert.equal(f.getAttribute('role'), 'dialog');
+  assert.equal(f.getAttribute('aria-modal'), null);
+  while(closeTop());
+});

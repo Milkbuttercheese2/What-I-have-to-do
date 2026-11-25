@@ -324,8 +324,8 @@
     <div class="ps-new">
       <div class="ps-new-head" id="np-new-head">＋ 새 프리셋 만들기</div>
       <div class="ps-new-grid">
-        <div class="fm-field"><label>버튼 이름</label><input type="text" id="np-label" placeholder="예: 계약변경, 선금 지급"></div>
-        <div class="fm-field"><label>메모 기본값 (○○ 자리표시자 사용 가능)</label><input type="text" id="np-sum" placeholder="예: ○○ 사업 계약변경"></div>
+        <div class="fm-field"><label for="np-label">버튼 이름</label><input type="text" id="np-label" placeholder="예: 계약변경, 선금 지급"></div>
+        <div class="fm-field"><label for="np-sum">메모 기본값 (○○ 자리표시자 사용 가능)</label><input type="text" id="np-sum" placeholder="예: ○○ 사업 계약변경"></div>
       </div>
       <div class="ps-subs-head">세부 할 일 (선택)</div>
       <div id="np-subs"></div>
@@ -359,16 +359,16 @@
 
     <div class="ps-new">
       <div class="ps-new-head" id="rc-new-head">＋ 새 주기 업무</div>
-      <div class="fm-field"><label>공통 내용 (제목/메모)</label>
+      <div class="fm-field"><label for="rc-memo">공통 내용 (제목/메모)</label>
         <input type="text" id="rc-memo" placeholder="예: 주간 부서 업무보고 취합" autocomplete="off"></div>
       <!-- v2.5.6: 스케줄(매주 요일·며칠 + 시각)과 보드 생성을 각각 한 줄로 분리 -->
       <div class="fm-recur-row">
-        <select id="rc-type">
+        <select id="rc-type" aria-label="반복 방식">
           <option value="dow">매주 요일</option>
           <option value="monthly">매월 며칠</option>
         </select>
         <span id="rc-dow"></span>
-        <span id="rc-monthly" style="display:none">매월 <input type="number" id="rc-mday" min="1" max="31" value="1"> 일</span>
+        <span id="rc-monthly" style="display:none">매월 <input type="number" id="rc-mday" aria-label="매월 며칠" min="1" max="31" value="1"> 일</span>
         <span class="rc-time-wrap">시각 <input type="text" class="dt-time" id="rc-time" maxlength="5" value="09:00" placeholder="09:00 또는 0930" title="콜론 없이 0930, 930 처럼 입력해도 됩니다"></span>
       </div>
       <div class="fm-recur-row">
