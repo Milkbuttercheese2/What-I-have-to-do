@@ -1374,6 +1374,34 @@ fn oldest_schema_upgrades_to_latest_keeping_data() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 백업 복사가 실패하면 반쪽 `.sqlite` 가 남지 않는다(남으면 최신 N개 자리를 차지해 멀쩡한 백업을 밀어낸다).
+#[test]
+fn backup_copy_never_leaves_a_half_written_sqlite() {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_partial_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let bdir = dir.join("backups");
+    std::fs::create_dir_all(&bdir).unwrap();
+    let db = dir.join("wmhh.sqlite");
+    std::fs::write(&db, b"db bytes").unwrap();
+    // 성공: 이름이 바로 생기고 .partial 은 없다
+    super::rotate_backup(&db, &bdir, "20260101_000000", 10).unwrap();
+    let names = |d: &std::path::Path| -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(names(&bdir), vec!["wmhh_20260101_000000.sqlite"]);
+    assert_eq!(std::fs::read(bdir.join("wmhh_20260101_000000.sqlite")).unwrap(), b"db bytes");
+    // 실패(원본 없음): 아무것도 남기지 않고 오류
+    assert!(super::rotate_backup(&dir.join("없는.sqlite"), &bdir, "20260101_000100", 10).is_err());
+    assert_eq!(names(&bdir), vec!["wmhh_20260101_000000.sqlite"]);
+    // 대상 자리가 폴더라 이름 바꾸기가 실패해도 조각을 지운다
+    std::fs::create_dir_all(bdir.join("wmhh_20260101_000200.sqlite")).unwrap();
+    assert!(super::copy_whole(&db, &bdir.join("wmhh_20260101_000200.sqlite")).is_err());
+    assert!(!names(&bdir).iter().any(|n| n.ends_with(".partial")), "{:?}", names(&bdir));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 어느 중간 판(user_version 1~7)에서 올라와도 최신까지 가고, 백업 내보내기·저장이 된다.
 #[test]
 fn every_intermediate_schema_upgrades_to_latest() {

@@ -223,7 +223,7 @@ pub fn open_with_recovery(
     let mut kept: Option<PathBuf> = None;
     if db_path.exists() {
         let aside = db_path.with_file_name(format!("wmhh.before-recovery-{}.sqlite", fs_stamp()));
-        match fs::copy(db_path, &aside) {
+        match copy_whole(db_path, &aside) {
             Ok(_) => kept = Some(aside),
             Err(e) => eprintln!("복구 전 원본 보관 실패(복구는 계속): {e}"),
         }
@@ -308,9 +308,9 @@ pub fn apply_pending_import(db_path: &Path, backups_dir: &Path) -> DbResult<bool
     }
     if db_path.exists() {
         fs::create_dir_all(backups_dir)?;
-        let _ = fs::copy(
+        let _ = copy_whole(
             db_path,
-            backups_dir.join(format!("wmhh_preimport_{}.sqlite", fs_stamp())),
+            &backups_dir.join(format!("wmhh_preimport_{}.sqlite", fs_stamp())),
         );
     }
     if fs::rename(&pending, db_path).is_err() {
@@ -416,9 +416,24 @@ pub fn now_stamp(conn: &Connection) -> DbResult<String> {
 pub fn rotate_backup(db_path: &Path, backups_dir: &Path, stamp: &str, keep: usize) -> DbResult<()> {
     fs::create_dir_all(backups_dir)?;
     let dest = backups_dir.join(format!("wmhh_{stamp}.sqlite"));
-    fs::copy(db_path, &dest)?;
+    copy_whole(db_path, &dest)?;
     prune_backups(backups_dir, keep)?;
     Ok(())
+}
+
+/// 다 복사된 뒤에만 `dest` 이름이 생긴다 — `.partial` 로 복사하고 끝나면 이름을 바꾼다.
+/// 예전 `fs::copy(src, dest)` 는 디스크가 차거나 백신이 중간에 막으면 **반쯤 쓴 `.sqlite`** 를 남겼고,
+/// 그 조각이 (1) '최신 N개만 남기기'에서 한 자리를 차지해 멀쩡한 백업을 밀어내고
+/// (2) 가장 새 파일로 보여 다음 자동 백업을 30분 미루게 했다. 실패하면 조각을 지우고 오류를 올린다.
+pub(crate) fn copy_whole(src: &Path, dest: &Path) -> std::io::Result<()> {
+    let mut part = dest.as_os_str().to_owned();
+    part.push(".partial");
+    let part = PathBuf::from(part);
+    let res = fs::copy(src, &part).and_then(|_| fs::rename(&part, dest));
+    if res.is_err() {
+        let _ = fs::remove_file(&part);
+    }
+    res
 }
 
 /// Like `rotate_backup`, but skips (returning false) when the newest
@@ -569,6 +584,15 @@ pub fn save_items_guarded(
 /// heavy editing session that churns through all `keep` recent slots, a
 /// start-of-day restore point per day survives for two weeks.
 fn prune_backups(backups_dir: &Path, keep: usize) -> DbResult<()> {
+    /* 복사 도중 전원이 꺼져 남은 `.partial`(copy_whole) — 10분 넘은 것만 치운다(지금 다른 복사가 쓰는 중일 수 있어서) */
+    for e in fs::read_dir(backups_dir)?.filter_map(|e| e.ok()) {
+        let p = e.path();
+        if p.extension().map(|x| x == "partial").unwrap_or(false) {
+            let old = e.metadata().ok().and_then(|m| m.modified().ok())
+                .and_then(|t| t.elapsed().ok()).map(|a| a > std::time::Duration::from_secs(600)).unwrap_or(false);
+            if old { let _ = fs::remove_file(&p); }
+        }
+    }
     let mut entries: Vec<PathBuf> = fs::read_dir(backups_dir)?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
