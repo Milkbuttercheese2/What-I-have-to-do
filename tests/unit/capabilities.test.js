@@ -24,7 +24,9 @@ test('main 창은 모든 명령을 받는다', () => {
 });
 
 test('빠른 메모 창은 자기가 부르는 명령만 받는다', () => {
-  const need = invokedIn('src/capture-win.js');
+  /* client_log 는 capture-win.js 가 logs.js 를 쓸 때 logs.js 가 부른다 */
+  const usesLog = /from '\.\/logs\.js'/.test(rd('src/capture-win.js'));
+  const need = [...invokedIn('src/capture-win.js'), ...(usesLog ? ['client_log'] : [])];
   const got = cap.permissions.filter(p => p.startsWith('allow-') && p !== 'core:window:allow-hide').sort();
   assert.deepEqual(got, need.map(kebab).sort(), 'capture.json = capture-win.js 가 invoke 하는 명령');
   assert.deepEqual(cap.windows, ['capture']);

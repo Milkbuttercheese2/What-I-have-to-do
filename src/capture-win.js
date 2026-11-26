@@ -25,6 +25,7 @@
    둘 다 없다. 전화번호부 데이터 자체는 DB 를 직접 읽지 않고 phonebook_search
    커맨드로 조회한다(quick_search 와 같은 경로). */
 import {atToken, applyInsert, tagText, queryReady, linkifyAt, entryKey} from './phonebook-core.js';
+import {logWarn, logged} from './logs.js';     // import 없는 모듈이라 미니 창에서 써도 된다
 
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
@@ -51,7 +52,7 @@ export function applyCaptureConfig(c){
   $id('cap-hint').textContent=hintFor(mode);
 }
 /* 메인 창에 설정을 달라고 알린다 (부팅 직후·창이 다시 뜰 때마다) */
-function askConfig(){ window.__TAURI__.event.emitTo('main','wmhh://capture-hello',{}).catch(()=>{}); }
+function askConfig(){ window.__TAURI__.event.emitTo('main','wmhh://capture-hello',{}).catch(logged('cap-emit-hello')); }
 let draftTimer=null, searchTimer=null, searchSeq=0;
 let selIdx=-1;                              // 검색 결과 선택 위치 (v2.6.4 방향키 이동)
 /* v2.7.0 빠른 메모 @ 자동완성 — 전화번호부(phonebook_search) 드롭다운 상태 */
@@ -117,7 +118,7 @@ function autoGrow(el){
    hover 는 백드롭 태그 span 의 실제 사각형에 커서가 들어왔는지로 판정한다
    (textarea 가 위에 있어 CSS :hover 가 불가능한 구조). */
 function loadBook(){
-  invoke('phonebook_list').then(b=>{ pbBook=Array.isArray(b)?b:[]; renderCapHl(); }).catch(()=>{});
+  invoke('phonebook_list').then(b=>{ pbBook=Array.isArray(b)?b:[]; renderCapHl(); }).catch(logged('cap-phonebook-list'));
 }
 function renderCapHl(){
   const hl=$id('cap-hl'); if(!hl) return;
@@ -159,7 +160,7 @@ function wireTagHover(ta, hl){
 
 /* 초안을 메인 창으로 (메인이 settings.captureDraft에 저장) — 등록/삭제 포함 모든 변경 */
 function sendDraft(text){
-  window.__TAURI__.event.emitTo('main','wmhh://capture-draft',{text:String(text??'')}).catch(()=>{});
+  window.__TAURI__.event.emitTo('main','wmhh://capture-draft',{text:String(text??'')}).catch(logged('cap-emit-draft'));
 }
 
 /* 화면 크기(v2.5.15)는 이 창이 스스로 처리하지 않는다 — 메인 창에서 Ctrl+휠로
@@ -195,7 +196,7 @@ function sizeMemoWin(){
    그걸 모르고 1.2배로 창을 만들면 창이 25% 작아 목록 아래가 잘린다 — 여러 번
    신고된 '행이 다 안 보인다'의 진짜 원인이었다. commands.rs note_capture_ratio 참조. */
 function sizeWin(cssHeight){
-  invoke('resize_capture',{height:cssHeight, viewportWidth:window.innerWidth}).catch(()=>{});
+  invoke('resize_capture',{height:cssHeight, viewportWidth:window.innerWidth}).catch(logged('cap-resize'));
 }
 function closePb(skipResize){
   clearTimeout(pbTimer); pbSeq++;
@@ -447,8 +448,8 @@ function openSel(){
 }
 /* 업무 하나를 메인 창에서 열기 — 클릭·Enter 공용 */
 function openItem(id){
-  window.__TAURI__.event.emitTo('main','wmhh://open-item',{id}).catch(()=>{});
-  invoke('focus_main_window').catch(()=>{});
+  window.__TAURI__.event.emitTo('main','wmhh://open-item',{id}).catch(logged('cap-emit-open-item'));
+  invoke('focus_main_window').catch(logged('cap-focus-main'));
   hideWin();
 }
 
@@ -456,7 +457,12 @@ function openItem(id){
 function submitMemo(){
   const inp=$id('cap-inp');
   const t=inp.value.trim(); if(!t){ hideWin(); return; }
-  window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(()=>{});
+  /* 넘기기가 실패하면 메모를 입력칸에 되돌린다 — 예전엔 실패를 버리고 칸·초안을 비워 메모가 사라졌다.
+     (입력칸은 창을 감춰도 지우지 않으므로 다음에 창을 열면 그대로 있다) */
+  window.__TAURI__.event.emitTo('main','wmhh://capture-memo',{text:t}).catch(e=>{
+    logWarn('cap-emit-memo', e);
+    if(!inp.value){ inp.value=t; autoGrow(inp); renderCapHl(); sendDraft(t); }
+  });
   inp.value=''; autoGrow(inp); sizeMemoWin(); renderCapHl(); clearTimeout(draftTimer); sendDraft('');   // 등록됐으니 초안 비움
   submitting=true; document.body.classList.add('flash');
   setTimeout(()=>{ document.body.classList.remove('flash'); submitting=false; hideWin(); },400);
@@ -581,14 +587,14 @@ export function initCaptureWin(){
     const t=(mode==='search')?$id('cap-search'):$id('cap-inp');
     t.focus(); const n=t.value.length; try{t.setSelectionRange(n,n);}catch{}
   });
-  window.__TAURI__.event.listen('wmhh://capture-shown', ()=>{ loadBook(); openFresh(); }).catch(()=>{});
+  window.__TAURI__.event.listen('wmhh://capture-shown', ()=>{ loadBook(); openFresh(); }).catch(logged('cap-listen-shown'));
   /* Rust 가 토글로 창을 숨긴 경우(단축키 두 번) — 이때는 이 창의 JS 가 돌지 않으므로 알려준다 */
-  window.__TAURI__.event.listen('wmhh://capture-hidden', ()=>resetSearchUI()).catch(()=>{});
+  window.__TAURI__.event.listen('wmhh://capture-hidden', ()=>resetSearchUI()).catch(logged('cap-listen-hidden'));
   window.__TAURI__.event.listen('wmhh://capture-config', ev=>{
     const first = !ready; ready=true;
     applyCaptureConfig(ev.payload||{});
     if(first) openFresh();          // 설정이 도착한 뒤 시작 화면을 다시 잡는다
-  }).catch(()=>{});
+  }).catch(logged('cap-listen-config'));
   askConfig();
   loadBook();                                   // v3.0.1: 태그 하이라이트용 전화번호부
   openFresh();
@@ -596,8 +602,8 @@ export function initCaptureWin(){
 
 /* '양식 메모' — 미니 창을 접고 메인 창의 빈 양식을 연다 (Rust 가 여는 경로와 같은 이벤트) */
 function openMainForm(){
-  window.__TAURI__.event.emitTo('main','wmhh://open-blank-form',{}).catch(()=>{});
-  invoke('focus_main_window').catch(()=>{});
+  window.__TAURI__.event.emitTo('main','wmhh://open-blank-form',{}).catch(logged('cap-emit-blank-form'));
+  invoke('focus_main_window').catch(logged('cap-focus-main'));
   submitting=true; setTimeout(()=>{ submitting=false; },400);   // blur 로 인한 중복 숨김 방지
   hideWin();
 }

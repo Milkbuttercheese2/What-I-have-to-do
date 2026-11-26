@@ -30,6 +30,7 @@ import {placeOf} from './placement.js';
 import {openForm} from './form.js';
 import {topId} from './modals.js';
 import {syncGSearch} from './gsearch.js';
+import {logged, logWarn} from './logs.js';
 
 /* 폴더 목록이 바뀔 때마다 kidsGen+1 — 찾기를 지울 때, 그려 둔 트리를 그대로 다시 보여도 되는지 가린다(v3.8.16) */
 let kidsGen=0;
@@ -222,8 +223,8 @@ function viewHead(i, rel, e, extra){
 const box = () => { const b=$('dv-body'); return b && b.querySelector('.dv-content'); };
 async function leaveViewer(inChain){
   await flushEdit(inChain);
-  if(viewCleanup){ try{ viewCleanup(); }catch{} viewCleanup=null; }
-  if(native){ native=false; stopNativeWatch(); try{ await invoke('doc_preview_close'); }catch{} }
+  if(viewCleanup){ try{ viewCleanup(); }catch(e){ logWarn('doc-view-cleanup', e); } viewCleanup=null; }
+  if(native){ native=false; stopNativeWatch(); try{ await invoke('doc_preview_close'); }catch(e){ logWarn('doc-preview-close', e); } }
   ed=null; book=null; shown=null;
 }
 /* ⚠️ 한 번에 하나씩 돈다(직렬). 겹쳐 돌면 늦게 끝난 앞 호출이 뒤 호출이 띄운 탐색기 미리 보기 창을 닫아
@@ -551,7 +552,7 @@ async function tryNative(i, rel, seq){
   let ok=false;
   try{ ok=await invoke('doc_preview_open', {root:i, rel, ...r}); }
   catch(err){ console.warn('탐색기 미리 보기 실패', err); ok=false; }
-  if(seq!==viewSeq || !box()){ if(ok){ try{ await invoke('doc_preview_close'); }catch{} } return true; }
+  if(seq!==viewSeq || !box()){ if(ok){ try{ await invoke('doc_preview_close'); }catch(e){ logWarn('doc-preview-close', e); } } return true; }
   if(!ok){ box().classList.remove('dv-native-box'); return false; }
   native=true; nativeShown=true;
   const ph=$('dv-native'); if(ph) ph.innerHTML='';
@@ -575,13 +576,14 @@ let lastRect='';
 async function syncNative(){
   if(!native) return;
   const want=!nativeBlocked();
-  if(want!==nativeShown){ nativeShown=want; try{ await invoke('doc_preview_show', {on:want}); }catch{} }
+  /* 숨기기가 실패하면 미리 보기 창이 팝업 위에 남는다 — 흔적을 남긴다 */
+  if(want!==nativeShown){ nativeShown=want; try{ await invoke('doc_preview_show', {on:want}); }catch(e){ logWarn('doc-preview-show', e); } }
   if(!want) return;
   const r=nativeRect(); if(!r) return;
   const sig=`${r.x},${r.y},${r.w},${r.h}`;
   if(sig===lastRect) return;
   lastRect=sig;
-  try{ await invoke('doc_preview_place', r); }catch{}
+  try{ await invoke('doc_preview_place', r); }catch(e){ logWarn('doc-preview-place', e); }
 }
 let mo=null, ro=null, raf=0;
 const kick = () => { if(raf) return; const f=window.requestAnimationFrame||(cb=>setTimeout(cb,16)); raf=f(()=>{ raf=0; syncNative(); }); };
@@ -1278,10 +1280,10 @@ export function initDocs(){
   registerView({key:'docs', els:[{id:'view-docs'}], render:renderDocs});
   const ev=window.__TAURI__ && window.__TAURI__.event;
   if(ev && ev.listen){
-    ev.listen('wmhh://doc-renamed', e=>onExtRenamed(e.payload)).catch(()=>{});
-    ev.listen('wmhh://doc-root-moved', e=>onExtRootMoved(e.payload)).catch(()=>{});
-    ev.listen('wmhh://doc-changed', e=>onExtChanged(e.payload)).catch(()=>{});
-    ev.listen('wmhh://doc-root-gone', e=>onExtRootGone(e.payload)).catch(()=>{});
+    ev.listen('wmhh://doc-renamed', e=>onExtRenamed(e.payload)).catch(logged('listen-doc-renamed'));
+    ev.listen('wmhh://doc-root-moved', e=>onExtRootMoved(e.payload)).catch(logged('listen-doc-root-moved'));
+    ev.listen('wmhh://doc-changed', e=>onExtChanged(e.payload)).catch(logged('listen-doc-changed'));
+    ev.listen('wmhh://doc-root-gone', e=>onExtRootGone(e.payload)).catch(logged('listen-doc-root-gone'));
   }
   $('dc-root').addEventListener('click', addRoot);
   $('dc-root-empty').addEventListener('click', addRoot);
@@ -1295,7 +1297,7 @@ export function initDocs(){
   /* 찾기 칸을 누르면 색인을 미리(기다리지 않는다) — 공유 폴더는 처음 훑는 데 오래 걸려, 글자를 치는 동안 만들어 둔다 */
   document.addEventListener('focusin', e=>{
     if(!e.target || e.target.id!=='g-search' || !$('view-docs') || !$('view-docs').classList.contains('on')) return;
-    roots.forEach((r,i)=>{ if(r&&r.ok) invoke('doc_search_warm', {root:i}).catch(()=>{}); });
+    roots.forEach((r,i)=>{ if(r&&r.ok) invoke('doc_search_warm', {root:i}).catch(logged('doc-search-warm')); });
   });
   $('dc-search').addEventListener('keydown', e=>{ if(e.key==='Escape' && $('dc-search').value){ e.preventDefault(); e.stopPropagation(); clearSearch(); } });
   /* 오른쪽 칸의 카드 클릭 — 양식 팝업(render.js 의 data-open 위임)보다 먼저 받아 옆 칸 양식으로 연다. 체크·삭제 단추는 그대로 둔다 */

@@ -40,8 +40,6 @@ export function docKind(name){
 export function openLabel(kind){
   return kind==='hwpx'||kind==='hwp' ? '한글에서 열기' : kind==='xlsx'||kind==='csv' ? '엑셀에서 열기' : kind==='pptx' ? '파워포인트에서 열기' : kind==='docx' ? '워드에서 열기' : '열기';
 }
-/* 앱 안 그리기만 쓰는 형식(탐색기 미리 보기 처리기를 부르지 않는다) */
-export const inApp = kind => ['img','pdf','md','csv','html','text','media'].includes(kind);
 export const isTextKind = kind => kind==='md'||kind==='csv'||kind==='html'||kind==='text';
 
 /* MD → 안전한 HTML(스크립트·이벤트 속성 제거). 상대 경로 그림은 화면(docs.js)이 파일을 읽어 바꿔 넣는다. */

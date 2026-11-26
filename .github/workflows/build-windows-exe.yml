@@ -37,7 +37,8 @@ jobs:
         shell: bash
         run: |
           npm test
-          cd src-tauri && cargo test --lib
+          # --locked: Cargo.lock 과 Cargo.toml 이 어긋나면 lock 을 몰래 고치지 말고 실패한다(같은 lock 으로 빌드했다는 보장)
+          cd src-tauri && cargo test --lib --locked
 
       - name: Tauri 릴리즈 빌드 (MSVC)
         run: npm run tauri build

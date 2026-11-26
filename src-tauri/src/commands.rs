@@ -498,6 +498,46 @@ pub fn focus_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 화면(src/logs.js)이 조용히 삼키던 실패를 wmhh.log 에 한 줄 남긴다.
+/// 두 창이 부르므로 넘어온 글은 믿지 않는다: 꼬리표는 영문·숫자·`-_:.` 40자, 문구는 줄바꿈을 지우고 200자,
+/// 한 실행에 `CLIENT_LOG_MAX` 줄까지만(되풀이 실패·악의적 반복으로 로그가 1MB 롤링을 계속 밀어내지 않게).
+static CLIENT_LOG_COUNT: AtomicU32 = AtomicU32::new(0);
+const CLIENT_LOG_MAX: u32 = 300;
+
+#[tauri::command]
+pub fn client_log(state: State<AppDb>, tag: String, msg: String) {
+    if CLIENT_LOG_COUNT.fetch_add(1, Ordering::Relaxed) >= CLIENT_LOG_MAX {
+        return;
+    }
+    db::log_line(&state.base_dir, &client_log_line(&tag, &msg));
+}
+
+fn client_log_line(tag: &str, msg: &str) -> String {
+    let tag: String = tag
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || "-_:.".contains(*c))
+        .take(40)
+        .collect();
+    let msg: String = msg
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(200)
+        .collect();
+    format!("client {}: {}", if tag.is_empty() { "?" } else { &tag }, msg)
+}
+
+#[cfg(test)]
+mod client_log_tests {
+    #[test]
+    fn line_is_one_line_and_bounded() {
+        let l = super::client_log_line("doc-listen\n<x>", &format!("a\r\nb{}", "가".repeat(500)));
+        assert!(!l.contains('\n') && !l.contains('\r'));
+        assert!(l.starts_with("client doc-listenx: a  b"));
+        assert_eq!(l.chars().count(), "client doc-listenx: ".chars().count() + 200);
+        assert_eq!(super::client_log_line("", ""), "client ?: ");
+    }
+}
+
 /* (v2.5.5 제거) open_main_maximized — 캡처 창 'Ctrl 단독 → 최대화' 기능과 함께 삭제. */
 
 /// 작업표시줄 알람 표시(v2.5.3) — 알람이 울리면 on=true로 호출되어
