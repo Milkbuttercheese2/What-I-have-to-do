@@ -11,6 +11,7 @@ import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 import {openModal, closeModal, isOpen, topSave} from './modals.js';
 import {docTarget, showDoc} from './docs.js';
 import {markSections, sectionLinesIn} from './memo-sections.js';
+import {openShare, initShare} from './share.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -149,6 +150,13 @@ function setReadonly(on){
 }
 /* 지금 열린 양식이 읽기 전용(완료 업무)인가 — 파일 끌어다 놓기가 묻는다(filedrop.js) */
 export function formReadonly(){ return isOpen('formPanel') && $('formPanel').classList.contains('fm-ro'); }
+/* 공유 메모지의 재료(share.js) — 양식에 **지금 보이는** 내용(저장 전 고친 것 포함)과 양식의 시각 칸 순서.
+   읽기만 한다: S.items·임시저장을 건드리지 않는다(공유는 업무를 저장하지 않는다). */
+export function shareSource(){
+  const it=editingId ? S.items.find(x=>x.id===editingId) : null;
+  const done=!!(formReadonly() && it && it.done);
+  return {d:collectForm(), fields:enabled().map(f=>({key:f.key, label:f.label})), done, doneAt:done?it.doneAt:null};
+}
 
 export async function openForm(pre, opts){
   saveDraftNow();          // 열려 있던 양식이 있으면 그 초안부터 확정 (미니 창 → 양식 열기 경로)
@@ -538,6 +546,7 @@ export function initForm(){
   $('fm-close').addEventListener('click',()=>closeForm());
   $('fm-book').addEventListener('click',()=>openBook());
   initBook();
+  initShare();
 }
 
 /* 양식 확정 — [저장]·[업무 종료] 공용. finish 면 저장과 함께 완료 처리하고 [실행 취소]를 준다. */

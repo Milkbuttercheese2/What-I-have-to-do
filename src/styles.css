@@ -1874,3 +1874,11 @@
     font-family:inherit;font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;
     color:transparent;overflow:hidden;pointer-events:none}
   .book-page .book-ta{position:relative;z-index:1}
+
+  /* 미리 보기 창 — 표준 모달(§5.5). 메모지는 늘 밝은 모양(나가는 그림과 같다 — share-card.js shareCss). 양식(60) 위 */
+  #shareModal{z-index:75}
+  .share-modal{max-width:calc(512px + 46px)}
+  .share-stage{max-height:calc(100vh - 34px - 96px - 170px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;border-radius:10px;border:1px solid var(--line);margin-top:10px}
+  .share-opt{margin:12px 2px 0}
+  .share-actions{flex-wrap:wrap}
+  .share-sp{flex:1 1 0}

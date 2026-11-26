@@ -497,6 +497,21 @@
   </div>
 </div>
 
+<!-- 업무 공유 미리 보기 — 나갈 메모지를 그대로 보여 주고(접힌 칸마다 [펼치기], 단추는 그림에 안 실림) 세 가지로 내보낸다(share.js) -->
+<div class="modal-bg" id="shareModal">
+  <div class="modal share-modal">
+    <h3>업무 공유</h3>
+    <div class="share-stage" id="share-stage"></div>
+    <label class="pbsw-opt share-opt"><input type="checkbox" id="share-contacts"> 연락처도 넣기</label>
+    <div class="m-actions share-actions">
+      <button type="button" class="btn btn-cancel" id="share-text">글자로 복사</button>
+      <button type="button" class="btn btn-cancel" id="share-save">파일로 저장</button>
+      <span class="share-sp"></span>
+      <button type="button" class="btn btn-ok" id="share-img">그림 복사</button>
+    </div>
+  </div>
+</div>
+
 <!-- 메모 2쪽 보기 (v3.7.1) — 한글 '두 쪽 보기'처럼 쪽을 두 장씩 놓고 아래로 스크롤. 각 쪽에서 바로 고친다(form.js) -->
 <div class="modal-bg" id="bookModal">
   <div class="modal book-modal">
