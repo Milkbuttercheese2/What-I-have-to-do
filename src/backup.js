@@ -70,7 +70,7 @@ export function initBackup(){
         '연락처':(it.contacts||[]).map(c=>c.phone).filter(Boolean).join(', '),
         '이메일':(it.contacts||[]).map(c=>c.email).filter(Boolean).join(', '),   /* v3.5.0 선택 항목 — 없으면 빈 칸 */
         '접수시각':fx((it.f||{}).received),
-        '마감시각':fx((it.f||{}).due),
+        '기한':fx((it.f||{}).due),
         '식별정보':(it.ids||[]).map(x=>`${x.kind}: ${x.val}`).join(' · '),
         '하위 업무 진행':subs.length?`${subs.filter(s=>s.done).length}/${subs.length}`:'',
         '하위 업무 내역':subs.map(s=>(s.done?'[완료] ':'')+s.title+(s.mid?` (점검 ${fx(s.mid)})`:'')).join(' · '),

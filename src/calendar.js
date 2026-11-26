@@ -38,7 +38,7 @@ function liveEvents(){
     const key=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; (map[key]=map[key]||[]).push(Object.assign({iso},payload)); };
   S.items.forEach(it=>{
     if(it.recur || it.done) return;                 // 부모 정의·완료 업무 제외
-    push((it.f||{}).due,{it,fkey:'due',label:'마감'});
+    push((it.f||{}).due,{it,fkey:'due',label:'기한'});
     (it.subs||[]).filter(s=>s.mid && !s.done).forEach(s=>push(s.mid,{it,fkey:'mid',label:'하위 업무',subTitle:s.title,subDone:s.done,subId:s.id}));
   });
   return map;
@@ -93,7 +93,7 @@ function renderDetail(evMap){
   const lines=rows.map(r=>{
     const ev=r.ev, t=new Date(ev.iso);
     const hm=`${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
-    const kind=ev.fkey==='mid'?'점검':ev.fkey==='done'?'종료':'마감';
+    const kind=ev.fkey==='mid'?'점검':ev.fkey==='done'?'종료':'기한';
     const what=ev.fkey==='mid' ? `${ev.subTitle} · ${String(ev.it.memo||'').split('\n')[0]}` : memo1(ev.it);
     const cls=ev.fkey==='mid'?'tl-mid':ev.fkey==='done'?'tl-fin':'tl-due';
     return `<div class="tl-line ${cls}" style="top:${r.line}px"></div>`
@@ -106,7 +106,7 @@ function renderDetail(evMap){
   }).join('');
   const now=new Date(); const isToday=now.getFullYear()===y&&now.getMonth()===m&&now.getDate()===dd;
   const nowLine=isToday?`<div class="tl-now" style="top:${(now.getHours()*60+now.getMinutes())/60*HOUR_PX}px"></div>`:'';
-  const empty=rows.length?'':`<div class="tl-empty">${view==='done'?'이날 끝낸 업무가 없습니다.':'이날 마감·점검할 업무가 없습니다.'}</div>`;
+  const empty=rows.length?'':`<div class="tl-empty">${view==='done'?'이날 끝낸 업무가 없습니다.':'이날 기한·점검할 업무가 없습니다.'}</div>`;
   /* 현행 보기만: 빈 자리 누르기 = 새 업무. 마우스 자리에 흐린 줄 + 시각(.tl-hover — mousemove 가 옮긴다) */
   const hover=view==='live'?'<div class="tl-hover" aria-hidden="true"><span class="tl-hover-t num"></span></div>':'';
   const box=$('cal-detail-cards');
@@ -133,7 +133,7 @@ export function renderCal(){
   /* 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17) */
   if(lg) lg.innerHTML = view==='done'
     ? '<span><i class="lg" style="background:var(--gray-fg)"></i>끝낸 날</span>'
-    : '<span><i class="lg" style="background:var(--cal-mid)"></i>하위 업무 점검일</span><span><i class="lg" style="background:var(--cal-due)"></i>업무 마감일</span>';
+    : '<span><i class="lg" style="background:var(--cal-mid)"></i>하위 업무 점검일</span><span><i class="lg" style="background:var(--cal-due)"></i>업무 기한</span>';
   const evMap=dayEvents(view); const today=new Date();
   for(let i=0;i<42;i++){
     const d=new Date(start); d.setDate(start.getDate()+i);

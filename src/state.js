@@ -6,7 +6,7 @@ import {formatPhone} from './phonebook-core.js';
 
 export const CORE_FIELDS = [
   {key:'received', label:'접수시각', type:'datetime', on:true, builtin:true},
-  {key:'due',      label:'마감시각', type:'datetime', on:true, builtin:true},
+  {key:'due',      label:'기한', type:'datetime', on:true, builtin:true},
 ];
 export const DEFAULT_ID_KINDS = ['입찰공고번호','계약체결번호','공사관리번호','SR번호','국민신문고번호'];
 /* closeToTray 기본값은 Rust 쪽(lib.rs sget_bool 기본 인자)과 반드시 동일해야

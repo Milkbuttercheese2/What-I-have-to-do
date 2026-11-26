@@ -24,7 +24,7 @@ export function checkAlarms(){
   const test=(obj,key,iso,label,title)=>{ if(!iso)return; const t=new Date(iso).getTime(); if(isNaN(t)||now<t)return;
     obj.al=obj.al||{}; const st=obj.al[key]; if(st===true)return; if(typeof st==='number'&&now<st)return; fire.push({obj,key,label,title,iso}); };
   S.items.forEach(it=>{ if(it.done)return;
-    test(it,'due',(it.f||{}).due,'마감',it.memo||'');
+    test(it,'due',(it.f||{}).due,'기한',it.memo||'');
     (it.subs||[]).forEach(s=>{ if(!s.done)test(s,'mid',s.mid,'중간점검',s.title); });
   });
   if(!fire.length)return; firedNow=fire;

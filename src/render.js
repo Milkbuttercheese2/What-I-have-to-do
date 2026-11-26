@@ -70,7 +70,7 @@ function timePill(obj,key,iso,label){
   const m=fmtDue(iso); if(!m) return '';      // F7: 손상 ISO면 렌더 생략
   return `${alarmDot(obj,key)}<span class="tag time ${m.cls}"><span class="k">${label}</span>${esc(m.label)}</span>`;
 }
-function dueTagHtml(it){ const v=(it.f||{}).due; return v?timePill(it,'due',v,'마감:'):''; }
+function dueTagHtml(it){ const v=(it.f||{}).due; return v?timePill(it,'due',v,'기한:'):''; }
 export function cardHtml(it,place){
   /* v2.5.12: 카드에는 메모 본문의 '첫 줄'만 가져온다(줄바꿈 이후는 버림). 그 첫 줄이 길면
      .card-memo 가 최대 2줄까지 감싸 보여준다(2줄 클램프). */
@@ -198,7 +198,7 @@ export function render(){
   }
   const cols={inbox:[],today:[],doing:[],planned:[]};
   S.items.filter(onBoard).filter(matchesQ).forEach(it=>{ const p=placeOf(it); if(cols[p])cols[p].push(it); });
-  const EMPTY={inbox:'자유 입력이 여기 쌓입니다.',today:'오늘 마감·점검 건이 없습니다.<br><b>여유 있는 날</b>',doing:'진행 중인 업무가 없습니다.',planned:'예정 건이 없습니다.'};
+  const EMPTY={inbox:'자유 입력이 여기 쌓입니다.',today:'오늘 기한·점검 건이 없습니다.<br><b>여유 있는 날</b>',doing:'진행 중인 업무가 없습니다.',planned:'예정 건이 없습니다.'};
   for(const k of ['inbox','today','doing','planned']){
     const list=cols[k].sort(sorter);
     $('c-'+k).textContent=list.length;
@@ -242,7 +242,7 @@ export function doneCalHtml(list, y, m, selDay, now){
 }
 /* v3.8.4 완료 탭 — 늘 전체를 한 줄 목록으로 보여 준다(거르기·카드 보기 단추는 소유자 지정으로 뺐다) */
 /* 한 줄 = 종료시각 · 메모 첫 줄 · 식별정보 · 접수시각 · 마감시각 · 관련인 · 파일 (소유자 지정) */
-const DONE_COLS=['종료','메모','식별정보','접수','마감','관련인','파일'];
+const DONE_COLS=['종료','메모','식별정보','접수','기한','관련인','파일'];
 export const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
   return `${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const baseName = p => String(p||'').split(/[\\/]/).filter(Boolean).pop()||'';
