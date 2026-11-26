@@ -11,14 +11,14 @@ import {persist} from './render.js';
 import {adoptPhonebook, renderPhonebook} from './phonebook.js';
 import {refreshTagHl} from './form.js';
 
-/* [JSON파일 백업] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
+/* [백업 파일 만들기] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
    한 번 지정하면 그 파일 핸들을 기억해 이후엔 같은 파일에 조용히 저장. */
 /* v2.5.11: 백업에 임시 상태 captureDraft 를 넣지 않는다 — 넣으면 복원 후 다음 실행에
    (v2.6.2) 양식 임시저장 formDrafts 도 같은 이유로 뺀다: 복원한 항목을 열었을 때
    백업 시점의 옛 초안이 되살아나 '저장된 내용이 아닌 것'이 보이면 안 된다.
    초안이 유령 항목으로 등록돼(main.js 초안 회수), 백업 안 원본 항목과 중복될 수 있다. */
 /* v3.3.4: 페이로드 조립은 state.js backupObj() 하나로 모았다 — 비상 덤프
-   (store.js)가 같은 형태를 써야 그 파일도 [불러오기]로 그대로 복원된다. */
+   (store.js)가 같은 형태를 써야 그 파일도 [백업에서 복원]으로 그대로 복원된다. */
 function backupPayload(){ return JSON.stringify(backupObj(),null,1); }
 function backupName(){ const n=new Date(); return `뭐하려했더라_백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.json`; }
 async function doBackup(){
@@ -112,7 +112,7 @@ export function initBackup(){
   /* 백업/복원 */
   $('bkExp').addEventListener('click',e=>{ e.preventDefault(); doBackup(); });
 
-  /* 불러오기 — JSON 백업과 DB(.sqlite) 파일 중 아무거나 하나의 파일 선택창으로
+  /* 백업에서 복원 — JSON 백업과 DB(.sqlite) 파일 중 아무거나 하나의 파일 선택창으로
      고를 수 있다. JSON은 즉시 반영(재시작 불필요), DB 파일은 통째로 교체 후
      재시작이 필요하다(저장 위치 변경과 동일한 이유 — 열려있는 SQLite 연결을
      그대로 두고 파일만 바꾸는 게 아니라, 안전하게 다시 여는 쪽이 단순하고
