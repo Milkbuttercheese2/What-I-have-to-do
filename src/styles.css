@@ -1864,3 +1864,13 @@
   /* v3.8.18 완료 탭 — 다른 달을 보는 중이면 목록 위에 "YYYY년 M월에 끝낸 업무 N건"(완료 탭 위 요약 글자와 같은 크기·색) */
   .done-month-note{margin:0 2px 10px;font-size:12.5px;color:var(--ink-soft)}
   .done-month-note b{color:var(--ink);font-weight:700}
+
+  /* 메모 구역 제목(소유자 지정) — 한 줄이 통째로 [제목]이면 그 줄 위에 칸 폭 전체의 가는 선(memo-sections.js).
+     선은 글자 뒤 백드롭 층에만 끼운 빈 표시(.msec)이고 글자 흐름 밖(position:absolute)이라 글자 자리·줄 높이를 바꾸지 않는다.
+     top 을 주지 않아 그 줄의 맨 위(제자리)에 놓인다. ⚠️ 높이·여백·굵기를 주지 말 것 — 백드롭 글자가 밀려 태그 하이라이트가 어긋난다. */
+  #fm-memo-hl .msec,.book-hl .msec{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--line);pointer-events:none}
+  /* 2쪽 보기: 쪽마다 글 칸(.book-ta)과 같은 자리·같은 글자 치수의 꾸밈 층. 쪽 나누기 측정(#book-measure)과는 상관없다 */
+  .book-hl{position:absolute;top:calc(var(--bw) * .095);left:calc(var(--bw) * .12);width:calc(var(--bw) * .76);height:calc(var(--bw) * 1.2);
+    font-family:inherit;font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;
+    color:transparent;overflow:hidden;pointer-events:none}
+  .book-page .book-ta{position:relative;z-index:1}

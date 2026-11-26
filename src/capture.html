@@ -67,6 +67,8 @@
    color:transparent;pointer-events:none;overflow:hidden}
  #cap-hl .at-tag{color:transparent;font-weight:inherit;background:var(--cap-tag-hl);border-radius:4px;padding:0}
  #cap-hl .at-tag.hover{box-shadow:0 0 0 1.5px var(--cap-hit-fg)}
+ /* 메모 구역 제목([제목] 한 줄) 위 가로선 — 양식 메모(styles.css .msec)와 같은 규칙. 글자 흐름 밖이라 글자 자리는 그대로 */
+ #cap-hl .msec{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--cap-border);pointer-events:none}
  #cap-inp{position:relative;z-index:1;width:100%}
  body.search #cap-bar,body.search #cap-hint{flex:none}   /* 검색칸·힌트는 상단 고정, 목록만 스크롤 */
  /* v2.5.1: font 축약형에 inherit(전역 키워드)를 섞으면 선언 전체가 무효 처리돼

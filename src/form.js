@@ -10,6 +10,7 @@ import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './ph
 import {absorbIntoPhonebook, openRelated} from './phonebook.js';
 import {openModal, closeModal, isOpen, topSave} from './modals.js';
 import {docTarget, showDoc} from './docs.js';
+import {markSections, sectionLinesIn} from './memo-sections.js';
 
 /* 메모 속 @태그 → 관련인 목록 (v2.9.0). 빠른 메모로 적어도 태그의 관련인 정보가
    업무에 구조화되어 붙는다 — 전화번호부에서 이름·소속·번호를 찾아 첨부.
@@ -193,7 +194,9 @@ export async function openForm(pre, opts){
    '균'만 지워도 즉시 해제). 마지막 개행 보정('\n')은 스크롤 높이 일치용. */
 function renderMemoHl(){
   const hl=$('fm-memo-hl'); if(!hl) return;
-  hl.innerHTML=linkifyAt(esc($('fm-memo').value), S.phonebook)+'\n';
+  /* 구역 제목([제목] 한 줄) 위 가로선도 같은 층에 — 글자 흐름 밖의 빈 표시라 글자 자리·줄 높이는 그대로(memo-sections.js) */
+  const v=$('fm-memo').value;
+  hl.innerHTML=markSections(linkifyAt(esc(v), S.phonebook), v)+'\n';
   hl.scrollTop=$('fm-memo').scrollTop;
 }
 /* 하이라이트 일괄 갱신 (v3.0.3) — 전화번호부가 '나중에' 바뀌는 경로용 훅.
@@ -608,9 +611,30 @@ function paginate(text){
   while(s<text.length){ const e=bookPageEnd(m, text, s); pages.push(text.slice(s,e)); s=e; }
   return pages;
 }
-const bookPageHtml=i=>`<div class="book-page"><textarea class="book-ta" spellcheck="false" maxlength="50000" aria-label="${i+1}쪽"></textarea><span class="book-no num">${i+1}</span></div>`;
+const bookPageHtml=i=>`<div class="book-page"><div class="book-hl" aria-hidden="true"></div><textarea class="book-ta" spellcheck="false" maxlength="50000" aria-label="${i+1}쪽"></textarea><span class="book-no num">${i+1}</span></div>`;
 /* 쪽 i 의 시작 위치(전체 글 기준) */
 const pageStart=i=>bookTas.slice(0,i).reduce((a,t)=>a+t.value.length,0);
+/* 구역 제목([제목] 한 줄) 위 가로선 — 쪽마다 글자 뒤의 꾸밈 층(.book-hl)에만 그린다. 쪽 나누기 계산(측정 칸)에는 들어가지 않는다.
+   입력 처리 길(bookChanged·bookPush)에서는 '다시 그릴 쪽'만 적어 두고, 그리기는 다음 그림 틀(requestAnimationFrame)에서 한 번에 —
+   입력 중에 레이아웃을 더 일으키지 않는다. 쪽 i 의 선은 앞 쪽의 끝 글자에도 달려 있으므로 고친 쪽과 그다음 쪽을 함께 적는다. */
+let bookSecDirty=new Set(), bookSecRaf=0;
+function bookSecMark(from, to){
+  for(let i=Math.max(0,from); i<=Math.min(to, bookTas.length-1); i++) bookSecDirty.add(i);
+  if(!bookSecRaf && bookSecDirty.size) bookSecRaf=requestAnimationFrame(bookSecPaint);
+}
+function bookSecPaint(){
+  bookSecRaf=0;
+  const want=[...bookSecDirty].filter(i=>i<bookTas.length); bookSecDirty.clear();
+  if(!want.length) return;
+  const full=bookFull(), starts=[]; let acc=0;
+  bookTas.forEach(t=>{ starts.push(acc); acc+=t.value.length; });
+  for(const i of want){
+    const t=bookTas[i], hl=t.previousElementSibling; if(!hl || !hl.classList.contains('book-hl')) continue;
+    const v=t.value, s=starts[i];
+    hl.innerHTML=markSections(esc(v), v, sectionLinesIn(full, s, s+v.length))+'\n';
+    hl.scrollTop=t.scrollTop;
+  }
+}
 /* 지금 커서의 전체 글 기준 위치(쪽 밖에 있으면 null) */
 function bookCaret(){ const a=document.activeElement, i=bookTas.indexOf(a); return i<0 ? null : pageStart(i)+a.selectionStart; }
 /* 전체 글 위치 caret 에 커서를 둔다 */
@@ -632,6 +656,7 @@ function setPages(pages, caret){
     bookTas.forEach(t=>{ t.readOnly=bookRO; });
   }
   pages.forEach((p,i)=>{ if(bookTas[i].value!==p) bookTas[i].value=p; });
+  bookSecMark(0, bookTas.length-1);
   $('book-pos').textContent=`${pages.length}쪽`;
   bookPlace(caret);
 }
@@ -661,6 +686,7 @@ function bookPush(i){
     k++;
   }
   if(grew) $('book-pos').textContent=`${bookTas.length}쪽`;
+  bookSecMark(i, k+1);
   bookPlace(caret);
 }
 function bookSyncMemo(now){
@@ -706,6 +732,7 @@ function bookChanged(t){
   if(bookRO) return;
   const i=bookTas.indexOf(t); if(i<0) return;
   if(bookOver(t)) bookPush(i);                        // 자리가 남으면 측정 없이 끝
+  bookSecMark(i, i+1);
   bookSyncMemo(false);
   bookMarkDirty(i);
 }
@@ -742,6 +769,8 @@ function initBook(){
   const box=$('book-pages');
   box.addEventListener('input',e=>{ if(e.target.classList.contains('book-ta') && !e.isComposing) bookChanged(e.target); });
   box.addEventListener('compositionend',e=>{ if(e.target.classList.contains('book-ta')) bookChanged(e.target); });
+  /* 쪽 칸이 잠깐 넘쳐 안에서 밀려도 선 층이 함께 가도록(scroll 은 거품이 일지 않아 잡는 단계에서) */
+  box.addEventListener('scroll',e=>{ const t=e.target; if(t.classList && t.classList.contains('book-ta') && t.previousElementSibling) t.previousElementSibling.scrollTop=t.scrollTop; }, true);
   /* 쪽 경계 넘나들기 — 쪽 끝에서 → / ↓ 는 다음 쪽 처음으로, 쪽 처음에서 ← / ↑ 는 앞 쪽 끝으로,
      쪽 처음에서 Backspace 는 앞 쪽의 마지막 글자를, 쪽 끝에서 Delete 는 다음 쪽의 첫 글자를 지운다 */
   box.addEventListener('keydown',e=>{
@@ -762,6 +791,7 @@ function initBook(){
 }
 /* 쪽 경계 Backspace/Delete — 커서를 두고, 메모를 맞추고, 정리는 입력이 멈춘 뒤에 */
 function bookChangedAt(caret, dirty){
+  bookSecMark(dirty, dirty+2);
   bookPlace(caret);
   bookSyncMemo(false);
   bookMarkDirty(dirty);
