@@ -46,7 +46,7 @@ test('마감을 모레로 적으면 → 예정·대기', async () => {
   assert.equal(placeOf(S.items[0]), 'planned');
 });
 
-test('세부 할 일 하나를 완료 표시하면 → 진행 중', async () => {
+test('하위 업무 하나를 완료 표시하면 → 진행 중', async () => {
   await env.resetS(); S.loaded = true;
   env.fireEvent('wmhh://open-blank-form', {}); await env.flush();
   $('fm-memo').value = '착수한 건'; input($('fm-memo'));

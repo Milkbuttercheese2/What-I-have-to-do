@@ -1,4 +1,4 @@
-/* v3.7.0 기능 회귀 — 업무 종료 · 다시 진행 · 파일 끌어다 놓기 · 인물 일괄 바꾸기 ·
+/* v3.7.0 기능 회귀 — 업무 완료 · 다시 진행 · 파일 끌어다 놓기 · 인물 일괄 바꾸기 ·
    설정(보드 배치·자동 실행) · 2쪽 보기 · 한눈 요약 숫자.
    핵심 불변식: 완료 업무가 바뀌는 모든 경로는 S.doneDirty 에 표시돼야 저장에 실린다(v3.6.0 증분 저장). */
 import {test, mock} from 'node:test';
@@ -25,14 +25,16 @@ const saves = () => env.invokeCalls.filter(c=>c.cmd==='save_all');
 const mk = o => Object.assign({id:newId(), memo:'업무', owner:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}, recur:null, recurId:null}, o);
 async function fresh(){ await env.resetS(); S.loaded=true; S.doneDirty.clear(); while(closeTop()); setPlaceMode('time'); }
 
-/* ── 업무 종료 / 다시 진행 ───────────────────────────────────────────── */
-test('업무 종료: 연 양식의 변경을 저장하면서 완료 처리 + 저장에 실린다 + [실행 취소]로 되돌린다', async () => {
+/* ── 업무 완료 / 다시 진행 ───────────────────────────────────────────── */
+test('업무 완료: 연 양식의 변경을 저장하면서 완료 처리 + 저장에 실린다 + [실행 취소]로 되돌린다', async () => {
   await fresh();
   const it = mk({memo:'원래'}); S.items.push(it);
   await openForm(it);
   $('fm-memo').value = '고친 내용';
+  assert.equal($('fm-finish').textContent, '✓ 업무 완료', '단추 글은 표준용어(예전 "업무 종료")');
   click($('fm-finish'));
   await env.flush();
+  assert.equal($('toast-msg').textContent, '업무를 완료했습니다');
   const cur = S.items.find(x=>x.id===it.id);
   assert.equal(cur.memo, '고친 내용', '편집 내용도 함께 저장된다');
   assert.equal(cur.done, true);
@@ -44,7 +46,7 @@ test('업무 종료: 연 양식의 변경을 저장하면서 완료 처리 + 저
   assert.equal(S.items.find(x=>x.id===it.id).done, false, '실행 취소 = 진행 중으로');
 });
 
-test('업무 종료: 새 양식에서 누르면 완료된 업무로 바로 기록된다', async () => {
+test('업무 완료: 새 양식에서 누르면 완료된 업무로 바로 기록된다', async () => {
   await fresh();
   await openForm({});
   $('fm-memo').value = '이미 처리한 통화';
@@ -55,7 +57,7 @@ test('업무 종료: 새 양식에서 누르면 완료된 업무로 바로 기�
   assert.equal(S.items[0].memo, '이미 처리한 통화');
 });
 
-test('업무 종료: 날짜 오입력이면 저장도 완료도 하지 않는다 (F3)', async () => {
+test('업무 완료: 날짜 오입력이면 저장도 완료도 하지 않는다 (F3)', async () => {
   await fresh();
   const it = mk({}); S.items.push(it);
   await openForm(it);
@@ -78,7 +80,7 @@ test('다시 진행: 검색으로 연 완료 업무(읽기 전용)를 진행 중
   assert.ok(isOpen('formPanel'), '양식이 열린 채로');
   assert.ok(!$('formPanel').classList.contains('fm-ro'), '이제 편집 가능');
   assert.equal($('fm-memo').disabled, false);
-  assert.equal($('fm-finish').style.display, '', '[업무 종료]가 다시 보인다');
+  assert.equal($('fm-finish').style.display, '', '[업무 완료]가 다시 보인다');
   assert.ok(saves().at(-1).args.items.some(x=>x.id===it.id && !x.done), '되살림이 저장에 실린다');
   /* 실행 취소 — 양식을 닫고 다시 완료로 */
   click($('toast-undo')); await env.flush();
@@ -286,12 +288,12 @@ test('v3.7.1 2쪽 보기: 쪽에서 고치면 양식 메모에 바로 반영되�
   env.window.requestAnimationFrame = raf; globalThis.requestAnimationFrame = raf;
 });
 
-test('metricsOf: 오늘 할 일(오늘·지난 미완료) · 오늘 완료(오늘 끝냈거나 오늘 일정인 완료) — 주기 부모 제외', () => {
+test('metricsOf: 오늘 업무(오늘·지난 미완료) · 오늘 완료(오늘 끝냈거나 오늘 일정인 완료) — 주기 부모 제외', () => {
   const now = new Date(); now.setHours(12,0,0,0); const T = now.getTime();
   const at = h => new Date(T + h*3600e3).toISOString();
   const items = [
-    mk({f:{due:at(-30)}}),                                    // 어제 마감, 아직 안 끝남 → 오늘 할 일
-    mk({f:{due:at(3)}}),                                      // 오늘 마감 → 오늘 할 일
+    mk({f:{due:at(-30)}}),                                    // 어제 마감, 아직 안 끝남 → 오늘 업무
+    mk({f:{due:at(3)}}),                                      // 오늘 마감 → 오늘 업무
     mk({subs:[{id:1, title:'s', mid:at(48), done:false}]}),   // 모레 — 세지 않음
     mk({}),                                                   // 시각 없음 — 세지 않음
     mk({done:true, doneAt:T-3600e3}),                         // 오늘 완료 처리 → 오늘 완료
@@ -371,11 +373,11 @@ test('캘린더: 처음부터 오늘 상세가 보이고, 날짜를 누르면 �
   assert.ok($('cal-detail').classList.contains('on'));
   assert.ok($('cal-detail-cards').textContent.includes('오늘 마감 건'));
   assert.match($('cal-detail-title').textContent, /1건/);
-  /* 시간표: 15:00 마감 → 가로선이 15×44px 높이에, 이름표는 누르면 그 업무가 열린다 */
+  /* 시간표: 15:00 기한 → 가로선이 15×44px 높이에, 이름표는 누르면 그 업무가 열린다 */
   const line = doc.querySelector('#cal-detail-cards .tl-line.tl-due');
   assert.equal(line.style.top, `${15*44}px`);
   const chip = doc.querySelector('#cal-detail-cards .tl-chip');
-  assert.match(chip.textContent, /15:00마감오늘 마감 건/);
+  assert.match(chip.textContent, /15:00기한오늘 마감 건/);   // 이름표 종류 글 '기한'(예전 '마감')
   click(chip);
   assert.ok(isOpen('formPanel'));
   closeForm();
@@ -432,7 +434,7 @@ test('v3.7.0 속도: persist 는 저장이 끝나기 전에 화면부터 그린�
   env.onInvoke('save_all', () => undefined);
 });
 
-test('v3.8.4 완료 탭 달력 띠: 날마다 끝낸 건수 · 누르면 그날 것만 · 다시 누르면 풀림 · 달 넘기기', async () => {
+test('v3.8.4 완료 탭 달력 띠: 날마다 완료한 건수 · 누르면 그날 것만 · 다시 누르면 풀림 · 달 넘기기', async () => {
   const {doneCalHtml} = await import('../../src/render.js');
   await fresh();
   const now=new Date(); now.setHours(12,0,0,0);
@@ -461,7 +463,7 @@ test('v3.8.4 완료 탭 달력 띠: 날마다 끝낸 건수 · 누르면 그날 
   for(let i=0;i<4 && !new RegExp(`${now.getFullYear()}년 ${now.getMonth()+1}월`).test($('done-cal').querySelector('.dcal-head b').textContent);i++) click($('done-cal').querySelector('[data-dcalnav="1"]'));
 });
 
-test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마감·관련인·파일) · 한곳 검색칸', async () => {
+test('v3.8.4 완료 탭 한 줄 목록(완료·메모·식별정보·접수·기한·관련인·파일) · 한곳 검색칸', async () => {
   const {initGSearch} = await import('../../src/gsearch.js');
   await fresh();
   const now=Date.now();
@@ -472,12 +474,12 @@ test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마
   renderDone();
   const rows=()=>[...doc.querySelectorAll('#col-done .drow:not(.drow-h)')];
   assert.equal(rows().length, 2);
-  assert.deepEqual([...doc.querySelector('#col-done .drow-h').children].map(x=>x.textContent), ['종료','메모','식별정보','접수','마감','관련인','파일']);
+  assert.deepEqual([...doc.querySelector('#col-done .drow-h').children].map(x=>x.textContent), ['완료','메모','식별정보','접수','기한','관련인','파일']);
   const cells=[...rows()[0].children].map(x=>x.textContent);
   assert.equal(cells[1], '내 일', '메모 첫 줄만');
   assert.equal(cells[2], 'SR 7'); assert.equal(cells[5], '행정과 김철수'); assert.equal(cells[6], 'a.txt');
   assert.match(cells[0], /^\d+\.\d+ \d\d:\d\d$/); assert.match(cells[3], /^\d+\.\d+ \d\d:\d\d$/); assert.match(cells[4], /^\d+\.\d+ \d\d:\d\d$/);
-  assert.equal([...rows()[1].children][4].textContent, '', '마감이 없으면 빈 칸');
+  assert.equal([...rows()[1].children][4].textContent, '', '기한이 없으면 빈 칸');
   assert.ok(!doc.querySelector('[data-downer],[data-dview],#done-files'), '거르기·보기 단추는 없다');
   /* 줄을 누르면 읽기 전용 양식 */
   click(rows()[0]); await env.flush(4);
@@ -499,7 +501,7 @@ test('v3.8.4 완료 탭 한 줄 목록(종료·메모·식별정보·접수·마
   doc.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view==='board'));
 });
 
-test('v3.8.18 완료 탭 달 단위: 이번 달=전체 · 다른 달=그 달에 끝낸 것만(안내 줄·건수) · 날짜 고르기 · 검색은 전체 · 빈 달 안내', async () => {
+test('v3.8.18 완료 탭 달 단위: 이번 달=전체 · 다른 달=그 달에 완료한 것만(안내 줄·건수) · 날짜 고르기 · 검색은 전체 · 빈 달 안내', async () => {
   await fresh();
   const now=new Date(); now.setHours(12,0,0,0);
   const t0=now.getTime();
@@ -515,7 +517,7 @@ test('v3.8.18 완료 탭 달 단위: 이번 달=전체 · 다른 달=그 달에 
   nav(-1);
   assert.deepEqual(memos(), ['지난달 둘','지난달 하나']);
   const pm=new Date(prev);
-  assert.equal($('col-done').querySelector('.done-month-note').textContent, `${pm.getFullYear()}년 ${pm.getMonth()+1}월에 끝낸 업무 2건`);
+  assert.equal($('col-done').querySelector('.done-month-note').textContent, `${pm.getFullYear()}년 ${pm.getMonth()+1}월에 완료한 업무 2건`);
   /* 날짜 고르기: 그날만 → 다시 누르면 그 달로 */
   click($('done-cal').querySelector(`[data-dcalday="${new Date(pm.getFullYear(),pm.getMonth(),10).getTime()}"]`));
   assert.deepEqual(memos(), ['지난달 둘','지난달 하나']);
@@ -525,10 +527,10 @@ test('v3.8.18 완료 탭 달 단위: 이번 달=전체 · 다른 달=그 달에 
   const s=$('done-search'); s.value='두 달'; s.dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
   assert.deepEqual(memos(), ['두 달 전']);
   s.value=''; s.dispatchEvent(new env.window.Event('input',{bubbles:true})); mock.timers.tick(120);
-  /* 끝낸 것이 없는 달 */
+  /* 완료한 것이 없는 달 */
   nav(-1); nav(-1);
   const em=new Date(now.getFullYear(), now.getMonth()-3, 1);
-  assert.match($('col-done').textContent, new RegExp(`${em.getFullYear()}년 ${em.getMonth()+1}월에 끝낸 업무가 없습니다`));
+  assert.match($('col-done').textContent, new RegExp(`${em.getFullYear()}년 ${em.getMonth()+1}월에 완료한 업무가 없습니다`));
   nav(1); nav(1); nav(1);
   assert.equal(memos().length, 5, '이번 달로 돌아오면 다시 전체');
 });

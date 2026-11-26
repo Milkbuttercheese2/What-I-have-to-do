@@ -1,6 +1,7 @@
-/* v3.8.0 캘린더 — 현행 | 종료 전환 · 시간표 빈 자리 누르기 = 그 시각으로 새 업무 · 날짜 두 번 누르기.
-   핵심 불변식: (1) 종료 보기는 끝낸 시각(doneAt)에 부모 업무만 그리고 누르기로 새 업무를 만들지 않는다.
-   (2) 미리 채워 연 양식은 닫으면 아무것도 생기지 않고, 세부 제목을 비운 채 저장해도 점검시각이 살아남는다. */
+/* v3.8.0 캘린더 — 진행 중 | 완료 전환 · 시간표 빈 자리 누르기 = 그 시각으로 새 업무 · 날짜 두 번 누르기.
+   (화면 글은 표준용어로 '진행 중 | 완료'. 보기 값은 예전 그대로 'live' | 'done'.)
+   핵심 불변식: (1) 완료 보기는 완료 시각(doneAt)에 부모 업무만 그리고 누르기로 새 업무를 만들지 않는다.
+   (2) 미리 채워 연 양식은 닫으면 아무것도 생기지 않고, 하위 업무 제목을 비운 채 저장해도 점검시각이 살아남는다. */
 import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {setupEnv} from '../helpers/env.js';
@@ -42,7 +43,7 @@ test('minuteAtY: 0시 · 30분 맞춤(내림) · 23:30 · 자정 경계·음수�
   assert.deepEqual([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()], [2026,10,21,23,30]);
 });
 
-test('현행 | 종료 전환: 종료 보기는 끝낸 시각에 부모 업무만, 고른 값은 설정에 기억', async () => {
+test('진행 중 | 완료 전환: 완료 보기는 완료 시각에 부모 업무만, 고른 값은 설정에 기억', async () => {
   await fresh();
   S.items.push(
     mk({memo:'진행 중 마감', f:{due:today(15).toISOString()}}),
@@ -51,6 +52,9 @@ test('현행 | 종료 전환: 종료 보기는 끝낸 시각에 부모 업무만
     mk({memo:'주기 부모', done:true, doneAt:today(11).getTime(), recur:{type:'dow'}}),
   );
   renderCal();
+  assert.deepEqual([...doc.querySelectorAll('#cal-mode .seg-btn')].map(b=>[b.dataset.v, b.textContent]),
+    [['live','진행 중'], ['done','완료']], '보기 단추 글은 표준용어, 값은 그대로');
+  assert.match($('cal-legend').textContent, /하위 업무 점검일.*업무 기한/);
   assert.ok($('cal-detail-cards').textContent.includes('진행 중 마감'));
   assert.ok(!$('cal-detail-cards').textContent.includes('오늘 끝낸 일'));
   const before = env.invokeCalls.filter(c=>c.cmd==='save_settings').length;
@@ -61,12 +65,12 @@ test('현행 | 종료 전환: 종료 보기는 끝낸 시각에 부모 업무만
   assert.ok(doc.querySelector('#cal-mode [data-v="done"]').classList.contains('on'));
   const chips = [...doc.querySelectorAll('#cal-detail-cards .tl-chip')];
   assert.equal(chips.length, 1, '부모 업무 하나만 — 세부·doneAt 없는 것·주기 부모는 안 그린다');
-  assert.match(chips[0].textContent, /^10:20종료오늘 끝낸 일×$/);
+  assert.match(chips[0].textContent, /^10:20완료오늘 끝낸 일×$/);
   assert.ok(chips[0].classList.contains('tl-fin'));
   assert.equal(doc.querySelector('#cal-detail-cards .tl-line.tl-fin').style.top, `${(10+20/60)*HOUR_PX}px`);
   assert.ok(doc.querySelector('#cal-grid .pill.p-fin'), '달 칸 알약도 그린다');
-  assert.ok(!doc.querySelector('#cal-grid .pill.p-done'), '종료 보기는 줄을 긋지 않는다');
-  assert.match($('cal-legend').textContent, /끝낸 날/);
+  assert.ok(!doc.querySelector('#cal-grid .pill.p-done'), '완료 보기는 줄을 긋지 않는다');
+  assert.match($('cal-legend').textContent, /완료한 날/);
   /* 이름표 → 읽기 전용 양식 */
   click(chips[0]);
   assert.ok(isOpen('formPanel'));
@@ -75,12 +79,12 @@ test('현행 | 종료 전환: 종료 보기는 끝낸 시각에 부모 업무만
   /* 빈 날 안내문은 보기에 맞게 */
   const other = new Date(); other.setDate(other.getDate()+3);
   const cell = doc.querySelector(`#cal-grid .cal-day[data-key="${other.getFullYear()}-${other.getMonth()}-${other.getDate()}"]`);
-  if(cell){ click(cell); assert.match($('cal-detail-cards').textContent, /이날 끝낸 업무가 없습니다/); }
-  /* 종료 보기에선 누르기로 새 업무를 만들지 않는다 */
+  if(cell){ click(cell); assert.match($('cal-detail-cards').textContent, /이날 완료한 업무가 없습니다/); }
+  /* 완료 보기에선 누르기로 새 업무를 만들지 않는다 */
   click(doc.querySelector('#cal-detail-cards .tl-canvas'), {clientY: HOUR_PX*9});
   assert.ok(!isOpen('formPanel'));
   if(cell){ ev(cell, 'dblclick'); assert.ok(!isOpen('formPanel')); }
-  /* 모르는 값은 현행으로 */
+  /* 모르는 값은 진행 중 보기('live')로 */
   S.settings.calView='zzz'; assert.equal(calView(), 'live');
 });
 
@@ -156,7 +160,7 @@ test('달 칸: 한 번 누르기 = 날짜 고르기, 두 번 누르기 = 그날 
   assert.equal(S.items.length, 0);
 });
 
-test('이름표 × (v3.8.0): 마감 = 업무 삭제 · 점검 = 그 세부 줄만 · 종료 = 종료 업무 삭제 — 양식·새 업무는 안 생긴다', async () => {
+test('이름표 × (v3.8.0): 기한 = 업무 삭제 · 점검 = 그 하위 업무 줄만 · 완료 = 완료 업무 삭제 — 양식·새 업무는 안 생긴다', async () => {
   await fresh();
   const keep = {id:newId(), title:'남는 세부', mid:today(16).toISOString(), done:false, al:{mid:true}, owner:''};
   const cut  = {id:newId(), title:'지울 세부', mid:today(11).toISOString(), done:false, al:{}, owner:''};
@@ -180,19 +184,19 @@ test('이름표 × (v3.8.0): 마감 = 업무 삭제 · 점검 = 그 세부 줄�
   assert.ok(!x(`[data-delsub="${cut.id}"]`), '이름표가 사라진다');
   click($('toast-undo')); await env.flush();
   assert.deepEqual(S.items.find(i=>i.id===b.id).subs.map(s=>s.title), ['지울 세부', '남는 세부'], '실행 취소 = 제자리로');
-  /* 마감 × — 카드의 × 와 같은 경로(업무 삭제 + 실행 취소) */
+  /* 기한 × — 카드의 × 와 같은 경로(업무 삭제 + 실행 취소) */
   click(x(`.tl-chip [data-del="${a.id}"]`)); await env.flush();
   assert.ok(!isOpen('formPanel'));
   assert.ok(!S.items.some(i=>i.id===a.id));
   assert.equal($('toast-msg').textContent, '업무 삭제함');
   click($('toast-undo')); await env.flush();
   assert.ok(S.items.some(i=>i.id===a.id));
-  /* 종료 보기의 × — 종료 업무 삭제(종료 탭 카드의 × 와 같게: deletedDone 으로 저장에 실린다) */
+  /* 완료 보기의 × — 완료 업무 삭제(완료 탭 카드의 × 와 같게: deletedDone 으로 저장에 실린다) */
   click(doc.querySelector('#cal-mode [data-v="done"]'));
   click(x(`.tl-chip [data-del="${c.id}"]`)); await env.flush();
   assert.ok(!isOpen('formPanel'));
   assert.ok(!S.items.some(i=>i.id===c.id));
   const last = env.invokeCalls.filter(k=>k.cmd==='save_all').at(-1).args;
-  assert.ok((last.deletedDone||[]).includes(c.id), '종료 업무 삭제가 저장에 실린다(markDoneRemoved)');
+  assert.ok((last.deletedDone||[]).includes(c.id), '완료 업무 삭제가 저장에 실린다(markDoneRemoved)');
   assert.equal(S.items.length, 2);
 });

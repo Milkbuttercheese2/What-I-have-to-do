@@ -182,7 +182,7 @@ test('연속 실패가 이어지면 DB 를 건너뛰고 비상 덤프를 남긴�
   const dumps = env.invokeCalls.filter(c=>c.cmd==='emergency_dump');
   assert.equal(dumps.length, 1);
   const payload = JSON.parse(dumps[0].args.json);
-  assert.equal(payload.v, 5, '평범한 JSON 백업과 같은 형태여야 [불러오기]로 복원된다');
+  assert.equal(payload.v, 5, '평범한 JSON 백업과 같은 형태여야 [백업에서 복원]으로 복원된다');
   assert.deepEqual(payload.items, S.items);
   assert.equal(payload.settings.captureDraft, '', '임시 상태는 백업 왕복 계약대로 제외');
   assert.match(env.document.getElementById('saveAlertDump').textContent, /emergency/);
