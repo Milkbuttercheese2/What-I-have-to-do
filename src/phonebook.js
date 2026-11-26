@@ -58,7 +58,7 @@ export function renderPhonebook(){
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
   if(!list.length){
-    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. [＋ 추가]나 [엑셀 불러오기]를 쓰세요.'}</div>`;
+    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. [＋ 추가]나 [엑셀 가져오기]를 쓰세요.'}</div>`;
     return;
   }
   /* v3.7.0 소속별 묶음(소유자 선택): 묶음 = 엮인 업무 합이 많은 소속 먼저 → 소속명,
@@ -215,7 +215,7 @@ async function saveXlsxTemplate(){
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
     const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
     const saved=await invoke('save_binary_file',{suggestedName:'전화번호부_양식.xlsx', data:bytes});
-    if(saved) showToast('제목 줄 아래에 채운 뒤 [엑셀 불러오기]로 넣으세요');
+    if(saved) showToast('제목 줄 아래에 채운 뒤 [엑셀 가져오기]로 넣으세요');
   }catch(e){ await appAlert('엑셀 양식 저장 실패: '+e); }
 }
 

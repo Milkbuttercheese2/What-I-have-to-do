@@ -121,7 +121,7 @@ export function initBackup(){
     e.preventDefault();
     let result;
     try{ result=await invoke('import_backup_file'); }
-    catch(err){ await appAlert('불러오기 실패: '+err); return; }
+    catch(err){ await appAlert('복원 실패: '+err); return; }
     if(result.kind==='Cancelled')return;
 
     if(result.kind==='Json'){
@@ -184,7 +184,7 @@ export function initBackup(){
       }
       if(err){
         await appAlert('복원 취소에 실패했습니다: '+err+'\n\n이대로 두면 다음에 앱을 다시 시작할 때 이 복원이 적용됩니다.\n'+
-          '앱을 끄기 전에 데이터 폴더의 data\\wmhh.sqlite.pending-import 파일을 지워 주세요.\n([설정] → [저장 위치 확인·변경]에서 데이터 폴더 위치를 볼 수 있습니다)');
+          '앱을 끄기 전에 데이터 폴더의 data\\wmhh.sqlite.pending-import 파일을 지워 주세요.\n([설정] → [저장 위치]에서 데이터 폴더 위치를 볼 수 있습니다)');
         return;
       }
       showToast('복원을 취소했습니다');
