@@ -158,7 +158,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
   await page.close();
   console.log('filelink.png');
 }
-/* ---- 7. recur.png : 주기 업무 입력·관리 ----------------------------- */
+/* ---- 7. recur.png : 반복 업무 입력·관리 ----------------------------- */
 {
   const page = await open({width: 1000, height: 820});
   await page.click('#settingsBtn'); await page.waitForTimeout(200);
@@ -177,7 +177,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
   await page.close();
   console.log('calendar.png');
 }
-/* ---- 9. alarm.png : 알람창(코드가 만드는 마크업 그대로 재현) --------- */
+/* ---- 9. alarm.png : 알림창(코드가 만드는 마크업 그대로 재현) --------- */
 {
   const page = await open({width: 1180, height: 820});
   await page.evaluate(()=>{
@@ -185,7 +185,7 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
     const fmtT=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
     const list=document.getElementById('alarmList');
     if(list) list.innerHTML=
-      '<div class="a-item"><b>마감 </b>전기설비 유지관리 용역 계약변경 검토 회신<span class="mono">'+fmtT(now)+'</span></div>'+
+      '<div class="a-item"><b>기한 </b>전기설비 유지관리 용역 계약변경 검토 회신<span class="mono">'+fmtT(now)+'</span></div>'+
       '<div class="a-item"><b>점검 </b>입찰공고 정정 사유 확인<span class="mono">'+fmtT(now)+'</span></div>';
     const bg=document.getElementById('alarmBg'); if(bg) bg.classList.add('on');
   });

@@ -53,7 +53,7 @@ at(T.f2 + 3.4, { click: true });
 at(T.f3 - .1, { shot: "board-moved", hard: true, ring: "card", tag: "오늘 처리 칸으로", cam: ZOOM_LEFT, cur: "card" });
 at(T.f4 - .1, { shot: "merge", hard: true, ring: "target", tag: "끌어서 하나로", cam: [0, 120, 1100, 619], cur: [400, 760] });
 
-// ④ 알림과 업무 종료
+// ④ 알림과 업무 완료
 chapter("ch4", "④ 시각이 되면", 520, "n1", "alarm", WIDE);
 at(T.n1 + .2, { ring: "alarm", tag: "시각 도래 알림", cam: [460, 220, 1000, 563], cur: [1240, 640] });
 at(T.n2 - .1, { shot: "form-finish", hard: true, ring: "finish", tag: "", cam: [760, 520, 1000, 563], cur: "finish" });

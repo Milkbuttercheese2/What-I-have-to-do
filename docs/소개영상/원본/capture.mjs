@@ -111,12 +111,12 @@ await shot("board-moved", { card: cardBy("투찰 화면 멈춤 문의"), colMe: 
   await page.mouse.move(1900, 1060, { steps: 6 }); await page.mouse.up(); await wait(300);
 }
 
-// ── 4. 알림 · 업무 종료 ───────────────────────────────────────────
+// ── 4. 알림 · 업무 완료 ───────────────────────────────────────────
 await page.evaluate(() => {
   const t = new Date(); const hm = String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
   document.getElementById("alarmList").innerHTML =
     '<div class="a-item a-mid"><b>점검</b>장애 공지 게시<span class="num">' + hm + "</span></div>" +
-    '<div class="a-item a-due"><b>마감</b>이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신<span class="num">' + hm + "</span></div>";
+    '<div class="a-item a-due"><b>기한</b>이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신<span class="num">' + hm + "</span></div>";
   document.getElementById("alarmBg").classList.add("on");
 }); await park();
 await shot("alarm", { alarm: "#alarmBg .alarm" });
