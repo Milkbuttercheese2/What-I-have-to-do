@@ -88,10 +88,12 @@ test('원자료 시트: 예전과 같은 열 이름·순서의 한 줄짜리 표
   assert.equal(ws['!autofilter'].ref, `A1:L${exp.length+1}`);
 });
 
-test('시트 이름과 순서 — 잘린 메모가 없으면 메모 전문 시트를 만들지 않는다', () => {
+test('시트 이름과 순서 — 32,000자에서 잘린 메모가 없으면 메모 전문 시트를 만들지 않는다', () => {
   setPlaceMode('time');
   assert.deepEqual(readBack(build(sample())).SheetNames, ['업무 목록','연락처·파일','원자료']);
-  const long = sample(); long[0].memo += '\n' + '다음 줄\n'.repeat(10);
+  const many = sample(); many[0].memo += '\n' + '다음 줄\n'.repeat(500);
+  assert.deepEqual(readBack(build(many)).SheetNames, ['업무 목록','연락처·파일','원자료'], '줄이 많아도 내용 칸에 다 들어가면 메모 전문 시트는 없다');
+  const long = sample(); long[0].memo += '\n' + '가'.repeat(33000);
   assert.deepEqual(readBack(build(long)).SheetNames, ['업무 목록','연락처·파일','메모 전문','원자료']);
 });
 
@@ -120,7 +122,7 @@ test('업무 목록 시트: 제목·기준 줄·머리글·구역 줄(보드 순
   assert.equal(done[2], '11-26(목) 완료');
 });
 
-test('업무 목록 시트의 꾸밈: 머리글·구역·지남/오늘·완료 흐림, 줄바꿈 표시, 틀 고정, 인쇄 설정', () => {
+test('업무 목록 시트의 꾸밈: 머리글·구역·지남/오늘·완료도 검정, 줄바꿈 표시, 틀 고정, 인쇄 설정', () => {
   setPlaceMode('time');
   const pkg = checkPackage(build(sample()));
   const s1 = pkg.sheets[0];
@@ -132,13 +134,20 @@ test('업무 목록 시트의 꾸밈: 머리글·구역·지남/오늘·완료 �
   assert.equal(S('A5'), X.ST.bold); assert.equal(S('C5'), X.ST.late, '지난 기한은 붉은');
   assert.equal(S('C6'), X.ST.soon, '오늘 기한(아직 안 지남)은 주홍');
   assert.equal(S('A7'), X.ST.secTeal); assert.equal(S('A10'), X.ST.secDone);
-  assert.equal(S('A11'), X.ST.dimBold); assert.equal(S('B11'), X.ST.dim);
+  /* 완료 업무 줄도 다른 구역과 같은 꾸밈(검정 글자·업무 이름 굵게) — 2026-11-27 소유자 지시 */
+  assert.equal(S('A11'), X.ST.bold); assert.equal(S('B11'), X.ST.body); assert.equal(S('C11'), X.ST.body, '완료의 기한 칸도 보통 글자');
+  assert.equal(S('E11'), X.ST.center); assert.equal(S('F11'), X.ST.body, '✓ 하위 업무 줄도 보통 글자');
   /* 꾸밈 번호 → 실제 꾸밈 */
   const st = pkg.docs['xl/styles.xml'];
   const xf = n => st.getElementsByTagName('cellXfs')[0].children[n];
   const fontColor = n => st.getElementsByTagName('fonts')[0].children[Number(xf(n).getAttribute('fontId'))].getElementsByTagName('color')[0].getAttribute('rgb');
   assert.equal(xf(X.ST.body).getElementsByTagName('alignment')[0].getAttribute('wrapText'), '1');
   assert.equal(xf(X.ST.body).getElementsByTagName('alignment')[0].getAttribute('vertical'), 'top');
+  for(const k of ['body','bold','center']) assert.equal(fontColor(X.ST[k]), 'FF131A24', k+' 검정');
+  const fontColors = Array.from(st.getElementsByTagName('fonts')[0].children).map(f => f.getElementsByTagName('color')[0].getAttribute('rgb'));
+  assert.ok(!fontColors.includes('FF8A93A1'), '완료 흐림(회색) 글꼴은 styles.xml 에 없다');
+  const secDoneFill = st.getElementsByTagName('fills')[0].children[Number(xf(X.ST.secDone).getAttribute('fillId'))];
+  assert.equal(secDoneFill.getElementsByTagName('fgColor')[0].getAttribute('rgb'), 'FFEEF0F3', '완료 구역 줄의 옅은 회색 채움은 그대로');
   assert.equal(fontColor(X.ST.late), 'FF9B1B30'); assert.equal(fontColor(X.ST.soon), 'FFB34A26'); assert.equal(fontColor(X.ST.head), 'FFFFFFFF');
   const headFill = st.getElementsByTagName('fills')[0].children[Number(xf(X.ST.head).getAttribute('fillId'))];
   assert.equal(headFill.getElementsByTagName('fgColor')[0].getAttribute('rgb'), 'FF2A7C6E', '머리글 청록 채움');
@@ -171,31 +180,68 @@ test('기한 칸: 지남·오늘·내일·그 밖·완료·다른 해', () => {
   assert.deepEqual(X.dueCell({f:{due:T(30,14)}}, now), {text:'11-30(월) 14:00', tone:''});
   assert.deepEqual(X.dueCell({f:{}}, now), {text:'', tone:''});
   assert.deepEqual(X.dueCell({f:{due:'망가진 값'}}, now), {text:'', tone:''});
-  assert.deepEqual(X.dueCell({done:true, doneAt:new Date(2026,10,26,17).getTime()}, now), {text:'11-26(목) 완료', tone:'dim'});
-  assert.deepEqual(X.dueCell({done:true}, now), {text:'완료', tone:'dim'});
+  assert.deepEqual(X.dueCell({done:true, doneAt:new Date(2026,10,26,17).getTime()}, now), {text:'11-26(목) 완료', tone:'done'});
+  assert.deepEqual(X.dueCell({done:true}, now), {text:'완료', tone:'done'});
   assert.equal(X.dueCell({f:{due:new Date(2027,0,5,9).toISOString()}}, now).text, '2027-01-05(화) 09:00');
 });
 
-test('업무·내용 칸: 첫 줄은 120자, 나머지는 5줄 또는 300자까지 — 넘으면 안내와 함께 메모 전문 시트로', () => {
+test('업무·내용 칸: 메모 나머지를 다 담고, 32,000자를 넘을 때만 잘라 안내 — 그때만 메모 전문 시트로', () => {
   assert.deepEqual(X.memoCells('\n\n  제목 줄  \n\n가\n나\n\n'), {title:'제목 줄', body:'가\n나', cut:false});
   assert.deepEqual(X.memoCells('[구역 제목]\n본문'), {title:'[구역 제목]', body:'본문', cut:false}, '[제목] 줄은 그대로 글자로');
-  const six = X.memoCells('t\n1\n2\n3\n4\n5\n6\n7');
-  assert.equal(six.body, "1\n2\n3\n4\n5\n… 아래 2줄 더 있음 ('메모 전문' 시트)"); assert.ok(six.cut);
+  const eight = X.memoCells('t\n1\n2\n3\n4\n5\n6\n7\n\n8');
+  assert.deepEqual(eight, {title:'t', body:'1\n2\n3\n4\n5\n6\n7\n\n8', cut:false}, '5줄 넘는 메모도 온전히(가운데 빈 줄 포함)');
   const long = X.memoCells('t\n' + '가'.repeat(250) + '\n' + '나'.repeat(100) + '\n끝');
-  assert.equal(long.body, '가'.repeat(250) + '\n' + '나'.repeat(50) + "…\n… 아래 1줄 더 있음 ('메모 전문' 시트)");
-  const one = X.memoCells('t\n' + '다'.repeat(400));
-  assert.equal(one.body, '다'.repeat(300) + "…\n(이어지는 내용은 '메모 전문' 시트)");
-  const title = X.memoCells('가'.repeat(130));
-  assert.equal(title.title, '가'.repeat(120) + '…'); assert.ok(title.cut);
+  assert.equal(long.body, '가'.repeat(250) + '\n' + '나'.repeat(100) + '\n끝'); assert.ok(!long.cut);
+  const edge = X.memoCells('t\n' + '다'.repeat(32000));
+  assert.equal(edge.body, '다'.repeat(32000)); assert.ok(!edge.cut, '딱 32,000자는 자르지 않는다');
+  const over = X.memoCells('t\n' + '다'.repeat(32001));
+  assert.equal(over.body, '다'.repeat(32000) + "… (잘림. 전체는 '메모 전문' 시트)"); assert.ok(over.cut);
+  assert.ok(over.body.length <= 32767);
+  /* 첫 줄이 120자를 넘으면 업무 칸은 앞 120자, 뒤쪽은 내용 칸 맨 앞에 이어 적는다 — 잃는 글이 없어 메모 전문으로 보내지 않는다 */
+  const title = X.memoCells('가'.repeat(120) + '나'.repeat(10) + '\n본문');
+  assert.deepEqual(title, {title:'가'.repeat(120) + '…', body:'…' + '나'.repeat(10) + '\n본문', cut:false});
   assert.deepEqual(X.memoCells(''), {title:'', body:'', cut:false});
 });
 
-test('관련인 3명·하위 업무 5개(남은 것 먼저)·식별정보 3개까지, 넘으면 외 N', () => {
+test('업무 줄 높이: 메모 길이와 무관하고 하위 업무 수를 따른다(최소 2줄 · 최대 409pt), 같은 줄의 다른 칸도 가리지 않는다', () => {
+  setPlaceMode('time');
+  /* 완료 업무로 — 기한 칸('11-27(금) 완료')이 한 줄이라 최소 높이를 그대로 볼 수 있다 */
+  const one = (memo, more) => Object.assign({id:1, memo, done:true, doneAt:new Date(2026,10,27,14).getTime(), f:{due:T(27,18)}, contacts:[], ids:[], subs:[], files:[]}, more);
+  const htOf = items => { const s1 = checkPackage(build(items)).sheets[0];
+    return Number(Array.from(s1.doc.getElementsByTagName('row')).find(x => x.getAttribute('r') === '5').getAttribute('ht')); };
+  const subs = n => Array.from({length:n}, (_, i) => ({id:i+1, title:`하위 ${i+1}`, done:i % 4 === 3}));
+  const memo = n => '업무\n' + Array.from({length:n}, (_, i) => `메모 ${i+1}번째 줄`).join('\n');
+  /* 메모 길이만 다르면 높이가 같다 — 하위 업무가 없으면 최소 2줄 */
+  assert.equal(htOf([one(memo(1))]), 2*15+3);
+  assert.equal(htOf([one(memo(200))]), 2*15+3, '메모 200줄이어도 2줄 높이(메모는 셀 안에서 아래가 가려진다)');
+  assert.equal(htOf([one('업무\n' + '가'.repeat(30000))]), 2*15+3);
+  /* 하위 업무 수를 따른다 */
+  assert.equal(htOf([one(memo(200), {subs:subs(5)})]), 5*15+3);
+  assert.equal(htOf([one(memo(1), {subs:subs(12)})]), 12*15+3);
+  /* 하위 업무가 많아도 409pt 아래, 같은 줄의 관련인 칸이 더 길면 그 줄 수 */
+  assert.ok(htOf([one(memo(1), {subs:subs(80)})]) <= 409);
+  const ps = Array.from({length:3}, (_, i) => ({who:'사람'+i, org:'과'+i, phone:''}));
+  assert.equal(htOf([one(memo(1), {subs:subs(1), contacts:ps})]), 6*15+3, '관련인 3명(이름·소속 6줄)이 가려지지 않게');
+  /* 업무 이름이 접혀 여러 줄이 되는 경우도 본다(열 너비 26 — 한글 14자쯤에서 접힌다) */
+  assert.ok(htOf([one('가'.repeat(60) + '\n본문')]) >= 4*15+3);
+});
+
+test('관련인 3명·하위 업무는 줄 높이에 드는 만큼(남은 것 먼저)·식별정보 3개까지, 넘으면 외 N', () => {
   const ps = Array.from({length:5}, (_, i) => ({who:'사람'+i, org:'과'+i, phone:'02-000-000'+i}));
   assert.equal(X.peopleCell(ps), '사람0\n과0\n사람1\n과1\n사람2\n과2\n외 2명');
   assert.equal(X.peopleCell([{who:'', org:'', phone:'02-000-0000'}]), '', '이름·소속이 없는 관련인은 첫 시트에 안 보인다(연락처는 둘째 시트)');
   const subs = [{title:'끝1',done:true},{title:'남1'},{title:'끝2',done:true},{title:'남2'},{title:'남3'},{title:'남4'},{title:'끝3',done:true},{title:'남5'},{title:'남6'}];
-  assert.equal(X.subsCell(subs), '☐ 남1\n☐ 남2\n☐ 남3\n☐ 남4\n☐ 남5\n외 4개 · 끝낸 것 3개');
+  assert.equal(X.subsCell(subs), '☐ 남1\n☐ 남2\n☐ 남3\n☐ 남4\n☐ 남5\n☐ 남6\n✓ 끝1\n✓ 끝2\n✓ 끝3', '9개면 다 적는다');
+  /* 한 줄짜리는 LIMITS.subs(26)개까지, 그 뒤는 외 N개 — 합쳐 27줄 = 408pt */
+  const many = Array.from({length:30}, (_, i) => ({title:'일'+i, done:i >= 25}));
+  const lines = X.subsCell(many).split('\n');
+  assert.equal(X.LIMITS.subs, 26); assert.equal(X.ROW_LINES, 27);
+  assert.equal(lines.length, 27); assert.equal(lines[25], '✓ 일25'); assert.equal(lines.at(-1), '외 4개 · 끝낸 것 4개');
+  assert.equal(X.subsCell(many.slice(0, 26)).split('\n').length, 26, '26개는 외 줄 없이 다');
+  /* 제목이 접혀 여러 줄이 되면 줄 수로 재어 일찍 멈춘다 — '외' 줄까지 27줄 안 */
+  const wide = Array.from({length:20}, (_, i) => ({title:'가'.repeat(40) + i}));
+  const w = X.subsCell(wide);
+  assert.ok(X.visualLines(w, 34) <= 27, `${X.visualLines(w, 34)}줄`); assert.match(w, /외 \d+개$/);
   assert.equal(X.subsCell([{title:'a'},{title:'b',done:true}]), '☐ a\n✓ b');
   assert.equal(X.idsCell([{kind:'가',val:1},{kind:'나',val:2},{kind:'다',val:3},{kind:'라',val:4}]), '가 1\n나 2\n다 3\n외 1개');
 });
@@ -212,20 +258,29 @@ test('연락처·파일 시트: 관련인 한 사람에 한 줄, 업무 이름�
   assert.equal(aoa[j][5], 'C:\\업무\\2026\\입찰\\정정요청.hwpx');
 });
 
-test('메모 전문 시트: 메모 한 줄을 시트 한 줄에, 업무 이름은 첫 줄에만, 업무 사이에 빈 줄', () => {
+test('메모 전문 시트: 32,000자에서 잘린 메모만, 메모 한 줄을 시트 한 줄에, 업무 이름은 첫 줄에만, 업무 사이에 빈 줄', () => {
   setPlaceMode('time');
   const items = sample();
-  items[0].memo = '첫 업무\n' + Array.from({length:8}, (_, i) => `줄 ${i+1}`).join('\n');
-  items[2].memo = '둘째 업무\n\n' + '라'.repeat(2500);
+  items[0].memo = '첫 업무\n' + Array.from({length:8}, (_, i) => `줄 ${i+1}`).join('\n') + '\n' + '마'.repeat(32500);
+  items[2].memo = '둘째 업무\n\n' + '라'.repeat(32500);
+  items[1].memo = '셋째 업무\n' + '바'.repeat(2500);   // 내용 칸에 다 들어가므로 메모 전문에는 싣지 않는다
   const bytes = build(items);
   assert.equal(checkPackage(bytes).sheets.length, 4);
-  const aoa = XLSX.utils.sheet_to_json(readBack(bytes).Sheets['메모 전문'], {header:1, defval:''});
+  const wb = readBack(bytes);
+  const aoa = XLSX.utils.sheet_to_json(wb.Sheets['메모 전문'], {header:1, defval:''});
   assert.deepEqual(aoa[0], ['업무','메모']);
+  assert.ok(!aoa.some(r => r[0] === '셋째 업무'), '다 담긴 메모는 싣지 않는다');
   /* 업무 목록과 같은 순서: 오늘 처리(둘째 업무) → 진행 중(첫 업무) */
-  assert.deepEqual(aoa.slice(1, 6), [['둘째 업무','둘째 업무'],['',''],['','라'.repeat(1000)],['','라'.repeat(1000)],['','라'.repeat(500)]]);
-  assert.deepEqual(aoa[6], ['','']); /* 업무 사이 빈 줄 */
-  assert.deepEqual(aoa[7], ['첫 업무','첫 업무']);
-  assert.deepEqual(aoa.slice(8).map(r => r[1]), Array.from({length:8}, (_, i) => `줄 ${i+1}`));
+  const ra = Array.from({length:32}, () => ['', '라'.repeat(1000)]).concat([['', '라'.repeat(500)]]);
+  assert.deepEqual(aoa.slice(1, 36), [['둘째 업무','둘째 업무'],['',''], ...ra]);
+  assert.deepEqual(aoa[36], ['','']); /* 업무 사이 빈 줄 */
+  assert.deepEqual(aoa[37], ['첫 업무','첫 업무']);
+  assert.deepEqual(aoa.slice(38, 46).map(r => r[1]), Array.from({length:8}, (_, i) => `줄 ${i+1}`));
+  assert.equal(aoa.slice(46).map(r => r[1]).join(''), '마'.repeat(32500));
+  /* 업무 목록의 내용 칸: 잘린 것은 32,000자 + 안내, 다 들어간 것은 그대로 */
+  const list = XLSX.utils.sheet_to_json(wb.Sheets['업무 목록'], {header:1, defval:''});
+  assert.equal(list.find(r => r[0] === '둘째 업무')[1], '라'.repeat(32000) + "… (잘림. 전체는 '메모 전문' 시트)");
+  assert.equal(list.find(r => r[0] === '셋째 업무')[1], '바'.repeat(2500));
 });
 
 test('제어 문자는 지우고, = + - @ 로 시작하는 글과 & < > 는 글자 그대로', () => {

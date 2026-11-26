@@ -11,13 +11,14 @@
    구조를 틀릴 여지를 줄인다. 시트 XML 의 원소 순서(sheetPr → dimension → sheetViews → … → pageSetup)는
    엑셀이 엄격히 보므로 tests/unit/xlsx-export.test.js 가 지킨다.
 
-   시트: ① 업무 목록(읽는 용도) ② 연락처·파일(개인정보를 여기로 모은다) ③ 메모 전문(시트 ①에서 잘린 메모만,
-   잘린 것이 없으면 만들지 않는다) ④ 원자료(예전 내보내기와 같은 열 이름·순서).
+   시트: ① 업무 목록(읽는 용도) ② 연락처·파일(개인정보를 여기로 모은다) ③ 메모 전문(시트 ① 내용 칸에 다 못 담아 32,000자에서
+   잘린 메모만, 그런 것이 없으면 만들지 않는다) ④ 원자료(예전 내보내기와 같은 열 순서, 열 이름 셋은 v3.9.0 표준용어).
    큰 자료: 어떤 셀도 엑셀 셀 한도 32,767자를 넘지 않는다(예전엔 넘으면 XLSX.write 가 던져 파일이 안 나왔다).
    ========================================================================= */
 import {placeOf as boardPlaceOf, PLACE_NAME} from './placement.js';
 
-/* 원자료 시트의 열 — 예전 내보내기(v3.8.x 이전 backup.js)와 **같은 이름·같은 순서**. 바꾸면 사용자의 기존 수식·필터가 깨진다. */
+/* 원자료 시트의 열 — 예전 내보내기(v3.8.x 이전 backup.js)와 **같은 순서**. 이름은 v3.9.0 표준용어로 셋이 바뀌었다
+   (마감시각→기한, 세부진행→하위 업무 진행, 세부내역→하위 업무 내역 — CHANGELOG 에 알림). 더 바꾸면 사용자의 기존 수식·필터가 깨진다. */
 export const RAW_COLUMNS=['구역','메모','관련인','관련소속','연락처','이메일','접수시각','기한','식별정보','하위 업무 진행','하위 업무 내역','파일링크'];
 export const SHEET_NAMES={list:'업무 목록', contacts:'연락처·파일', memo:'메모 전문', raw:'원자료'};
 export const LIST_HEAD=['업무','내용','기한','관련인','진행','하위 업무','식별정보'];
@@ -29,13 +30,17 @@ export const SECTION_ORDER=['inbox','today','doing','planned','metoday','othtoda
 export const LIMITS={
   cell:32767,      // 엑셀 셀 한 칸의 글자 한도
   cut:32000,       // 넘을 때 자르는 길이(뒤에 붙는 안내 글자가 들어갈 자리를 남긴다)
-  title:120,       // 업무 열(메모 첫 줄)
-  bodyLines:5, bodyChars:300,   // 내용 열(메모 나머지)
-  people:3, subs:5, ids:3,      // 관련인·하위 업무·식별정보를 몇 개까지 보이나
+  title:120,       // 업무 열(메모 첫 줄) — 넘는 뒤쪽은 내용 칸 맨 앞에 '…'로 이어 적는다
+  people:3, ids:3, // 관련인·식별정보를 몇 개까지 보이나
+  subs:26,         // 하위 업무를 몇 개까지 보이나 = 줄 높이 한도에 드는 줄 수(27) − '외 N개' 한 줄. 한 줄짜리 하위 업무 기준이고,
+                   // 제목이 길어 접히는 것이 있으면 subsCell 이 줄 수로 다시 재어 그보다 일찍 멈춘다
   item:40,         // 업무 목록 시트의 하위 업무·식별정보 한 줄, 관련인 이름·소속 한 줄의 글자 한도(줄 높이를 409pt 아래로 두려고)
   rowPt:409,       // 엑셀 줄 높이 한도
+  rowMinLines:2,   // 업무 목록 시트 업무 줄의 최소 높이(줄 수)
   memoChunk:1000,  // 메모 전문 시트에서 메모 한 줄을 끊어 다음 줄에 잇는 길이(아래 MEMO_CHUNK 설명)
 };
+/* 업무 목록 시트의 내용 칸 — 메모 나머지를 다 담는다(셀 한도 때문에 LIMITS.cut 에서만 자른다). 잘렸을 때만 붙는 안내 */
+export const MEMO_CUT_NOTE="… (잘림. 전체는 '메모 전문' 시트)";
 
 /* ---- 줄 높이 어림 ----------------------------------------------------------------------------
    엑셀은 줄바꿈이 든 셀이라도 파일을 열 때 줄 높이를 저절로 맞추지 않는 경우가 있다(병합 안 된 셀도, 파일에
@@ -64,6 +69,17 @@ export function rowHeight(cells, widths, min=LINE_PT+ROW_PAD){
   let lines=1;
   cells.forEach((v,i)=>{ if(v!=null&&v!=='') lines=Math.max(lines, visualLines(v, widths[i])); });
   return Math.min(LIMITS.rowPt, Math.max(min, lines*LINE_PT+ROW_PAD));
+}
+/* 줄 높이 한도(409pt) 안에 드는 줄 수 = 27 */
+export const ROW_LINES=Math.floor((LIMITS.rowPt-ROW_PAD)/LINE_PT);
+/* 업무 목록 시트 업무 줄의 높이 — 소유자 지시(2026-11-27): "내용을 되도록 다 담되, 기본 세로 크기는 하위 업무 수에 맞게끔만".
+   내용 칸(메모, LIST_BODY_COL)은 재지 않는다 — 메모가 길면 셀 안에서 아래가 가려져 보이는 것이 의도다(사용자가 줄을 늘리거나
+   칸을 눌러 본다). 하위 업무 칸을 기준으로 하되, 같은 줄의 업무 이름·기한·관련인·진행·식별정보가 가려지지 않게 그 칸들도
+   함께 재어 가장 큰 줄 수로. 최소 2줄, 최대 409pt. */
+const LIST_BODY_COL=1;
+export function listRowHeight(cells, widths=LIST_W){
+  const others=cells.map((v,i)=>i===LIST_BODY_COL?'':v);
+  return rowHeight(others, widths, LIMITS.rowMinLines*LINE_PT+ROW_PAD);
 }
 
 /* ---- 글자 다듬기 ---- */
@@ -136,28 +152,24 @@ export function memoParts(memo){
   while(body.length&&!body[body.length-1].trim()) body.pop();
   return {title:lines[i].trim(), body};
 }
-/* 업무 칸·내용 칸과 '메모 전문' 시트로 보낼지(cut) */
+/* 업무 칸·내용 칸과 '메모 전문' 시트로 보낼지(cut).
+   2026-11-27 소유자 지시: 내용 칸에 메모 나머지를 다 담는다(예전엔 5줄·300자에서 자르고 메모 전문 시트로 보냈다).
+   - 첫 줄이 LIMITS.title 자를 넘으면 업무 칸은 앞쪽만 '…'로 끝내고, 뒤쪽은 내용 칸 맨 앞에 '…'로 이어 적는다(잃는 글 없음).
+   - 셀 한도 때문에 내용 칸이 LIMITS.cut 자를 넘을 때만 자르고 MEMO_CUT_NOTE 를 붙인다 — 이때만 cut(메모 전문 시트에 싣는다). */
 export function memoCells(memo){
   const {title, body}=memoParts(memo);
-  let cut=false, t=title;
-  if(t.length>LIMITS.title){ t=sliceSafe(t,LIMITS.title)+'…'; cut=true; }
-  const out=[]; let used=0, full=0, partial=false;
-  for(const line of body){
-    if(out.length>=LIMITS.bodyLines||used>=LIMITS.bodyChars){ cut=true; break; }
-    const room=LIMITS.bodyChars-used;
-    if(line.length>room){ out.push(sliceSafe(line,room)+'…'); partial=true; cut=true; break; }
-    out.push(line); used+=line.length; full++;
-  }
-  const rest=body.length-full-(partial?1:0);
-  if(rest>0) out.push(`… 아래 ${rest}줄 더 있음 ('${SHEET_NAMES.memo}' 시트)`);
-  else if(partial) out.push(`(이어지는 내용은 '${SHEET_NAMES.memo}' 시트)`);
-  return {title:t, body:out.join('\n'), cut};
+  let t=title;
+  if(t.length>LIMITS.title){ const head=sliceSafe(t,LIMITS.title); body.unshift('…'+t.slice(head.length)); t=head+'…'; }
+  let text=body.join('\n'), cut=false;
+  if(text.length>LIMITS.cut){ text=sliceSafe(text,LIMITS.cut)+MEMO_CUT_NOTE; cut=true; }
+  return {title:t, body:text, cut};
 }
-/* 기한 칸: 글과 꾸밈 종류('late' 지남 · 'soon' 오늘·내일 · 'dim' 완료 · '' 보통) */
+/* 기한 칸: 글과 꾸밈 종류('late' 지남 · 'soon' 오늘·내일 · 'done' 완료 · '' 보통).
+   완료는 보통 글자(검정)로 쓴다 — 2026-11-27 소유자 지시 "완료 업무는 회색 글씨가 아니라 검정 글씨로" */
 export function dueCell(it, now){
   if(it.done){
     const d=toDate(it.doneAt);
-    return {text:d?`${mdw(d,now)} 완료`:'완료', tone:'dim'};
+    return {text:d?`${mdw(d,now)} 완료`:'완료', tone:'done'};
   }
   const d=toDate((it.f||{}).due);
   if(!d) return {text:'', tone:''};
@@ -175,11 +187,19 @@ export function peopleCell(contacts){
   if(ps.length>LIMITS.people) lines.push(`외 ${ps.length-LIMITS.people}명`);
   return lines.join('\n');
 }
-export function subsCell(subs){
+/* 하위 업무 칸 — 남은 것 먼저, 끝낸 것 뒤. 줄 높이 한도(ROW_LINES 줄) 안에 드는 만큼 다 적는다(최대 LIMITS.subs 개).
+   제목이 칸 폭에서 접혀 여러 줄이 되는 것도 세어, '외 N개' 줄까지 한도 안에 들게 한다. */
+export function subsCell(subs, wch=LIST_W[5]){
   const all=subs||[], ordered=all.filter(s=>!s.done).concat(all.filter(s=>s.done));
-  const lines=ordered.slice(0,LIMITS.subs).map(s=>(s.done?'✓ ':'☐ ')+short(s.title));
-  if(ordered.length>LIMITS.subs){
-    const hidden=ordered.slice(LIMITS.subs), hd=hidden.filter(s=>s.done).length;
+  const lines=[]; let used=0, k=0;
+  for(; k<ordered.length && k<LIMITS.subs; k++){
+    const line=(ordered[k].done?'✓ ':'☐ ')+short(ordered[k].title);
+    const n=visualLines(line, wch), reserve=k+1<ordered.length?1:0;   // 뒤에 더 있으면 '외 N개' 한 줄 자리를 남긴다
+    if(used+n+reserve>ROW_LINES) break;
+    lines.push(line); used+=n;
+  }
+  if(k<ordered.length){
+    const hidden=ordered.slice(k), hd=hidden.filter(s=>s.done).length;
     lines.push(`외 ${hidden.length}개`+(hd?` · 끝낸 것 ${hd}개`:''));
   }
   return lines.join('\n');
@@ -218,12 +238,13 @@ export function groupSections(items, placeOf=boardPlaceOf){
 /* ---- 꾸밈(styles.xml) ----
    색은 앱의 색 토큰(src/styles.css :root, 디자인 정책.md)과 시안(총괄 reports/시안/뭐하려-했더라-엑셀-내보내기.html)에서 가져온다.
    fills 의 0·1 번은 규격이 예약한 자리(none, gray125)다. 번호를 바꾸면 아래 ST 와 함께 바꾼다. */
-const C={ink:'FF131A24', soft:'FF687284', dim:'FF8A93A1', white:'FFFFFFFF', focus:'FF2A7C6E', line:'FFD9DDE3',
+const C={ink:'FF131A24', soft:'FF687284', white:'FFFFFFFF', focus:'FF2A7C6E', line:'FFD9DDE3',
   late:'FF9B1B30', soon:'FFB34A26', secTodayFg:'FFB34A26', secTodayBg:'FFFBE9E2', secTodayBar:'FFD9623A',
   secTealFg:'FF1F6357', secTealBg:'FFEDF4F2', secDoneFg:'FF5A6472', secDoneBg:'FFEEF0F3', secDoneBar:'FF9AA3AE'};
 const FONT_NAME='맑은 고딕';
 const font=(o={})=>`<font>${o.b?'<b/>':''}<sz val="${o.sz||10}"/><color rgb="${o.c||C.ink}"/><name val="${FONT_NAME}"/><family val="3"/><charset val="129"/></font>`;
-const FONTS=[font(), font({b:1}), font({b:1,sz:16}), font({c:C.soft}), font({b:1,c:C.white}), font({c:C.dim}), font({b:1,c:C.dim}),
+/* 완료 업무용 흐린 글자(회색)는 2026-11-27 소유자 지시로 없앴다 — 완료 구역 업무 줄도 다른 구역과 같은 검정 글자 */
+const FONTS=[font(), font({b:1}), font({b:1,sz:16}), font({c:C.soft}), font({b:1,c:C.white}),
   font({b:1,c:C.late}), font({b:1,c:C.soon}), font({b:1,c:C.secTodayFg}), font({b:1,c:C.secTealFg}), font({b:1,c:C.secDoneFg})];
 const solid=rgb=>`<fill><patternFill patternType="solid"><fgColor rgb="${rgb}"/><bgColor indexed="64"/></patternFill></fill>`;
 const FILLS=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>',
@@ -241,17 +262,14 @@ const XFS=[
   [4,2,1,'<alignment vertical="center" wrapText="1"/>'], // 3 머리글(청록 채움·흰 굵은 글자)
   [0,0,1,WRAP_TOP],                                      // 4 본문
   [1,0,1,WRAP_TOP],                                      // 5 본문 굵게(업무)
-  [5,0,1,WRAP_TOP],                                      // 6 완료 흐림
-  [6,0,1,WRAP_TOP],                                      // 7 완료 흐림 굵게
-  [7,0,1,WRAP_TOP],                                      // 8 기한 지남(붉은)
-  [8,0,1,WRAP_TOP],                                      // 9 기한 오늘·내일(주홍)
-  [9,3,2,'<alignment vertical="center"/>'],              // 10 구역 줄 — 오늘
-  [10,4,3,'<alignment vertical="center"/>'],             // 11 구역 줄 — 진행 중·예정
-  [11,5,4,'<alignment vertical="center"/>'],             // 12 구역 줄 — 완료
-  [0,0,1,'<alignment horizontal="center" vertical="top"/>'], // 13 본문 가운데(진행)
-  [5,0,1,'<alignment horizontal="center" vertical="top"/>'], // 14 완료 흐림 가운데
+  [5,0,1,WRAP_TOP],                                      // 6 기한 지남(붉은)
+  [6,0,1,WRAP_TOP],                                      // 7 기한 오늘·내일(주홍)
+  [7,3,2,'<alignment vertical="center"/>'],              // 8 구역 줄 — 오늘
+  [8,4,3,'<alignment vertical="center"/>'],              // 9 구역 줄 — 진행 중·예정
+  [9,5,4,'<alignment vertical="center"/>'],              // 10 구역 줄 — 완료(옅은 회색 채움은 구역을 나누는 표시라 남긴다)
+  [0,0,1,'<alignment horizontal="center" vertical="top"/>'], // 11 본문 가운데(진행)
 ];
-export const ST={title:1, meta:2, head:3, body:4, bold:5, dim:6, dimBold:7, late:8, soon:9, secToday:10, secTeal:11, secDone:12, center:13, dimCenter:14};
+export const ST={title:1, meta:2, head:3, body:4, bold:5, late:6, soon:7, secToday:8, secTeal:9, secDone:10, center:11};
 export function stylesXml(){
   const xf=([f,fi,b,al])=>`<xf numFmtId="0" fontId="${f}" fillId="${fi}" borderId="${b}" xfId="0"${f?' applyFont="1"':''}${fi?' applyFill="1"':''}${b?' applyBorder="1"':''}${al?' applyAlignment="1">'+al+'</xf>':'/>'}`;
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
@@ -300,10 +318,9 @@ export function buildSheets(items, {now=new Date(), placeOf=boardPlaceOf}={}){
       const due=dueCell(it, now), subs=it.subs||[];
       const vals=[m.title||'(메모 없음)', m.body, due.text, peopleCell(it.contacts),
         subs.length?`${subs.filter(s=>s.done).length}/${subs.length}`:'', subsCell(subs), idsCell(it.ids)];
-      const dim=!!it.done;
-      const sts=dim ? [ST.dimBold, ST.dim, ST.dim, ST.dim, ST.dimCenter, ST.dim, ST.dim]
-        : [ST.bold, ST.body, due.tone==='late'?ST.late:due.tone==='soon'?ST.soon:ST.body, ST.body, ST.center, ST.body, ST.body];
-      push(L, vals, sts, rowHeight(vals, LIST_W));
+      /* 완료 업무도 다른 구역과 같은 꾸밈(검정 글자, 업무 이름 굵게) — 완료의 기한 칸은 tone 'done' 이라 보통 글자 */
+      const sts=[ST.bold, ST.body, due.tone==='late'?ST.late:due.tone==='soon'?ST.soon:ST.body, ST.body, ST.center, ST.body, ST.body];
+      push(L, vals, sts, listRowHeight(vals));
     }
   }
 

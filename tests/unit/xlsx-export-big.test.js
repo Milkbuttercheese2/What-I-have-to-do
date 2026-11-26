@@ -19,6 +19,8 @@ const base = (id, memo, more) => Object.assign({id, memo, done:false, f:{due:T(2
 const build = items => X.buildXlsx(XLSX, items, {now:NOW});
 const read = bytes => XLSX.read(bytes, {type:'array'});
 const rows = (wb, name) => XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:''});
+/* 업무 목록 시트 r 번째 줄의 높이(pt) */
+const listHt = (bytes, r = 5) => Number(Array.from(checkPackage(bytes).sheets[0].doc.getElementsByTagName('row')).find(x => x.getAttribute('r') === String(r)).getAttribute('ht'));
 /* 꾸러미 안의 모든 글자 셀 길이 */
 function maxCellLen(wb){ let m = 0; for(const n of wb.SheetNames) for(const [k, c] of Object.entries(wb.Sheets[n])) if(k[0] !== '!' && typeof c.v === 'string') m = Math.max(m, c.v.length); return m; }
 const HANGUL = n => Array.from({length:n}, (_, i) => '가나다라마바사아자차카타파하'[i % 14]).join('');
@@ -38,7 +40,7 @@ test('예전 방식은 40,000자 메모에서 던진다 — 새 방식은 파일
   assert.ok(maxCellLen(read(bytes)) <= 32767);
 });
 
-test('메모 50,000자: 원자료는 32,000자에서 자르고 안내, 메모 전문에는 전부', () => {
+test('메모 50,000자: 업무 목록·원자료는 32,000자에서 자르고 안내, 메모 전문에는 전부', () => {
   const memo = '오만 자 메모\n' + HANGUL(49992);
   assert.equal(memo.length, 50000);
   const bytes = build([base(1, memo)]);
@@ -52,18 +54,28 @@ test('메모 50,000자: 원자료는 32,000자에서 자르고 안내, 메모 �
   assert.ok(chunks.every(c => c.length <= 1000), '한 줄은 1,000자씩 끊는다');
   assert.equal(chunks.join(''), HANGUL(49992), '잘린 데 없이 전부');
   const list = rows(wb, '업무 목록');
-  assert.match(list[4][1], /\(이어지는 내용은 '메모 전문' 시트\)$/);
+  assert.equal(list[4][0], '오만 자 메모');
+  assert.equal(list[4][1], HANGUL(49992).slice(0, 32000) + "… (잘림. 전체는 '메모 전문' 시트)");
+  assert.ok(maxCellLen(wb) <= 32767);
+  assert.equal(listHt(bytes), listHt(build([base(1, '오만 자 메모')])), '줄 높이는 메모 길이와 무관');
 });
 
-test('메모 1,000줄: 업무 목록은 5줄과 안내, 메모 전문은 한 줄에 한 줄', () => {
+test('메모 1,000줄: 업무 목록 내용 칸에 999줄 모두(32,000자 안이라 메모 전문 시트 없음), 줄 높이는 그대로', () => {
   const memo = ['천 줄 메모', ...Array.from({length:999}, (_, i) => `${i+1}번째 줄 — 조달 검토 내용`)].join('\n');
+  assert.ok(memo.length < 32000);
   const bytes = build([base(1, memo)]);
   checkPackage(bytes);
   const wb = read(bytes);
-  assert.match(rows(wb, '업무 목록')[4][1], /… 아래 994줄 더 있음 \('메모 전문' 시트\)$/);
-  const full = rows(wb, '메모 전문').slice(1);
-  assert.equal(full.length, 1000);
-  assert.deepEqual(full.map(r => r[1]), memo.split('\n'));
+  assert.equal(rows(wb, '업무 목록')[4][1], memo.split('\n').slice(1).join('\n'));
+  assert.ok(!wb.SheetNames.includes('메모 전문'));
+  assert.equal(listHt(bytes), listHt(build([base(1, '천 줄 메모')])), '줄 높이는 메모 길이와 무관');
+  /* 32,000자를 넘는 줄 많은 메모는 메모 전문에 한 줄에 한 줄 */
+  const big = ['큰 메모', ...Array.from({length:1999}, (_, i) => `${i+1}번째 줄 — 조달 검토 내용 ` + HANGUL(10))].join('\n');
+  assert.ok(big.length > 32000);
+  const wb2 = read(build([base(1, big)]));
+  const full = rows(wb2, '메모 전문').slice(1);
+  assert.equal(full.length, 2000);
+  assert.deepEqual(full.map(r => r[1]), big.split('\n'));
 });
 
 test('한 줄 40,000자 메모: 메모 전문에서 1,000자씩 이어 적고, 줄 높이는 409pt 아래', () => {
@@ -90,7 +102,13 @@ test('하위 업무 200개·관련인 100명·식별정보 50개·파일 300개'
   assert.equal(r[3].split('\n').length, 3*2 + 1, '관련인 3명(이름·소속) + 외 N명');
   assert.match(r[3], /외 97명$/);
   assert.equal(r[4], '67/200');
-  assert.equal(r[5].split('\n').length, 6); assert.match(r[5], /^☐ /); assert.match(r[5], /외 195개 · 끝낸 것 67개$/);
+  /* 하위 업무: 줄 높이 한도(27줄) 안에 드는 만큼 남은 것부터, 나머지는 외 N개 */
+  const sl = r[5].split('\n'), shown = sl.length - 1;
+  assert.ok(sl.slice(0, -1).every(x => x.startsWith('☐ ')), '남은 것 먼저');
+  assert.equal(sl.at(-1), `외 ${200 - shown}개 · 끝낸 것 67개`);
+  assert.ok(X.visualLines(r[5], 34) <= X.ROW_LINES, '하위 업무 칸이 줄 높이 안에 다 보인다');
+  const ht = listHt(bytes);
+  assert.ok(ht <= 409 && ht >= X.visualLines(r[5], 34)*15 + 3, `줄 높이 ${ht}pt — 하위 업무 칸이 다 보이고 한도 아래`);
   assert.match(r[6], /외 47개$/);
   const k = rows(wb, '연락처·파일').slice(1);
   assert.equal(k.length, 100, '관련인 한 사람에 한 줄');
