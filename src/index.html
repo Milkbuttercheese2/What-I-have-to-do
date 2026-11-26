@@ -115,7 +115,7 @@
         <span class="fm-draft" id="fm-draft"></span>
         <button class="btn btn-cancel" id="fm-revert" title="마지막으로 저장한 내용으로 되돌립니다 (임시저장분 삭제)">되돌리기</button>
         <!-- v3.7.0 업무 종료: 연 채로 저장 + 완료 처리 (카드의 ○ 와 같은 일). 완료 업무엔 [다시 진행]. -->
-        <button class="btn btn-finish" id="fm-finish" title="지금 내용을 저장하고 업무를 완료(종료) 처리합니다">✓ 업무 종료</button>
+        <button class="btn btn-finish" id="fm-finish" title="지금 내용을 저장하고 업무를 완료 처리합니다">✓ 업무 완료</button>
         <button class="btn btn-reopen" id="fm-reopen" style="display:none" title="완료를 취소하고 진행 중으로 되돌려 바로 고칠 수 있게 엽니다">↺ 다시 진행</button>
         <button class="btn btn-ok" id="fm-save" title="Ctrl+S · Ctrl+Enter 로도 저장됩니다">저장</button>
       </div>
@@ -191,7 +191,7 @@
     <!-- v3.8.0 현행 | 종료 — 고른 값은 settings.calView (calendar.js) -->
     <div class="seg cal-mode" id="cal-mode" role="group" aria-label="캘린더 보기">
       <button type="button" class="seg-btn on" data-v="live">현행</button>
-      <button type="button" class="seg-btn" data-v="done">종료</button>
+      <button type="button" class="seg-btn" data-v="done">완료</button>
     </div>
     <div class="cal-legend" id="cal-legend">
       <!-- 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17: --slate/--red 직접 참조라

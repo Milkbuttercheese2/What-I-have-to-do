@@ -574,7 +574,7 @@ async function commitForm(opts){
     absorbIntoPhonebook(d.contacts);
     if(finish && target){
       const id=target.id;
-      showToast('업무를 종료했습니다',()=>{ const cur=S.items.find(x=>x.id===id); if(cur&&cur.done){ toggleDone(cur); persist(); } });
+      showToast('업무를 완료했습니다',()=>{ const cur=S.items.find(x=>x.id===id); if(cur&&cur.done){ toggleDone(cur); persist(); } });
     }
   }
 }

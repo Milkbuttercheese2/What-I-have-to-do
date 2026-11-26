@@ -295,7 +295,7 @@ export function renderPbSide(){
     /* v3.8.18 소속 · 전화 · 이메일은 이름 아래 한 줄에, 이름표 없이 같은 글자로(소유자 지정) */
     +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">관련 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
     /* 줄 = 진행/완료 · 메모 첫 줄 · 식별정보 · 종료(완료 탭 한 줄 목록과 같은 이름·같은 날짜 모양 — 소유자 요청) */
-    +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">종료</span></div>`+list.map(it=>{
+    +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">완료</span></div>`+list.map(it=>{
       const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
       const ids=(it.ids||[]).filter(x=>x.val).map(x=>`${x.kind?x.kind+' ':''}${x.val}`).join(', ');
       const end=it.done ? dAt(it.doneAt) : '';

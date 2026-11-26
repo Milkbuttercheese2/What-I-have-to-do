@@ -242,7 +242,7 @@ export function doneCalHtml(list, y, m, selDay, now){
 }
 /* v3.8.4 완료 탭 — 늘 전체를 한 줄 목록으로 보여 준다(거르기·카드 보기 단추는 소유자 지정으로 뺐다) */
 /* 한 줄 = 종료시각 · 메모 첫 줄 · 식별정보 · 접수시각 · 마감시각 · 관련인 · 파일 (소유자 지정) */
-const DONE_COLS=['종료','메모','식별정보','접수','기한','관련인','파일'];
+const DONE_COLS=['완료','메모','식별정보','접수','기한','관련인','파일'];
 export const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
   return `${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const baseName = p => String(p||'').split(/[\\/]/).filter(Boolean).pop()||'';
@@ -281,8 +281,8 @@ export function renderDone(){
     dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
   const mName=`${dcalY}년 ${dcalM+1}월`;
-  const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 끝낸 업무 <b class="num">${list.length}</b>건</div>` : '';
-  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 끝낸 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
+  const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 완료한 업무 <b class="num">${list.length}</b>건</div>` : '';
+  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 완료한 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
     const g=doneGroupOf(it.doneAt, now);
