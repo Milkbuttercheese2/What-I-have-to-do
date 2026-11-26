@@ -46,9 +46,9 @@ function alarmDot(obj,key){
   if(isNaN(t)) return '';
   const st=(obj.al||{})[key];
   let cls,tip;
-  if(st===true){ cls='ad-done'; tip='알람 확인함'; }              // ● 확인함(초록)
-  else if(t<=Date.now()){ cls='ad-ring'; tip='알람 울림'; }        // ● 울림(빨강) — 미확인·스누즈 포함
-  else { cls='ad-wait'; tip='알람 대기'; }                         // ○ 대기
+  if(st===true){ cls='ad-done'; tip='알림 확인함'; }              // ● 확인함(초록)
+  else if(t<=Date.now()){ cls='ad-ring'; tip='알림 울림'; }        // ● 울림(빨강) — 미확인·스누즈 포함
+  else { cls='ad-wait'; tip='알림 대기'; }                         // ○ 대기
   return `<span class="adot ${cls}" title="${escAttr(tip)}"></span>`;
 }
 /* 카드에 보일 세부 할일: '울린 것(지난 미완료 점검)'을 우선 표시 —
