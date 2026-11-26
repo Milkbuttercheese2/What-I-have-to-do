@@ -155,7 +155,7 @@ export function metricsOf(items, now){
 function renderMetrics(){
   const el=$('metrics'); if(!el) return;
   const m=metricsOf(S.items);
-  el.innerHTML=`<span><b>${m.active}</b>진행 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 할 일</span>`
+  el.innerHTML=`<span><b>${m.active}</b>진행 중 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 업무</span>`
     +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
 }
 /* v3.8.16 보드 칸은 지난번과 같은 HTML 이면 다시 넣지 않는다 — 카드를 하나 체크·저장할 때 바뀌지 않은 칸까지
