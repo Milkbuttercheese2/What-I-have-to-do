@@ -46,14 +46,18 @@ export function reconcileImported(){
     window.FIELDS=S.fields; STORE.saveFields(S.fields); }
 }
 
+const XLSX_BUSY_AT=500;   // 엑셀로 내보내기: 이 건수부터 '만드는 중' 토스트를 먼저 띄운다
 export function initBackup(){
   /* 엑셀로 내보내기 — 2026-11-27 개편: 보기 좋은 업무 목록(구역별 묶음·기한 색·줄바꿈) + 연락처·파일 + 메모 전문 + 원자료.
      파일을 만드는 일은 순수 모듈 xlsx-export.js 가 한다(범위·원자료 열은 예전과 같다 — tests/unit/xlsx-export.test.js).
      예전엔 32,767자를 넘는 메모가 하나라도 있으면 XLSX.write 가 던져 파일이 통째로 안 나왔다 — 이제 셀마다 자른다. */
   $('xlsx').addEventListener('click', async ()=>{
-    const items=S.items;
-    if(!exportableItems(items).length){await appAlert('내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).');return;}
+    const items=S.items, count=exportableItems(items).length;
+    if(!count){await appAlert('내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).');return;}
     try{ await needXlsx(); }catch(e){ await appAlert('XLSX 저장 실패: '+e.message); return; }
+    /* 업무가 많으면 만드는 데 시간이 든다(2,000건 약 0.4초, 느린 PC 는 몇 배) — 멈춘 것처럼 보이지 않게 먼저 알리고
+       한 번 그릴 틈을 준다. 적을 때는 금방 끝나 알릴 것이 없다. */
+    if(count>=XLSX_BUSY_AT){ showToast('엑셀 파일을 만드는 중입니다…'); await new Promise(r=>setTimeout(r,30)); }
     let bytes;
     try{ bytes=Array.from(buildXlsx(XLSX, items, {now:new Date()})); }
     catch(e){ await appAlert('XLSX 저장 실패: '+(e&&e.message||e)); return; }

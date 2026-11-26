@@ -44,3 +44,17 @@ test('내보낼 업무가 없으면 예전과 같은 안내', async () => {
   assert.deepEqual(env.alerts, ['내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).']);
   assert.ok(!env.invokeCalls.some(c => c.cmd === 'save_binary_file'));
 });
+
+test('업무가 500건 이상이면 만들기 전에 "만드는 중" 토스트를 먼저 띄운다', async () => {
+  await env.resetS(); S.loaded = true;
+  for(let i = 0; i < 500; i++) S.items.push({id:100+i, memo:`가상 업무 ${i}`, done:true, doneAt:Date.now(), f:{}, contacts:[], ids:[], subs:[], files:[]});
+  let got = null, toastAtSave = null;
+  env.onInvoke('save_binary_file', args => { got = args; toastAtSave = $('toast-msg').textContent; return true; });
+  $('xlsx').click(); await env.flush(6);
+  assert.equal($('toast-msg').textContent, '엑셀 파일을 만드는 중입니다…');
+  assert.equal(got, null, '아직 만들기 전(그릴 틈)');
+  mock.timers.tick(30); await env.flush(6);
+  assert.ok(got && got.data.length > 0);
+  assert.equal(toastAtSave, '엑셀 파일을 만드는 중입니다…');
+  assert.equal($('toast-msg').textContent, 'XLSX 파일을 저장했습니다');
+});
