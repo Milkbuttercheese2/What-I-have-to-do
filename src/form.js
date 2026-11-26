@@ -137,7 +137,7 @@ function setReadonly(on){
   const p=$('formPanel');
   p.classList.toggle('fm-ro', on);
   p.querySelectorAll('input,textarea,select,button').forEach(el=>{
-    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·[문서]는 살려 둔다
+    if(el.id==='fm-close'||el.id==='fm-reopen'||el.id==='fm-book'||el.id==='fm-share'||el.classList.contains('ffile-doc')) return;   // 닫기·다시 진행·2쪽 보기·공유·[문서]는 살려 둔다
     el.disabled=on;
   });
   $('fm-save').style.display=on?'none':'';
@@ -546,6 +546,8 @@ export function initForm(){
   $('fm-close').addEventListener('click',()=>closeForm());
   $('fm-book').addEventListener('click',()=>openBook());
   initBook();
+  /* 공유 — 업무 한 건을 메모지 그림으로(미리 보기 창에서 그림 복사·글자로 복사·파일로 저장). 진행 중·완료 양식 모두 */
+  if($('fm-share')) $('fm-share').addEventListener('click',()=>openShare());
   initShare();
 }
 

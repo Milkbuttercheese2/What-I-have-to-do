@@ -1875,6 +1875,13 @@
     color:transparent;overflow:hidden;pointer-events:none}
   .book-page .book-ta{position:relative;z-index:1}
 
+  /* 업무 공유(소유자 지정) — 양식 아래 단추 줄의 왼쪽 끝, 아이콘 전용 미니 버튼(34×34 · 모서리 8px · 흰 면 · 가는 테두리, 정책 §8).
+     아이콘 색은 글자 색을 따라간다(어두운 테마도 그대로). hover = 테두리·아이콘이 강조색(단추 모양 통일 규칙과 같다) */
+  .fm-share{flex:none;width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+    background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--ink-soft);cursor:pointer;font-family:inherit}
+  .fm-share:hover,.fm-share:focus-visible{border-color:var(--focus);color:var(--focus);outline:none}
+  .fm-share svg{width:16px;height:16px;display:block}
+  @media(max-width:700px){ .fm-actions .fm-share + .fm-draft{flex:1 1 calc(100% - 42px)} }   /* 좁은 창: 공유와 임시저장 표시가 한 줄, 단추는 다음 줄 */
   /* 미리 보기 창 — 표준 모달(§5.5). 메모지는 늘 밝은 모양(나가는 그림과 같다 — share-card.js shareCss). 양식(60) 위 */
   #shareModal{z-index:75}
   .share-modal{max-width:calc(512px + 46px)}
