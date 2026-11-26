@@ -459,7 +459,7 @@ export function initRender(){
       const i=it ? (it.subs||[]).findIndex(s=>s.id==ds.dataset.delsub) : -1;
       if(i<0||it.done) return;
       const removed=it.subs[i]; it.subs.splice(i,1); persist();
-      showToast('세부 할 일 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
+      showToast('하위 업무 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
         cur.subs.splice(Math.min(i,cur.subs.length),0,removed); persist(); });
       return; }
     /* v3.6.0: 완료 업무는 읽기 전용으로 연다 — 저장이 완료 업무 행을 다시 쓰지 않으므로

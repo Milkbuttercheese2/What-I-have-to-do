@@ -39,7 +39,7 @@ function liveEvents(){
   S.items.forEach(it=>{
     if(it.recur || it.done) return;                 // 부모 정의·완료 업무 제외
     push((it.f||{}).due,{it,fkey:'due',label:'마감'});
-    (it.subs||[]).filter(s=>s.mid && !s.done).forEach(s=>push(s.mid,{it,fkey:'mid',label:'세부',subTitle:s.title,subDone:s.done,subId:s.id}));
+    (it.subs||[]).filter(s=>s.mid && !s.done).forEach(s=>push(s.mid,{it,fkey:'mid',label:'하위 업무',subTitle:s.title,subDone:s.done,subId:s.id}));
   });
   return map;
 }
@@ -101,7 +101,7 @@ function renderDetail(evMap){
       +`<span class="tl-time num">${hm}</span><span class="tl-kind">${kind}</span><span class="tl-what">${esc(what)}</span>`
       /* v3.8.0 × — 카드의 × 와 같은 클래스·같은 위임(render.js). 마감·종료 = 그 업무 삭제(data-del),
          점검 = 그 세부 줄만 삭제(data-delsub). 이름표의 data-open·빈 자리 클릭보다 먼저 먹는다. */
-      +(ev.fkey==='mid' ? `<button class="del tl-del" data-delsub="${ev.subId}" data-item="${ev.it.id}" title="세부 할 일 삭제">×</button>`
+      +(ev.fkey==='mid' ? `<button class="del tl-del" data-delsub="${ev.subId}" data-item="${ev.it.id}" title="하위 업무 삭제">×</button>`
                         : `<button class="del tl-del" data-del="${ev.it.id}" title="삭제">×</button>`)+`</div>`;
   }).join('');
   const now=new Date(); const isToday=now.getFullYear()===y&&now.getMonth()===m&&now.getDate()===dd;
@@ -133,7 +133,7 @@ export function renderCal(){
   /* 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17) */
   if(lg) lg.innerHTML = view==='done'
     ? '<span><i class="lg" style="background:var(--gray-fg)"></i>끝낸 날</span>'
-    : '<span><i class="lg" style="background:var(--cal-mid)"></i>세부할일 점검일</span><span><i class="lg" style="background:var(--cal-due)"></i>업무 마감일</span>';
+    : '<span><i class="lg" style="background:var(--cal-mid)"></i>하위 업무 점검일</span><span><i class="lg" style="background:var(--cal-due)"></i>업무 마감일</span>';
   const evMap=dayEvents(view); const today=new Date();
   for(let i=0;i<42;i++){
     const d=new Date(start); d.setDate(start.getDate()+i);

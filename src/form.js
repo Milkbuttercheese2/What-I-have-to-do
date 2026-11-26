@@ -345,7 +345,7 @@ function addFormSubRow(title,mid,focusIt,sub){
   const md=mid?{date:isoToDateStr(mid),time:isoToTimeStr(mid)}:{date:'',time:''};
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
     <div class="fsub-chk chk ${sub.done?'on':''}" title="완료 표시"></div>
-    <input type="text" class="fsub-title" maxlength="500" placeholder="세부 할 일" value="${escAttr(title||'')}">
+    <input type="text" class="fsub-title" maxlength="500" placeholder="하위 업무" value="${escAttr(title||'')}">
     <input type="text" class="sub-owner" maxlength="100" placeholder="담당" title="비우면 본인" value="${escAttr(sub.owner||'')}">
     <span class="dt-inp fsub-dt">${dtInner(md.date, md.time)}</span>
     <button class="rm" title="삭제">×</button>`;

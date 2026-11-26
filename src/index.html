@@ -75,9 +75,9 @@
 
       <!-- v2.5.3 양식 순서: 메모 → 세부 할 일 → 접수·마감 → 식별번호 → 관련소속·관련인·연락처 → 파일 링크 -->
       <div class="fm-subs">
-        <div class="t-head">세부 할 일</div><!-- (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가) — 명칭 간결화 v2.5.13, 설명은 주석 보존 -->
+        <div class="t-head">하위 업무</div><!-- (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가) — 명칭 간결화 v2.5.13, 설명은 주석 보존 -->
         <div id="fm-subs"></div>
-        <button class="btn fsub-add" id="fm-subadd" title="세부 항목 추가">＋ 추가</button>
+        <button class="btn fsub-add" id="fm-subadd" title="하위 업무 추가">＋ 추가</button>
       </div>
 
       <div class="fm-grid" id="fm-grid"></div>
@@ -196,7 +196,7 @@
     <div class="cal-legend" id="cal-legend">
       <!-- 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17: --slate/--red 직접 참조라
            pill 색만 바꿨을 때 범례가 옛 색으로 남아 어긋났다). v3.8.0: 보기에 따라 calendar.js renderCal 이 다시 쓴다 -->
-      <span><i class="lg" style="background:var(--cal-mid)"></i>세부할일 점검일</span>
+      <span><i class="lg" style="background:var(--cal-mid)"></i>하위 업무 점검일</span>
       <span><i class="lg" style="background:var(--cal-due)"></i>업무 마감일</span>
     </div>
   </div>
@@ -327,9 +327,9 @@
         <div class="fm-field"><label for="np-label">버튼 이름</label><input type="text" id="np-label" placeholder="예: 계약변경, 선금 지급"></div>
         <div class="fm-field"><label for="np-sum">메모 기본값 (○○ 자리표시자 사용 가능)</label><input type="text" id="np-sum" placeholder="예: ○○ 사업 계약변경"></div>
       </div>
-      <div class="ps-subs-head">세부 할 일 (선택)</div>
+      <div class="ps-subs-head">하위 업무 (선택)</div>
       <div id="np-subs"></div>
-      <button class="btn fsub-add" id="np-subadd">＋ 세부 항목</button>
+      <button class="btn fsub-add" id="np-subadd">＋ 하위 업무</button>
       <div class="m-actions">
         <button class="btn btn-cancel" id="np-cancel-edit" style="display:none">수정 취소</button>
         <button class="btn btn-ok" id="np-save">프리셋 저장</button>
@@ -355,7 +355,7 @@
 <div class="modal-bg" id="recurModal">
   <div class="modal modal-wide">
     <h3>주기 업무</h3>
-    <div class="m-sub">공통 내용과 반복 주기만 등록하면, 예정일마다 그 내용으로 업무가 <b>보드에 자동 생성</b>됩니다. 세부 내용(관련인·식별정보·세부 할일·파일)은 생성된 각 업무에서 채우세요.</div>
+    <div class="m-sub">공통 내용과 반복 주기만 등록하면, 예정일마다 그 내용으로 업무가 <b>보드에 자동 생성</b>됩니다. 세부 내용(관련인·식별정보·하위 업무·파일)은 생성된 각 업무에서 채우세요.</div>
 
     <div class="ps-new">
       <div class="ps-new-head" id="rc-new-head">＋ 새 주기 업무</div>
