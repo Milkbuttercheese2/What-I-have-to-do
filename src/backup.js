@@ -4,7 +4,7 @@
 import {S, CORE_FIELDS, DEFAULT_SETTINGS, migrateItem, stripTemp, backupObj} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, showToast, appAlert, appConfirm, needXlsx} from './dom-utils.js';
-import {placeOf, PLACE_NAME} from './placement.js';
+import {exportableItems, buildXlsx} from './xlsx-export.js';
 import {renderPresets} from './presets.js';
 import {applyAlarmOn} from './alarms.js';
 import {persist} from './render.js';
@@ -47,50 +47,22 @@ export function reconcileImported(){
 }
 
 export function initBackup(){
-  /* XLSX */
+  /* 엑셀로 내보내기 — 2026-11-27 개편: 보기 좋은 업무 목록(구역별 묶음·기한 색·줄바꿈) + 연락처·파일 + 메모 전문 + 원자료.
+     파일을 만드는 일은 순수 모듈 xlsx-export.js 가 한다(범위·원자료 열은 예전과 같다 — tests/unit/xlsx-export.test.js).
+     예전엔 32,767자를 넘는 메모가 하나라도 있으면 XLSX.write 가 던져 파일이 통째로 안 나왔다 — 이제 셀마다 자른다. */
   $('xlsx').addEventListener('click', async ()=>{
-    // 분류 대기·예정 항목은 아직 손 안 댄 메모라 보고용 목록에는 의미가 적어
-    // 제외 — 오늘 처리·진행 중·완료(=실제로 다루고 있거나 다룬 업무)만 담는다.
-    // (시간·담당자 모드에서는 오늘 두 열(metoday/othtoday)이 같은 역할.
-    //  v2.5.1: 무시각 업무가 '오늘 외'로 가게 되면서, 손 댄(세부 일부 완료=시간 모드의
-    //  '진행 중' 상당) 업무가 오늘 외 열에 있어도 누락되지 않게 started 조건을 추가)
-    const started=it=>(it.subs||[]).some(s=>s.done);
-    const exportable=S.items.filter(it=>{const p=placeOf(it);
-      return it.done||['today','doing','metoday','othtoday'].includes(p)||(['meplan','othplan'].includes(p)&&started(it));});
-    if(!exportable.length){await appAlert('내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).');return;}
-    const fx=iso=>{ if(!iso)return''; const d=new Date(iso); if(isNaN(d))return'';
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
-    const rows=exportable.map(it=>{
-      const subs=it.subs||[];
-      return {
-        '구역':PLACE_NAME[placeOf(it)],
-        '메모':it.memo||'',
-        '관련인':(it.contacts||[]).map(c=>c.who).filter(Boolean).join(', '),
-        '관련소속':(it.contacts||[]).map(c=>c.org).filter(Boolean).join(', '),
-        '연락처':(it.contacts||[]).map(c=>c.phone).filter(Boolean).join(', '),
-        '이메일':(it.contacts||[]).map(c=>c.email).filter(Boolean).join(', '),   /* v3.5.0 선택 항목 — 없으면 빈 칸 */
-        '접수시각':fx((it.f||{}).received),
-        '기한':fx((it.f||{}).due),
-        '식별정보':(it.ids||[]).map(x=>`${x.kind}: ${x.val}`).join(' · '),
-        '하위 업무 진행':subs.length?`${subs.filter(s=>s.done).length}/${subs.length}`:'',
-        '하위 업무 내역':subs.map(s=>(s.done?'[완료] ':'')+s.title+(s.mid?` (점검 ${fx(s.mid)})`:'')).join(' · '),
-        '파일링크':(it.files||[]).join(' · ')
-      };
-    });
+    const items=S.items;
+    if(!exportableItems(items).length){await appAlert('내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).');return;}
     try{ await needXlsx(); }catch(e){ await appAlert('XLSX 저장 실패: '+e.message); return; }
-    const ws=XLSX.utils.json_to_sheet(rows); const cols=Object.keys(rows[0]);
-    ws['!cols']=cols.map(c=>({wch:Math.max(10,Math.min(46,rows.reduce((m,r)=>Math.max(m,String(r[c]||'').length*1.7),c.length*2)))}));
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'업무목록');
+    let bytes;
+    try{ bytes=Array.from(buildXlsx(XLSX, items, {now:new Date()})); }
+    catch(e){ await appAlert('XLSX 저장 실패: '+(e&&e.message||e)); return; }
     const n=new Date();
     const name=`뭐하려했더라_업무목록_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.xlsx`;
     // XLSX.writeFile()은 브라우저의 blob+<a download> 다운로드에 의존하는데,
     // Tauri 창은 그걸 받아줄 다운로드 관리자가 없어 조용히 아무 일도 안 일어난다
     // (JSON 백업도 같은 이유로 안 됐던 것과 동일한 원인) — 바이트를 직접 뽑아
-    // 네이티브 저장 대화상자로 넘긴다.
-    // F14: {type:'array'}는 이 SheetJS 빌드에서 length가 없는 순수 ArrayBuffer를
-    // 반환해 Array.from()이 조용히 빈 배열을 만들어버린다(= 0바이트 파일, "파일 형식
-    // 문제"로 안 열림) — Uint8Array로 감싸야 실제 바이트가 나온다.
-    const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
+    // 네이티브 저장 대화상자로 넘긴다. (F14: 바이트는 Uint8Array 로 받아 Array.from — buildXlsx 가 Uint8Array 를 돌려준다)
     try{
       const saved=await invoke('save_binary_file', {suggestedName:name, data:bytes});
       if(saved) showToast('XLSX 파일을 저장했습니다');

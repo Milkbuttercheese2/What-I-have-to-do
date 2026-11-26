@@ -7,6 +7,7 @@
    테스트 자료는 모두 지어낸 것이다. */
 import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
 import {setupEnv} from '../helpers/env.js';
 
 mock.timers.enable({apis:['setTimeout','setInterval']});
@@ -95,18 +96,20 @@ test('엑셀 내보내기 머리글: 기한 · 하위 업무 진행 · 하위 �
   const due = new Date(2026, 10, 3, 14, 5, 0, 0).toISOString();
   S.items.push(mk({memo:'내보낼 업무', done:true, doneAt:Date.now(), f:{due},
     subs:[{id:newId(), title:'서류 확인', mid:'', done:true, al:{}, owner:''}, {id:newId(), title:'회신', mid:'', done:false, al:{}, owner:''}]}));
-  let rows = null;
-  const X = {utils:{json_to_sheet:r=>{ rows=r; return {}; }, book_new:()=>({}), book_append_sheet:()=>{}}, write:()=>new Uint8Array([1]).buffer};
+  /* 진짜 SheetJS 로 만든 파일을 다시 읽어 '원자료' 시트의 머리글을 본다(2026-11-27 엑셀 내보내기 개편 — 시트 넷) */
+  const X = createRequire(import.meta.url)('../../src/vendor/xlsx.full.min.js');
   env.window.XLSX = X; globalThis.XLSX = X;
   let saved = null;
   env.onInvoke('save_binary_file', a => { saved = a; return true; });
   try{
     $('xlsx').click();
     await env.flush(8);
+    const wb = X.read(new Uint8Array(saved.data), {type:'array'});
+    const rows = X.utils.sheet_to_json(wb.Sheets['원자료']);
     assert.ok(rows && rows.length === 1, '한 줄');
-    assert.deepEqual(Object.keys(rows[0]),
+    assert.deepEqual(X.utils.sheet_to_json(wb.Sheets['원자료'], {header:1})[0],
       ['구역','메모','관련인','관련소속','연락처','이메일','접수시각','기한','식별정보','하위 업무 진행','하위 업무 내역','파일링크']);
-    for(const old of ['마감시각','세부진행','세부내역']) assert.ok(!(old in rows[0]), `옛 열 이름 ${old} 없음`);
+    for(const old of ['마감시각','세부진행','세부내역']) assert.ok(!JSON.stringify(X.utils.sheet_to_json(wb.Sheets['업무 목록'], {header:1})).includes(old) && !(old in rows[0]), `옛 열 이름 ${old} 없음`);
     assert.equal(rows[0]['기한'], '2026-11-03 14:05');
     assert.equal(rows[0]['하위 업무 진행'], '1/2');
     assert.equal(rows[0]['하위 업무 내역'], '[완료] 서류 확인 · 회신');
