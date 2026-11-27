@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v3.9.1-2a7c6e?style=flat-square" alt="version v3.9.1">
+  <img src="https://img.shields.io/badge/version-v3.9.2-2a7c6e?style=flat-square" alt="version v3.9.2">
   <img src="https://img.shields.io/badge/platform-Windows-2a7c6e?style=flat-square" alt="platform Windows">
   <img src="https://img.shields.io/badge/license-AGPL%20v3-2a7c6e?style=flat-square" alt="license AGPL v3">
 </p>
@@ -63,7 +63,7 @@
 
 ## 기능 전체
 
-v3.9.1에 있는 기능을 묶음 여덟으로 나눠 모두 적었습니다. 화면 그림은 모두 지어낸 예시 데이터입니다.
+v3.9.2에 있는 기능을 묶음 여덟으로 나눠 모두 적었습니다. 화면 그림은 모두 지어낸 예시 데이터입니다.
 
 [적기](#적기) · [정리하기](#정리하기) · [잊지 않기](#잊지-않기) · [다시 찾기](#다시-찾기) · [문서](#문서) · [넘기기](#넘기기) · [지키기](#지키기) · [내게 맞추기](#내게-맞추기)
 
@@ -229,8 +229,8 @@ v3.9.1에 있는 기능을 묶음 여덟으로 나눠 모두 적었습니다. �
 
 ## 받기
 
-1. [최신 릴리스](https://github.com/Milkbuttercheese2/What-I-have-to-do/releases/latest)에서 exe 파일(`wmhh-desktop-v3.9.1.exe`)을 받습니다.
-   저장소의 [`최종 프로그램 산출물/`](./최종%20프로그램%20산출물) 폴더에도 같은 버전의 exe(`뭐하려 했더라v3.9.1.exe`)가 있습니다.
+1. [최신 릴리스](https://github.com/Milkbuttercheese2/What-I-have-to-do/releases/latest)에서 exe 파일(`wmhh-desktop-v3.9.2.exe`)을 받습니다.
+   저장소의 [`최종 프로그램 산출물/`](./최종%20프로그램%20산출물) 폴더에도 같은 버전의 exe(`뭐하려 했더라v3.9.2.exe`)가 있습니다.
 2. 아무 폴더(바탕 화면, D 드라이브 등)에 두고 더블클릭합니다. 설치 과정이 없고 관리자 권한도 필요 없습니다.
 3. 예전 버전 exe가 있으면 지웁니다. 옛 exe를 다시 켜면 새 버전이 저장한 내용을 덮어쓸 수 있습니다.
 
