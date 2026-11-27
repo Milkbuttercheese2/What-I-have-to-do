@@ -1,11 +1,8 @@
 /* 엑셀로 내보내기 꾸러미(zip) 검사 도구 — tests/unit/xlsx-export*.test.js 가 함께 쓴다.
    엑셀이 엄격히 보는 구조(원소 순서·꾸밈 수·관계·내용 형식·틀 고정 짝·줄 높이·글자 한도)를 본다. */
 import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
 import {JSDOM} from 'jsdom';
-
-const require = createRequire(import.meta.url);
-const XLSX = require('../../src/vendor/xlsx.full.min.js');
+import XLSX from './xlsx-lib.js';
 
 /* ---- 꾸러미 읽기 도구 ---- */
 /* zip 중앙 디렉터리에서 항목 이름을 직접 읽는다(CFB.read 는 읽을 때 표지 항목을 스스로 끼워 넣으므로 쓰지 않는다) */

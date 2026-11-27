@@ -3,10 +3,8 @@
    이 PC 에는 엑셀이 없어 진짜 엑셀로 열어 볼 수 없다 — 그래서 규격을 테스트로 지킨다. */
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
+import XLSX from '../helpers/xlsx-lib.js';
 
-const require = createRequire(import.meta.url);
-const XLSX = require('../../src/vendor/xlsx.full.min.js');
 const X = await import('../../src/xlsx-export.js');
 const {setPlaceMode, placeOf, PLACE_NAME} = await import('../../src/placement.js');
 

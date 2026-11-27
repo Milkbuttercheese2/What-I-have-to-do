@@ -4,10 +4,8 @@
    자료는 모두 지어낸 것이다. */
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
+import XLSX from '../helpers/xlsx-lib.js';
 
-const require = createRequire(import.meta.url);
-const XLSX = require('../../src/vendor/xlsx.full.min.js');
 const X = await import('../../src/xlsx-export.js');
 const {setPlaceMode, placeOf, PLACE_NAME} = await import('../../src/placement.js');
 const {checkPackage} = await import('../helpers/xlsx-package.js');

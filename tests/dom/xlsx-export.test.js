@@ -1,13 +1,11 @@
 /* 설정 → 데이터 → [엑셀로 내보내기] 연결 — 버튼을 누르면 xlsx-export.js 가 만든 바이트가 save_binary_file 로 간다 */
 import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
 import {setupEnv} from '../helpers/env.js';
+import XLSX from '../helpers/xlsx-lib.js';
 
 mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
-const require = createRequire(import.meta.url);
-const XLSX = require('../../src/vendor/xlsx.full.min.js');
 env.window.XLSX = XLSX; globalThis.XLSX = XLSX;
 const {S} = await import('../../src/state.js');
 const {initBackup} = await import('../../src/backup.js');

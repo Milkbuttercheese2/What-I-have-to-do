@@ -7,8 +7,8 @@
    테스트 자료는 모두 지어낸 것이다. */
 import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
 import {setupEnv} from '../helpers/env.js';
+import XLSX from '../helpers/xlsx-lib.js';
 
 mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
@@ -97,7 +97,7 @@ test('엑셀 내보내기 머리글: 기한 · 하위 업무 진행 · 하위 �
   S.items.push(mk({memo:'내보낼 업무', done:true, doneAt:Date.now(), f:{due},
     subs:[{id:newId(), title:'서류 확인', mid:'', done:true, al:{}, owner:''}, {id:newId(), title:'회신', mid:'', done:false, al:{}, owner:''}]}));
   /* 진짜 SheetJS 로 만든 파일을 다시 읽어 '원자료' 시트의 머리글을 본다(2026-11-27 엑셀 내보내기 개편 — 시트 넷) */
-  const X = createRequire(import.meta.url)('../../src/vendor/xlsx.full.min.js');
+  const X = XLSX;
   env.window.XLSX = X; globalThis.XLSX = X;
   let saved = null;
   env.onInvoke('save_binary_file', a => { saved = a; return true; });
