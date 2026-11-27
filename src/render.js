@@ -4,7 +4,7 @@
 import {S, toggleDone, markDoneRemoved} from './state.js';
 import {STORE, invoke, openPath, revealPath} from './store.js';
 import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
-import {doneGroupOf, groupOpenByDefault} from './done-weeks.js';
+import {doneGroupOf, groupOpenByDefault, weekStart} from './done-weeks.js';
 import {fmtDue, fmtT} from './datetime.js';
 import {placeOf, placeMode} from './placement.js';
 import {textMatch} from './filters.js';
@@ -286,21 +286,26 @@ export function renderDone(){
   const list=matched.filter(it=>dcalDay==null ? inMonth(it) : (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
   $('done-count').textContent=all.length;
   const now=Date.now();
+  /* 라운드 2 성능: 묶음 열쇠만 먼저 구한다 — doneGroupOf 와 같은 규칙(오늘 0시·이번 주 월요일 0시 기준)이고, 이름표(날짜 글)는
+     묶음마다 한 번만 doneGroupOf 로 만든다. 예전엔 완료 업무마다 이름표까지 만들어(요약 숫자용으로 한 번, 묶음용으로 또 한 번)
+     완료 1만 건에서 검색 글자 하나·탭 열기마다 그만큼 들었다. */
+  const d0=new Date(now); d0.setHours(0,0,0,0); const today0=d0.getTime(), wk0=weekStart(now);
+  const gkey=t=>!t ? 'nodate' : t>=today0 ? 'today' : t>=wk0 ? 'week' : `w${weekStart(t)}`;
   const dm=$('done-metrics');
   if(dm){
-    const g=all.map(it=>doneGroupOf(it.doneAt, now).key);
-    const n=k=>g.filter(x=>x===k).length;
+    let nT=0, nW=0;
+    for(const it of all){ const k=gkey(it.doneAt); if(k==='today') nT++; else if(k==='week') nW++; }
     /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
-    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
+    dm.innerHTML=`<span class="m-ok"><b>${nT}</b>오늘</span><span><b>${nT+nW}</b>이번 주</span>`;
   }
   const mName=`${dcalY}년 ${dcalM+1}월`;
   const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 완료한 업무 <b class="num">${list.length}</b>건</div>` : '';
   if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 완료한 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
-    const g=doneGroupOf(it.doneAt, now);
-    let grp=byKey.get(g.key);
-    if(!grp){ grp=Object.assign({items:[]}, g); groups.push(grp); byKey.set(g.key, grp); }
+    const k=gkey(it.doneAt);
+    let grp=byKey.get(k);
+    if(!grp){ grp=Object.assign({items:[]}, doneGroupOf(it.doneAt, now)); groups.push(grp); byKey.set(k, grp); }
     grp.items.push(it);
   }
   groups.sort((a,b)=>b.order-a.order);

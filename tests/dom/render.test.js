@@ -256,3 +256,20 @@ test('라운드 2 성능: 바뀐 것 없이 다시 그리면 요약 숫자·칸 
   search.value = ''; search.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);
   assert.equal($('c-inbox').textContent, '1', '검색을 지우면 그대로 돌아온다');
 });
+
+test('라운드 2 성능: 완료 묶음 열쇠·요약 숫자가 doneGroupOf 와 같다(오늘 0시·월요일 0시 경계 포함)', async () => {
+  const {doneGroupOf, weekStart} = await import('../../src/done-weeks.js');
+  await env.resetS(); S.loaded = true;
+  const now = Date.now(), d0 = new Date(now); d0.setHours(0,0,0,0);
+  const marks = [now, d0.getTime(), d0.getTime()-1, weekStart(now), weekStart(now)-1, weekStart(now)-7*864e5, weekStart(now)-7*864e5-1, null, 0];
+  for(let k=0;k<40;k++) marks.push(now - k*20*36e5);
+  marks.forEach((t,i)=>S.items.push(mk({memo:'완료'+i, done:true, doneAt:t})));
+  const keys = new Map(); let nT=0, nW=0;
+  for(const t of marks){ const g=doneGroupOf(t, now); keys.set(g.key, (keys.get(g.key)||0)+1); if(g.key==='today') nT++; if(g.key==='week') nW++; }
+  renderDone();
+  const shown = new Map([...$('col-done').querySelectorAll('.done-group')].map(s=>[s.dataset.group, Number(s.querySelector('.dg-head .count').textContent)]));
+  assert.deepEqual([...shown.entries()].sort(), [...keys.entries()].sort(), '묶음 열쇠·건수가 같다');
+  assert.equal($('done-metrics').textContent, `${nT}오늘${nT+nW}이번 주`);
+  const labels = [...$('col-done').querySelectorAll('.done-group')].map(s=>[s.dataset.group, s.querySelector('.dg-label').textContent]);
+  for(const [k,l] of labels){ const t=marks.find(x=>doneGroupOf(x, now).key===k); assert.equal(l, doneGroupOf(t, now).label); }
+});
