@@ -5,7 +5,7 @@ import {setupEnv} from '../helpers/env.js';
 
 mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
-const {S} = await import('../../src/state.js');
+const {S, toggleDone} = await import('../../src/state.js');
 const {reconcileImported, initBackup} = await import('../../src/backup.js');
 const {initPresets} = await import('../../src/presets.js');
 initPresets();     // reconcileImported → renderPresets 경로에 프리셋 초기화 필요
@@ -265,6 +265,30 @@ test('시작 읽기 실패 세션에서 적은 메모(저장된 적 없음)는 J
   $('bkImp').click();
   await env.flush(8);
   assert.deepEqual(S.items.map(x=>x.id), [7]);
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
+/* 점검 라운드 5(독립 검토 01 확정 1): 위 규칙이 완료로 체크한 업무에서는 덜 고쳐져 있었다 — 복원이 S.doneDirty 를 비우는 것이
+   붙이기 뒤라, 증분 저장(완료 업무는 doneDirty 에 있어야 보낸다)이 그 업무를 빼고 보냈다 → DB 에 없음 → 다음 시작에 사라짐. */
+test('시작 읽기 실패 세션에서 적고 그 세션에서 완료한 업무도 JSON 복원 뒤 저장에 실린다(옛 완료 표시는 비운다)', async () => {
+  await env.resetS();                                  // loaded=false = 첫 읽기 실패
+  S.doneDirty.clear();
+  S.doneDirty.add(55);                                 // 복원 전 데이터를 가리키던 옛 표시 — 복원 뒤 deletedDone 으로 나가면 안 된다
+  const it = {id:99, memo:'잠긴 동안 적고 끝낸 업무', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}};
+  S.items.push(it);
+  toggleDone(it);                                      // 카드의 ○ — 저장은 F1 게이트로 조용히 돌아간다
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:4}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.deepEqual(S.items.map(x=>x.id), [7, 99], '화면에는 붙어 있다');
+  const last = env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args;
+  assert.deepEqual(last.items.map(x=>x.id), [7, 99], '완료한 업무 99 도 저장에 실린다');
+  assert.equal(last.items.find(x=>x.id===99).done, true);
+  assert.deepEqual(last.deletedDone, [], '옛 완료 표시(55)는 비워져 지우기로 나가지 않는다');
   env.onInvoke('backup_import', () => null);
   env.onInvoke('save_all', () => undefined);
 });

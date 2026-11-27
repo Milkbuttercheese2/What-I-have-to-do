@@ -143,6 +143,10 @@ export function initBackup(){
          '완료 업무 변경 표시'는 이제 없는 데이터를 가리키므로 반드시 비운다 — 남겨두면
          다음 저장에서 deletedDone 으로 나가 **id 가 겹치는 엉뚱한 완료 업무를 지운다.** */
       S.doneDirty.clear();
+      /* 위에서 붙인 저장된 적 없는 업무 가운데 완료한 것은 다시 표시한다 — 증분 저장은 완료 업무를 doneDirty 에 있을 때만 보내므로,
+         빼면 화면에는 있는데 DB 에 들어가지 않아 다음 시작에 사라진다(첫 읽기는 doneDirty 를 비우지 않아 그대로 저장된다).
+         이 업무들은 복원분과 id 가 겹치지 않는 것만 골랐으니 위 ⚠️(엉뚱한 업무 지우기)에 걸리지 않는다. */
+      for(const p of unsaved) if(p.done) S.doneDirty.add(p.id);
       S.imported.fields=payload.fields;
       S.imported.presets=payload.presets;
       S.imported.idKinds=payload.idKinds;
