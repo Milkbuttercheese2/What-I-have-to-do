@@ -184,7 +184,11 @@ export function shareModel(d, ctx){
    미리 보기(DOM)와 나가는 그림(SVG foreignObject 속 XHTML)이 이 함수 하나에서 나온다.
    XHTML 로도 읽혀야 하므로: 빈 요소(<br> 등)를 쓰지 않고, &nbsp; 같은 HTML 전용 이름을 쓰지 않는다.
    controls=true 면 접힌 칸마다 [펼치기]/[접기] 단추를 넣는다(미리 보기 창에서만 — 그림에는 싣지 않는다). */
-const E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* XML 1.0 에 못 쓰는 글자(탭·줄바꿈을 뺀 제어 문자, U+FFFE·U+FFFF, 짝 없는 서로게이트)는 뺀다 — 하나라도 있으면 SVG 를 그림으로
+   읽지 못해(짝 없는 서로게이트는 data: 주소로 바꾸다 URIError) [그림 복사]·[파일로 저장]이 통째로 실패했다(워드에서 붙여 넣은 세로 탭 등).
+   보이지 않는 글자라 미리 보기에서도 같이 빼 둘이 같게 둔다. (엑셀 내보내기 xlsx-export.js cleanText 와 같은 규칙) */
+const XML_BAD=/[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+const E=s=>String(s??'').replace(XML_BAD,'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function lines(arr){ return arr.map(l=>`<div class="shl">${l.trim()?E(l):'​'}</div>`).join(''); }
 function moreChip(m){ return m && m.label ? `<div class="shc-more"><span>${E(m.label)}</span></div>` : ''; }
 function foldBtn(m, controls){

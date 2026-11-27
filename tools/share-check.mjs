@@ -170,6 +170,20 @@ await page.click('#share-contacts'); await page.waitForTimeout(100);
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);
 ok(await page.evaluate(() => !document.getElementById('shareModal').classList.contains('on') && document.getElementById('formPanel').classList.contains('on')), 'ESC: 미리 보기만 닫히고 양식으로');
 
+/* XML 에 못 쓰는 글자(워드에서 붙여 넣은 세로 탭·제어 문자·짝 없는 서로게이트)가 든 메모도 그림이 나온다
+   (예전엔 "그림을 만들지 못했습니다: The source image cannot be decoded" / "URI malformed") */
+await openForm({...BASE, id: 9004}); await page.waitForTimeout(200);
+await page.evaluate(() => { const m = document.getElementById('fm-memo');
+  m.value = '워드에서 붙여 넣은 글' + String.fromCharCode(11) + '둘째 줄\n제어' + String.fromCharCode(1, 12, 31) + ' 문자\n반쪽 ' + String.fromCharCode(0xD83D) + ' 이모지';
+  m.dispatchEvent(new Event('input', {bubbles: true})); });
+await page.click('#fm-share'); await page.waitForTimeout(300);
+await page.evaluate(() => { window.__saved = []; document.getElementById('share-save').click(); });
+const badOk = await page.waitForFunction(() => window.__saved.length > 0 || document.getElementById('appDialog')?.classList.contains('on'), null, {timeout: 30000})
+  .then(() => page.evaluate(() => window.__saved.length > 0 ? 'PNG' : document.getElementById('dlg-msg').textContent));
+ok(badOk === 'PNG', `XML 에 못 쓰는 글자(세로 탭·제어 문자·짝 없는 서로게이트)가 든 메모도 그림이 나온다 (${badOk})`);
+await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+if (badOk !== 'PNG') { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+
 /* ── 긴 업무(관련인 5명·하위 업무 7개·구역 셋) — 접기와 펼치기 ── */
 const LONG = {id: 9002, memo: '청사 전기설비 유지관리 용역 장기계속 2차 계약\n1차 계약이 12월 말에 끝나 2차 계약을 맺어야 합니다. 과업지시서 변경분과 노임단가 조정이 걸려 있습니다.\n[검토할 것]\n과업지시서 3장 점검 주기 변경이 계약금액에 주는 영향\n노임단가 조정률 산출 근거와 적용 시점\n1차 계약 정산분과 2차 착수 시점이 겹치는지\n장기계속계약 차수별 계약금액 배분\n하자담보책임기간 승계 여부\n[통화 내용]\n운영지원과 윤소이 주무관: 과업지시서 수정본은 다음 주 월요일까지.\n재무과 최민재 사무관: 노임단가 조정은 내년 1월 공표 기준으로.\n[참고]\n2025년 1차 계약 결과 보고(계약번호 2025-0412)',
   f: {received: at(-3, 9, 30), due: at(0, now.getHours() + 1, 0)},

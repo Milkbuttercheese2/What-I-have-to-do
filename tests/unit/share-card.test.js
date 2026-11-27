@@ -204,6 +204,27 @@ test('[글자로 복사]는 접지 않고 전부 싣는다', () => {
   assert.ok(!t.includes('외 '), '"외 N명" 표시가 없다');
 });
 
+test('마크업은 그림(SVG 속 XHTML)으로도 읽힌다 — XML 에 못 쓰는 글자(제어 문자·짝 없는 서로게이트·U+FFFE)가 든 업무도', async () => {
+  /* 예전엔 메모에 세로 탭(워드에서 붙여 넣은 줄바꿈 \v) 같은 제어 문자가 하나라도 있으면 SVG 를 그림으로 읽지 못해
+     [그림 복사]·[파일로 저장]이 "그림을 만들지 못했습니다"로 실패했고, 짝 없는 서로게이트는 주소 꼴로 바꾸다 URIError 가 났다 */
+  const bad = '\u0000\u0001\u0008\u000b\u000c\u000e\u001f￾￿\ud83d';
+  const d = {memo:`제목${bad}\n본문 세로탭\u000b다음${bad}\n[구역${bad}]\n구역 글${'\udc00'}`,
+    f:{received:T(26,9,10), x:T(27,9,0)},
+    contacts:[{who:`김${bad}`, org:`과${bad}`, phone:`02${bad}`, email:''}], ids:[{kind:`종류${bad}`, val:`값${bad}`}],
+    subs:[{title:`하위${bad}`, mid:'', done:false, owner:`담당${bad}`}]};
+  const fields = [...FIELDS, {key:'x', label:`사용자 칸${bad}`}];
+  const {JSDOM} = await import('jsdom');
+  const dp = new (new JSDOM('')).window.DOMParser();
+  for (const controls of [false, true]) {
+    const html = shareHtml(shareModel(d, ctx({fields, withContacts:true})), {controls});
+    assert.doesNotMatch(html, /[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/u, 'XML 1.0 에 못 쓰는 글자가 남지 않음');
+    assert.doesNotThrow(() => encodeURIComponent(html), '주소 꼴(data:)로 바꿀 수 있음');
+    const doc = dp.parseFromString(`<div xmlns="http://www.w3.org/1999/xhtml">${html}</div>`, 'application/xml');
+    assert.equal(doc.getElementsByTagName('parsererror').length, 0, 'XML 로 읽힘');
+    assert.ok(doc.documentElement.textContent.includes('본문 세로탭다음'), '글은 그대로(못 쓰는 글자만 빠짐)');
+  }
+});
+
 test('날짜 꼴과 파일 이름', () => {
   assert.equal(fmtLong(T(28,14,0)), '2026/11/28 (토) 14:00');
   assert.equal(fmtShort(T(27,16,0)), '11/27(금) 16:00');
