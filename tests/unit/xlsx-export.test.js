@@ -1,7 +1,7 @@
 /* 엑셀로 내보내기(xlsx-export.js) — 만든 바이트를 SheetJS 로 다시 읽어 값·병합·열 너비를 보고,
    꾸러미(zip) 안의 XML 을 직접 읽어 엑셀이 엄격히 보는 구조(원소 순서·꾸밈 수·관계·내용 형식)를 본다.
    이 PC 에는 엑셀이 없어 진짜 엑셀로 열어 볼 수 없다 — 그래서 규격을 테스트로 지킨다. */
-import {test} from 'node:test';
+import {test, mock} from 'node:test';
 import assert from 'node:assert/strict';
 import XLSX from '../helpers/xlsx-lib.js';
 
@@ -9,6 +9,9 @@ const X = await import('../../src/xlsx-export.js');
 const {setPlaceMode, placeOf, PLACE_NAME} = await import('../../src/placement.js');
 
 const NOW = new Date(2026, 10, 27, 15, 20);
+/* 보드 칸 나누기(placement.js placeOf)는 opts.now 가 아니라 지금 시각(new Date())으로 '오늘'을 정한다 — 실제 날짜가 NOW 와 다르면
+   (예: 2026-11-28 에 돌리면 11/28 기한이 '오늘 처리'로) 구역 줄 수가 달라져 날마다 결과가 바뀌었다. 이 파일의 시계를 NOW 로 고정한다 */
+mock.timers.enable({apis:['Date'], now:NOW.getTime()});
 const T = (d, h, m=0) => new Date(2026, 10, d, h, m).toISOString();
 
 const {zipNames, unzipText, parseXml, checkPackage} = await import('../helpers/xlsx-package.js');
