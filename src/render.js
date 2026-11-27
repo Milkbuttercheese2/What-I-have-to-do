@@ -11,7 +11,7 @@ import {textMatch} from './filters.js';
 import {recurLabel} from './recur.js';
 import {linkifyAt} from './phonebook-core.js';
 import {mergeItems} from './merge.js';
-import {openForm} from './form.js';
+import {openForm, mergeDrafts, editDrafts} from './form.js';
 import {renderCal} from './calendar.js';
 import {renderNote as renderDocNotes} from './docs.js';
 import {registerView, refreshView} from './views.js';
@@ -367,6 +367,10 @@ function mergeCards(targetId, sourceId){
   const beforeT=JSON.parse(JSON.stringify(t));            // 실행 취소용 원본 보관
   const beforeS=JSON.parse(JSON.stringify(s));
   const srcIdx=S.items.indexOf(s);
+  /* 점검 라운드 3: 어느 쪽이든 임시저장분(양식에 쓰다 저장하지 않고 닫은 것)이 있으면 받는 쪽 임시저장분도 같은 규칙으로 합친다.
+     그대로 두면 받는 쪽 양식을 열 때 합치기 전 사본이 되살아나 [저장] 한 번에 끌려온 업무의 메모·관련인·하위 업무가 사라지고
+     (끌려온 업무는 이미 지워졌다), 끌려온 쪽 임시저장분은 주인 없이 버려졌다. */
+  const undoDrafts=mergeDrafts(t, s, mergeItems);
   S.items[S.items.indexOf(t)]=mergeItems(t,s);
   S.items.splice(S.items.indexOf(s),1);
   persist();
@@ -374,6 +378,7 @@ function mergeCards(targetId, sourceId){
     const i=S.items.findIndex(x=>x.id===targetId);
     if(i>=0) S.items[i]=beforeT; else S.items.push(beforeT);
     if(!S.items.some(x=>x.id===sourceId)) S.items.splice(Math.min(srcIdx,S.items.length),0,beforeS);
+    undoDrafts();
     persist();
   });
 }
@@ -476,9 +481,12 @@ export function initRender(){
     if(ds){ e.stopPropagation(); const it=S.items.find(x=>x.id==ds.dataset.item);
       const i=it ? (it.subs||[]).findIndex(s=>s.id==ds.dataset.delsub) : -1;
       if(i<0||it.done) return;
-      const removed=it.subs[i]; it.subs.splice(i,1); persist();
+      const removed=it.subs[i]; it.subs.splice(i,1);
+      /* 임시저장분에 같은 하위 업무가 있으면 거기서도 뺀다 — 남기면 양식을 열어 [저장]할 때 지운 줄이 되살아난다(form.js editDrafts) */
+      const undoDraft=editDrafts([it.id], d=>{ const subs=(d.subs||[]).filter(x=>x.id!==removed.id); return subs.length===(d.subs||[]).length ? undefined : {...d, subs}; });
+      persist();
       showToast('하위 업무 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
-        cur.subs.splice(Math.min(i,cur.subs.length),0,removed); persist(); });
+        cur.subs.splice(Math.min(i,cur.subs.length),0,removed); undoDraft(); persist(); });
       return; }
     /* v3.6.0: 완료 업무는 읽기 전용으로 연다 — 저장이 완료 업무 행을 다시 쓰지 않으므로
        여기서 고치면 그 변경이 조용히 사라진다. 고치려면 [되살려서 수정]으로 먼저 되살린다. */

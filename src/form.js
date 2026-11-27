@@ -121,6 +121,67 @@ function dropDraft(key){
   markDraft(0);
 }
 
+/* ── 양식 밖에서 업무가 바뀔 때 임시저장분도 함께 (점검 라운드 3) ──────────────────────────
+   임시저장분은 양식 칸 전부(메모·시각·관련인·식별정보·하위 업무·링크)의 사본이다. 메모 합치기·인물 바꾸기·카드에 파일 놓기·
+   캘린더의 하위 업무 지우기·문서 탭의 링크 고치기처럼 양식을 거치지 않고 업무가 바뀌면, 다음에 그 업무 양식을 열 때 바뀌기 전
+   사본이 되살아나 [저장] 한 번에 그 변경을 되돌렸다 — 합치기는 끌려온 업무가 이미 지워져 그 메모가 영영 사라졌다.
+   그래서 그 길들이 같은 변경을 임시저장분에도 한다. fn(data, key) 가 새 data 를 돌려주면 바꾸고, null 이면 지우고, undefined 면 그대로.
+   keys 를 주지 않으면 모든 임시저장분. 돌려주는 함수를 부르면 바꾸기 전으로 되돌린다(각 길의 [실행 취소]). */
+export function editDrafts(keys, fn){
+  const d=drafts(), before={};
+  for(const k of (keys ? keys.map(String) : Object.keys(d))){
+    const dr=d[k]; if(!dr || !dr.data || k in before) continue;
+    const nx=fn(dr.data, k);
+    if(nx===undefined) continue;
+    before[k]=dr;
+    if(nx===null) delete d[k]; else d[k]={...dr, data:nx};
+    if(k===draftKey) lastWritten=null;
+  }
+  const keysChanged=Object.keys(before);
+  if(keysChanged.length) persistDrafts();
+  return ()=>{
+    if(!keysChanged.length) return;
+    const d2=drafts();
+    for(const k of keysChanged) d2[k]=before[k];
+    persistDrafts();
+  };
+}
+/* 업무 → 임시저장분 모양(collectForm 이 돌려주는 칸만, 같은 순서) */
+const formShape = x => ({memo:x.memo||'', f:x.f||{}, contacts:x.contacts||[], ids:x.ids||[], subs:x.subs||[], files:x.files||[]});
+/* 메모 합치기(render.js mergeCards)가 부른다 — 받는 쪽(t)·끌려온 쪽(s) 어느 한쪽에라도 임시저장분이 있으면, 받는 쪽 임시저장분을
+   '두 쪽의 임시저장분(없으면 저장본)을 같은 규칙(merge)으로 합친 것'으로 두고 끌려온 쪽 것은 지운다. 돌려주는 함수 = 실행 취소. */
+export function mergeDrafts(t, s, merge){
+  const d=drafts(), kT=String(t.id), kS=String(s.id);
+  const dT=d[kT]&&d[kT].data, dS=d[kS]&&d[kS].data;
+  if(!dT && !dS) return ()=>{};
+  const before={[kT]:d[kT], [kS]:d[kS]};
+  d[kT]={at:Date.now(), data:formShape(merge(dT?{...t, ...dT}:t, dS?{...s, ...dS}:s))};
+  delete d[kS];
+  if(kT===draftKey || kS===draftKey) lastWritten=null;
+  persistDrafts();
+  return ()=>{
+    const d2=drafts();
+    for(const k of [kT, kS]){ if(before[k]) d2[k]=before[k]; else delete d2[k]; }
+    persistDrafts();
+  };
+}
+/* 지금 열린 양식의 링크 칸 경로를 바꾼다(문서 탭이 파일·폴더를 옮겼을 때 — 옆 칸 양식이 열려 있을 수 있다). map(path) 가 새 경로 또는 그대로.
+   양식이 저장본과 같았으면(고친 것 없음) 기준선도 새 경로로 옮겨, 바꾼 것 없는 양식이 '고친 양식'이 되지 않게 한다. */
+export function mapFormFiles(map){
+  if(!$('formPanel').classList.contains('on')) return 0;
+  let clean=false; try{ clean = baseline!=null && JSON.stringify(collectForm())===baseline; }catch{}
+  let n=0;
+  $('fm-files').querySelectorAll('.ffile-row').forEach(row=>{
+    const inp=row.querySelector('.ffile-path'), v=inp.value.trim(), nv=map(v);
+    if(!v || !nv || nv===v) return;
+    inp.value=nv; const l=row.querySelector('.ffile-link'); if(l) l.textContent=fileName(nv)||'(경로 없음)';
+    n++;
+  });
+  if(n && clean) baseline=JSON.stringify(collectForm());
+  if(n) scheduleDraft();
+  return n;
+}
+
 /* 양식 패널을 팝업 스택에 올린다 — 여는 경로가 둘(읽기 전용·일반)이라 한 곳으로 모은다.
    close 는 closeForm (초안 플러시가 딸려 있어 그냥 감추면 안 된다),
    save 는 자기 저장 버튼 — 예전엔 main.js 가 $('fm-save').click() 으로 남의 버튼을

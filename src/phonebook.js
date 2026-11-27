@@ -14,6 +14,7 @@ import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigit
    render→form→phonebook→render 순환이지만 함수 호출만 오가므로(최상위 사용 없음) 안전하다 —
    CLAUDE.md 규칙 1(기능 모듈은 hoisted 함수 + init*() 만)이 지켜지는 동안. */
 import {persist, dAt} from './render.js';
+import {editDrafts} from './form.js';
 import {registerView} from './views.js';
 import {openModal, closeModal} from './modals.js';
 
@@ -362,6 +363,9 @@ function applySwap(){
     if(after.done) S.doneDirty.add(after.id);               // 완료 업무도 다시 써야 한다(위 ⚠️)
   }
   if(delFrom) S.phonebook=S.phonebook.filter(x=>x.id!==from.id);
+  /* 임시저장분(쓰다 닫은 양식)에도 같은 바꾸기를 — 안 하면 그 양식을 열어 [저장]할 때 옛 사람이 되살아나고(전화번호부에도 다시 들어간다)
+     메모의 @태그도 옛 이름으로 돌아간다(form.js editDrafts) */
+  const undoDrafts=editDrafts(null, d=>swapPersonIn(d, from, to)||undefined);
   closeSwap();
   persist(); savePb(); renderPhonebook();
   showToast(`업무 ${plan.length}건의 관련인을 바꿨습니다`,()=>{
@@ -369,6 +373,7 @@ function applySwap(){
       const i=S.items.findIndex(x=>x.id===sn.id);
       if(i>=0){ S.items[i]=sn.copy; if(sn.copy.done||S.items[i].done) S.doneDirty.add(sn.id); }
     }
+    undoDrafts();
     S.phonebook=pbBefore;
     persist(); savePb(); renderPhonebook();
   });

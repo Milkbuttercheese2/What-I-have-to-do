@@ -1221,6 +1221,32 @@ test('바깥(탐색기)에서 바꾼 이름: doc-renamed 알림 → 트리·선�
   assert.deepEqual(live.files, ['X:\\감시\\새 폴더\\보고서.txt']);
 });
 
+/* 점검 라운드 3: 링크를 고칠 때 임시저장분(쓰다 닫은 양식)과 지금 열린 양식(옆 칸)의 링크 칸도 같이 — 예전엔 그 양식을 [저장]하면
+   옛 경로가 되돌아와 링크가 다시 깨졌다(업무 링크만 고치고 양식 쪽 사본은 그대로였다). (initForm 은 위 '[＋ 메모]' 테스트가 했다) */
+test('이름 바뀜으로 링크를 고칠 때 임시저장분과 열린 양식의 링크도 새 경로로 — [저장]해도 옛 경로가 돌아오지 않는다', async () => {
+  const {openForm, closeForm} = await import('../../src/form.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['X:\\감시'];
+  let lists={'0:':[{name:'옛 폴더',rel:'옛 폴더',dir:true,size:0,mtime:1}], '0:옛 폴더':[{name:'보고서.txt',rel:'옛 폴더/보고서.txt',dir:false,size:1,mtime:1}]};
+  fakeFs(()=>lists);
+  const shut=mk({memo:'쓰다 닫음', files:['X:\\감시\\옛 폴더\\보고서.txt']});
+  const open=mk({memo:'열린 양식', files:['X:\\감시\\옛 폴더\\보고서.txt', 'C:\\딴곳\\a.txt']});
+  S.items.push(shut, open);
+  S.settings.formDrafts={[String(shut.id)]:{at:1, data:{memo:'쓰다 닫음 + 고침', f:{}, contacts:[], ids:[], subs:[], files:['X:\\감시\\옛 폴더\\보고서.txt']}}};
+  await openDocs();
+  openForm(open, {dock:true}); await env.flush(4);
+  lists={'0:':[{name:'새 폴더',rel:'새 폴더',dir:true,size:0,mtime:1}], '0:새 폴더':[{name:'보고서.txt',rel:'새 폴더/보고서.txt',dir:false,size:1,mtime:1}]};
+  env.fireEvent('wmhh://doc-renamed', {root:0, base:'X:\\감시', from:'옛 폴더', to:'새 폴더'}); await env.flush(14);
+  assert.deepEqual(S.settings.formDrafts[String(shut.id)].data.files, ['X:\\감시\\새 폴더\\보고서.txt'], '임시저장분');
+  assert.equal(S.settings.formDrafts[String(shut.id)].data.memo, '쓰다 닫음 + 고침', '나머지는 그대로');
+  assert.deepEqual([...doc.querySelectorAll('#fm-files .ffile-path')].map(i=>i.value), ['X:\\감시\\새 폴더\\보고서.txt', 'C:\\딴곳\\a.txt'], '열린 양식');
+  assert.equal(doc.querySelector('#fm-files .ffile-link').textContent, '보고서.txt');
+  click($('fm-save')); await env.flush(4);
+  assert.deepEqual(open.files, ['X:\\감시\\새 폴더\\보고서.txt', 'C:\\딴곳\\a.txt'], '[저장]해도 옛 경로가 돌아오지 않는다');
+  assert.equal(S.settings.formDrafts[String(open.id)], undefined, '고친 것 없던 양식은 임시저장분을 남기지 않는다');
+  closeForm();
+});
+
 test('문서 폴더 자체 이름: 바깥(doc-root-moved)·앱 안(맨 위 줄 이름 바꾸기 → doc_rename_root) 모두 목록·업무 링크가 따라간다', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.docRoots=['W:\\팀\\가'];
