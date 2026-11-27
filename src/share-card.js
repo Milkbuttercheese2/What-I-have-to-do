@@ -244,7 +244,7 @@ export function shareHtml(model, opts){
       sec('', head('식별정보', b.more, controls)+`<div class="shc-kv">${b.rows.map(r=>`<span class="k">${E(r.kind)}</span><span class="v">${E(r.val)}</span>`).join('')}</div>`+moreChip(b.more));
     } else if(b.kind==='people'){
       sec('', head('관련소속 · 관련인', b.more, controls, b.total>SHARE_LIMITS.people?`${b.total}명`:'')
-        +`<div class="shc-kv">${b.rows.map(r=>`<span class="k">${E(r.org)}</span><span class="v"><b>${E(r.who)}</b>${r.extra?`<small> · ${E(r.extra)}</small>`:''}</span>`).join('')}</div>`+moreChip(b.more));
+        +`<div class="shc-kv">${b.rows.map(r=>`<span class="k">${E(r.org)}</span><span class="v"><span class="who">${E(r.who)}</span>${r.extra?`<small> · ${E(r.extra)}</small>`:''}</span>`).join('')}</div>`+moreChip(b.more));
     }
   }
   out.push(`</div><div class="shc-ft"><span>${E(model.foot.left)}</span><span>${E(model.foot.right)}</span></div></div></div>`);
@@ -259,7 +259,7 @@ export const SHARE_TOKENS={ink:'#131a24','ink-soft':'#687284','ink-2':'#3a4453',
    글자 색은 두 가지뿐(2026-11-28 소유자 지정): 본문(메모 제목·메모 본문·구역 본문·하위 업무 제목) = 검정(--sh-ink),
    그 밖(항목명·구역 제목·식별정보 이름과 값·관련소속·관련인·연락처·접수시각·기한·하위 업무 시각·맨 위 기준 시각·바닥줄) = 회색 하나(--sh-ink-soft,
    흰 바탕 대비 4.85:1 · 바닥줄 바탕 --sh-sunk 위 4.57:1 · 알약(--sh-chip-bg) 위 4.21:1). 색으로 강조하는 것은 임박한 기한의 붉은 표시 하나.
-   관련인 이름은 굵기(600)로만 구별. */
+   관련인 이름도 소속과 같은 회색·보통 굵기(소유자 지정 — 굵은 표시 없음). */
 export const SHARE_W=480+16*2;
 export function shareCss(fontFamily){
   const v=Object.entries(SHARE_TOKENS).map(([k,x])=>`--sh-${k}:${x}`).join(';');
@@ -299,7 +299,6 @@ text-align:left;line-height:normal;letter-spacing:0;font-size:13px;font-weight:4
 .shc-kv{display:grid;grid-template-columns:minmax(0,110px) minmax(0,1fr);gap:2px 10px;font-size:13px;line-height:1.6;margin-top:4px;font-variant-numeric:tabular-nums}
 .shc-kv .k{color:var(--sh-ink-soft);overflow-wrap:anywhere}
 .shc-kv .v{color:var(--sh-ink-soft);overflow-wrap:anywhere}
-.shc-kv b{font-weight:600}
 .shc-kv small{font-size:12px;color:var(--sh-ink-soft)}
 .shc-ft{display:flex;justify-content:space-between;gap:12px;padding:7px 18px 8px;background:var(--sh-sunk);border-top:1px solid var(--sh-line-soft);font-size:11px;color:var(--sh-ink-soft)}
 .shc-ft span:last-child{text-align:right}`;

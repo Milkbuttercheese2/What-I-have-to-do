@@ -215,7 +215,7 @@ await page.evaluate(() => { const st = document.getElementById('share-stage'), b
   st.scrollTop += b.getBoundingClientRect().top - st.getBoundingClientRect().top - 120; });   // 펼친 관련인 칸이 보이게
 await shot('공유-화면-3-펼침.png');
 const pl2 = await savePng('');
-const L2 = await page.evaluate(() => document.querySelectorAll('#share-stage .shc-kv').length && [...document.querySelectorAll('#share-stage .shc-kv b')].map(b => b.textContent));
+const L2 = await page.evaluate(() => document.querySelectorAll('#share-stage .shc-kv').length && [...document.querySelectorAll('#share-stage .shc-kv .who')].map(b => b.textContent));
 ok(L2.length >= 5 + 0 && L2.includes('박하린 주무관'), `관련인 펼치기: 5명 모두 (${L2.length})`);
 ok(pl2.h > pl1.h, `펼친 상태가 그림에 반영됨 (높이 ${pl1.h} → ${pl2.h})`);
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);

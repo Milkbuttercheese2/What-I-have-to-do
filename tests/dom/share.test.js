@@ -119,8 +119,9 @@ test('[펼치기]/[접기]: 누르면 그 칸이 다 실리고 단추 글이 바
   await fresh();
   const it=item({contacts:Array.from({length:5},(_,i)=>({who:`사람${i} 주무관`, org:`부서${i}`, phone:'', email:''}))}); S.items.push(it); openForm(it);
   $('fm-share').click();
-  const st=$('share-stage'), count=()=>st.querySelectorAll('.shc-kv b').length;
+  const st=$('share-stage'), count=()=>st.querySelectorAll('.shc-kv .who').length;
   assert.equal(count(), 2);
+  assert.equal(st.querySelectorAll('.shc-kv b').length, 0, '관련인 이름은 굵게 하지 않는다(2026-11-28 소유자 지정)');
   assert.ok([...st.querySelectorAll('.shc-more span')].some(s=>s.textContent==='외 3명'));
   st.querySelector('.sh-fold[data-fold="people"]').click();
   assert.equal(count(), 5);

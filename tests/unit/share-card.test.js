@@ -296,3 +296,19 @@ test('그림 색은 늘 밝은 테마 — styles.css :root(밝게) 토큰과 같
     assert.equal(m[1].toLowerCase(), v.toLowerCase(), `--${k}`);
   }
 });
+
+/* 2026-11-28 소유자 지정: 본문은 검정, 나머지(항목명·식별정보·관련인·시간)는 회색 하나, 관련인 이름도 굵게 하지 않는다 */
+test('글자 색: 본문 검정 · 식별정보·관련인·시각 회색 · 관련인 이름 보통 굵기', async () => {
+  const {shareCss} = await import('../../src/share-card.js');
+  const css = shareCss('x'), rule = sel => { const i = css.indexOf(sel + '{'); return i < 0 ? '' : css.slice(i, css.indexOf('}', i)); };
+  assert.match(rule('.shc-memo'), /color:var\(--sh-ink\)/, '메모 본문·구역 본문 검정');
+  assert.doesNotMatch(rule('.shc-title'), /color:/, '제목은 기본(검정)');
+  assert.doesNotMatch(rule('.shc-st'), /color:/, '하위 업무 제목은 기본(검정)');
+  for (const sel of ['.shc-h', '.shc-kv .k', '.shc-kv .v', '.shc-val', '.shc-sm', '.shc-hd span', '.shc-ft'])
+    assert.match(rule(sel), /color:var\(--sh-ink-soft\)/, `${sel} 회색`);
+  assert.match(rule('.shc-val b.imm'), /color:var\(--sh-tag-imm-fg\)/, '임박한 기한의 붉은 표시는 그대로');
+  assert.equal(rule('.shc-kv b'), '', '관련인 이름 굵게 규칙 없음');
+  const html = shareHtml(shareModel(SAMPLE, ctx({withContacts:true})));
+  assert.ok(!/<b>[^<]*김서준/.test(html) && html.includes('<span class="who">김서준 주무관</span>'), '관련인 이름은 <b> 로 감싸지 않는다');
+  assert.ok(!/\*\*/.test(shareText(SAMPLE, ctx({withContacts:true}))), '글자로 복사에도 굵게 표시 없음');
+});
