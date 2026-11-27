@@ -7,7 +7,7 @@
    ========================================================================= */
 import {S, newId} from './state.js';
 import {STORE, invoke} from './store.js';
-import {$, esc, escAttr, showToast, appAlert, appConfirm, needXlsx} from './dom-utils.js';
+import {$, esc, escAttr, showToast, appAlert, appConfirm, needXlsx, setReady} from './dom-utils.js';
 import {fmtT} from './datetime.js';
 import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigits, relatedItems, relatedCounts, relKeyOf, absorbContacts, swapPersonIn} from './phonebook-core.js';
 /* v3.7.0: 인물 일괄 바꾸기가 업무를 고친 뒤 저장·재렌더해야 해서 persist 를 쓴다.
@@ -98,6 +98,14 @@ function clearPbForm(){
   $('pb-org').value=''; $('pb-who').value=''; $('pb-phone').value=''; $('pb-email').value='';
   $('pbe-title').textContent='관련인 추가';
   $('pb-save').textContent='추가';
+  syncPbSave();
+}
+/* [추가]·[저장]의 '할 일이 생김' — 세 칸(관련소속·관련인·연락처)이 다 차서 누르면 들어갈 때만, 수정이면 그중 바뀐 것이 있을 때만 녹색 */
+function syncPbSave(){
+  const e=normEntry({who:$('pb-who').value, org:$('pb-org').value, phone:$('pb-phone').value, email:$('pb-email').value});
+  const cur=editingPbId!=null ? S.phonebook.find(x=>x.id===editingPbId) : null;
+  const changed=!cur || e.who!==cur.who || e.org!==cur.org || e.phone!==cur.phone || e.email!==(cur.email||'');
+  setReady($('pb-save'), isComplete(e) && changed);
 }
 function openPbEdit(id){
   if(id!=null){ if(!loadPbForm(id)) return; } else clearPbForm();
@@ -111,6 +119,7 @@ function loadPbForm(id){
   $('pb-org').value=e.org; $('pb-who').value=e.who; $('pb-phone').value=e.phone; $('pb-email').value=e.email||'';
   $('pbe-title').textContent='관련인 수정';
   $('pb-save').textContent='저장';
+  syncPbSave();
   return true;
 }
 async function submitPbForm(){
@@ -145,6 +154,7 @@ function openPbSync(title, sub, found){
   $('pbs-list').innerHTML=found.map(e=>`<div class="pbs-row">
     <span class="pb-org">${esc(e.org)}</span><span class="pb-who">${esc(e.who)}</span><span class="pb-phone num">${esc(e.phone)}</span>${e.email?`<span class="pb-email">${esc(e.email)}</span>`:''}
   </div>`).join('');
+  setReady($('pbs-add'), found.length>0);          // 확인 창의 기본 동작 — 넣을 사람이 있으면 녹색
   /* close 를 함께 준다 — ESC 로 닫을 때도 대기 목록을 반드시 비우기 위해서다
      (예전 ESC 는 화면만 닫아 pendingSync 가 남았다). */
   openModal('pbSyncModal',{close:closePbSync});
@@ -334,9 +344,10 @@ function renderSwapList(){
       <span class="rel-txt"><b>${esc(e.who||'')}</b> · ${esc(e.org||'')} · <span class="num">${esc(e.phone||'')}</span></span></div>`).join('')
     :'<div class="empty" style="padding:14px">바꿀 사람이 없습니다. 먼저 전화번호부에 새 담당자를 추가하세요.</div>';
   const go=$('pbsw-go'), sum=$('pbsw-sum');
-  if(!swapTo){ go.disabled=true; sum.textContent=''; return; }
+  if(!swapTo){ go.disabled=true; setReady(go, false); sum.textContent=''; return; }
   const plan=swapPlan(swapFrom, swapTo), done=plan.filter(x=>x.before.done).length;
   go.disabled=!plan.length && !$('pbsw-del').checked;
+  setReady(go, !go.disabled);                       // 바꿀 사람을 골라 누를 수 있게 되면 녹색
   sum.textContent=plan.length
     ? `업무 ${plan.length}건${done?`(완료 ${done}건 포함)`:''}의 관련인이 ${swapTo.who||swapTo.org} 님으로 바뀝니다.`
     : '이 사람과 관련 업무가 없습니다. 원래 인물 삭제만 할 수 있습니다.';
@@ -399,9 +410,12 @@ export function initPhonebook(){
   $('pb-add').addEventListener('click',()=>openPbEdit(null));
   $('pb-cancel').addEventListener('click',closePbEdit);
   $('pbEditModal').addEventListener('click',e=>{ if(e.target.id==='pbEditModal') closePbEdit(); });
-  [$('pb-org'),$('pb-who'),$('pb-phone'),$('pb-email')].forEach(inp=>inp.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); submitPbForm(); }
-  }));
+  [$('pb-org'),$('pb-who'),$('pb-phone'),$('pb-email')].forEach(inp=>{
+    inp.addEventListener('keydown',e=>{
+      if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){ e.preventDefault(); submitPbForm(); }
+    });
+    inp.addEventListener('input',syncPbSave);
+  });
   $('pb-search').addEventListener('input',()=>{ q=$('pb-search').value.trim().toLowerCase(); renderPhonebook(); });
   $('pb-tmpl').addEventListener('click',saveXlsxTemplate);
   $('pb-xlsx').addEventListener('click',()=>$('pb-file').click());

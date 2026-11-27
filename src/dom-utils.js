@@ -87,6 +87,11 @@ export function clearSaveError(){
   const d=$('saveAlertDump'); if(d){ d.textContent=''; d.style.display='none'; }
 }
 
+/* 단추의 '할 일이 생김' 꼴(2026-11-28 소유자 지정 — 평소엔 모든 단추가 흰색, 누르면 방금 한 일이 마무리될 때만 청록 솔리드).
+   모양은 styles.css '단추 모양 통일' 블록의 `.btn.ready` 하나, 켜는 때는 디자인 정책 §8.
+   새 타이머·전역 상태를 만들지 말고 이미 있는 신호(임시저장 표시·input 이벤트·목록 다시 그리기)에서 부른다. */
+export function setReady(el, on){ if(el) el.classList.toggle('ready', !!on); }
+
 /* ── 앱 표준 대화상자 (v3.3.0 소유자 지정) ────────────────────────────────
    네이티브 alert/confirm 은 창 제목이 'wmhh-desktop' 으로 뜨고 버튼·글꼴이 OS
    것이라 앱과 따로 논다. 같은 문법의 표준 모달(.modal-bg > .modal)로 통일한다.
@@ -105,7 +110,7 @@ function ensureDialog(){
     <div class="m-sub" id="dlg-msg"></div>
     <div class="m-actions">
       <button class="btn btn-cancel" id="dlg-cancel" style="display:none">취소</button>
-      <button class="btn btn-ok" id="dlg-ok">확인</button>
+      <button class="btn btn-ok ready" id="dlg-ok">확인</button>
     </div>
   </div>`;
   document.body.appendChild(dlgEl);

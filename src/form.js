@@ -3,7 +3,7 @@
    ========================================================================= */
 import {S, newId, makeItem, toggleDone} from './state.js';
 import {invoke, STORE, openPath} from './store.js';
-import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm, showToast} from './dom-utils.js';
+import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm, showToast, setReady} from './dom-utils.js';
 import {dtInner, dtInputHtml, refreshDow, readDtInput, validateAllDt, isoToDateStr, isoToTimeStr} from './datetime.js';
 import {persist} from './render.js';
 import {entryKey, extractTags, entriesForTag, linkifyAt, formatPhone} from './phonebook-core.js';
@@ -83,6 +83,8 @@ function pruneDrafts(keep){
   }
 }
 function markDraft(at){
+  /* 임시저장분이 있다 = 저장되지 않은 변경이 있다 → [저장]이 '할 일이 생김'(녹색). 저장·되돌리기·저장본과 같아짐·닫기에서 꺼진다 */
+  setReady($('fm-save'), !!at);
   const el=$('fm-draft'); if(!el) return;
   if(!at){ el.textContent=''; return; }
   const t=new Date(at);
