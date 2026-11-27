@@ -26,6 +26,7 @@ export function checkAlarms(){
   S.items.forEach(it=>{ if(it.done)return;
     test(it,'due',(it.f||{}).due,'기한',it.memo||'');
     (it.subs||[]).forEach(s=>{ if(!s.done)test(s,'mid',s.mid,'중간점검',s.title); });
+    for(const a of fire) if(a.itemId==null){ a.itemId=it.id; if(a.key==='mid') a.subId=a.obj.id; }   // [확인]이 번호로 다시 찾는다(acknowledge)
   });
   if(!fire.length)return; firedNow=fire;
   /* v3.6.2: 알림창도 카드(v2.5.12)처럼 메모의 첫 줄만 보여준다 — 여러 줄 메모가 통째로
@@ -38,6 +39,16 @@ export function checkAlarms(){
     const nt=new Notification('뭐하려 했더라 · '+a.label,{body:a.title||'',tag:'wmhh-'+a.key+'-'+a.iso});
     nt.onclick=()=>{ try{window.focus();}catch{} try{nt.close();}catch{} };
   }catch(e){ logWarn('alarm-notification', e); }}); }
+}
+/* 점검 라운드 5: [확인]은 알림이 울릴 때의 객체가 아니라 **지금** 업무 목록에서 번호로 다시 찾은 업무·하위 업무에 적는다.
+   알림창이 떠 있는 동안 목록이 통째로 바뀌면(JSON 복원 — 파일 고르기 창을 연 사이 알림이 울린 경우) 옛 객체에 적혀, 새 객체에는 확인이
+   없어 20초 뒤 같은 알림이 다시 울렸다. 그 시각이 그새 바뀌었으면(본 알림과 다른 알림) 적지 않는다 — 새 시각에 다시 울린다. */
+function acknowledgeTarget(a){
+  const it=S.items.find(x=>x.id===a.itemId);
+  if(!it || it.done) return null;
+  if(a.key==='due') return (it.f||{}).due===a.iso ? it : null;
+  const s=(it.subs||[]).find(x=>x.id===a.subId);
+  return s && s.mid===a.iso ? s : null;
 }
 let _titleFlash=null, _baseTitle='';
 function startTitleFlash(n){
@@ -62,7 +73,7 @@ export function initAlarms(){
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) stopTitleFlash(); });
   /* v2.5.3: 확인·미룸·알람 끔이 작업표시줄 배지도 함께 걷는다 (미룸은 재울림 때 다시 켜짐) */
   attentionOff=()=>invoke('alarm_attention',{on:false}).catch(logged('alarm-attention-off'));
-  $('alarmOk').addEventListener('click',()=>{ firedNow.forEach(a=>{a.obj.al=a.obj.al||{};a.obj.al[a.key]=true;}); firedNow=[]; closeModal('alarmBg'); stopTitleFlash(); attentionOff(); persist(); });
+  $('alarmOk').addEventListener('click',()=>{ firedNow.forEach(a=>{ const o=acknowledgeTarget(a); if(o){ o.al=o.al||{}; o.al[a.key]=true; } }); firedNow=[]; closeModal('alarmBg'); stopTitleFlash(); attentionOff(); persist(); });
   /* v2.5.11: '10분 뒤 다시'(스누즈) 기능 제거 — 알람창은 [확인]만. 옛 데이터의 snooze-until
      값은 Rust가 계속 디코드하고 카드 점은 '울림'으로 접어 표시하므로 호환 문제 없음. */
   setInterval(checkAlarms,20000); setTimeout(checkAlarms,2500);
