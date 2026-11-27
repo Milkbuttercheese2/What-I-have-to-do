@@ -13,6 +13,8 @@ mod schema;
 pub mod settings;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod perf_tests;
 
 use std::fs;
 use std::path::{Path, PathBuf};
