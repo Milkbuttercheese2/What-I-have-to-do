@@ -134,6 +134,9 @@ export function initBackup(){
       if(typeof version==='number') S.dataVersion=version;
       // DB 복원이 성공한 뒤에만 메모리 상태를 갈아끼운다
       S.items=migrated;
+      /* 시작 때 읽기가 실패한 세션(F1 게이트가 닫힌 채)에서도 이 복원은 시작 안내가 권하는 길이다. DB 와 화면이 이제
+         같은 데이터이므로 게이트를 연다 — 열지 않으면 복원 뒤 고친 것이 모두 말없이 저장되지 않았다(배너도 없이). */
+      S.loaded=true;
       /* v3.6.0: 복원은 DB 를 통째로 갈아끼운다(backup_import 는 전체 교체). 그 전에 쌓인
          '완료 업무 변경 표시'는 이제 없는 데이터를 가리키므로 반드시 비운다 — 남겨두면
          다음 저장에서 deletedDone 으로 나가 **id 가 겹치는 엉뚱한 완료 업무를 지운다.** */

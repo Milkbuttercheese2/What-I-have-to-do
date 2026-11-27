@@ -216,3 +216,44 @@ test('내보내기: 임시 상태(초안)는 백업 파일에 담기지 않는�
   assert.deepEqual(out.settings.formDrafts, {});
   assert.equal(out.settings.theme, 'dark');            // 진짜 설정은 그대로 간다
 });
+
+/* 점검 라운드 3: 시작 때 읽기가 실패한 세션(S.loaded=false — "저장된 데이터를 불러오지 못했습니다" 안내)에서 안내대로
+   [백업에서 복원](JSON)을 하면, 예전엔 F1 게이트가 닫힌 채로 남아 **복원 뒤 고친 것이 하나도 저장되지 않았다**(배너도 없이 —
+   saveAll 이 조용히 돌아간다). 앱을 닫으면 그 사이 작업이 사라졌다. */
+test('시작 읽기 실패 세션에서 JSON 복원 → 그 뒤 고친 것이 저장된다(F1 게이트가 열린다)', async () => {
+  await env.resetS();                                  // loaded=false = 첫 읽기 실패
+  const {persist} = await import('../../src/render.js');
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:4}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.equal(S.items.length, 1);
+  assert.equal(S.loaded, true, '복원으로 DB 와 화면이 같아졌으니 게이트가 열린다');
+  const first = env.invokeCalls.filter(c=>c.cmd==='save_all');
+  assert.equal(first.length, 1, '복원 직후의 저장(persist)도 나간다');
+  assert.equal(first[0].args.baseVersion, 3, '복원이 준 번호표로');
+  env.invokeCalls.length = 0;
+  S.items[0].memo = '복원 뒤 고침';
+  await persist();
+  await env.flush(4);
+  const saves = env.invokeCalls.filter(c=>c.cmd==='save_all');
+  assert.equal(saves.length, 1, '복원 뒤 고친 것이 저장에 나간다');
+  assert.equal(saves[0].args.items[0].memo, '복원 뒤 고침');
+  assert.equal(saves[0].args.baseVersion, 4, '그 저장이 돌려준 번호표로');
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
+test('시작 읽기 실패 세션에서 JSON 복원이 실패하면 게이트는 닫힌 채다(빈 화면이 DB 를 덮지 않게)', async () => {
+  await env.resetS();
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => { throw '쓰기 실패'; });
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.equal(S.loaded, false);
+  assert.equal(S.items.length, 0);
+  env.onInvoke('backup_import', () => null);
+});
