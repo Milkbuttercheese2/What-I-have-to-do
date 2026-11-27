@@ -69,7 +69,7 @@ test('owner 모드: 5열 분배 + 보드 표시 전환 (v2.5.0 · 담당 판정�
   assert.equal($('view-board5').style.display, 'none');
 });
 
-test('카드 시각 표시 정책: 마감보다 앞서는 세부가 있으면 세부 시각만, 아니면 마감만 (v2.5.1 · # 제거 v2.5.2)', async () => {
+test('카드 시각 표시 정책: 기한보다 앞서는 하위 업무가 있으면 그 점검 시각만, 아니면 기한만 (v2.5.1 · # 제거 v2.5.2 · 꼬리표 "기한:")', async () => {
   await env.resetS(); S.loaded = true;
   // 전부 지난 시각으로 고정 — 자정 경계 플레이크 없이 항상 today 열
   const a = mk({memo:'세부가앞섬', f:{due:iso(-60)},  subs:[{id:newId(), title:'먼저점검', mid:iso(-120), done:false}]});
@@ -78,19 +78,20 @@ test('카드 시각 표시 정책: 마감보다 앞서는 세부가 있으면 �
   S.items.push(a, b, c);
   render();
   const card = id => $('col-today').querySelector(`[data-open="${id}"]`);
-  // a: 세부 점검 시각(점검:)만 — 마감 태그 없음
+  // a: 하위 업무 점검 시각(점검:)만 — 기한 꼬리표 없음
   assert.ok(card(a.id).innerHTML.includes('점검:'));
-  assert.ok(!card(a.id).innerHTML.includes('마감:'));
+  assert.ok(!card(a.id).innerHTML.includes('기한:'));
   assert.ok(!card(a.id).innerHTML.includes('#점검:'));   // v2.5.2: '#' 접두 제거
-  // b: 세부 제목 줄은 남되 시각은 마감만
+  // b: 하위 업무 제목 줄은 남되 시각은 기한만
   assert.ok(card(b.id).textContent.includes('나중점검'));
   assert.ok(!card(b.id).innerHTML.includes('점검:'));
-  assert.ok(card(b.id).innerHTML.includes('마감:'));
-  assert.ok(!card(b.id).innerHTML.includes('#마감:'));   // v2.5.2: '#' 접두 제거
-  // c: pending 세부 없음 → 마감만
+  assert.ok(card(b.id).innerHTML.includes('기한:'));
+  assert.ok(!card(b.id).innerHTML.includes('#기한:'));   // v2.5.2: '#' 접두 제거
+  // c: pending 하위 업무 없음 → 기한만
   assert.ok(!card(c.id).querySelector('.card-subline'));
   assert.ok(!card(c.id).innerHTML.includes('점검:'));
-  assert.ok(card(c.id).innerHTML.includes('마감:'));
+  assert.ok(card(c.id).innerHTML.includes('기한:'));
+  assert.ok(!$('col-today').innerHTML.includes('마감:'), '옛 꼬리표 글은 남지 않는다');
 });
 
 /* P6: 완료 업무가 많으면 앞쪽 줄만 먼저 그리고 나머지는 잠깐씩 나눠 이어 그린다(1만 건에서 탭 열기가 1초 가까이 멈췄다).
@@ -123,25 +124,25 @@ test('done 아이템은 보드 제외, renderDone에 표시 — 완료 카드 = 
     assert.ok(!$('col-'+k).textContent.includes('끝난 일'));
   assert.equal($('done-count').textContent, '2');
   assert.ok($('col-done').textContent.includes('끝난 일'));
-  // 완료 카드는 메모 + 완료: 시각 뿐 — 세부·마감·점검·주기 배지 없음
+  // 완료 카드는 메모 + 완료: 시각 뿐 — 하위 업무·기한·점검·반복 배지 없음
   assert.equal($('col-done').querySelectorAll('.drow:not(.drow-h)').length, 2);   // v3.8.4 완료 탭은 한 줄 목록
-  assert.ok(!$('col-done').innerHTML.includes('마감:'));
+  assert.ok(!$('col-done').innerHTML.includes('기한:'));
   assert.ok(!$('col-done').innerHTML.includes('점검:'));
   assert.ok(!$('col-done').querySelector('.card-subline'));
-  assert.ok(!$('col-done').textContent.includes('주기'));
+  assert.ok(!$('col-done').textContent.includes('반복'));
   // doneAt 없으면 완료 시각 줄 자체를 생략
   const noAt = $('col-done').querySelector(`[data-open="${S.items[1].id}"]`);
   assert.ok(!noAt.innerHTML.includes('완료:'));
 });
 
-test('완료 업무는 마감이 지났어도 빨간 알람 점(ad-ring)을 표시하지 않음', async () => {
+test('완료 업무는 기한이 지났어도 빨간 알림 점(ad-ring)을 표시하지 않음', async () => {
   await env.resetS(); S.loaded = true;
-  // 마감이 이미 지난 완료 업무 — 알람 확인 기록(al) 없음
+  // 기한이 이미 지난 완료 업무 — 알림 확인 기록(al) 없음
   S.items.push(mk({memo:'지난 완료건', done:true, doneAt:Date.now(), f:{due:iso(-120)}}));
   render(); renderDone();
   assert.ok($('col-done').textContent.includes('지난 완료건'));
   assert.ok(!$('col-done').innerHTML.includes('ad-ring'));   // 울림(빨강) 점 없음
-  assert.ok(!$('col-done').innerHTML.includes('adot'));      // 알람 점 자체가 없음
+  assert.ok(!$('col-done').innerHTML.includes('adot'));      // 알림 점 자체가 없음
 });
 
 test('카드 클릭 → 양식 오픈 + 메모 채워짐', async () => {

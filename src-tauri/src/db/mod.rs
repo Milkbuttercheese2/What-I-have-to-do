@@ -232,7 +232,7 @@ pub fn open_with_recovery(
         .as_ref()
         .map(|p| {
             format!(
-                "\n\n복구 전 원본은 지우지 않고 옆에 보관했습니다: {}\n(원본이 사실 멀쩡했다면 이 파일을 [설정] → [JSON·DB파일 불러오기]로 되살릴 수 있습니다.)",
+                "\n\n복구 전 원본은 지우지 않고 옆에 보관했습니다: {}\n(원본이 사실 멀쩡했다면 이 파일을 [설정] → [백업에서 복원]으로 되살릴 수 있습니다.)",
                 p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
             )
         })

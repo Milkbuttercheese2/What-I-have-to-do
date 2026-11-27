@@ -416,7 +416,7 @@ test('완료 업무는 읽기 전용으로 열린다 (저장 버튼 없음 · �
   assert.equal($('fm-revert').style.display, 'none', '되돌리기도 감춘다(고칠 게 없으므로)');
   assert.equal($('fm-reopen').style.display, '', 'v3.7.0 [다시 진행] 버튼이 보인다');
   assert.equal($('fm-reopen').disabled, false, '읽기 전용이어도 [다시 진행]은 눌린다');
-  assert.equal($('fm-finish').style.display, 'none', '완료 업무엔 [업무 종료]가 없다');
+  assert.equal($('fm-finish').style.display, 'none', '완료 업무엔 [업무 완료]가 없다');
   // 초안을 만들지 않는다 — 고칠 수 없는 화면의 초안은 되살아날 때 혼란만 만든다
   const drafts = (S.settings.formDrafts)||{};
   assert.equal(drafts[String(it.id)], undefined);

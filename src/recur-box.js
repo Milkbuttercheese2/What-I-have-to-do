@@ -60,7 +60,7 @@ function sameSchedule(a,b){
 
 function resetInput(){
   editingParentId=null;
-  $('rc-new-head').textContent='＋ 새 주기 업무';
+  $('rc-new-head').textContent='＋ 새 반복 업무';
   $('rc-memo').value='';
   $('rc-type').value='dow';
   renderDow([]);
@@ -74,7 +74,7 @@ function resetInput(){
 }
 function fillForEdit(p){
   editingParentId=p.id;
-  $('rc-new-head').textContent='주기 업무 수정';
+  $('rc-new-head').textContent='반복 업무 수정';
   $('rc-memo').value=p.memo||'';
   const r=p.recur||{};
   // '며칠마다'(every)는 v2.4.4에서 제거 — 옛 every 부모를 열면 요일 반복으로 표시(저장 시 전환)
@@ -105,7 +105,7 @@ function renderList(){
         <button class="btn btn-tool rc-del" data-rc-del="${p.id}">삭제</button>
       </div>
     </div>`;
-  }).join('') : '<div class="empty">등록된 주기 업무가 없습니다. 위에서 공통 내용과 반복 주기를 등록하세요.</div>';
+  }).join('') : '<div class="empty">등록된 반복 업무가 없습니다. 위에서 공통 내용과 반복 주기를 등록하세요.</div>';
 }
 
 export function openRecurModal(){ resetInput(); renderList(); openModal('recurModal',{save:()=>$('rc-save').click()}); $('rc-memo').focus(); }
@@ -135,7 +135,7 @@ async function saveParent(){
   persist();           // 부모 등록/수정 저장
   render();
   renderList();
-  showToast(editingParentId?'주기 업무를 수정했습니다':'주기 업무를 등록했습니다');
+  showToast(editingParentId?'반복 업무를 수정했습니다':'반복 업무를 등록했습니다');
 }
 
 export function initRecurBox(){
@@ -159,9 +159,9 @@ export function initRecurBox(){
     const de=e.target.closest('[data-rc-del]');
     if(de){ const id=+de.dataset.rcDel; const idx=S.items.findIndex(x=>x.id===id);
       if(idx>=0){ const n=childCount(id);
-        if(!await appConfirm(`이 주기 업무를 삭제할까요?\n이미 생성된 업무 ${n}건은 그대로 남습니다.`)) return;
+        if(!await appConfirm(`이 반복 업무를 삭제할까요?\n이미 생성된 업무 ${n}건은 그대로 남습니다.`)) return;
         const removed=S.items[idx]; S.items.splice(idx,1); persist(); render(); renderList();
-        showToast('주기 업무 삭제함',()=>{ S.items.splice(Math.min(idx,S.items.length),0,removed); persist(); render(); renderList(); });
+        showToast('반복 업무 삭제함',()=>{ S.items.splice(Math.min(idx,S.items.length),0,removed); persist(); render(); renderList(); });
       } return; }
   });
 }

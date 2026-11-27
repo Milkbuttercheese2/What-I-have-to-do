@@ -35,7 +35,7 @@ function renderPresetList(){
   if(!S.presets.length){ w.innerHTML='<div class="empty">저장된 프리셋이 없습니다.</div>'; return; }
   w.innerHTML=S.presets.map((p,i)=>`<div class="ps-item" data-pid="${esc(p.id)}"><span class="drag-handle" title="드래그하여 순서 변경">⠿</span><div class="ps-body">
     <div class="ps-name">${esc(p.label)}</div><div class="ps-sum">${esc(p.sum||'')}</div>
-    ${(p.subs&&p.subs.length)?`<div class="ps-subs">세부: ${p.subs.map(esc).join(' · ')}</div>`:''}
+    ${(p.subs&&p.subs.length)?`<div class="ps-subs">하위 업무: ${p.subs.map(esc).join(' · ')}</div>`:''}
     </div><button class="ps-edit" data-edit="${i}">수정</button><button class="ps-del" data-del="${i}">삭제</button></div>`).join('');
 }
 let editingPresetId=null;
@@ -52,7 +52,7 @@ function loadPresetIntoForm(idx){
 function addPresetSubRow(val){
   const row=document.createElement('div'); row.className='fsub-row';
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
-    <input type="text" placeholder="세부 할 일" value="${escAttr(val||'')}"><button class="rm" title="삭제">×</button>`;
+    <input type="text" placeholder="하위 업무" value="${escAttr(val||'')}"><button class="rm" title="삭제">×</button>`;
   row.querySelector('.rm').addEventListener('click',()=>row.remove());
   $('np-subs').appendChild(row);
 }

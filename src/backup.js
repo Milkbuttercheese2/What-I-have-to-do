@@ -4,21 +4,21 @@
 import {S, CORE_FIELDS, DEFAULT_SETTINGS, migrateItem, stripTemp, backupObj} from './state.js';
 import {STORE, invoke} from './store.js';
 import {$, showToast, appAlert, appConfirm, needXlsx} from './dom-utils.js';
-import {placeOf, PLACE_NAME} from './placement.js';
+import {exportableItems, buildXlsx} from './xlsx-export.js';
 import {renderPresets} from './presets.js';
 import {applyAlarmOn} from './alarms.js';
 import {persist} from './render.js';
 import {adoptPhonebook, renderPhonebook} from './phonebook.js';
 import {refreshTagHl} from './form.js';
 
-/* [JSON파일 백업] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
+/* [백업 파일 만들기] / Ctrl+S — 저장창을 띄워 폴더·이름 지정.
    한 번 지정하면 그 파일 핸들을 기억해 이후엔 같은 파일에 조용히 저장. */
 /* v2.5.11: 백업에 임시 상태 captureDraft 를 넣지 않는다 — 넣으면 복원 후 다음 실행에
    (v2.6.2) 양식 임시저장 formDrafts 도 같은 이유로 뺀다: 복원한 항목을 열었을 때
    백업 시점의 옛 초안이 되살아나 '저장된 내용이 아닌 것'이 보이면 안 된다.
    초안이 유령 항목으로 등록돼(main.js 초안 회수), 백업 안 원본 항목과 중복될 수 있다. */
 /* v3.3.4: 페이로드 조립은 state.js backupObj() 하나로 모았다 — 비상 덤프
-   (store.js)가 같은 형태를 써야 그 파일도 [불러오기]로 그대로 복원된다. */
+   (store.js)가 같은 형태를 써야 그 파일도 [백업에서 복원]으로 그대로 복원된다. */
 function backupPayload(){ return JSON.stringify(backupObj(),null,1); }
 function backupName(){ const n=new Date(); return `뭐하려했더라_백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.json`; }
 async function doBackup(){
@@ -46,51 +46,27 @@ export function reconcileImported(){
     window.FIELDS=S.fields; STORE.saveFields(S.fields); }
 }
 
+const XLSX_BUSY_AT=500;   // 엑셀로 내보내기: 이 건수부터 '만드는 중' 토스트를 먼저 띄운다
 export function initBackup(){
-  /* XLSX */
+  /* 엑셀로 내보내기 — 2026-11-27 개편: 보기 좋은 업무 목록(구역별 묶음·기한 색·줄바꿈) + 연락처·파일 + 메모 전문 + 원자료.
+     파일을 만드는 일은 순수 모듈 xlsx-export.js 가 한다(범위·원자료 열은 예전과 같다 — tests/unit/xlsx-export.test.js).
+     예전엔 32,767자를 넘는 메모가 하나라도 있으면 XLSX.write 가 던져 파일이 통째로 안 나왔다 — 이제 셀마다 자른다. */
   $('xlsx').addEventListener('click', async ()=>{
-    // 분류 대기·예정 항목은 아직 손 안 댄 메모라 보고용 목록에는 의미가 적어
-    // 제외 — 오늘 처리·진행 중·완료(=실제로 다루고 있거나 다룬 업무)만 담는다.
-    // (시간·담당자 모드에서는 오늘 두 열(metoday/othtoday)이 같은 역할.
-    //  v2.5.1: 무시각 업무가 '오늘 외'로 가게 되면서, 손 댄(세부 일부 완료=시간 모드의
-    //  '진행 중' 상당) 업무가 오늘 외 열에 있어도 누락되지 않게 started 조건을 추가)
-    const started=it=>(it.subs||[]).some(s=>s.done);
-    const exportable=S.items.filter(it=>{const p=placeOf(it);
-      return it.done||['today','doing','metoday','othtoday'].includes(p)||(['meplan','othplan'].includes(p)&&started(it));});
-    if(!exportable.length){await appAlert('내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).');return;}
-    const fx=iso=>{ if(!iso)return''; const d=new Date(iso); if(isNaN(d))return'';
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
-    const rows=exportable.map(it=>{
-      const subs=it.subs||[];
-      return {
-        '구역':PLACE_NAME[placeOf(it)],
-        '메모':it.memo||'',
-        '관련인':(it.contacts||[]).map(c=>c.who).filter(Boolean).join(', '),
-        '관련소속':(it.contacts||[]).map(c=>c.org).filter(Boolean).join(', '),
-        '연락처':(it.contacts||[]).map(c=>c.phone).filter(Boolean).join(', '),
-        '이메일':(it.contacts||[]).map(c=>c.email).filter(Boolean).join(', '),   /* v3.5.0 선택 항목 — 없으면 빈 칸 */
-        '접수시각':fx((it.f||{}).received),
-        '마감시각':fx((it.f||{}).due),
-        '식별정보':(it.ids||[]).map(x=>`${x.kind}: ${x.val}`).join(' · '),
-        '세부진행':subs.length?`${subs.filter(s=>s.done).length}/${subs.length}`:'',
-        '세부내역':subs.map(s=>(s.done?'[완료] ':'')+s.title+(s.mid?` (점검 ${fx(s.mid)})`:'')).join(' · '),
-        '파일링크':(it.files||[]).join(' · ')
-      };
-    });
+    const items=S.items, count=exportableItems(items).length;
+    if(!count){await appAlert('내보낼 항목이 없습니다 (오늘 처리·진행 중·완료된 업무만 내보냅니다).');return;}
     try{ await needXlsx(); }catch(e){ await appAlert('XLSX 저장 실패: '+e.message); return; }
-    const ws=XLSX.utils.json_to_sheet(rows); const cols=Object.keys(rows[0]);
-    ws['!cols']=cols.map(c=>({wch:Math.max(10,Math.min(46,rows.reduce((m,r)=>Math.max(m,String(r[c]||'').length*1.7),c.length*2)))}));
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'업무목록');
+    /* 업무가 많으면 만드는 데 시간이 든다(2,000건 약 0.4초, 느린 PC 는 몇 배) — 멈춘 것처럼 보이지 않게 먼저 알리고
+       한 번 그릴 틈을 준다. 적을 때는 금방 끝나 알릴 것이 없다. */
+    if(count>=XLSX_BUSY_AT){ showToast('엑셀 파일을 만드는 중입니다…'); await new Promise(r=>setTimeout(r,30)); }
+    let bytes;
+    try{ bytes=Array.from(buildXlsx(XLSX, items, {now:new Date()})); }
+    catch(e){ await appAlert('XLSX 저장 실패: '+(e&&e.message||e)); return; }
     const n=new Date();
     const name=`뭐하려했더라_업무목록_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.xlsx`;
     // XLSX.writeFile()은 브라우저의 blob+<a download> 다운로드에 의존하는데,
     // Tauri 창은 그걸 받아줄 다운로드 관리자가 없어 조용히 아무 일도 안 일어난다
     // (JSON 백업도 같은 이유로 안 됐던 것과 동일한 원인) — 바이트를 직접 뽑아
-    // 네이티브 저장 대화상자로 넘긴다.
-    // F14: {type:'array'}는 이 SheetJS 빌드에서 length가 없는 순수 ArrayBuffer를
-    // 반환해 Array.from()이 조용히 빈 배열을 만들어버린다(= 0바이트 파일, "파일 형식
-    // 문제"로 안 열림) — Uint8Array로 감싸야 실제 바이트가 나온다.
-    const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
+    // 네이티브 저장 대화상자로 넘긴다. (F14: 바이트는 Uint8Array 로 받아 Array.from — buildXlsx 가 Uint8Array 를 돌려준다)
     try{
       const saved=await invoke('save_binary_file', {suggestedName:name, data:bytes});
       if(saved) showToast('XLSX 파일을 저장했습니다');
@@ -112,7 +88,7 @@ export function initBackup(){
   /* 백업/복원 */
   $('bkExp').addEventListener('click',e=>{ e.preventDefault(); doBackup(); });
 
-  /* 불러오기 — JSON 백업과 DB(.sqlite) 파일 중 아무거나 하나의 파일 선택창으로
+  /* 백업에서 복원 — JSON 백업과 DB(.sqlite) 파일 중 아무거나 하나의 파일 선택창으로
      고를 수 있다. JSON은 즉시 반영(재시작 불필요), DB 파일은 통째로 교체 후
      재시작이 필요하다(저장 위치 변경과 동일한 이유 — 열려있는 SQLite 연결을
      그대로 두고 파일만 바꾸는 게 아니라, 안전하게 다시 여는 쪽이 단순하고
@@ -121,7 +97,7 @@ export function initBackup(){
     e.preventDefault();
     let result;
     try{ result=await invoke('import_backup_file'); }
-    catch(err){ await appAlert('불러오기 실패: '+err); return; }
+    catch(err){ await appAlert('복원 실패: '+err); return; }
     if(result.kind==='Cancelled')return;
 
     if(result.kind==='Json'){
@@ -184,7 +160,7 @@ export function initBackup(){
       }
       if(err){
         await appAlert('복원 취소에 실패했습니다: '+err+'\n\n이대로 두면 다음에 앱을 다시 시작할 때 이 복원이 적용됩니다.\n'+
-          '앱을 끄기 전에 데이터 폴더의 data\\wmhh.sqlite.pending-import 파일을 지워 주세요.\n([설정] → [저장 위치 확인·변경]에서 데이터 폴더 위치를 볼 수 있습니다)');
+          '앱을 끄기 전에 데이터 폴더의 data\\wmhh.sqlite.pending-import 파일을 지워 주세요.\n([설정] → [저장 위치]에서 데이터 폴더 위치를 볼 수 있습니다)');
         return;
       }
       showToast('복원을 취소했습니다');

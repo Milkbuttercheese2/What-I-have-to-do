@@ -294,7 +294,7 @@ test('백업 왕복: adoptPhonebook 이 id 없는 항목에 id 를 채우고 las
   assert.ok(S.lastId >= 99999);                                 // 기존 id 가 lastId 를 밀어올림
 });
 
-test('세부 할 일 담당칸 자동완성: 2글자부터 후보, 선택하면 담당+관련인이 함께 채워진다 (v3.4.0)', async () => {
+test('하위 업무 담당칸 자동완성: 2글자부터 후보, 선택하면 담당+관련인이 함께 채워진다 (v3.4.0)', async () => {
   await env.resetS(); S.loaded = true;
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1234-5678'}]);
   openForm({});
@@ -340,7 +340,7 @@ test('v3.8.4 전화번호부 줄을 누르면 팝업 대신 오른쪽 칸: 그 �
   S.items[1].done=true; S.items[1].doneAt=9; renderPhonebook();
   assert.match(side.textContent, /진행 0 · 완료 2/);
   assert.ok(!env.document.getElementById('pb-side-x'), 'v3.8.18: 칸 접기(⇥)는 없다');
-  assert.deepEqual([...side.querySelectorAll('.pbs-h span')].map(x=>x.textContent), ['','메모','식별정보','종료'], 'v3.8.18: 관련 업무 칸 머리줄');
+  assert.deepEqual([...side.querySelectorAll('.pbs-h span')].map(x=>x.textContent), ['','메모','식별정보','완료'], 'v3.8.18: 관련 업무 칸 머리줄(완료 탭 한 줄 목록과 같은 이름)');
 });
 
 test('v3.8.16 전화번호부 탭이 안 보이면 그리지 않고, 탭을 열면 그린다', async () => {

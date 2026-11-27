@@ -161,7 +161,7 @@ const MAIN = {width: 560, height: 1150};
     const fmtT=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
     const list=document.getElementById('alarmList');
     if(list) list.innerHTML=
-      '<div class="a-item"><b>마감 </b>예산 집행 잔액 정리해서 재무팀에 회신하기<span class="mono">'+fmtT(now)+'</span></div>'+
+      '<div class="a-item"><b>기한 </b>예산 집행 잔액 정리해서 재무팀에 회신하기<span class="mono">'+fmtT(now)+'</span></div>'+
       '<div class="a-item"><b>점검 </b>각 팀 신청서 회신 확인<span class="mono">'+fmtT(now)+'</span></div>';
     const bg=document.getElementById('alarmBg'); if(bg) bg.classList.add('on');
   });

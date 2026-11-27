@@ -14,12 +14,12 @@ const iso = min => new Date(Date.now() + min*60e3).toISOString();
 const mk = o => Object.assign({id:newId(), memo:'m', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], al:{}}, o);
 const closeModal = () => { $('alarmBg').classList.remove('on'); };
 
-test('지난 마감 → 모달 + 마감 항목 + focus_main_window + 작업표시줄 배지 on (v2.5.3)', async () => {
+test('지난 기한 → 모달 + 기한 항목 + focus_main_window + 작업표시줄 배지 on (v2.5.3)', async () => {
   await env.resetS(); S.loaded = true;
   S.items.push(mk({memo:'지난 마감건', f:{due:iso(-5)}}));
   checkAlarms();
   assert.ok($('alarmBg').classList.contains('on'));
-  assert.ok($('alarmList').textContent.includes('마감'));
+  assert.equal($('alarmList').querySelector('.a-due b').textContent, '기한');   // 이름표 글(예전 '마감') — 메모의 '마감'과 헷갈리지 않게 이름표만 본다
   assert.ok($('alarmList').textContent.includes('지난 마감건'));
   assert.ok(env.invokeCalls.some(c=>c.cmd==='focus_main_window'));
   assert.ok(env.invokeCalls.some(c=>c.cmd==='alarm_attention'&&c.args&&c.args.on===true));

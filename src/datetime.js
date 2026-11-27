@@ -77,7 +77,7 @@ export function dtInner(dateStr,timeStr){
     <button type="button" class="dt-pick" title="캘린더에서 선택">📅</button>
     <input type="date" class="dt-native" tabindex="-1" aria-hidden="true">
     <span class="dt-dow"></span>
-    <input type="text" class="dt-time" placeholder="HH:MM" maxlength="5" title="비워두면 기본 시각이 채워집니다 (마감·점검 18:00)" value="${escAttr(timeStr)}">`;
+    <input type="text" class="dt-time" placeholder="HH:MM" maxlength="5" title="비워두면 기본 시각이 채워집니다 (기한·점검 18:00)" value="${escAttr(timeStr)}">`;
 }
 export function dtInputHtml(cls, iso, dataAttr){
   return `<span class="dt-inp ${cls}" ${dataAttr}>${dtInner(isoToDateStr(iso), isoToTimeStr(iso))}</span>`;

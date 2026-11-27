@@ -33,9 +33,9 @@ test('열고 닫기: on 클래스 · isOpen · 빈 스택에서 closeTop 은 fal
 test('같은 z 면 나중에 연 것이 위 — ESC 는 그것부터 닫는다', () => {
   drain();
   openModal('settingsModal');
-  openModal('recurModal');                 // 설정 팝업에서 여는 주기 업무 팝업
+  openModal('recurModal');                 // 설정 팝업에서 여는 반복 업무 팝업
   closeTop();
-  assert.ok(!on('recurModal'), '주기 업무 팝업이 먼저 닫혀야 한다');
+  assert.ok(!on('recurModal'), '반복 업무 팝업이 먼저 닫혀야 한다');
   assert.ok(on('settingsModal'), '밑의 설정 팝업은 남아 있어야 한다');
   closeTop();
   assert.ok(!on('settingsModal'));

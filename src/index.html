@@ -75,9 +75,9 @@
 
       <!-- v2.5.3 양식 순서: 메모 → 세부 할 일 → 접수·마감 → 식별번호 → 관련소속·관련인·연락처 → 파일 링크 -->
       <div class="fm-subs">
-        <div class="t-head">세부 할 일</div><!-- (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가) — 명칭 간결화 v2.5.13, 설명은 주석 보존 -->
+        <div class="t-head">하위 업무</div><!-- (항목별 중간점검시각 지정 가능 · Enter로 다음 줄 추가) — 명칭 간결화 v2.5.13, 설명은 주석 보존 -->
         <div id="fm-subs"></div>
-        <button class="btn fsub-add" id="fm-subadd" title="세부 항목 추가">＋ 추가</button>
+        <button class="btn fsub-add" id="fm-subadd" title="하위 업무 추가">＋ 추가</button>
       </div>
 
       <div class="fm-grid" id="fm-grid"></div>
@@ -111,11 +111,13 @@
       </div>
 
       <div class="fm-actions">
+        <!-- 공유(소유자 지정): 단추 줄 왼쪽 끝, 글자 대신 아이콘 — 상자에서 위로 나가는 화살표(직접 그린 SVG, 검색 돋보기와 같은 선) -->
+        <button type="button" class="fm-share" id="fm-share" title="공유" aria-label="공유"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M12 15V3.5M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <!-- v2.5.22 임시저장: 작성 중 내용은 자동으로 임시저장되고, [되돌리기]로 마지막 저장본 복구 -->
         <span class="fm-draft" id="fm-draft"></span>
         <button class="btn btn-cancel" id="fm-revert" title="마지막으로 저장한 내용으로 되돌립니다 (임시저장분 삭제)">되돌리기</button>
         <!-- v3.7.0 업무 종료: 연 채로 저장 + 완료 처리 (카드의 ○ 와 같은 일). 완료 업무엔 [다시 진행]. -->
-        <button class="btn btn-finish" id="fm-finish" title="지금 내용을 저장하고 업무를 완료(종료) 처리합니다">✓ 업무 종료</button>
+        <button class="btn btn-finish" id="fm-finish" title="지금 내용을 저장하고 업무를 완료 처리합니다">✓ 업무 완료</button>
         <button class="btn btn-reopen" id="fm-reopen" style="display:none" title="완료를 취소하고 진행 중으로 되돌려 바로 고칠 수 있게 엽니다">↺ 다시 진행</button>
         <button class="btn btn-ok" id="fm-save" title="Ctrl+S · Ctrl+Enter 로도 저장됩니다">저장</button>
       </div>
@@ -190,14 +192,14 @@
     </div>
     <!-- v3.8.0 현행 | 종료 — 고른 값은 settings.calView (calendar.js) -->
     <div class="seg cal-mode" id="cal-mode" role="group" aria-label="캘린더 보기">
-      <button type="button" class="seg-btn on" data-v="live">현행</button>
-      <button type="button" class="seg-btn" data-v="done">종료</button>
+      <button type="button" class="seg-btn on" data-v="live">진행 중</button>
+      <button type="button" class="seg-btn" data-v="done">완료</button>
     </div>
     <div class="cal-legend" id="cal-legend">
       <!-- 범례 점은 pill 색과 반드시 같은 토큰을 쓸 것 (v2.5.17: --slate/--red 직접 참조라
            pill 색만 바꿨을 때 범례가 옛 색으로 남아 어긋났다). v3.8.0: 보기에 따라 calendar.js renderCal 이 다시 쓴다 -->
-      <span><i class="lg" style="background:var(--cal-mid)"></i>세부할일 점검일</span>
-      <span><i class="lg" style="background:var(--cal-due)"></i>업무 마감일</span>
+      <span><i class="lg" style="background:var(--cal-mid)"></i>하위 업무 점검일</span>
+      <span><i class="lg" style="background:var(--cal-due)"></i>업무 기한</span>
     </div>
   </div>
   <!-- v3.7.0: 달력 + 옆 상세(넓은 화면) / 아래 상세(좁은 화면). 처음 열면 오늘이 골라져 있다. -->
@@ -256,8 +258,8 @@
     <h2>전화번호부 <span id="pb-count" class="done-cnt">0</span></h2>
     <div class="done-tools">
       <button class="btn btn-ok" id="pb-add" title="관련인 한 명을 직접 추가합니다">＋ 추가</button>
-      <button class="btn btn-tool" id="pb-tmpl" title="관련소속·관련인·연락처 제목 줄만 있는 빈 엑셀 파일을 저장합니다. 채워서 [엑셀 불러오기]로 넣으세요">엑셀 양식</button>
-      <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 관련소속·관련인·연락처 제목)에서 일괄 추가">엑셀 불러오기</button>
+      <button class="btn btn-tool" id="pb-tmpl" title="관련소속·관련인·연락처 제목 줄만 있는 빈 엑셀 파일을 저장합니다. 채워서 [엑셀 가져오기]로 넣으세요">엑셀 양식</button>
+      <button class="btn btn-tool" id="pb-xlsx" title="엑셀 파일(첫 줄에 관련소속·관련인·연락처 제목)에서 일괄 추가">엑셀 가져오기</button>
       <input class="s-search" id="pb-search" placeholder="검색" autocomplete="off">
     </div>
   </div>
@@ -291,7 +293,7 @@
 <!-- 전화번호부 엑셀 확인 팝업 (v2.9.0) — 네이티브 confirm 대신 표준 모달 -->
 <div class="modal-bg" id="pbSyncModal">
   <div class="modal">
-    <h3 id="pbs-title">엑셀 불러오기</h3>
+    <h3 id="pbs-title">엑셀 가져오기</h3>
     <div class="m-sub" id="pbs-sub"></div>
     <div class="rel-list" id="pbs-list"></div>
     <div class="m-actions">
@@ -327,9 +329,9 @@
         <div class="fm-field"><label for="np-label">버튼 이름</label><input type="text" id="np-label" placeholder="예: 계약변경, 선금 지급"></div>
         <div class="fm-field"><label for="np-sum">메모 기본값 (○○ 자리표시자 사용 가능)</label><input type="text" id="np-sum" placeholder="예: ○○ 사업 계약변경"></div>
       </div>
-      <div class="ps-subs-head">세부 할 일 (선택)</div>
+      <div class="ps-subs-head">하위 업무 (선택)</div>
       <div id="np-subs"></div>
-      <button class="btn fsub-add" id="np-subadd">＋ 세부 항목</button>
+      <button class="btn fsub-add" id="np-subadd">＋ 하위 업무</button>
       <div class="m-actions">
         <button class="btn btn-cancel" id="np-cancel-edit" style="display:none">수정 취소</button>
         <button class="btn btn-ok" id="np-save">프리셋 저장</button>
@@ -354,11 +356,11 @@
 <!-- 주기 업무(부모 정의) 입력·관리 -->
 <div class="modal-bg" id="recurModal">
   <div class="modal modal-wide">
-    <h3>주기 업무</h3>
-    <div class="m-sub">공통 내용과 반복 주기만 등록하면, 예정일마다 그 내용으로 업무가 <b>보드에 자동 생성</b>됩니다. 세부 내용(관련인·식별정보·세부 할일·파일)은 생성된 각 업무에서 채우세요.</div>
+    <h3>반복 업무</h3>
+    <div class="m-sub">공통 내용과 반복 주기만 등록하면, 예정일마다 그 내용으로 업무가 <b>보드에 자동 생성</b>됩니다. 세부 내용(관련인·식별정보·하위 업무·파일)은 생성된 각 업무에서 채우세요.</div>
 
     <div class="ps-new">
-      <div class="ps-new-head" id="rc-new-head">＋ 새 주기 업무</div>
+      <div class="ps-new-head" id="rc-new-head">＋ 새 반복 업무</div>
       <div class="fm-field"><label for="rc-memo">공통 내용 (제목/메모)</label>
         <input type="text" id="rc-memo" placeholder="예: 주간 부서 업무보고 취합" autocomplete="off"></div>
       <!-- v2.5.6: 스케줄(매주 요일·며칠 + 시각)과 보드 생성을 각각 한 줄로 분리 -->
@@ -387,7 +389,7 @@
       </div>
     </div>
 
-    <div class="rc-list-head">등록된 주기 업무</div>
+    <div class="rc-list-head">등록된 반복 업무</div>
     <div class="rc-list" id="rc-list"></div>
 
     <div class="m-actions modal-foot">
@@ -429,7 +431,7 @@
     <div class="set-sec">알림</div>
     <div class="set-card">
       <div class="set-row">
-        <div class="set-txt"><span class="set-lab">마감·점검 시각 알림</span><span class="set-desc">시각이 되면 알림창 · 소리 · 작업 표시줄 깜빡임으로 알려 줍니다</span></div>
+        <div class="set-txt"><span class="set-lab">기한·점검 시각 알림</span><span class="set-desc">시각이 되면 알림창 · 소리 · 작업 표시줄 깜빡임으로 알려 줍니다</span></div>
         <div class="seg" id="segAlarm">
           <button class="seg-btn" data-v="on">켬</button>
           <button class="seg-btn" data-v="off">끔</button>
@@ -479,20 +481,35 @@
     <div class="set-sec">업무 도구</div>
     <div class="set-card">
       <button class="set-row set-go" id="presetManageBtn"><span class="set-txt"><span class="set-lab">프리셋 · 식별정보</span><span class="set-desc">자주 쓰는 업무 양식과 식별정보 명칭(계약번호 등)</span></span><span class="set-chev" aria-hidden="true">›</span></button>
-      <button class="set-row set-go" id="recurManageBtn"><span class="set-txt"><span class="set-lab">주기 업무</span><span class="set-desc">매주·매월 반복되는 업무를 자동으로 보드에 올립니다</span></span><span class="set-chev" aria-hidden="true">›</span></button>
+      <button class="set-row set-go" id="recurManageBtn"><span class="set-txt"><span class="set-lab">반복 업무</span><span class="set-desc">매주·매월 반복되는 업무를 자동으로 보드에 올립니다</span></span><span class="set-chev" aria-hidden="true">›</span></button>
     </div>
 
     <div class="set-sec">데이터</div>
     <div class="set-card">
       <button class="set-row set-go" id="dataDirBtn" title="데이터 저장 위치 확인·변경"><span class="set-txt"><span class="set-lab">저장 위치</span><span class="set-desc num" id="dataDirPath"></span></span><span class="set-chev" aria-hidden="true">›</span></button>
       <button class="set-row set-go" id="bkExp"><span class="set-txt"><span class="set-lab">백업 파일 만들기</span><span class="set-desc">전체 데이터를 JSON 파일 하나로 저장합니다 · Ctrl+S</span></span><span class="set-chev" aria-hidden="true">›</span></button>
-      <button class="set-row set-go" id="bkImp" title="JSON 백업 파일 또는 자동 백업(.sqlite) 등 DB 파일에서 복원"><span class="set-txt"><span class="set-lab">백업에서 복원</span><span class="set-desc">JSON 백업 또는 자동 백업(.sqlite)을 불러옵니다</span></span><span class="set-chev" aria-hidden="true">›</span></button>
-      <button class="set-row set-go" id="xlsx"><span class="set-txt"><span class="set-lab">엑셀로 내보내기</span><span class="set-desc">업무 목록을 .xlsx 로 저장합니다(읽기용)</span></span><span class="set-chev" aria-hidden="true">›</span></button>
+      <button class="set-row set-go" id="bkImp" title="JSON 백업 파일 또는 자동 백업(.sqlite) 등 DB 파일에서 복원"><span class="set-txt"><span class="set-lab">백업에서 복원</span><span class="set-desc">JSON 백업 또는 자동 백업(.sqlite)에서 복원합니다</span></span><span class="set-chev" aria-hidden="true">›</span></button>
+      <button class="set-row set-go" id="xlsx"><span class="set-txt"><span class="set-lab">엑셀로 내보내기</span><span class="set-desc">업무 목록을 보기 좋은 엑셀 파일로 저장합니다</span></span><span class="set-chev" aria-hidden="true">›</span></button>
     </div>
 
     <div class="m-actions">
       <span class="set-ver">뭐하려 했더라 <span class="num" id="appVer"></span></span>
       <button class="btn btn-ok" id="settingsClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 업무 공유 미리 보기 — 나갈 메모지를 그대로 보여 주고(접힌 칸마다 [펼치기], 단추는 그림에 안 실림) 세 가지로 내보낸다(share.js) -->
+<div class="modal-bg" id="shareModal">
+  <div class="modal share-modal">
+    <h3>업무 공유</h3>
+    <div class="share-stage" id="share-stage"></div>
+    <label class="pbsw-opt share-opt"><input type="checkbox" id="share-contacts"> 연락처도 넣기</label>
+    <div class="m-actions share-actions">
+      <button type="button" class="btn btn-cancel" id="share-text">글자로 복사</button>
+      <button type="button" class="btn btn-cancel" id="share-save">파일로 저장</button>
+      <span class="share-sp"></span>
+      <button type="button" class="btn btn-ok" id="share-img">그림 복사</button>
     </div>
   </div>
 </div>
@@ -549,7 +566,7 @@
 <!-- 저장 실패 경고 — 저장이 실패하면 성공할 때까지 계속 떠 있는다(저장 성공은 조용).
      v3.3.4: 이제 실패해도 배치를 버리지 않고 계속 다시 시도하므로 문구가 '다시 시도 중'이다.
      연속 실패가 이어지면 store.js 가 비상 덤프 파일을 남기고 그 경로를 아랫줄에 적는다. -->
-<div class="save-alert" id="saveAlert" role="alert" aria-live="assertive">⚠ 저장이 지연되고 있습니다. 변경 내용이 아직 디스크에 기록되지 않아 계속 다시 시도 중입니다. 이 표시가 사라지지 않으면 [설정 → JSON파일 백업]으로 따로 저장해두세요.<span id="saveAlertDump" class="save-alert-dump" style="display:none"></span></div>
+<div class="save-alert" id="saveAlert" role="alert" aria-live="assertive">⚠ 저장이 지연되고 있습니다. 변경 내용이 아직 디스크에 기록되지 않아 계속 다시 시도 중입니다. 이 표시가 사라지지 않으면 [설정 → 백업 파일 만들기]로 따로 저장해두세요.<span id="saveAlertDump" class="save-alert-dump" style="display:none"></span></div>
 
 <!-- vendor/xlsx.full.min.js 는 처음 쓸 때 불러온다(dom-utils.js needXlsx, v3.8.16) -->
 <script type="module" src="main.js"></script>

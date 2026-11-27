@@ -26,6 +26,7 @@
    커맨드로 조회한다(quick_search 와 같은 경로). */
 import {atToken, applyInsert, tagText, queryReady, linkifyAt, entryKey} from './phonebook-core.js';
 import {logWarn, logged} from './logs.js';     // import 없는 모듈이라 미니 창에서 써도 된다
+import {markSections} from './memo-sections.js';   // 구역 제목 규칙 — import 없는 순수 모듈이라 미니 창에서 써도 된다
 
 let submitting=false;                       // 등록 플래시 중 blur로 조기 숨김 방지
 let mode='memo';                            // 'memo' | 'search' (init에서 설정값으로 진입)
@@ -123,7 +124,8 @@ function loadBook(){
 function renderCapHl(){
   const hl=$id('cap-hl'); if(!hl) return;
   const inp=$id('cap-inp');
-  hl.innerHTML=linkifyAt(esc(inp.value), pbBook)+'\n';
+  /* 구역 제목([제목] 한 줄) 위 가로선 — 양식 메모와 같은 규칙·같은 층(memo-sections.js) */
+  hl.innerHTML=markSections(linkifyAt(esc(inp.value), pbBook), inp.value)+'\n';
   /* v3.4.9: 백드롭도 입력칸과 **같은 만큼 스크롤**해야 한다. 입력칸은 110px 에서
      자라기를 멈추고(autoGrow) 그 뒤로는 안에서 스크롤되는데, 예전엔 백드롭이 맨 위에
      남아 태그 하이라이트가 실제 글자보다 아래에 그려졌다(신고: "하이라이트가 아래로

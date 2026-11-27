@@ -6,7 +6,7 @@ import {formatPhone} from './phonebook-core.js';
 
 export const CORE_FIELDS = [
   {key:'received', label:'접수시각', type:'datetime', on:true, builtin:true},
-  {key:'due',      label:'마감시각', type:'datetime', on:true, builtin:true},
+  {key:'due',      label:'기한', type:'datetime', on:true, builtin:true},
 ];
 export const DEFAULT_ID_KINDS = ['입찰공고번호','계약체결번호','공사관리번호','SR번호','국민신문고번호'];
 /* closeToTray 기본값은 Rust 쪽(lib.rs sget_bool 기본 인자)과 반드시 동일해야
@@ -64,9 +64,9 @@ export const S = {
 export function stripTemp(settings){ return {...settings, captureDraft:'', formDrafts:{}}; }
 
 /* 지금 메모리에 있는 전체 데이터의 백업 페이로드(객체).
-   [JSON파일 백업](backup.js)과 **비상 덤프**(store.js — 저장이 거듭 실패할 때
+   [백업 파일 만들기](backup.js)와 **비상 덤프**(store.js — 저장이 거듭 실패할 때
    DB 를 건너뛰고 파일로 떨구는 마지막 그물)가 같은 것을 쓴다. 형태가 하나여야
-   비상 덤프도 평범한 백업처럼 [불러오기]로 그대로 복원된다 — 이 둘이 갈라지면
+   비상 덤프도 평범한 백업처럼 [백업에서 복원]으로 그대로 복원된다 — 이 둘이 갈라지면
    정작 필요한 순간에 "열 수 없는 파일"이 된다. v 는 Rust BACKUP_VERSION 과 같다. */
 export function backupObj(){
   return {v:5, exported:new Date().toISOString(), fields:S.fields, presets:S.presets,

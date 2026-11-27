@@ -46,9 +46,9 @@ function alarmDot(obj,key){
   if(isNaN(t)) return '';
   const st=(obj.al||{})[key];
   let cls,tip;
-  if(st===true){ cls='ad-done'; tip='알람 확인함'; }              // ● 확인함(초록)
-  else if(t<=Date.now()){ cls='ad-ring'; tip='알람 울림'; }        // ● 울림(빨강) — 미확인·스누즈 포함
-  else { cls='ad-wait'; tip='알람 대기'; }                         // ○ 대기
+  if(st===true){ cls='ad-done'; tip='알림 확인함'; }              // ● 확인함(초록)
+  else if(t<=Date.now()){ cls='ad-ring'; tip='알림 울림'; }        // ● 울림(빨강) — 미확인·스누즈 포함
+  else { cls='ad-wait'; tip='알림 대기'; }                         // ○ 대기
   return `<span class="adot ${cls}" title="${escAttr(tip)}"></span>`;
 }
 /* 카드에 보일 세부 할일: '울린 것(지난 미완료 점검)'을 우선 표시 —
@@ -70,7 +70,7 @@ function timePill(obj,key,iso,label){
   const m=fmtDue(iso); if(!m) return '';      // F7: 손상 ISO면 렌더 생략
   return `${alarmDot(obj,key)}<span class="tag time ${m.cls}"><span class="k">${label}</span>${esc(m.label)}</span>`;
 }
-function dueTagHtml(it){ const v=(it.f||{}).due; return v?timePill(it,'due',v,'마감:'):''; }
+function dueTagHtml(it){ const v=(it.f||{}).due; return v?timePill(it,'due',v,'기한:'):''; }
 export function cardHtml(it,place){
   /* v2.5.12: 카드에는 메모 본문의 '첫 줄'만 가져온다(줄바꿈 이후는 버림). 그 첫 줄이 길면
      .card-memo 가 최대 2줄까지 감싸 보여준다(2줄 클램프). */
@@ -95,7 +95,7 @@ export function cardHtml(it,place){
   const es=earliestSub(it);
   const parent = it.recurId!=null ? itemById(it.recurId) : null;
   /* v2.5.3: 주기 배지에 recur 클래스 — 5열 모드 시각 줄에서도 시각과 한 줄에 들어가게 축소 표기 */
-  const recurTag = it.recurId!=null?`<span class="tag mid recur" title="${escAttr(parent&&parent.recur?recurLabel(parent.recur):'주기 업무에서 생성됨')}">주기</span>`:'';
+  const recurTag = it.recurId!=null?`<span class="tag mid recur" title="${escAttr(parent&&parent.recur?recurLabel(parent.recur):'반복 업무에서 생성됨')}">반복</span>`:'';
   /* v2.5.1 시각 표시 정책 — 마감보다 앞서는 미완료 세부가 있으면 그 세부의 점검시각만
      보이고 마감 태그는 감춘다(둘 다 보이던 중복 제거). 앞서는 세부가 없거나 전부
      완료면 마감만. 시각 칩은 세부 제목 줄이 아니라 메타 줄에 둔다(제목 잘림 방지). */
@@ -155,7 +155,7 @@ export function metricsOf(items, now){
 function renderMetrics(){
   const el=$('metrics'); if(!el) return;
   const m=metricsOf(S.items);
-  el.innerHTML=`<span><b>${m.active}</b>진행 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 할 일</span>`
+  el.innerHTML=`<span><b>${m.active}</b>진행 중 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 업무</span>`
     +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
 }
 /* v3.8.16 보드 칸은 지난번과 같은 HTML 이면 다시 넣지 않는다 — 카드를 하나 체크·저장할 때 바뀌지 않은 칸까지
@@ -198,7 +198,7 @@ export function render(){
   }
   const cols={inbox:[],today:[],doing:[],planned:[]};
   S.items.filter(onBoard).filter(matchesQ).forEach(it=>{ const p=placeOf(it); if(cols[p])cols[p].push(it); });
-  const EMPTY={inbox:'자유 입력이 여기 쌓입니다.',today:'오늘 마감·점검 건이 없습니다.<br><b>여유 있는 날</b>',doing:'진행 중인 업무가 없습니다.',planned:'예정 건이 없습니다.'};
+  const EMPTY={inbox:'자유 입력이 여기 쌓입니다.',today:'오늘 기한·점검 건이 없습니다.<br><b>여유 있는 날</b>',doing:'진행 중인 업무가 없습니다.',planned:'예정 건이 없습니다.'};
   for(const k of ['inbox','today','doing','planned']){
     const list=cols[k].sort(sorter);
     $('c-'+k).textContent=list.length;
@@ -242,7 +242,7 @@ export function doneCalHtml(list, y, m, selDay, now){
 }
 /* v3.8.4 완료 탭 — 늘 전체를 한 줄 목록으로 보여 준다(거르기·카드 보기 단추는 소유자 지정으로 뺐다) */
 /* 한 줄 = 종료시각 · 메모 첫 줄 · 식별정보 · 접수시각 · 마감시각 · 관련인 · 파일 (소유자 지정) */
-const DONE_COLS=['종료','메모','식별정보','접수','마감','관련인','파일'];
+const DONE_COLS=['완료','메모','식별정보','접수','기한','관련인','파일'];
 export const dAt = v => { if(v==null || v==='') return ''; const d=new Date(v); if(isNaN(d)) return '';
   return `${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const baseName = p => String(p||'').split(/[\\/]/).filter(Boolean).pop()||'';
@@ -281,8 +281,8 @@ export function renderDone(){
     dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
   }
   const mName=`${dcalY}년 ${dcalM+1}월`;
-  const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 끝낸 업무 <b class="num">${list.length}</b>건</div>` : '';
-  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 끝낸 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
+  const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 완료한 업무 <b class="num">${list.length}</b>건</div>` : '';
+  if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 완료한 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
     const g=doneGroupOf(it.doneAt, now);
@@ -459,7 +459,7 @@ export function initRender(){
       const i=it ? (it.subs||[]).findIndex(s=>s.id==ds.dataset.delsub) : -1;
       if(i<0||it.done) return;
       const removed=it.subs[i]; it.subs.splice(i,1); persist();
-      showToast('세부 할 일 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
+      showToast('하위 업무 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
         cur.subs.splice(Math.min(i,cur.subs.length),0,removed); persist(); });
       return; }
     /* v3.6.0: 완료 업무는 읽기 전용으로 연다 — 저장이 완료 업무 행을 다시 쓰지 않으므로

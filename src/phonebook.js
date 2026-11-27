@@ -1,5 +1,5 @@
 /* =========================================================================
-   전화번호부 탭 (v2.7.0) — 목록·직접 입력·[아이템에서 가져오기]·엑셀 불러오기.
+   전화번호부 탭 (v2.7.0) — 목록·직접 입력·[아이템에서 가져오기]·엑셀 가져오기.
    저장은 S.phonebook 통째 교체(STORE.savePhonebook) — 다른 사이드카(프리셋 등)와
    동일한 replace-not-merge 계약. 표시는 소속→이름 정렬로 파생(배열 순서는 저장
    순서일 뿐 화면 정렬에 안 쓴다 — 수백 건에서 드래그 정렬은 의미가 없다).
@@ -58,7 +58,7 @@ export function renderPhonebook(){
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
   if(!list.length){
-    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. [＋ 추가]나 [엑셀 불러오기]를 쓰세요.'}</div>`;
+    w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. [＋ 추가]나 [엑셀 가져오기]를 쓰세요.'}</div>`;
     return;
   }
   /* v3.7.0 소속별 묶음(소유자 선택): 묶음 = 엮인 업무 합이 많은 소속 먼저 → 소속명,
@@ -127,7 +127,7 @@ async function submitPbForm(){
   savePb(); closePbEdit(); renderPhonebook();
 }
 
-/* ── 엑셀 불러오기 확인 팝업 (v2.9.0 — 네이티브 confirm 대신 앱 표준 모달) ──
+/* ── 엑셀 가져오기 확인 팝업 (v2.9.0 — 네이티브 confirm 대신 앱 표준 모달) ──
    찾은 관련인을 목록으로 보여주고 [모두 추가]로 확정한다. */
 let pendingSync=[];                 // 팝업에 떠 있는 후보 (id 없는 {who,org,phone})
 function openPbSync(title, sub, found){
@@ -215,7 +215,7 @@ async function saveXlsxTemplate(){
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'전화번호부');
     const bytes=Array.from(new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})));
     const saved=await invoke('save_binary_file',{suggestedName:'전화번호부_양식.xlsx', data:bytes});
-    if(saved) showToast('제목 줄 아래에 채운 뒤 [엑셀 불러오기]로 넣으세요');
+    if(saved) showToast('제목 줄 아래에 채운 뒤 [엑셀 가져오기]로 넣으세요');
   }catch(e){ await appAlert('엑셀 양식 저장 실패: '+e); }
 }
 
@@ -295,7 +295,7 @@ export function renderPbSide(){
     /* v3.8.18 소속 · 전화 · 이메일은 이름 아래 한 줄에, 이름표 없이 같은 글자로(소유자 지정) */
     +`<div class="pbs-box"><div class="pbs-bhead"><span class="pbs-btitle">관련 업무</span><span class="pbs-count num">진행 ${live} · 완료 ${list.length-live}</span></div>`
     /* 줄 = 진행/완료 · 메모 첫 줄 · 식별정보 · 종료(완료 탭 한 줄 목록과 같은 이름·같은 날짜 모양 — 소유자 요청) */
-    +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">종료</span></div>`+list.map(it=>{
+    +`<div class="rel-list pbs-list">${list.length ? `<div class="rel-hit pbs-h"><span class="pbs-c0"></span><span class="rel-txt">메모</span><span class="pbs-c">식별정보</span><span class="pbs-c">완료</span></div>`+list.map(it=>{
       const memo=(it.memo||'').split(/\r?\n/)[0].trim()||'(메모 없음)';
       const ids=(it.ids||[]).filter(x=>x.val).map(x=>`${x.kind?x.kind+' ':''}${x.val}`).join(', ');
       const end=it.done ? dAt(it.doneAt) : '';
