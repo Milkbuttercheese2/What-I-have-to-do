@@ -36,9 +36,12 @@ const RUNS = +process.env.RUNS || 7, START_RUNS = +process.env.START_RUNS || 5, 
 const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(',')) : null;
 const SIZES = {보통: [50, 500], 많음: [300, 3000], 아주많음: [1000, 10000]};
 const pick = process.env.SIZE ? process.env.SIZE.split(',') : Object.keys(SIZES);
-/* LIMIT=1 일 때 보통 크기의 한도(ms, '길게' 기준). 100ms = 바로 느껴지는 문턱, 시작·내보내기·그림은 1초 */
+/* LIMIT=1 일 때 보통 크기의 한도(ms, '길게' 기준). 100ms = 바로 느껴지는 문턱, 시작·내보내기·그림은 1초.
+   공유 미리 보기 열기만 200ms — 미리 보기 그림을 한 번에 그리는 일이라 이 PC 에서 가운데값이 이미 100ms 언저리이고(혼자 돌려 94~104ms),
+   PC 가 조금만 바빠도 120~139ms 로 흩어져(2026-11-27 점검 라운드 5: 같은 날 12회, c3f6c0f 와 그 뒤 코드가 같은 숫자) 100ms 한도는
+   앱이 그대로인데도 실패했다. 본 흩어짐의 가장 큰 값(139ms)에 여유를 두고, 두 배로 느려지는 퇴행은 잡히게 200ms. */
 const LIMITS = {startup: 1000, render60: 100, save: 100, search: 100, formOpen: 100, formOpenLong: 100, tabCal: 100, tabDone: 100, tabPhone: 100, tabBoard: 100,
-  calNext: 100, doneMonth: 100, doneSearch: 100, pbClick: 100, memoKey: 100, capSearch: 100, xlsx: 1000, share: 1000, shareOpen: 100};
+  calNext: 100, doneMonth: 100, doneSearch: 100, pbClick: 100, memoKey: 100, capSearch: 100, xlsx: 1000, share: 1000, shareOpen: 200};
 
 /* ── 지어낸 자료 (Rust perf_tests.rs 와 같은 모양) ── */
 function makeData(active, done){
