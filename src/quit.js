@@ -14,6 +14,7 @@
    ========================================================================= */
 import {STORE, invoke} from './store.js';
 import {flushEdit as flushDocEdit} from './docs.js';
+import {saveDraftNow} from './form.js';
 import {logged} from './logs.js';
 
 let quitting=false;
@@ -23,6 +24,9 @@ async function onQuitRequest(){
   quitting=true;
   /* v3.8.4 문서 탭에서 고치던 글자 파일도 저장하고 끈다(2초 안에 — 그 뒤엔 Rust 감시 타이머가 어차피 끈다) */
   try{ await Promise.race([flushDocEdit(), new Promise(r=>setTimeout(r,2000))]); }catch(e){ console.warn('종료 전 문서 저장 실패',e); }
+  /* 점검 라운드 3: 열린 양식에서 방금 친 글 — 임시저장은 입력이 0.7초 멈춰야 도는데, 그 전에 끄면 마지막으로 멈춘 뒤 친 글이 사라졌다.
+     지금 내용을 임시저장분으로 확정하면 아래 flush 가 설정과 함께 디스크에 쓴다(다음에 그 양식을 열면 이어 쓴다) */
+  try{ saveDraftNow(); }catch(e){ console.warn('종료 전 양식 임시저장 실패',e); }
   try{ await STORE.flush(); }catch(e){ console.warn('종료 전 저장 플러시 실패',e); }
   try{ await invoke('quit_now'); }catch(e){ console.warn('종료 요청 실패',e); }
 }
