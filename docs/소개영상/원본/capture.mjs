@@ -19,10 +19,13 @@ const PDF_REL = "2026 나라장터 운영/한빛정보 장애 경위서.pdf", PD
 const server = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split("?")[0]); if (p === "/") p = "/index.html";
   const file = p.startsWith("/__demo/") ? path.join(DEMO, p.slice(8)) : path.join(ROOT, p);
   fs.readFile(file, (e, b) => { if (e) { r.writeHead(404); r.end(); return; } r.writeHead(200, { "Content-Type": MIME[path.extname(p)] || "application/octet-stream" }); r.end(b); }); });
-await new Promise((r) => server.listen(0, r)); const port = server.address().port;
+await new Promise((r) => server.listen(0, "127.0.0.1", r)); const port = server.address().port;   // 이 PC 안(127.0.0.1)의 빈 포트만
 const b = await chromium.launch({ channel: "msedge" });
 const page = await b.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });   // 2배율 — 영상에서 확대해도 글자가 또렷하게
 page.on("pageerror", (e) => console.log("ERR", e.message));
+/* v3.9.0 — 화면 속 시각을 오늘 17:10 으로 묶는다(언제 찍어도 "오후 세 시 반 장애 → 저녁 무렵" 화면이 같게). 타이머는 그대로 흐른다 */
+const now = new Date(); now.setHours(17, 10, 0, 0);
+await page.clock.setFixedTime(now);
 await page.addInitScript(INIT);
 await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: "networkidle" });
 await page.waitForTimeout(900);
@@ -54,7 +57,7 @@ const openCard = (text) => page.evaluate((s) => (0, eval)(s).querySelector(".car
 const tab = async (v) => { await page.click(`.tab[data-view="${v}"]`); await wait(500); };
 const dkey = (rel) => `#dt-tree [data-dkey="0:${rel}"]`;
 const pad = (n) => String(n).padStart(2, "0");
-const now = new Date(); const today = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())}`;
+const today =`${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())}`;
 fs.mkdirSync(path.join(HERE, "shots"), { recursive: true });
 /* 미니 창 띄우기 — 실제 capture.html 을 보드 위 작은 창 크기로 */
 async function openMini(h) {
@@ -103,31 +106,23 @@ await page.locator("#fm-subs .fsub-row .dt-time").blur(); await wait(200); await
 await shot("form-sub", { subs: ".fm-subs", save: "#fm-save" });
 await page.click("#fm-save"); await wait(500); await park();
 await shot("board-moved", { card: cardBy("투찰 화면 멈춤 문의"), colMe: "#view-board5 .col:nth-child(2)" });
-/* 메모 합치기 — 카드를 끌어 다른 카드 위로(놓기 직전) */
-{
-  const a = await box(cardBy("투찰 지연 업체 회신 목록 정리")); const t = await box(cardBy("전자입찰 장애"));
-  await page.mouse.move(a.x + 60, a.y + 18); await page.mouse.down(); await page.mouse.move(a.x + 90, a.y + 30, { steps: 4 });
-  await page.mouse.move(t.x + 120, t.y + 22, { steps: 10 }); await wait(250);
-  await shot("merge", { target: "#view-board5 .card.merge-over", ghost: ".drag-ghost", inbox: "#view-board5 .col:nth-child(1)" });
-  await page.mouse.move(1900, 1060, { steps: 6 }); await page.mouse.up(); await wait(300);
-}
+/* (v3.9.0 — 메모 합치기 장면 f4 는 길이 때문에 뺐다) */
 /* v3.8.19 f5 — 업체 보고서를 양식 위로 끌어 놓으면 링크 줄이 생긴다. 탐색기 끌기는 브라우저로 찍을 수 없어
    놓기 전(링크 칸)과 놓은 뒤(앱의 끌어 놓기 처리 addLinkPaths 가 만든 링크 줄)를 찍고, 끄는 동작은 영상의 커서로 보여 준다 */
 const filesInView = () => page.evaluate(() => { document.getElementById("fm-files").scrollIntoView({ block: "center" }); });
 const lastFileRow = "js:[...document.querySelectorAll('#fm-files .ffile-row')].pop()";
-await page.mouse.click(1915, 1075); await wait(300);   // 끌기 뒤 첫 클릭은 앱이 삼킨다(render.js initMergeDrag) — 빈 곳에 한 번
 await openCard("전자입찰 장애 — 투찰"); await wait(500); await filesInView(); await wait(300); await park();
 await shot("form-drop", { panel: "#formPanel .fm-inner", files: "#fm-files" });
 await page.evaluate(async (p) => { const m = await import("./form.js"); m.addLinkPaths([p]); }, PDF_ABS); await wait(500); await filesInView(); await wait(200); await park();
 await shot("form-linked", { files: "#fm-files", row: lastFileRow });
 await page.click("#fm-save"); await wait(500);
 
-// ── 4. 알림 · 업무 종료 ───────────────────────────────────────────
+// ── 4. 알림 · 업무 완료 ───────────────────────────────────────────
 await page.evaluate(() => {
   const t = new Date(); const hm = String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
   document.getElementById("alarmList").innerHTML =
     '<div class="a-item a-mid"><b>점검</b>장애 공지 게시<span class="num">' + hm + "</span></div>" +
-    '<div class="a-item a-due"><b>마감</b>이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신<span class="num">' + hm + "</span></div>";
+    '<div class="a-item a-due"><b>기한</b>이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신<span class="num">' + hm + "</span></div>";
   document.getElementById("alarmBg").classList.add("on");
 }); await park();
 await shot("alarm", { alarm: "#alarmBg .alarm" });
@@ -182,10 +177,9 @@ console.log("pdf sel", await dragText("#dv-body .textLayer", Number(process.env.
 await page.mouse.move(1915, 1075);
 await shot("docs-pdf-sel", { sel: selBox, body: "#dv-body", file: dkey(PDF_REL) });
 await page.evaluate(() => window.getSelection().removeAllRanges());
-await page.click(dkey("2026 나라장터 운영/장애 접수 목록.csv")); await wait(900); await park();
-await shot("docs-csv", { table: "#dv-md table", body: "#dv-body" });
+/* (v3.9.0 — 표 파일 장면 d3 는 길이 때문에 뺐다. SQL 화면은 d4 의 메모 칸 접기에서 쓴다) */
 await page.click(dkey("2026 나라장터 운영/장애 시간대 투찰 기록 조회.sql")); await wait(1200); await park();
-await shot("docs-sql", { code: "#dv-code", body: "#dv-body" });
+await shot("docs-sql", { code: "#dv-code", body: "#dv-body", fold: "#dn-fold" });
 { const add = (await page.$("#dn-add2:visible")) ? "#dn-add2" : "#dn-add"; await page.click(add); await wait(700); }
 await page.click("#fm-memo"); await page.keyboard.type("장애 시간대 실패 투찰 12건 — 업체별 재투찰 안내", { delay: 6 }); await wait(300); await park();
 await shot("docs-dock", { form: "#formPanel", code: "#dv-code", memo: "#fm-memo" });
@@ -236,19 +230,103 @@ await page.click('#pbsw-list [data-swapto="907"]'); await wait(250); await park(
 await shot("swap", { modal: "#pbSwapModal .modal", pick: '#pbsw-list [data-swapto="907"]', sum: "#pbsw-sum", go: "#pbsw-go" });
 await page.click("#pbsw-cancel"); await wait(200);
 
-// ── 8. 화면 테마 · 데이터 ─────────────────────────────────────────
+// ── 8. (v3.9.0 새 장) 자리를 비우기 전, 일을 넘깁니다 ───────────────────
 await tab("board");
-await page.click("#settingsBtn"); await wait(400);
-await page.evaluate(() => { const m = document.querySelector("#settingsModal .modal"); m.scrollTop = 0; }); await wait(250); await park();
-await shot("settings-top", { modal: "#settingsModal .modal", theme: "#segTheme" });
-await esc();
-await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark")); await park();
-await shot("board-dark", { board: "#view-board5" });
-await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+const OUT = path.join(HERE, "handover"); fs.mkdirSync(OUT, { recursive: true });
+const takeSaved = async () => { for (let k = 0; k < 60; k++) { const s = await page.evaluate(() => { const v = window.__saved; window.__saved = null; return v && { name: v.name, data: Array.from(v.data) }; }); if (s) return s; await wait(150); } throw new Error("저장된 바이트가 없다"); };
+/* h1 — 장애 업무의 메모에 [진행 경과]·[남은 일] 줄을 친다 → 그 줄 위에 가로선(.msec) */
+const MEMO0 = "전자입찰 장애 — 투찰 화면 멈춤 (공고 R26BK01234567)\n입찰서 제출 30분 전 여러 업체 투찰 화면 멈춤.";
+const MEMO1 = MEMO0 + "\n[진행 경과]\n15:50 서버 로그 확인 — 인증 모듈 응답 지연\n16:30 장애 공지 게시";
+const MEMO2 = MEMO1 + "\n[남은 일]\n제출 기한 연기 공고 (박서연 주무관과 협의)\n실패 투찰 12건 업체별 재투찰 안내";
+await openCard("전자입찰 장애 — 투찰"); await wait(500);
+const setMemo = async (t) => { await page.fill("#fm-memo", t); await page.locator("#fm-memo").evaluate((e) => { e.selectionStart = e.selectionEnd = e.value.length; e.dispatchEvent(new Event("input", { bubbles: true })); }); await wait(350); };
+await page.evaluate(() => { document.getElementById("formPanel").scrollTop = 0; });
+await setMemo(MEMO0); await park();
+await shot("memo-0", { panel: "#formPanel .fm-inner", memo: "#fm-memo" });
+await setMemo(MEMO1); await park();
+await shot("memo-1", { panel: "#formPanel .fm-inner", memo: "#fm-memo", sec0: "#formPanel .msec" });
+await setMemo(MEMO2); await park();
+await shot("memo-2", { panel: "#formPanel .fm-inner", memo: "#fm-memo", sec0: "js:document.querySelectorAll('#formPanel .msec')[0]", sec1: "js:document.querySelectorAll('#formPanel .msec')[1]" });
+/* h2 — 양식 왼쪽 아래 공유 아이콘 → 미리 보기 창 */
+await page.evaluate(() => { const p = document.getElementById("formPanel"); p.scrollTop = p.scrollHeight; }); await wait(300); await park();
+await shot("form-share", { share: "#fm-share", actions: ".fm-actions", panel: "#formPanel .fm-inner" });
+await page.click("#fm-share"); await wait(1500); await park();
+await shot("share-preview", { modal: "#shareModal .share-modal", stage: "#share-stage", card: "#share-stage .shw", img: "#share-img" });
+/* 나가는 그림 그대로 — [파일로 저장]이 넘기는 PNG(앱의 공유 그림 만들기)를 꺼내 대화창 장면에 쓴다 */
+await page.click("#share-save"); { const s = await takeSaved(); fs.writeFileSync(path.join(OUT, "share-card.png"), Buffer.from(s.data)); console.log("share png", s.name, s.data.length); }
+await wait(400);
+await page.click("#share-img").catch(() => {}); await wait(700); await park();   // [그림 복사] — 갈무리 창에서는 클립보드가 막혀 안내가 뜰 수 있다
+await shot("share-copied", { img: "#share-img", toast: "#toast", modal: "#shareModal .share-modal" });
+await page.evaluate(() => { const d = document.querySelector("#appDialog.on #dlg-ok"); if (d) d.click(); });
+await page.evaluate(async () => { (await import("./share.js")).closeShare(); }); await wait(300);
+await esc(); { const d = await page.$("#appDialog.on #dlg-cancel"); if (d) await d.click(); }
+await page.evaluate(async () => { const { S } = await import("./state.js"); if (S.settings.formDrafts) for (const k of Object.keys(S.settings.formDrafts)) delete S.settings.formDrafts[k]; });
+await wait(300);
+/* h4 — 설정 → 데이터 → [엑셀로 내보내기]. 앱이 만든 xlsx 바이트를 그대로 파일로(h5·h6 의 한셀 뷰어 갈무리에 쓴다) */
 await page.click("#settingsBtn"); await wait(400);
 await page.evaluate(() => { const m = document.querySelector("#settingsModal .modal"); m.scrollTop = m.scrollHeight; }); await wait(250); await park();
-await shot("settings-data", { modal: "#settingsModal .modal", data: "js:document.getElementById('bkExp').closest('.set-card')", bk: "#bkExp" });
+await shot("settings-data", { modal: "#settingsModal .modal", data: "js:document.getElementById('bkExp').closest('.set-card')", bk: "#bkExp", xlsx: "#xlsx" });
+await page.click("#xlsx"); { const s = await takeSaved(); fs.writeFileSync(path.join(OUT, "업무목록.xlsx"), Buffer.from(s.data)); console.log("xlsx", s.name, s.data.length); }
+await wait(500); await park();
+await shot("xlsx-saved", { modal: "#settingsModal .modal", xlsx: "#xlsx", toast: "#toast" });
 await esc();
+/* h3 — 대화창(직접 그린 일반 대화창 — 어떤 메신저의 이름·로고·색도 흉내 내지 않는다). 왼쪽 보내는 사람, 오른쪽 받는 사람.
+   메모지 그림은 위에서 앱이 만든 share-card.png 그대로 */
+{
+  const png = "data:image/png;base64," + fs.readFileSync(path.join(OUT, "share-card.png")).toString("base64");
+  const chat = await b.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });
+  const font = "data:font/woff2;base64," + fs.readFileSync(path.join(ROOT, "fonts", "PretendardVariable.woff2")).toString("base64");
+  const html = (sent) => `<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:P;src:url('${font}') format('woff2');font-weight:45 920}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1920px;height:1080px;overflow:hidden;background:#E4E7EB;font-family:P,sans-serif;color:#1d2330;letter-spacing:-.01em}
+.side{position:absolute;top:40px;bottom:40px;width:880px}.l{left:60px}.r{left:980px}
+.who{display:inline-flex;align-items:center;gap:10px;font-size:24px;font-weight:700;color:#3a4150;margin:0 0 14px 6px}
+.who i{font-style:normal;font-size:20px;font-weight:600;color:#fff;background:#56606f;border-radius:999px;padding:4px 14px}
+.win{position:absolute;top:58px;bottom:0;left:0;right:0;background:#fff;border-radius:18px;box-shadow:0 18px 50px rgba(20,30,45,.18);display:flex;flex-direction:column;overflow:hidden}
+.head{height:76px;border-bottom:1px solid #e3e6ea;display:flex;align-items:center;gap:14px;padding:0 24px;font-size:22px;font-weight:650}
+.av{width:44px;height:44px;border-radius:50%;background:#cfd6df;color:#46505e;display:grid;place-items:center;font-size:19px;font-weight:700}
+.head small{font-size:16px;color:#7b8492;font-weight:500;margin-left:4px}
+.log{flex:1;padding:24px 26px;display:flex;flex-direction:column;gap:14px;overflow:hidden;background:#f7f8fa}
+.row{display:flex;gap:10px;align-items:flex-end}.row.me{justify-content:flex-end}
+.b{max-width:560px;font-size:21px;line-height:1.45;padding:12px 18px;border-radius:16px;background:#fff;border:1px solid #e1e4e8}
+.me .b{background:#e6ebf2;border-color:#d6dde7}
+.t{font-size:14px;color:#8a929e;white-space:nowrap}
+.pic{border-radius:14px;border:1px solid #d6dde7;background:#fff;padding:6px;display:block}
+.pic img{display:block;border-radius:9px}
+.compose{border-top:1px solid #e3e6ea;padding:14px 18px;display:flex;align-items:flex-end;gap:12px;min-height:84px}
+.field{flex:1;min-height:56px;border:1px solid #d5dae1;border-radius:12px;padding:10px 14px;font-size:20px;color:#9aa1ab;display:flex;align-items:center;gap:12px}
+.att{border:1px solid #c9d1dc;border-radius:10px;padding:4px;background:#fff}.att img{display:block;height:150px;border-radius:7px}
+.send{height:56px;padding:0 26px;border-radius:12px;background:#4b5565;color:#fff;font-size:20px;font-weight:650;display:grid;place-items:center}
+</style></head><body>
+<div class="side l"><div class="who"><i>보내는 사람</i>김정보 주무관</div><div class="win">
+ <div class="head"><div class="av">이</div>이시스<small>디지털조달관리과</small></div>
+ <div class="log">
+  <div class="row"><div class="b">다음 주 교육 기간에는 제가 장애 건 이어서 볼게요.</div><span class="t">17:02</span></div>
+  <div class="row me"><span class="t">17:08</span><div class="b">고마워요. 지금까지 진행된 것 정리해서 보낼게요.</div></div>
+  ${sent ? `<div class="row me"><span class="t">17:10</span><div class="pic" id="sentPic"><img src="${png}" style="height:470px"></div></div>` : ""}
+ </div>
+ <div class="compose">${sent ? `<div class="field">메시지 입력</div>` : `<div class="field" id="field"><div class="att" id="att"><img src="${png}"></div>그림 1장</div>`}<div class="send" id="send">보내기</div></div>
+</div></div>
+<div class="side r"><div class="who"><i>받는 사람</i>이시스 주무관</div><div class="win">
+ <div class="head"><div class="av">김</div>김정보<small>디지털조달관리과</small></div>
+ <div class="log">
+  <div class="row me"><span class="t">17:02</span><div class="b">다음 주 교육 기간에는 제가 장애 건 이어서 볼게요.</div></div>
+  <div class="row"><div class="b">고마워요. 지금까지 진행된 것 정리해서 보낼게요.</div><span class="t">17:08</span></div>
+  ${sent ? `<div class="row"><div class="pic" id="recvPic"><img src="${png}" id="recvImg" style="height:640px"></div><span class="t">17:10</span></div>` : ""}
+ </div>
+ <div class="compose"><div class="field">메시지 입력</div><div class="send">보내기</div></div>
+</div></div>
+</body></html>`;
+  const cbox = async (sel) => chat.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; }, sel);
+  for (const [name, sent, sels] of [["chat-paste", false, { att: "#att", field: "#field", send: "#send" }], ["chat-sent", true, { sent: "#sentPic", recv: "#recvPic", img: "#recvImg" }]]) {
+    await chat.setContent(html(sent), { waitUntil: "load" }); await chat.evaluate(() => document.fonts.ready); await chat.waitForTimeout(300);
+    await chat.screenshot({ path: path.join(HERE, "shots", name + ".jpg"), type: "jpeg", quality: 95 });
+    SHOTS[name] = {}; for (const [k, s] of Object.entries(sels)) { const r = await cbox(s); if (!r) throw new Error("no element " + s); SHOTS[name][k] = r; }
+    console.log("shot", name);
+  }
+  await chat.close();
+}
 
 fs.writeFileSync(path.join(HERE, "shots.json"), JSON.stringify(SHOTS, null, 1));
 await b.close(); server.close();

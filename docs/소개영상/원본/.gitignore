@@ -12,3 +12,8 @@ shots/*.jpg
 render-all.log
 shotlist.txt
 st.txt
+# v3.9.0 — 앱이 만든 공유 그림·엑셀과 한셀 뷰어 갈무리(capture.mjs·handover.py·hcell-shot.ps1 로 다시 만든다)
+handover/
+qa/
+phone.mp4
+ffmpeg2pass*

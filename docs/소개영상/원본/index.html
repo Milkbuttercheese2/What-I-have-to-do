@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><title>조달법령 시연</title>
+<html lang="ko"><head><meta charset="utf-8"><title>뭐하려 했더라 소개영상</title>
 <style>
 @font-face{font-family:"Pretendard";src:url(PretendardVariable.woff2) format("woff2");font-weight:45 920}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -17,10 +17,17 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:#ECEAE6;font-fam
 .card span{display:block;color:#111;font-size:25px;font-weight:550;line-height:1.28;letter-spacing:-.01em}
 .ask{position:absolute;left:50%;top:345px;white-space:nowrap;color:#111;font-size:38px;font-weight:550;letter-spacing:-.01em}
 #ringTag{position:absolute;background:#2a7c6e;color:#fff;font-size:26px;font-weight:650;padding:7px 16px;border-radius:12px;white-space:nowrap}
+/* v3.9.0 — 장 진행 표시(알약 아래 "3 / 9" + 점), 누르는 자리 물결, 단축키 키 칩 */
+#prog{position:absolute;left:50%;top:622px;display:flex;align-items:center;gap:16px;color:#55595f;font-size:26px;font-weight:650;letter-spacing:.02em;white-space:nowrap}
+#prog .dots{display:flex;gap:9px}#prog .dots i{width:11px;height:11px;border-radius:50%;background:#c9c6c0}#prog .dots i.on{background:#2a7c6e}#prog .dots i.now{background:#2a7c6e;transform:scale(1.35)}
+#ripple{position:absolute;left:0;top:0;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #2a7c6e;background:rgba(42,124,110,.18);pointer-events:none;display:none}
+#keys{position:absolute;left:50%;bottom:150px;display:flex;align-items:center;gap:12px;white-space:nowrap}
+#keys b{display:inline-block;min-width:64px;text-align:center;background:#fff;color:#111;font-size:34px;font-weight:700;padding:10px 20px;border-radius:12px;border:2px solid #cfccc6;box-shadow:0 5px 0 #b9b5ae,0 10px 24px rgba(0,0,0,.22)}
+#keys span{color:#fff;font-size:34px;font-weight:700;text-shadow:0 2px 6px rgba(0,0,0,.5)}
 </style></head><body>
 <div id="shape"><div id="screen"></div><div id="labels"></div>
 <svg id="icon" viewBox="0 0 52 52" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><circle id="arc" cx="26" cy="26" r="20"/><path id="tick" d="M14 27l8.5 8.5L38 18"/></svg></div>
-<div id="stage"></div><div id="ring"></div><div id="ringTag"></div><div id="caps"></div>
+<div id="stage"></div><div id="prog"></div><div id="ring"></div><div id="ringTag"></div><div id="ripple"></div><div id="keys"></div><div id="caps"></div>
 <svg id="cursor" viewBox="0 0 40 40"><path d="M6 4l0 26 7.2-6.6 4.6 11 5.4-2.3-4.7-10.8 10-.7z" fill="#111" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/></svg>
 <script src="timeline.js"></script>
 <script>
@@ -105,7 +112,9 @@ function seek(tt){
   const tick=$("tick");tick.style.opacity=checkA;tick.setAttribute("stroke-dasharray","46");tick.setAttribute("stroke-dashoffset",46*(1-ramp(t,LOADER[1],LOADER[1]+.28)));
   // 강조 테두리
   const ro=clamp(ringT.o(t))*open;const rs=$("ring").style;rs.display=ro>.01?"block":"none";
-  if(ro>.01){const p=toStage(cam,ringT.x(t),ringT.y(t));rs.left=p[0]+"px";rs.top=p[1]+"px";rs.width=ringT.w(t)*cam.s+"px";rs.height=ringT.h(t)*cam.s+"px";rs.opacity=ro;}
+  if(ro>.01){const p=toStage(cam,ringT.x(t),ringT.y(t));rs.left=p[0]+"px";rs.top=p[1]+"px";rs.width=ringT.w(t)*cam.s+"px";rs.height=ringT.h(t)*cam.s+"px";rs.opacity=1;
+    /* v3.9.0 보는 곳 좁히기(스포트라이트) — 테두리 바깥을 살짝 어둡게(농도 .26, 테두리와 같은 스프링으로 들고 난다) */
+    rs.borderColor=`rgba(42,124,110,${ro})`;rs.boxShadow=`0 0 0 3000px rgba(12,16,24,${(.26*ro).toFixed(3)})`;}
   // 자막
   for(const c of capEls){const inn=ramp(t,c.t0,c.t0+.2),out=1-ramp(t,c.t1-.14,c.t1),o=Math.min(inn,out);const st=c.el.style;st.display=o>0?"block":"none";
     if(o>0){st.opacity=o;st.filter=o<.99?`blur(${(1-o)*6}px)`:"none";st.transform=`translateY(${(1-inn)*10}px)`;}}
@@ -117,8 +126,21 @@ function seek(tt){
   // 커서
   let press=0;for(const c of clicks){const d=t-c;if(d>-.07&&d<.16)press=Math.max(press,d<0?(d+.07)/.07:1-d/.16);}
   $("cursor").style.transform=`translate(${curT.x(t)-8}px,${curT.y(t)-5}px) scale(${1-.16*press})`;
+  // v3.9.0 누르는 자리 물결(0.65초 동안 2.4배로 퍼지며 사라짐)
+  let rip=null;for(const c of clicks){const d=t-c;if(d>=0&&d<.65)rip=d/.65;}
+  {const st=$("ripple").style;if(rip===null)st.display="none";else{const e=1-Math.pow(1-rip,3);st.display="block";st.transform=`translate(${curT.x(t)}px,${curT.y(t)}px) scale(${1+1.4*e})`;st.opacity=(1-rip)*.9;}}
+  // v3.9.0 장 진행 표시 — 장 제목 알약 아래 "n / 9"
+  let pg=null;for(const p of STAGE.prog||[])if(t>=p[0]&&t<p[1]+.25)pg=p;
+  {const el=$("prog"),st=el.style;if(!pg)st.display="none";else{const o=ramp(t,pg[0],pg[0]+.25)*(1-ramp(t,pg[1],pg[1]+.25));
+    if(el.dataset.n!==String(pg[2])){el.dataset.n=pg[2];el.innerHTML=`<span>${pg[2]} / ${pg[3]}</span><span class="dots">${Array.from({length:pg[3]},(_,i)=>`<i class="${i+1<pg[2]?"on":i+1===pg[2]?"now":""}"></i>`).join("")}</span>`;}
+    st.display=o>0?"flex":"none";st.opacity=o;st.transform=`translate(-50%,${(1-o)*10}px)`;}}
+  // v3.9.0 단축키 키 칩 — 자막 위에 잠깐
+  let kc=null,ki=-1;(STAGE.keys||[]).forEach((k,i)=>{if(t>=k[0]&&t<k[1]+.2){kc=k;ki=i;}});
+  {const el=$("keys"),st=el.style;if(!kc)st.display="none";else{const o=ramp(t,kc[0],kc[0]+.18)*(1-ramp(t,kc[1],kc[1]+.2));
+    if(el.dataset.i!==String(ki)){el.dataset.i=ki;el.innerHTML=kc[2].map(k=>`<b>${k}</b>`).join("<span>+</span>");}
+    st.display=o>0?"flex":"none";st.opacity=o;st.transform=`translate(-50%,${(1-o)*14}px)`;}}
   // 같은 프레임을 건너뛰기 위한 상태 지문
-  return [r.x,r.y,r.w,r.h,r.r,cam.s,cam.cx,cam.cy,open,cur&&cur.name,clamp((t-(cur?cur.t:0))/.2),prev&&prev.name,ro,ringT.x(t),ringT.y(t),ringT.w(t),ringT.h(t),curT.x(t),curT.y(t),press,loaderA,checkA,loaderA>0?t:0,checkA>0?t:0,$("ringTag").textContent,$("ringTag").style.display,...cardEls.map(c=>c.el.style.display==='none'?0:c.el.style.opacity+c.el.style.transform),askEl.style.opacity,
+  return [r.x,r.y,r.w,r.h,r.r,cam.s,cam.cx,cam.cy,open,cur&&cur.name,clamp((t-(cur?cur.t:0))/.2),prev&&prev.name,ro,ringT.x(t),ringT.y(t),ringT.w(t),ringT.h(t),curT.x(t),curT.y(t),press,rip===null?-1:rip,$("prog").style.display==="none"?0:$("prog").style.opacity+$("prog").dataset.n,$("keys").style.display==="none"?0:$("keys").style.opacity+$("keys").dataset.i,loaderA,checkA,loaderA>0?t:0,checkA>0?t:0,$("ringTag").textContent,$("ringTag").style.display,...cardEls.map(c=>c.el.style.display==='none'?0:c.el.style.opacity+c.el.style.transform),askEl.style.opacity,
     ...labelEls.map(l=>l.el.style.display==="none"?0:l.el.style.opacity+l.el.style.transform),...capEls.map(c=>c.el.style.display==="none"?0:c.el.style.opacity+c.el.style.transform)]
     .map(v=>typeof v==="number"?Math.round(v*50)/50:v).join("|");
 }
