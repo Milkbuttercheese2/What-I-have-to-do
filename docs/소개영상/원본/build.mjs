@@ -8,7 +8,7 @@ let DUR = {}; try { DUR = JSON.parse(readFileSync("durations.json", "utf8")); } 
 const dur = (id, say) => DUR[id] ?? Math.max(2.4, say.length * 0.1 + 0.6);
 const GAP = .5;
 /* 동작(클릭·화면 전환)이 문장 끝에 붙는 곳은 조금 더 머문다 */
-const HOLD = { o2: .6, m1: .4, c1: .8, c2: .6, c3: .6, f1: .5, f3: .5, f4: .6, n1: .4, n2: .6, d1: .6, d2: .8, d3: .6, d4: .6, s1: .5, s2: 1.0, s3: .5, p1: .6, p2: .4, k1: .3, k2: .6, e1: 1.4 };
+const HOLD = { o2: .6, m1: .4, c1: .8, c2: .6, c3: .6, f1: .5, f3: .5, f4: .6, f5: .6, n1: .4, n2: .6, d0: .6, d1: .6, d2: .8, d2b: .6, d3: .6, d4: .6, s1: .5, s2: 1.0, s3: .5, p1: .6, p2: .4, k1: .3, k2: .6, e1: 1.4 };
 const T = {}; const CAPS = []; let clock = .8;
 for (const [id, say, cap] of LINES) { T[id] = clock; const d = dur(id, say); CAPS.push([clock - .05, clock + d + .15, cap]); clock += d + GAP + (HOLD[id] || 0); }
 const TOTAL = clock + 2.6;
@@ -52,8 +52,14 @@ at(T.f2 + 2.6, { ring: "save", tag: "", cur: "save" });
 at(T.f2 + 3.4, { click: true });
 at(T.f3 - .1, { shot: "board-moved", hard: true, ring: "card", tag: "오늘 처리 칸으로", cam: ZOOM_LEFT, cur: "card" });
 at(T.f4 - .1, { shot: "merge", hard: true, ring: "target", tag: "끌어서 하나로", cam: [0, 120, 1100, 619], cur: [400, 760] });
+/* v3.8.19 f5 — 탐색기에서 끌어 온 보고서를 양식 위에 놓는다(커서가 화면 밖에서 링크 칸으로) → 링크 줄이 생김 */
+const FILES_CAM = [380, 430, 1160, 653];
+at(T.f5 - .1, { shot: "form-drop", hard: true, ring: "files", tag: "탐색기에서 끌어 놓기", cam: FILES_CAM, cur: [1560, 1060], lead: .05 });
+at(T.f5 + 1.4, { cur: "files" });
+at(T.f5 + 3.2, { click: true });
+at(T.f5 + 3.4, { shot: "form-linked", ring: "row", tag: "링크로 붙음", cur: "row" });
 
-// ④ 알림과 업무 완료
+// ④ 알림과 업무 종료
 chapter("ch4", "④ 시각이 되면", 520, "n1", "alarm", WIDE);
 at(T.n1 + .2, { ring: "alarm", tag: "시각 도래 알림", cam: [460, 220, 1000, 563], cur: [1240, 640] });
 at(T.n2 - .1, { shot: "form-finish", hard: true, ring: "finish", tag: "", cam: [760, 520, 1000, 563], cur: "finish" });
@@ -62,13 +68,26 @@ at(T.n2 + 3.0, { shot: "finished", hard: true, ring: "metrics", tag: "오늘 완
 at(T.n2 + 5.6, { ring: "toast", tag: "실행 취소", cam: WIDE, cur: "toast" });
 
 // ⑤ 문서 탭
-chapter("ch5", "⑤ 문서도 이 안에서", 600, "d1", "docs-search", WIDE);
-at(T.d1 + .2, { ring: "search", tag: "문서 찾기", cam: [900, 0, 1020, 574], cur: "search" });
+chapter("ch5", "⑤ 문서도 이 안에서", 600, "d0", "form-docbtn", FILES_CAM);
+/* v3.8.19 d0 — 양식 링크 옆 [문서] → 문서 탭, 왼쪽 목록에서 그 파일 줄이 초록 */
+at(T.d0 + .2, { ring: "doc", tag: "문서 단추", cur: "doc" });
+at(T.d0 + 3.4, { click: true });
+at(T.d0 + 3.6, { shot: "docs-reveal", hard: true, ring: "reveal", tag: "어느 폴더의 파일인지 초록으로", cam: [0, 60, 1100, 619], cur: "reveal" });
+at(T.d1 - .1, { shot: "docs-search", hard: true, ring: "search", tag: "문서 찾기", cam: [900, 0, 1020, 574], cur: "search" });
 at(T.d1 + 3.0, { ring: "hits", tag: "이름 · 내용까지", cam: [0, 60, 1100, 619], cur: "hit0" });
 at(T.d2 - .1, { shot: "docs-hwp", hard: true, ring: "page", tag: "한컴오피스 없이 · 쪽 모양 그대로", cam: [380, 120, 1160, 653], cur: "file" });
+/* v3.8.19 d2b — 한글 쪽의 글자를 끌어 고르고, PDF 에서도 똑같이 */
+at(T.d2b - .1, { shot: "docs-hwp-sel", ring: "sel", tag: "끌어 골라 복사", cur: "sel" });
+at(T.d2b + dur("d2b", "") * .6, { shot: "docs-pdf-sel", hard: true, ring: "sel", tag: "PDF도 똑같이", cur: "sel" });
 at(T.d3 - .1, { shot: "docs-csv", hard: true, ring: "table", tag: "표 그대로 고치기", cam: [380, 120, 1160, 653], cur: "table" });
-at(T.d3 + dur("d3", "") * .55, { shot: "docs-sql", ring: "code", tag: "쿼리 색 입히기", cur: "code" });
+at(T.d3 + dur("d3", "") * .5, { shot: "docs-sql", ring: "code", tag: "VS Code 색", cur: "code" });
 at(T.d4 - .1, { shot: "docs-dock", hard: true, ring: "form", tag: "보면서 메모", cam: [700, 60, 1220, 686], cur: "memo" });
+/* v3.8.19 d4 — 메모 칸 접기 → 문서가 넓어지고 오른쪽에 '‹ 메모' 띠만 */
+/*   양식을 닫은 문서 화면(docs-sql — 메모 칸이 보인다)에서 메모 칸 머리의 › (#dn-fold, 화면 좌표 ≈ 1689,169) 를 누른다 */
+const FOLD_BTN = [1687, 167, 24, 24];
+at(T.d4 + dur("d4", "") * .48, { shot: "docs-sql", hard: true, ring: FOLD_BTN, tag: "접기", cam: [700, 60, 1220, 686], cur: FOLD_BTN });
+at(T.d4 + dur("d4", "") * .48 + 1.0, { click: true });
+at(T.d4 + dur("d4", "") * .48 + 1.2, { shot: "docs-fold", hard: true, ring: "rail", tag: "메모 칸 접기", cam: [300, 60, 1620, 911], cur: "rail" });
 
 // ⑥ 다시 찾기
 chapter("ch6", "⑥ 며칠 뒤, 다시 찾기", 600, "s1", "mini-search", [380, 110, 1160, 653]);
@@ -76,15 +95,19 @@ at(T.s1 + .2, { ring: "results", tag: "진행 · 완료 함께 검색", cur: "re
 at(T.s2 - .1, { shot: "cal", hard: true, ring: "detail", tag: "하루 시간표", cam: [860, 90, 1060, 596], cur: "chip0" });
 at(T.s2 + 3.6, { click: true });
 at(T.s2 + 3.8, { shot: "cal-new", hard: true, ring: "subs", tag: "그 시각으로 새 업무", cam: FORM, cur: "subs" });
-at(T.s3 - .1, { shot: "done", hard: true, ring: "strip", tag: "달력 띠", cam: [900, 40, 1020, 574], cur: "strip" });
-at(T.s3 + 2.2, { click: true });
-at(T.s3 + 2.4, { shot: "done-day", hard: true, ring: "list", tag: "그날 끝낸 일", cam: [0, 40, 1500, 844], cur: "day" });
+/* v3.8.19 s3 — 달력 띠의 ‹ 로 지난달(목록도 그 달 것만) → 날짜를 누르면 그날만 */
+at(T.s3 - .1, { shot: "done", hard: true, ring: "strip", tag: "달력 띠", cam: [900, 40, 1020, 574], cur: "prev" });
+at(T.s3 + 1.6, { click: true });
+at(T.s3 + 1.8, { shot: "done-prev", hard: true, ring: "list", tag: "지난달 끝낸 일", cam: [200, 40, 1500, 844], cur: "prev" });
+at(T.s3 + dur("s3", "") * .5, { ring: "day", tag: "", cur: "day" });
+at(T.s3 + dur("s3", "") * .5 + 1.2, { click: true });
+at(T.s3 + dur("s3", "") * .5 + 1.4, { shot: "done-day", hard: true, ring: "list", tag: "그날 끝낸 일", cur: "day" });
 
 // ⑦ 사람으로 찾기 · 담당자 교체
 chapter("ch7", "⑦ 사람으로 찾기", 520, "p1", "phone-side", [100, 40, 1500, 844]);
 at(T.p1 + .2, { ring: "row", tag: "", cur: "row" });
 at(T.p1 + 1.4, { click: true });
-at(T.p1 + 1.6, { ring: "side", tag: "엮인 업무 모두", cam: [800, 40, 1100, 619], cur: "side" });
+at(T.p1 + 1.6, { ring: "side", tag: "관련 업무 · 진행/완료", cam: [800, 40, 1100, 619], cur: "side" });
 at(T.p2 - .1, { shot: "phone-swap", hard: true, ring: "swap", tag: "바꾸기", cam: [400, 40, 1400, 788], cur: "swap" });
 at(T.p2 + 1.6, { click: true });
 at(T.p2 + 1.8, { shot: "swap", hard: true, ring: "sum", tag: "완료 업무까지 한 번에", cam: [260, 0, 1400, 788], cur: "go" });

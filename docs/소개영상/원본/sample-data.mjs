@@ -15,6 +15,7 @@ export const DOCS = {
     { name: "장애 시간대 투찰 기록 조회.sql", rel: "2026 나라장터 운영/장애 시간대 투찰 기록 조회.sql" },
     { name: "장애 접수 목록.csv", rel: "2026 나라장터 운영/장애 접수 목록.csv" },
     { name: "장애 조치 결과 보고.hwpx", rel: "2026 나라장터 운영/장애 조치 결과 보고.hwpx" },
+    { name: "한빛정보 장애 경위서.pdf", rel: "2026 나라장터 운영/한빛정보 장애 경위서.pdf" },   // v3.8.19 — 업체가 보내온 보고서(mkpdf.mjs)
   ],
   "2026 나라장터 운영/회신 문서": [{ name: "세종시 질의 회신 초안.txt", rel: "2026 나라장터 운영/회신 문서/세종시 질의 회신 초안.txt" }],
   "참고 자료": [{ name: "이용자 등록 처리 기준.md", rel: "참고 자료/이용자 등록 처리 기준.md" }],
@@ -63,6 +64,11 @@ export function makeInit(gs) {
     mk({id:17,memo:'나라장터 장애 대응 모의훈련 결과 보고',done:true,doneAt:doneAt(-9,15)}),
     mk({id:18,memo:'인증서 오류 문의 처리 — 공고 R26BK01198830',done:true,doneAt:doneAt(-11,11),contacts:[${P.minjun}],ids:[{kind:'입찰공고번호',val:'R26BK01198830'}]}),
     mk({id:19,memo:'투찰 마감 지연 장애 공지 — 공고 R26BK01187702',done:true,doneAt:doneAt(-15,10),ids:[{kind:'입찰공고번호',val:'R26BK01187702'}]}),
+    /* v3.8.19 — 완료 탭을 지난달로 넘기는 장면(s3)용 지난달 완료 업무 */
+    mk({id:201,memo:'10월 나라장터 장애 대응 실적 보고',done:true,doneAt:doneAt(-27,16),f:{received:at(-28,9,0),due:''},contacts:[${P.seoyeon}]}),
+    mk({id:202,memo:'인증서 갱신 오류 문의 회신 — 공고 R26BK01150214',done:true,doneAt:doneAt(-31,11),f:{received:at(-32,10,0),due:''},contacts:[${P.minjun}],ids:[{kind:'입찰공고번호',val:'R26BK01150214'}]}),
+    mk({id:203,memo:'부산센터 현장 점검 결과 정리',done:true,doneAt:doneAt(-31,17),f:{received:at(-33,9,0),due:''},contacts:[${P.jihoon}]}),
+    mk({id:204,memo:'나라장터 서버 증설 일정 공유',done:true,doneAt:doneAt(-38,15),f:{received:at(-40,9,0),due:''}}),
   ];
   const phonebook=[{id:901,who:'김민준',org:'㈜한빛정보',phone:'010-2841-5530',email:''},
                    {id:902,who:'박서연',org:'디지털조달관리과',phone:'042-724-7031',email:''},
@@ -94,5 +100,5 @@ ${tauri}
     if(c==='doc_write_text')return mt;
     return inv0(c,a);
   };
-})()`.replace("getVersion:async()=>'3.7.5'", "getVersion:async()=>'3.8.7'");
+})()`.replace("getVersion:async()=>'3.7.5'", "getVersion:async()=>'3.8.19'");
 }

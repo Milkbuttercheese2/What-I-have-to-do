@@ -6,7 +6,7 @@
 // 실행: node capture.mjs (저장소의 node_modules/playwright-core 사용)
 import http from "node:http"; import fs from "node:fs"; import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { makeInit } from "./sample-data.mjs";
+import { makeInit, DOC_ROOT } from "./sample-data.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../../..");
 const ROOT = path.join(REPO, "src"), DEMO = path.join(HERE, "demo-docs");
@@ -14,7 +14,8 @@ const INIT = makeInit(fs.readFileSync(path.join(REPO, "tools/guide-shots.mjs"), 
 const pw = await import(pathToFileURL(path.join(REPO, "node_modules", "playwright-core", "index.js")).href);
 const chromium = (pw.default && pw.default.chromium) || pw.chromium;
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".png": "image/png", ".svg": "image/svg+xml", ".wasm": "application/wasm",
-  ".md": "text/plain; charset=utf-8", ".csv": "text/plain; charset=utf-8", ".sql": "text/plain; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".hwpx": "application/octet-stream" };
+  ".md": "text/plain; charset=utf-8", ".csv": "text/plain; charset=utf-8", ".sql": "text/plain; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".hwpx": "application/octet-stream", ".pdf": "application/pdf" };
+const PDF_REL = "2026 나라장터 운영/한빛정보 장애 경위서.pdf", PDF_ABS = DOC_ROOT + "\\" + PDF_REL.replace(/\//g, "\\");   // v3.8.19 — 업체가 보내온 보고서(f5·d0·d2b)
 const server = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split("?")[0]); if (p === "/") p = "/index.html";
   const file = p.startsWith("/__demo/") ? path.join(DEMO, p.slice(8)) : path.join(ROOT, p);
   fs.readFile(file, (e, b) => { if (e) { r.writeHead(404); r.end(); return; } r.writeHead(200, { "Content-Type": MIME[path.extname(p)] || "application/octet-stream" }); r.end(b); }); });
@@ -110,13 +111,23 @@ await shot("board-moved", { card: cardBy("투찰 화면 멈춤 문의"), colMe: 
   await shot("merge", { target: "#view-board5 .card.merge-over", ghost: ".drag-ghost", inbox: "#view-board5 .col:nth-child(1)" });
   await page.mouse.move(1900, 1060, { steps: 6 }); await page.mouse.up(); await wait(300);
 }
+/* v3.8.19 f5 — 업체 보고서를 양식 위로 끌어 놓으면 링크 줄이 생긴다. 탐색기 끌기는 브라우저로 찍을 수 없어
+   놓기 전(링크 칸)과 놓은 뒤(앱의 끌어 놓기 처리 addLinkPaths 가 만든 링크 줄)를 찍고, 끄는 동작은 영상의 커서로 보여 준다 */
+const filesInView = () => page.evaluate(() => { document.getElementById("fm-files").scrollIntoView({ block: "center" }); });
+const lastFileRow = "js:[...document.querySelectorAll('#fm-files .ffile-row')].pop()";
+await page.mouse.click(1915, 1075); await wait(300);   // 끌기 뒤 첫 클릭은 앱이 삼킨다(render.js initMergeDrag) — 빈 곳에 한 번
+await openCard("전자입찰 장애 — 투찰"); await wait(500); await filesInView(); await wait(300); await park();
+await shot("form-drop", { panel: "#formPanel .fm-inner", files: "#fm-files" });
+await page.evaluate(async (p) => { const m = await import("./form.js"); m.addLinkPaths([p]); }, PDF_ABS); await wait(500); await filesInView(); await wait(200); await park();
+await shot("form-linked", { files: "#fm-files", row: lastFileRow });
+await page.click("#fm-save"); await wait(500);
 
-// ── 4. 알림 · 업무 완료 ───────────────────────────────────────────
+// ── 4. 알림 · 업무 종료 ───────────────────────────────────────────
 await page.evaluate(() => {
   const t = new Date(); const hm = String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
   document.getElementById("alarmList").innerHTML =
     '<div class="a-item a-mid"><b>점검</b>장애 공지 게시<span class="num">' + hm + "</span></div>" +
-    '<div class="a-item a-due"><b>기한</b>이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신<span class="num">' + hm + "</span></div>";
+    '<div class="a-item a-due"><b>마감</b>이용자 등록 — ㈜한빛정보 인증서 재발급 문의 회신<span class="num">' + hm + "</span></div>";
   document.getElementById("alarmBg").classList.add("on");
 }); await park();
 await shot("alarm", { alarm: "#alarmBg .alarm" });
@@ -129,14 +140,48 @@ await shot("finished", { metrics: "#metrics", toast: "#toast" });
 await page.click("#toast-undo"); await wait(400);
 
 // ── 5. 문서 탭 ───────────────────────────────────────────────────
+/* v3.8.19 d0 — 양식 링크 옆 [문서] → 문서 탭, 트리에서 그 파일 줄이 초록(.reveal) */
+await openCard("전자입찰 장애 — 투찰"); await wait(500); await filesInView(); await wait(300); await park();
+await shot("form-docbtn", { files: "#fm-files", row: lastFileRow, doc: lastFileRow + ".querySelector('.ffile-doc')" });
+await page.evaluate((s) => (0, eval)(s).querySelector(".ffile-doc").click(), lastFileRow.slice(3));
+for (let k = 0; k < 40; k++) { if (await page.$("#dt-tree .reveal")) break; await wait(150); }
+await wait(1200); await park();
+await shot("docs-reveal", { tree: "#dt-tree", reveal: "#dt-tree .reveal", tab: '.tab[data-view="docs"]' });
 await tab("docs"); await wait(600);
 await page.click("#g-search"); await page.keyboard.type("투찰", { delay: 60 }); await wait(900); await park();
 await shot("docs-search", { tree: "#dt-tree", hits: "js:document.querySelector('#dt-tree .dt-hit').parentElement", search: "#g-search", hit0: "#dt-tree .dt-hit" });
 await page.click("#g-search"); await page.keyboard.press("Escape"); await wait(500);
 await page.click(dkey("2026 나라장터 운영/장애 조치 결과 보고.hwpx"));
-for (let k = 0; k < 80; k++) { if (await page.$("#dv-body img.dv-hwp-pg")) break; await wait(150); }
+for (let k = 0; k < 80; k++) { if (await page.$("#dv-body .dv-hwp-pg img")) break; await wait(150); }
 await wait(1200); await park();
-await shot("docs-hwp", { page: "#dv-body img.dv-hwp-pg", body: "#dv-body", file: dkey("2026 나라장터 운영/장애 조치 결과 보고.hwpx") });
+await shot("docs-hwp", { page: "#dv-body .dv-hwp-pg img", body: "#dv-body", file: dkey("2026 나라장터 운영/장애 조치 결과 보고.hwpx") });
+/* v3.8.19 d2b — 글자 층(한글 .dv-hwp-tl · PDF .textLayer)을 마우스로 끌어 고른다. 고른 범위(Range)의 상자를 함께 적는다 */
+const dragText = async (layerSel, lineFrom, lines) => {
+  const pts = await page.evaluate(([s, a, n]) => {
+    const spans = [...document.querySelectorAll(s + " span")].filter((x) => x.textContent.trim() && x.getBoundingClientRect().width > 2);
+    const ys = [...new Set(spans.map((x) => Math.round(x.getBoundingClientRect().top)))].sort((p, q) => p - q);
+    const line = (y) => spans.filter((x) => Math.abs(Math.round(x.getBoundingClientRect().top) - y) <= 2).map((x) => x.getBoundingClientRect());
+    const l0 = line(ys[Math.min(a, ys.length - 1)]), l1 = line(ys[Math.min(a + n - 1, ys.length - 1)]);
+    const f = l0.reduce((m, r) => (r.left < m.left ? r : m)), e = l1.reduce((m, r) => (r.right > m.right ? r : m));
+    return { x0: f.left + 1, y0: f.top + f.height / 2, x1: e.right - 1, y1: e.top + e.height / 2, lines: ys.length };
+  }, [layerSel, lineFrom, lines]);
+  await page.mouse.move(pts.x0, pts.y0); await page.mouse.down();
+  await page.mouse.move((pts.x0 + pts.x1) / 2, (pts.y0 + pts.y1) / 2, { steps: 8 }); await page.mouse.move(pts.x1, pts.y1, { steps: 8 });
+  await page.mouse.up(); await wait(300);
+  return pts;
+};
+const selBox = "js:window.getSelection().getRangeAt(0)";
+console.log("hwp sel", await dragText("#dv-body .dv-hwp-tl", Number(process.env.HWP_LINE || 5), Number(process.env.HWP_N || 2)));
+await page.mouse.move(1915, 1075);
+await shot("docs-hwp-sel", { sel: selBox, body: "#dv-body", page: "#dv-body .dv-hwp-pg img" });
+await page.evaluate(() => window.getSelection().removeAllRanges());
+await page.click(dkey(PDF_REL));
+for (let k = 0; k < 80; k++) { if (await page.$("#dv-body .textLayer span")) break; await wait(150); }
+await wait(1000);
+console.log("pdf sel", await dragText("#dv-body .textLayer", Number(process.env.PDF_LINE || 5), Number(process.env.PDF_N || 2)));
+await page.mouse.move(1915, 1075);
+await shot("docs-pdf-sel", { sel: selBox, body: "#dv-body", file: dkey(PDF_REL) });
+await page.evaluate(() => window.getSelection().removeAllRanges());
 await page.click(dkey("2026 나라장터 운영/장애 접수 목록.csv")); await wait(900); await park();
 await shot("docs-csv", { table: "#dv-md table", body: "#dv-body" });
 await page.click(dkey("2026 나라장터 운영/장애 시간대 투찰 기록 조회.sql")); await wait(1200); await park();
@@ -147,6 +192,10 @@ await shot("docs-dock", { form: "#formPanel", code: "#dv-code", memo: "#fm-memo"
 await esc(); { const d = await page.$("#appDialog.on #dlg-cancel"); if (d) await d.click(); }
 await page.evaluate(async () => { const { S } = await import("./state.js"); if (S.settings.formDrafts) delete S.settings.formDrafts.new; });
 await wait(300);
+/* v3.8.19 d4 — 메모 칸 접기(›) → 문서가 넓어지고 오른쪽에 펼치기 띠(‹ 메모)만 남는다 */
+await page.click("#dn-fold"); await wait(500); await park();
+await shot("docs-fold", { rail: "#dn-unfold", body: "#dv-body", code: "#dv-code" });
+await page.click("#dn-unfold"); await wait(300);
 
 // ── 6. 다시 찾기 ──────────────────────────────────────────────────
 await tab("board");
@@ -165,18 +214,24 @@ await shot("cal-new", { panel: "#formPanel .fm-inner", subs: ".fm-subs" });
 await esc(); { const d = await page.$("#appDialog.on #dlg-cancel"); if (d) await d.click(); }
 await page.evaluate(async () => { const { S } = await import("./state.js"); if (S.settings.formDrafts) delete S.settings.formDrafts.new; });
 await tab("done"); await wait(400); await park();
-await shot("done", { strip: "#done-cal", list: "#col-done", head: "#col-done .drow-h" });
-await page.evaluate(() => { const d = [...document.querySelectorAll("#done-cal .dcal-has:not(.dcal-today)")].pop(); d.click(); }); await wait(400); await park();
+await shot("done", { strip: "#done-cal", list: "#col-done", head: "#col-done .drow-h", prev: '#done-cal [data-dcalnav="-1"]' });
+/* v3.8.19 s3 — 달력 띠의 ‹ 로 지난달 → 목록도 그 달 것만("…에 끝낸 업무 N건"), 날짜를 누르면 그날만 */
+await page.click('#done-cal [data-dcalnav="-1"]'); await wait(500); await park();
+await shot("done-prev", { strip: "#done-cal", head: "#done-cal .dcal-head", list: "#col-done", note: "#col-done .done-month-note", prev: '#done-cal [data-dcalnav="-1"]', day: "js:[...document.querySelectorAll('#done-cal .dcal-has')].pop()" });
+await page.evaluate(() => { const d = [...document.querySelectorAll("#done-cal .dcal-has")].pop(); d.click(); }); await wait(400); await park();
 await shot("done-day", { strip: "#done-cal", day: "#done-cal .dcal-d.on", list: "#col-done" });
 await page.evaluate(() => document.querySelector("#done-cal .dcal-clear")?.click()); await wait(200);
+await page.click('#done-cal [data-dcalnav="1"]'); await wait(300);
 
 // ── 7. 사람으로 찾기 · 담당자 교체 ─────────────────────────────────
 await tab("phone"); await wait(300);
 await page.click('#pb-list .pb-item[data-pbid="901"]'); await wait(500); await park();
 await shot("phone-side", { list: "#pb-list", row: '#pb-list .pb-item[data-pbid="901"]', side: "#pb-side" });
-await page.hover('#pb-list .pb-item[data-pbid="902"]'); await wait(200);
-await shot("phone-swap", { row: '#pb-list .pb-item[data-pbid="902"]', swap: '#pb-list [data-pbswap="902"]' });
-await page.click('#pb-list [data-pbswap="902"]'); await wait(300);
+/* v3.8.18~19 — [수정]·[바꾸기]·[삭제]는 줄이 아니라 오른쪽 칸 위에 있고, 칸에 마우스를 올렸을 때 보인다 */
+await page.click('#pb-list .pb-item[data-pbid="902"]'); await wait(500);
+await page.hover("#pb-side .pbs-head"); await wait(400);
+await shot("phone-swap", { row: '#pb-list .pb-item[data-pbid="902"]', side: "#pb-side", swap: '#pb-side [data-pbswap="902"]' });
+await page.click('#pb-side [data-pbswap="902"]'); await wait(300);
 await page.click('#pbsw-list [data-swapto="907"]'); await wait(250); await park();
 await shot("swap", { modal: "#pbSwapModal .modal", pick: '#pbsw-list [data-swapto="907"]', sum: "#pbsw-sum", go: "#pbsw-go" });
 await page.click("#pbsw-cancel"); await wait(200);
