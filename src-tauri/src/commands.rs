@@ -735,6 +735,25 @@ pub async fn import_backup_file(app: AppHandle, state: State<'_, AppDb>) -> Resu
         return Ok(ImportResult::Json { content });
     }
 
+    let item_count = probe_import_db(&picked_path)?;
+
+    // Do NOT copy over state.db_path here — this process's own AppDb.conn
+    // is a live, open connection to that exact file. Overwriting a
+    // SQLite file's bytes out from under a connection that still has it
+    // open (even just idle, even on Windows where the raw byte-copy
+    // itself "succeeds") reliably left the file unreadable on next
+    // launch — every import ended up "recovered from backup" instead of
+    // actually applying, because the stale open connection's own
+    // teardown corrupted what we'd just written. Instead, stage the
+    // picked file next to the real one; `db::apply_pending_import` moves
+    // it into place at the start of the *next* process's startup, before
+    // any connection has been opened at all.
+    std::fs::copy(&picked_path, db::pending_import_path(&state.db_path)).map_err(to_err)?;
+    Ok(ImportResult::Db { items: item_count })
+}
+
+/// 고른 `.sqlite`/`.db` 를 대기시키기 전에 살펴본다 — 업무 건수를 돌려주거나, 사람에게 보일 거절 사유.
+fn probe_import_db(picked_path: &std::path::Path) -> Result<i64, String> {
     // .sqlite / .db path — validate before touching anything live: must
     // actually open, pass its own integrity check, and look like one of
     // our databases. The error text matters here: a rejected pick is the
@@ -744,13 +763,21 @@ pub async fn import_backup_file(app: AppHandle, state: State<'_, AppDb>) -> Resu
     // was changed.
     const PICK_BAD: &str =
         "선택한 파일이 손상되어 있어 가져올 수 없습니다.\n(현재 데이터는 변경되지 않았습니다 — 다른 백업 파일을 선택해주세요.)";
-    let check_conn = rusqlite::Connection::open(&picked_path)
+    let check_conn = rusqlite::Connection::open(picked_path)
         .map_err(|e| format!("{PICK_BAD}\n\n상세: {e}"))?;
     let integrity: String = check_conn
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
         .map_err(|e| format!("{PICK_BAD}\n\n상세: {e}"))?;
     if integrity != "ok" {
         return Err(format!("{PICK_BAD}\n\n무결성 검사 결과: {integrity}"));
+    }
+    /* 점검 라운드 3: 더 새 판의 앱이 만든 DB 는 이 판이 열지 못한다 — 대기시켜 두면 다음 시작이 '실행 불가'로 멈춘다 */
+    let picked_version: i64 = check_conn.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(to_err)?;
+    if picked_version > db::SCHEMA_LATEST {
+        return Err(format!(
+            "선택한 파일은 이 판보다 새 판의 앱이 만든 데이터베이스라 가져올 수 없습니다(파일 판 {picked_version}, 이 앱 {}).\n(현재 데이터는 변경되지 않았습니다 — 새 판의 앱에서 가져오세요.)",
+            db::SCHEMA_LATEST
+        ));
     }
     let has_items: i64 = check_conn
         .query_row(
@@ -766,20 +793,32 @@ pub async fn import_backup_file(app: AppHandle, state: State<'_, AppDb>) -> Resu
         .query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0))
         .map_err(to_err)?;
     drop(check_conn);
+    Ok(item_count)
+}
 
-    // Do NOT copy over state.db_path here — this process's own AppDb.conn
-    // is a live, open connection to that exact file. Overwriting a
-    // SQLite file's bytes out from under a connection that still has it
-    // open (even just idle, even on Windows where the raw byte-copy
-    // itself "succeeds") reliably left the file unreadable on next
-    // launch — every import ended up "recovered from backup" instead of
-    // actually applying, because the stale open connection's own
-    // teardown corrupted what we'd just written. Instead, stage the
-    // picked file next to the real one; `db::apply_pending_import` moves
-    // it into place at the start of the *next* process's startup, before
-    // any connection has been opened at all.
-    std::fs::copy(&picked_path, db::pending_import_path(&state.db_path)).map_err(to_err)?;
-    Ok(ImportResult::Db { items: item_count })
+#[cfg(test)]
+mod import_probe_tests {
+    /// 점검 라운드 3: 더 새 판의 앱이 만든 DB 는 대기시키지 않는다(다음 시작이 '실행 불가'로 멈추므로). 이 판·옛 판의 DB 는 그대로 받는다.
+    #[test]
+    fn a_newer_apps_db_is_refused_before_staging() {
+        let dir = std::env::temp_dir().join(format!("wmhh_test_r3_import_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = dir.join("pick.sqlite");
+        drop(crate::db::open(&p).unwrap());
+        assert_eq!(super::probe_import_db(&p), Ok(0));
+        {
+            let c = rusqlite::Connection::open(&p).unwrap();
+            c.pragma_update(None, "user_version", 3).unwrap();       // 옛 판 DB 꼴 — 받는다(다음 시작에 올린다)
+        }
+        assert_eq!(super::probe_import_db(&p), Ok(0));
+        {
+            let c = rusqlite::Connection::open(&p).unwrap();
+            c.pragma_update(None, "user_version", crate::db::SCHEMA_LATEST + 1).unwrap();
+        }
+        let e = super::probe_import_db(&p).unwrap_err();
+        assert!(e.contains("새 판의 앱이 만든") && e.contains("변경되지 않았습니다"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 /// Discards a staged DB import (the user declined the final confirmation).

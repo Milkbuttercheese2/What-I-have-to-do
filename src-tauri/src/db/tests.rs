@@ -1436,3 +1436,111 @@ fn every_intermediate_schema_upgrades_to_latest() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/* ── 점검 라운드 3: 시작 길의 데이터 안전 ─────────────────────────────────────────── */
+
+fn r3_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("wmhh_test_r3_{tag}_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    std::fs::create_dir_all(dir.join("backups")).unwrap();
+    dir
+}
+fn r3_item_count(path: &std::path::Path) -> i64 {
+    Connection::open(path).unwrap().query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap()
+}
+fn r3_names(dir: &std::path::Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    v.sort();
+    v
+}
+
+/// 더 새 판의 앱이 만든 DB(스키마 번호가 이 판보다 큼)를 이 판으로 열면 — 예전엔 마이그레이션 실패를 손상으로 보고
+/// **옛 자동 백업으로 덮었다**(2건이던 데이터가 1건으로 되돌아감, 원본은 before-recovery 로만 남음).
+/// 이제 '더 새 판'이라고 알리고 아무것도 바꾸지 않는다.
+#[test]
+fn a_db_from_a_newer_app_is_not_rolled_back_to_an_old_backup() {
+    let dir = r3_dir("future");
+    let db_path = dir.join("data").join("wmhh.sqlite");
+    let backups_dir = dir.join("backups");
+    {
+        let mut c = super::open(&db_path).unwrap();
+        items::save_items(&mut c, &sample_items()[..1].to_vec()).unwrap();
+    }
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_000000.sqlite")).unwrap(); // 이 판이 만든 옛 백업(1건)
+    {
+        let mut c = super::open(&db_path).unwrap();
+        items::save_items(&mut c, &sample_items()).unwrap();
+        c.pragma_update(None, "user_version", super::SCHEMA_LATEST + 1).unwrap(); // 더 새 판이 마이그레이션을 하나 더 돌린 DB(2건)
+    }
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260201_000000.sqlite")).unwrap(); // 더 새 판이 만든 백업
+    let before = std::fs::read(&db_path).unwrap();
+
+    assert!(matches!(super::open(&db_path), Err(super::error::DbError::TooNew { .. })));
+    let err = super::open_with_recovery(&db_path, &backups_dir).err().expect("열지 않고 알려야 한다");
+    assert!(matches!(err, super::error::DbError::TooNew { .. }), "{err}");
+    assert!(err.to_string().contains("더 새 판"), "{err}");
+    assert_eq!(std::fs::read(&db_path).unwrap(), before, "원본을 한 바이트도 바꾸지 않는다");
+    assert_eq!(r3_item_count(&db_path), 2);
+    assert_eq!(r3_names(&dir.join("data")), vec!["wmhh.sqlite"], "복구 흔적(before-recovery·broken)도 만들지 않는다");
+    assert_eq!(r3_names(&backups_dir).len(), 2, "백업도 그대로");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 원본이 정말 깨졌는데 가장 새 정상 백업이 더 새 판의 것이면 — 그보다 옛 백업으로 되돌리지 않는다(더 새 판이 복구하게).
+#[test]
+fn recovery_does_not_skip_past_a_newer_apps_backup_to_an_older_one() {
+    let dir = r3_dir("future_bk");
+    let db_path = dir.join("data").join("wmhh.sqlite");
+    let backups_dir = dir.join("backups");
+    {
+        let mut c = super::open(&db_path).unwrap();
+        items::save_items(&mut c, &sample_items()[..1].to_vec()).unwrap();
+    }
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_000000.sqlite")).unwrap();
+    {
+        let c = Connection::open(&db_path).unwrap();
+        c.pragma_update(None, "user_version", super::SCHEMA_LATEST + 1).unwrap();
+    }
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260201_000000.sqlite")).unwrap();
+    std::fs::write(&db_path, b"garbage, not a database").unwrap();
+
+    let err = super::open_with_recovery(&db_path, &backups_dir).err().expect("옛 백업으로 되돌리지 않는다");
+    assert!(matches!(err, super::error::DbError::TooNew { .. }), "{err}");
+    assert_eq!(std::fs::read(&db_path).unwrap(), b"garbage, not a database", "원본 자리를 덮지 않는다");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 반쯤 잘린 DB(복사·동기화가 중간에 끊김) — 열기에서 손상이 드러나면 원본을 남기고 정상 백업으로 복구한다(지금 동작 확인).
+#[test]
+fn a_truncated_db_is_recovered_and_the_original_kept() {
+    let dir = r3_dir("trunc");
+    let db_path = dir.join("data").join("wmhh.sqlite");
+    let backups_dir = dir.join("backups");
+    {
+        let mut c = super::open(&db_path).unwrap();
+        let mut many = Vec::new();
+        for k in 0..300 {
+            let mut it = sample_items()[0].clone();
+            it.id = 1_700_000_000_000 + k;
+            it.memo = "가".repeat(400);
+            it.subs.clear();
+            many.push(it);
+        }
+        items::save_items(&mut c, &many).unwrap();
+    }
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_000000.sqlite")).unwrap();
+    let len = std::fs::metadata(&db_path).unwrap().len();
+    let f = std::fs::OpenOptions::new().write(true).open(&db_path).unwrap();
+    f.set_len(len / 2).unwrap();
+    drop(f);
+
+    let (conn, note) = super::open_with_recovery(&db_path, &backups_dir).unwrap();
+    assert!(note.is_some());
+    assert_eq!(items::load_items(&conn).unwrap().len(), 300);
+    drop(conn);
+    let kept: Vec<_> = r3_names(&dir.join("data")).into_iter().filter(|n| n.starts_with("wmhh.before-recovery-")).collect();
+    assert_eq!(kept.len(), 1, "복구 전 원본(잘린 것)을 남긴다");
+    assert_eq!(std::fs::metadata(dir.join("data").join(&kept[0])).unwrap().len(), len / 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
