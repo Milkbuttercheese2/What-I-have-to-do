@@ -237,6 +237,9 @@ function groupOpen(key){ return groupOpenByDefault(key) !== dgToggled.has(key); 
 /* v3.8.4 오른쪽 달력 띠(소유자 지정 — 한 달 단위). 날 칸의 농도 = 그날 끝낸 건수, 누르면 그날 것만(다시 누르면 풀림).
    보는 달(dcalY/dcalM)·고른 날(dcalDay)은 화면 상태일 뿐 저장하지 않는다. 주는 완료 묶음과 같이 월요일 시작. */
 let dcalY=null, dcalM=null, dcalDay=null;
+/* 점검 라운드 5: 사용자가 달을 직접 넘겨 다른 달을 보고 있는가. 아니면(처음·이번 달로 돌아옴) 그릴 때마다 이번 달을 따라간다 — 예전엔 처음
+   그릴 때 한 번만 정해, 켜 둔 채 달이 바뀌면 완료 탭이 앞 달에 남아 오늘 완료한 업무가 목록에도 달력 띠에도 없었다. 날을 골라 둔 동안도 그대로 둔다. */
+let dcalPinned=false;
 const dayStart = ms => { const d=new Date(ms); d.setHours(0,0,0,0); return d.getTime(); };
 export function doneCalHtml(list, y, m, selDay, now){
   const counts=new Map();
@@ -275,7 +278,7 @@ const doneHeadRow = () => `<div class="drow drow-h">${DONE_COLS.map((c,i)=>`<spa
 export function renderDone(){
   const all=S.items.filter(onBoard).filter(it=>it.done);
   const matched=all.filter(it=>textMatch(it, dq));
-  if(dcalY==null){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
+  if(dcalY==null || (!dcalPinned && dcalDay==null)){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
   const dc=$('done-cal'); if(dc) dc.innerHTML=doneCalHtml(matched, dcalY, dcalM, dcalDay, Date.now());
   /* v3.8.18 달 단위(소유자 지정): 목록은 달력 띠가 보는 달을 따라간다. 오늘이 든 달이면 지금처럼 전체, 다른 달이면 그 달에
      끝낸 업무만(끝낸 시각 doneAt 기준 — 시각이 없는 옛 완료 업무는 전체 보기에서만 보인다). 날짜를 고르면 그날만(예전 그대로),
@@ -441,7 +444,9 @@ export function initRender(){
   const dcEl=$('done-cal');
   if(dcEl) dcEl.addEventListener('click',e=>{
     const nav=e.target.closest('[data-dcalnav]');
-    if(nav){ const d=new Date(dcalY, dcalM+Number(nav.dataset.dcalnav), 1); dcalY=d.getFullYear(); dcalM=d.getMonth(); renderDone(); return; }
+    if(nav){ const d=new Date(dcalY, dcalM+Number(nav.dataset.dcalnav), 1); dcalY=d.getFullYear(); dcalM=d.getMonth();
+      const n=new Date(); dcalPinned=!(dcalY===n.getFullYear() && dcalM===n.getMonth());   // 이번 달로 돌아오면 다시 따라간다
+      renderDone(); return; }
     const day=e.target.closest('[data-dcalday]');
     if(day){ const t=Number(day.dataset.dcalday); dcalDay = dcalDay===t ? null : t; renderDone(); }
   });
