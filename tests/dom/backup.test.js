@@ -246,6 +246,29 @@ test('시작 읽기 실패 세션에서 JSON 복원 → 그 뒤 고친 것이 �
   env.onInvoke('save_all', () => undefined);
 });
 
+test('시작 읽기 실패 세션에서 적은 메모(저장된 적 없음)는 JSON 복원 뒤에도 남아 저장된다(첫 읽기와 같은 규칙)', async () => {
+  await env.resetS();                                  // loaded=false
+  S.items.push({id:99, memo:'잠긴 동안 미니 창으로 적은 메모', done:false, staged:true, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}});
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:4}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.deepEqual(S.items.map(x=>x.id), [7, 99]);
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args.items.map(x=>x.id);
+  assert.deepEqual(sent, [7, 99], '복원 직후 저장에 함께 실린다');
+  /* 평소 세션(읽기 성공)의 복원은 예전처럼 통째로 갈아끼운다 */
+  await env.resetS(); S.loaded = true;
+  S.items.push({id:98, memo:'복원 전 업무', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}});
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.deepEqual(S.items.map(x=>x.id), [7]);
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
 test('시작 읽기 실패 세션에서 JSON 복원이 실패하면 게이트는 닫힌 채다(빈 화면이 DB 를 덮지 않게)', async () => {
   await env.resetS();
   env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
