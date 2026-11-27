@@ -126,44 +126,62 @@ function dropDraft(key){
    캘린더의 하위 업무 지우기·문서 탭의 링크 고치기처럼 양식을 거치지 않고 업무가 바뀌면, 다음에 그 업무 양식을 열 때 바뀌기 전
    사본이 되살아나 [저장] 한 번에 그 변경을 되돌렸다 — 합치기는 끌려온 업무가 이미 지워져 그 메모가 영영 사라졌다.
    그래서 그 길들이 같은 변경을 임시저장분에도 한다. fn(data, key) 가 새 data 를 돌려주면 바꾸고, null 이면 지우고, undefined 면 그대로.
-   keys 를 주지 않으면 모든 임시저장분. 돌려주는 함수를 부르면 바꾸기 전으로 되돌린다(각 길의 [실행 취소]). */
-export function editDrafts(keys, fn){
-  const d=drafts(), before={};
+   keys 를 주지 않으면 모든 임시저장분. 돌려주는 함수를 부르면 그 변경을 되돌린다(각 길의 [실행 취소] — undoDraftEdits).
+   inv(data, key) 는 '그 변경의 반대'(새 data, 바꿀 것 없으면 undefined) — 그 뒤 사용자가 그 양식에 더 쓴 임시저장분에 쓴다. */
+export function editDrafts(keys, fn, inv){
+  const d=drafts(), changed=[];
   for(const k of (keys ? keys.map(String) : Object.keys(d))){
-    const dr=d[k]; if(!dr || !dr.data || k in before) continue;
+    const dr=d[k]; if(!dr || !dr.data || changed.some(c=>c.k===k)) continue;
     const nx=fn(dr.data, k);
     if(nx===undefined) continue;
-    before[k]=dr;
-    if(nx===null) delete d[k]; else d[k]={...dr, data:nx};
+    const after = nx===null ? null : {...dr, data:nx};
+    if(after) d[k]=after; else delete d[k];
+    changed.push({k, before:dr, after});
     if(k===draftKey) lastWritten=null;
   }
-  const keysChanged=Object.keys(before);
-  if(keysChanged.length) persistDrafts();
-  return ()=>{
-    if(!keysChanged.length) return;
-    const d2=drafts();
-    for(const k of keysChanged) d2[k]=before[k];
-    persistDrafts();
-  };
+  if(changed.length) persistDrafts();
+  return ()=>undoDraftEdits(changed, inv);
+}
+/* 점검 라운드 5: [실행 취소]는 그 동작이 바꾼 것만 되돌린다. 예전엔 바꾸기 전 사본으로 통째로 되돌려, 실행 취소 알림이 떠 있는 6초 안에
+   그 업무 양식을 열어 더 쓰고 닫은 글까지 지웠다. 이제 임시저장분마다:
+   - 그 뒤 아무도 손대지 않았으면(바꾼 그대로) 바꾸기 전 사본으로(없던 것이면 지운다) — 예전과 같다.
+   - 그 뒤 사용자가 고쳤으면 inv 로 그 변경의 반대만 한다(놓은 링크만 빼기·지운 하위 업무만 되넣기). inv 가 없는 길(합치기·인물 바꾸기 —
+     바꾼 것과 그 뒤 쓴 것을 나눌 수 없다)은 그대로 둔다 — 업무는 되돌아가고, 그 임시저장분은 사용자가 마지막으로 본 대로 남는다.
+   - 그 뒤 사라졌으면(양식에서 [저장]·되돌리기, 또는 저장본과 같아짐) 되살리지 않는다. */
+function undoDraftEdits(changed, inv){
+  if(!changed.length) return;
+  const d=drafts(), same=(a,b)=>JSON.stringify(a.data)===JSON.stringify(b.data);
+  let n=0;
+  for(const {k, before, after} of changed){
+    const cur=d[k];
+    if(after ? (cur && same(cur, after)) : !cur){
+      if(before) d[k]=before; else if(cur) delete d[k]; else continue;
+    }else if(cur && cur.data && inv){
+      const nx=inv(cur.data, k); if(nx===undefined) continue;
+      d[k]={...cur, data:nx};
+    }else continue;
+    n++;
+    if(k===draftKey) lastWritten=null;
+  }
+  if(n) persistDrafts();
 }
 /* 업무 → 임시저장분 모양(collectForm 이 돌려주는 칸만, 같은 순서) */
 const formShape = x => ({memo:x.memo||'', f:x.f||{}, contacts:x.contacts||[], ids:x.ids||[], subs:x.subs||[], files:x.files||[]});
 /* 메모 합치기(render.js mergeCards)가 부른다 — 받는 쪽(t)·끌려온 쪽(s) 어느 한쪽에라도 임시저장분이 있으면, 받는 쪽 임시저장분을
-   '두 쪽의 임시저장분(없으면 저장본)을 같은 규칙(merge)으로 합친 것'으로 두고 끌려온 쪽 것은 지운다. 돌려주는 함수 = 실행 취소. */
+   '두 쪽의 임시저장분(없으면 저장본)을 같은 규칙(merge)으로 합친 것'으로 두고 끌려온 쪽 것은 지운다. 돌려주는 함수 = 실행 취소
+   (undoDraftEdits — 그 뒤 받는 쪽 양식에 더 쓴 임시저장분은 그대로 남긴다). */
 export function mergeDrafts(t, s, merge){
   const d=drafts(), kT=String(t.id), kS=String(s.id);
   const dT=d[kT]&&d[kT].data, dS=d[kS]&&d[kS].data;
   if(!dT && !dS) return ()=>{};
-  const before={[kT]:d[kT], [kS]:d[kS]};
-  d[kT]={at:Date.now(), data:formShape(merge(dT?{...t, ...dT}:t, dS?{...s, ...dS}:s))};
+  const after={at:Date.now(), data:formShape(merge(dT?{...t, ...dT}:t, dS?{...s, ...dS}:s))};
+  const changed=[{k:kT, before:d[kT], after}];
+  if(d[kS]) changed.push({k:kS, before:d[kS], after:null});
+  d[kT]=after;
   delete d[kS];
   if(kT===draftKey || kS===draftKey) lastWritten=null;
   persistDrafts();
-  return ()=>{
-    const d2=drafts();
-    for(const k of [kT, kS]){ if(before[k]) d2[k]=before[k]; else delete d2[k]; }
-    persistDrafts();
-  };
+  return ()=>undoDraftEdits(changed, null);
 }
 /* 지금 열린 양식의 링크 칸 경로를 바꾼다(문서 탭이 파일·폴더를 옮겼을 때 — 옆 칸 양식이 열려 있을 수 있다). map(path) 가 새 경로 또는 그대로.
    양식이 저장본과 같았으면(고친 것 없음) 기준선도 새 경로로 옮겨, 바꾼 것 없는 양식이 '고친 양식'이 되지 않게 한다. */

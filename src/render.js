@@ -483,7 +483,16 @@ export function initRender(){
       if(i<0||it.done) return;
       const removed=it.subs[i]; it.subs.splice(i,1);
       /* 임시저장분에 같은 하위 업무가 있으면 거기서도 뺀다 — 남기면 양식을 열어 [저장]할 때 지운 줄이 되살아난다(form.js editDrafts) */
-      const undoDraft=editDrafts([it.id], d=>{ const subs=(d.subs||[]).filter(x=>x.id!==removed.id); return subs.length===(d.subs||[]).length ? undefined : {...d, subs}; });
+      let dSub=null, dSubAt=0;                // 임시저장분에서 뺀 줄(양식에서 고쳤을 수 있다)과 그 자리 — 실행 취소가 그 줄만 되넣는다
+      const undoDraft=editDrafts([it.id], d=>{
+        const j=(d.subs||[]).findIndex(x=>x.id===removed.id); if(j<0) return undefined;
+        dSub=d.subs[j]; dSubAt=j;
+        return {...d, subs:d.subs.filter((_,n)=>n!==j)};
+      }, d=>{                              // 그 뒤 양식에 더 쓴 임시저장분 — 그 사이 쓴 글은 남기고 지운 줄만 제자리로(이미 있으면 그대로)
+        const subs=(d.subs||[]).slice(); if(!dSub || subs.some(x=>x.id===dSub.id)) return undefined;
+        subs.splice(Math.min(dSubAt, subs.length), 0, dSub);
+        return {...d, subs};
+      });
       persist();
       showToast('하위 업무 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
         cur.subs.splice(Math.min(i,cur.subs.length),0,removed); undoDraft(); persist(); });
