@@ -203,9 +203,12 @@ export const STORE = {
     if(this._pending) await this._run();     // 실패로 되돌아온 배치를 즉시 한 번 더
     /* v3.4.2: 사이드카(설정·전화번호부 등)도 함께 밀어 넣는다 — 재시도를 기다리던
        변경분이 종료로 사라지지 않게(아이템과 같은 이유). 실패해도 종료는 막지 않는다. */
-    const pendingSide=Object.keys(this._side).filter(k=>this._side[k] && this._side[k].args);
-    for(const k of pendingSide){
+    for(const k of Object.keys(this._side)){
       const cur=this._side[k];
+      /* 점검 라운드 3: 보내는 중인 것이 있으면 끝나기를 먼저 기다린다 — 기다리지 않고 최신 값을 또 보내면 같은 표에 대한 저장 둘이
+         동시에 날아가 도착 순서가 보장되지 않는다(옛 값이 새 값을 덮을 수 있다 — _saveSide 의 v3.8.25 주석). 끝나며 이어 보낸 것까지. */
+      while(cur.busy && cur.p) await cur.p;
+      if(!cur.args) continue;
       if(cur.timer){ clearTimeout(cur.timer); cur.timer=null; }
       try{ await invoke(cur.cmd, cur.args); cur.args=null; }
       catch(e){ console.warn(`${cur.label} 최종 저장 실패`, e); }
@@ -237,7 +240,7 @@ export const STORE = {
     const cur=this._side[kind]; if(!cur||!cur.args||cur.busy) return;
     const {cmd, args}=cur;
     cur.busy=true;
-    invoke(cmd, args).then(()=>{
+    cur.p=invoke(cmd, args).then(()=>{
       cur.busy=false;
       /* 성공: 이 종류의 대기를 비운다. 그 사이 더 새 값이 들어왔다면 그 값이
          args 에 들어와 있으므로, 보낸 것과 같을 때만 비우고, 아니면 그 새 값을 이어서 보낸다. */

@@ -376,3 +376,26 @@ test('사이드카 저장: 같은 종류는 한 번에 하나, 비행 중 들어
   assert.equal(env.invokeCalls.filter(c=>c.cmd==='save_settings').length, 2, '더는 보내지 않는다');
   env.onInvoke('save_settings', () => null);
 });
+
+/* 점검 라운드 3: 종료 플러시가 '보내는 중'인 사이드카(설정·전화번호부 …)를 기다리지 않고 최신 값을 또 보내면, 같은 표에 대한 저장 둘이
+   동시에 날아간다 — Rust 는 이 저장들을 화면 스레드 밖에서 돌려 도착 순서가 보장되지 않으므로(v3.8.25) 옛 값이 새 값을 덮을 수 있다.
+   flush 도 '종류마다 한 번에 하나' 규칙을 지켜야 한다: 보내는 중인 것이 끝난 뒤 최신 값을 보낸다. */
+test('flush(): 보내는 중인 사이드카가 있으면 끝나기를 기다렸다가 최신 값을 보낸다(같은 종류를 동시에 두 번 보내지 않는다)', async () => {
+  await env.resetS(); S.loaded = true;
+  const gates = [], order = [];
+  let inFlight = 0, maxInFlight = 0;
+  env.onInvoke('save_settings', a => { inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    return new Promise(r => gates.push(() => { inFlight--; order.push(a.settings.n); r(null); })); });
+  env.onInvoke('save_all', () => ({kind:'Saved', version:1}));
+  STORE.saveSettings({n:1});                    // 보내는 중
+  await env.flush();
+  STORE.saveSettings({n:2});                    // 보내는 동안 바뀐 값 — 끝나면 이어서 보낼 몫
+  const done = STORE.flush();                   // 그 사이 종료
+  await env.flush();
+  assert.equal(maxInFlight, 1, '같은 종류를 동시에 두 번 보내지 않는다');
+  for(let i=0; i<6 && gates.length; i++){ gates.shift()(); await env.flush(); }
+  assert.equal(await done, true);
+  assert.deepEqual(order, [1, 2], '마지막에 쓰인 것이 최신 값');
+  assert.equal(maxInFlight, 1);
+  env.onInvoke('save_settings', () => null);
+});
