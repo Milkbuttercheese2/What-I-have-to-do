@@ -82,3 +82,30 @@ test('v3.7.0 끌어서 놓은 직후의 click 은 양식을 열지 않고, 6px �
   cardOf(2).dispatchEvent(new env.window.MouseEvent('click',{bubbles:true}));                // 놓은 직후 click 은 삼킨다
   assert.ok(!doc.getElementById('formPanel').classList.contains('on'));
 });
+
+/* 점검 라운드 3: 실행 취소가 두 업무를 '온전히' 되살리는가 — 알림 상태(확인·미룸), 하위 업무 순서(합치기는 시각순으로 섞는다)·담당,
+   관련인·식별정보·파일 링크, 목록 자리까지. 되살린 그대로 저장에 실린다. */
+test('실행 취소: 알림 상태·하위 업무 순서·파일 링크·목록 자리까지 합치기 전 그대로 저장된다', async () => {
+  await env.resetS(); S.loaded = true;
+  const t = {id:1, memo:'받는', owner:'', done:false, staged:false, f:{received:'2026-07-02T09:00:00.000Z', due:'2026-07-09T09:00:00.000Z'},
+    contacts:[{who:'가', org:'가과', phone:'010-1', email:''}], ids:[{kind:'SR번호', val:'1'}],
+    subs:[{id:11, title:'늦은 점검', mid:'2026-07-08T00:00:00.000Z', done:false, al:{mid:true}, owner:'갑'}, {id:12, title:'시각 없음', mid:'', done:false, al:{}, owner:''}],
+    files:['C:\a.hwp'], al:{due:true}, recur:null, recurId:null};
+  const mid = {id:5, memo:'가운데', owner:'', done:false, staged:true, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}, recur:null, recurId:null};
+  const s = {id:2, memo:'끌려온', owner:'', done:false, staged:true, f:{due:'2026-07-05T09:00:00.000Z'},
+    contacts:[{who:'가', org:'가과', phone:'010-1', email:'ga@x.kr'}], ids:[{kind:'SR번호', val:'1'}],
+    subs:[{id:21, title:'이른 점검', mid:'2026-07-03T00:00:00.000Z', done:false, al:{mid:1800000000000}, owner:''}],
+    files:['C:\a.hwp', 'C:\b.pdf'], al:{due:1800000000000}, recur:null, recurId:null};
+  S.items = [JSON.parse(JSON.stringify(t)), JSON.parse(JSON.stringify(mid)), JSON.parse(JSON.stringify(s))];
+  render();
+  dragMerge(2, 1);
+  await env.flush();
+  const m = S.items.find(x=>x.id===1);
+  assert.deepEqual(m.subs.map(x=>x.id), [21, 11, 12], '합치면 시각순으로 섞인다');
+  assert.equal(m.al.due, undefined, '더 이른 기한이 들어와 알림이 다시 걸린다');
+  doc.getElementById('toast-undo').click();
+  await env.flush();
+  assert.deepEqual(S.items, [t, mid, s], '모든 칸과 목록 자리가 합치기 전 그대로');
+  const last = env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args.items;
+  assert.deepEqual(last, [t, mid, s], '되살린 그대로 저장에 실린다');
+});
