@@ -1511,6 +1511,41 @@ fn recovery_does_not_skip_past_a_newer_apps_backup_to_an_older_one() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 자동 백업이 있는데 DB 가 0 바이트로 비워졌으면 — 예전엔 SQLite 가 빈 새 DB 로 열어 **안내 없이 빈 보드**로 켜졌다.
+/// 이제 손상과 같은 복구 길: 정상 백업으로 복구하고 안내한다.
+#[test]
+fn an_emptied_db_is_recovered_from_backup_instead_of_opening_empty() {
+    let dir = r3_dir("empty");
+    let db_path = dir.join("data").join("wmhh.sqlite");
+    let backups_dir = dir.join("backups");
+    {
+        let mut c = super::open(&db_path).unwrap();
+        items::save_items(&mut c, &sample_items()).unwrap();
+    }
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_000000.sqlite")).unwrap();
+    std::fs::write(&db_path, b"").unwrap();
+
+    let (conn, note) = super::open_with_recovery(&db_path, &backups_dir).unwrap();
+    let note = note.expect("무슨 일이 있었는지 알린다");
+    assert!(note.contains("0바이트") && note.contains("wmhh_20260101_000000.sqlite"), "{note}");
+    assert_eq!(items::load_items(&conn).unwrap().len(), 2, "백업의 데이터로 켜진다");
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 진짜 첫 실행(백업 없음)의 0 바이트 파일은 예전처럼 조용히 새 DB 로 연다(안내창 없음).
+#[test]
+fn a_zero_byte_db_without_any_backup_still_opens_fresh_silently() {
+    let dir = r3_dir("empty_first");
+    let db_path = dir.join("data").join("wmhh.sqlite");
+    std::fs::write(&db_path, b"").unwrap();
+    let (conn, note) = super::open_with_recovery(&db_path, &dir.join("backups")).unwrap();
+    assert!(note.is_none());
+    assert_eq!(items::load_items(&conn).unwrap().len(), 0);
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 반쯤 잘린 DB(복사·동기화가 중간에 끊김) — 열기에서 손상이 드러나면 원본을 남기고 정상 백업으로 복구한다(지금 동작 확인).
 #[test]
 fn a_truncated_db_is_recovered_and_the_original_kept() {
