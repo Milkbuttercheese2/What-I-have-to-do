@@ -1579,3 +1579,26 @@ fn a_truncated_db_is_recovered_and_the_original_kept() {
     assert_eq!(std::fs::metadata(dir.join("data").join(&kept[0])).unwrap().len(), len / 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 점검 라운드 3 — 제안(소유자 결정 전이라 ignore): [백업에서 복원]으로 고른 `.sqlite` 는 대기 파일로 두었다가 다음 시작에 적용한다.
+/// 그때 원본을 바꿔 넣지 못하면(예: 옛 exe 가 트레이에 남아 파일을 쥐고 있음) lib.rs 는 그냥 지금 DB 로 켜고(안내 없음) 대기 파일을
+/// 남겨 둔다 → **며칠 뒤 그 파일을 쥔 것이 사라진 어느 시작에 말없이 적용되어** 그 사이 작업이 대기 파일 시점으로 되돌아간다
+/// (preimport 스냅숏은 남지만 사용자는 모른다). 고치려면 실패 때 대기 파일을 치우고 알릴지, 다음에 다시 할지 정해야 한다.
+#[cfg(windows)]
+#[test]
+#[ignore = "제안 — 대기 중인 가져오기를 적용하지 못했을 때의 처리(소유자 결정)"]
+fn a_pending_import_that_could_not_be_applied_is_not_applied_silently_later() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = r3_dir("pending_locked");
+    let db_path = dir.join("data").join("wmhh.sqlite");
+    let backups_dir = dir.join("backups");
+    drop(super::open(&db_path).unwrap());
+    std::fs::copy(&db_path, super::pending_import_path(&db_path)).unwrap();
+    {
+        // 다른 프로세스가 쥔 것처럼 — 공유 없이 연다(이름 바꾸기·덮어쓰기 모두 실패)
+        let _held = std::fs::OpenOptions::new().read(true).write(true).share_mode(0).open(&db_path).unwrap();
+        assert!(super::apply_pending_import(&db_path, &backups_dir).is_err(), "전제: 쥔 동안엔 적용하지 못한다");
+    }
+    assert!(!super::pending_import_path(&db_path).exists(), "적용하지 못한 가져오기가 남아 다음 시작에 말없이 적용되면 안 된다");
+    let _ = std::fs::remove_dir_all(&dir);
+}
