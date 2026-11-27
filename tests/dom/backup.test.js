@@ -257,3 +257,24 @@ test('시작 읽기 실패 세션에서 JSON 복원이 실패하면 게이트는
   assert.equal(S.items.length, 0);
   env.onInvoke('backup_import', () => null);
 });
+
+/* 점검 라운드 3 — 제안(소유자 결정 전이라 todo): 문서 탭 옆 칸 양식은 가림막이 없어 양식을 연 채 [설정] → [백업에서 복원]을 할 수 있다.
+   복원한 데이터에 그 업무가 없으면, 양식의 [저장]은 '고칠 업무가 없음'으로 아무것도 하지 않고 임시저장분까지 지워 쓰던 글이 사라진다.
+   (그 업무가 있으면 반대로 복원 전 화면 내용이 복원한 업무를 덮는다.) 고치려면 복원 때 양식을 어떻게 할지(닫기·새 업무로 남기기)를 정해야 한다. */
+test('복원으로 열린 양식의 업무가 없어지면 [저장]이 쓰던 글을 말없이 버린다', {todo:'제안 — 복원 때 열린 양식 처리(소유자 결정)'}, async () => {
+  const {initForm, openForm} = await import('../../src/form.js');
+  initForm();
+  await env.resetS(); S.loaded = true;
+  const it = {id:41, memo:'복원 전 업무', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}};
+  S.items.push(it);
+  openForm(it, {dock:true}); await env.flush();
+  $('fm-memo').value = '복원 전 업무 — 쓰던 글';
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  $('fm-save').click(); await env.flush(4);
+  assert.ok(S.items.some(x=>String(x.memo).includes('쓰던 글')), '쓰던 글이 어딘가 남는다');
+  env.onInvoke('backup_import', () => null);
+});
