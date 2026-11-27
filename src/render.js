@@ -4,14 +4,14 @@
 import {S, toggleDone, markDoneRemoved} from './state.js';
 import {STORE, invoke, openPath, revealPath} from './store.js';
 import {$, esc, escAttr, showToast, askNotify, appAlert} from './dom-utils.js';
-import {doneGroupOf, groupOpenByDefault} from './done-weeks.js';
+import {doneGroupOf, groupOpenByDefault, weekStart} from './done-weeks.js';
 import {fmtDue, fmtT} from './datetime.js';
 import {placeOf, placeMode} from './placement.js';
 import {textMatch} from './filters.js';
 import {recurLabel} from './recur.js';
 import {linkifyAt} from './phonebook-core.js';
 import {mergeItems} from './merge.js';
-import {openForm} from './form.js';
+import {openForm, mergeDrafts, editDrafts} from './form.js';
 import {renderCal} from './calendar.js';
 import {renderNote as renderDocNotes} from './docs.js';
 import {registerView, refreshView} from './views.js';
@@ -155,9 +155,12 @@ export function metricsOf(items, now){
 function renderMetrics(){
   const el=$('metrics'); if(!el) return;
   const m=metricsOf(S.items);
-  el.innerHTML=`<span><b>${m.active}</b>진행 중 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 업무</span>`
-    +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
+  putCol(el, `<span><b>${m.active}</b>진행 중 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 업무</span>`
+    +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`);
 }
+/* 라운드 2 성능: 숫자 칸도 바뀔 때만 쓴다 — 같은 값이라도 다시 쓰면 그 자리를 새로 칠하고, 그러면 브라우저가 보드 전체(카드 1천 장)의
+   합성 층을 다시 나눠(Layerize) 60초 자동 다시 그리기 한 번에 0.1초 가까이 들었다(perf-check render60) */
+function putText(el, v){ if(el && el.textContent!==String(v)) el.textContent=v; }
 /* v3.8.16 보드 칸은 지난번과 같은 HTML 이면 다시 넣지 않는다 — 카드를 하나 체크·저장할 때 바뀌지 않은 칸까지
    카드를 전부 다시 만들어(업무 1천 건: 그리기 200ms 넘게) 1분마다 도는 자동 다시 그리기도 같은 비용을 냈다.
    칸 안 카드 DOM 을 직접 바꾸는 곳(끌기 표시 .dragging·.merge-over·.drop-on)은 끝날 때 스스로 지운다. */
@@ -187,24 +190,34 @@ export function render(){
   if(placeMode()==='owner'){
     /* 시간·담당자 모드(5열) — 필터·정렬은 시간 모드와 동일, 배치만 placeOwner 결과 */
     const cols={inbox:[],metoday:[],othtoday:[],meplan:[],othplan:[]};
-    S.items.filter(onBoard).filter(matchesQ).forEach(it=>{ const p=placeOf(it); if(cols[p])cols[p].push(it); });
+    boardFill(cols);
     for(const k of ['inbox','metoday','othtoday','meplan','othplan']){
       const list=cols[k].sort(sorter);
-      $('c5-'+k).textContent=list.length;
+      putText($('c5-'+k), list.length);
       putCol($('col5-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`);
     }
     renderHidden();
     return;
   }
   const cols={inbox:[],today:[],doing:[],planned:[]};
-  S.items.filter(onBoard).filter(matchesQ).forEach(it=>{ const p=placeOf(it); if(cols[p])cols[p].push(it); });
+  boardFill(cols);
   const EMPTY={inbox:'자유 입력이 여기 쌓입니다.',today:'오늘 기한·점검 건이 없습니다.<br><b>여유 있는 날</b>',doing:'진행 중인 업무가 없습니다.',planned:'예정 건이 없습니다.'};
   for(const k of ['inbox','today','doing','planned']){
     const list=cols[k].sort(sorter);
-    $('c-'+k).textContent=list.length;
+    putText($('c-'+k), list.length);
     putCol($('col-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`);
   }
   renderHidden();
+}
+/* 보드 칸 채우기 — 칸(배치)을 먼저 보고, 보드 칸에 들어갈 업무만 검색어와 견준다(라운드 2 성능).
+   예전엔 완료 업무까지 모든 업무의 검색 글(메모 전체 소문자)을 만든 뒤 배치를 봐서, 완료가 1만 건이면 글자 하나에 0.07초를 썼다.
+   어느 칸에 어떤 순서로 들어가는지는 예전과 같다(같은 순서로 넣고, 칸 안 정렬은 부르는 쪽 sorter) */
+function boardFill(cols){
+  for(const it of S.items){
+    if(!onBoard(it)) continue;
+    const p=placeOf(it);
+    if(cols[p] && matchesQ(it)) cols[p].push(it);
+  }
 }
 /* v3.7.0 속도: 달력·완료는 **보이고 있을 때만** 다시 그린다. 안 보일 땐 탭을 열 때 views.js 가 그 화면의
    render(renderCal·renderDone)를 부르므로 늘 최신으로 열린다. 예전엔 저장할 때마다 완료 업무 전부와
@@ -224,6 +237,9 @@ function groupOpen(key){ return groupOpenByDefault(key) !== dgToggled.has(key); 
 /* v3.8.4 오른쪽 달력 띠(소유자 지정 — 한 달 단위). 날 칸의 농도 = 그날 끝낸 건수, 누르면 그날 것만(다시 누르면 풀림).
    보는 달(dcalY/dcalM)·고른 날(dcalDay)은 화면 상태일 뿐 저장하지 않는다. 주는 완료 묶음과 같이 월요일 시작. */
 let dcalY=null, dcalM=null, dcalDay=null;
+/* 점검 라운드 5: 사용자가 달을 직접 넘겨 다른 달을 보고 있는가. 아니면(처음·이번 달로 돌아옴) 그릴 때마다 이번 달을 따라간다 — 예전엔 처음
+   그릴 때 한 번만 정해, 켜 둔 채 달이 바뀌면 완료 탭이 앞 달에 남아 오늘 완료한 업무가 목록에도 달력 띠에도 없었다. 날을 골라 둔 동안도 그대로 둔다. */
+let dcalPinned=false;
 const dayStart = ms => { const d=new Date(ms); d.setHours(0,0,0,0); return d.getTime(); };
 export function doneCalHtml(list, y, m, selDay, now){
   const counts=new Map();
@@ -262,7 +278,7 @@ const doneHeadRow = () => `<div class="drow drow-h">${DONE_COLS.map((c,i)=>`<spa
 export function renderDone(){
   const all=S.items.filter(onBoard).filter(it=>it.done);
   const matched=all.filter(it=>textMatch(it, dq));
-  if(dcalY==null){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
+  if(dcalY==null || (!dcalPinned && dcalDay==null)){ const d=new Date(); dcalY=d.getFullYear(); dcalM=d.getMonth(); }
   const dc=$('done-cal'); if(dc) dc.innerHTML=doneCalHtml(matched, dcalY, dcalM, dcalDay, Date.now());
   /* v3.8.18 달 단위(소유자 지정): 목록은 달력 띠가 보는 달을 따라간다. 오늘이 든 달이면 지금처럼 전체, 다른 달이면 그 달에
      끝낸 업무만(끝낸 시각 doneAt 기준 — 시각이 없는 옛 완료 업무는 전체 보기에서만 보인다). 날짜를 고르면 그날만(예전 그대로),
@@ -273,21 +289,26 @@ export function renderDone(){
   const list=matched.filter(it=>dcalDay==null ? inMonth(it) : (it.doneAt && dayStart(it.doneAt)===dcalDay)).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
   $('done-count').textContent=all.length;
   const now=Date.now();
+  /* 라운드 2 성능: 묶음 열쇠만 먼저 구한다 — doneGroupOf 와 같은 규칙(오늘 0시·이번 주 월요일 0시 기준)이고, 이름표(날짜 글)는
+     묶음마다 한 번만 doneGroupOf 로 만든다. 예전엔 완료 업무마다 이름표까지 만들어(요약 숫자용으로 한 번, 묶음용으로 또 한 번)
+     완료 1만 건에서 검색 글자 하나·탭 열기마다 그만큼 들었다. */
+  const d0=new Date(now); d0.setHours(0,0,0,0); const today0=d0.getTime(), wk0=weekStart(now);
+  const gkey=t=>!t ? 'nodate' : t>=today0 ? 'today' : t>=wk0 ? 'week' : `w${weekStart(t)}`;
   const dm=$('done-metrics');
   if(dm){
-    const g=all.map(it=>doneGroupOf(it.doneAt, now).key);
-    const n=k=>g.filter(x=>x===k).length;
+    let nT=0, nW=0;
+    for(const it of all){ const k=gkey(it.doneAt); if(k==='today') nT++; else if(k==='week') nW++; }
     /* 요약은 둘 — 오늘 / 이번 주(오늘 포함, 누적) */
-    dm.innerHTML=`<span class="m-ok"><b>${n('today')}</b>오늘</span><span><b>${n('today')+n('week')}</b>이번 주</span>`;
+    dm.innerHTML=`<span class="m-ok"><b>${nT}</b>오늘</span><span><b>${nT+nW}</b>이번 주</span>`;
   }
   const mName=`${dcalY}년 ${dcalM+1}월`;
   const monthNote = monthOnly && dcalDay==null ? `<div class="done-month-note">${mName}에 완료한 업무 <b class="num">${list.length}</b>건</div>` : '';
   if(!list.length){ $('col-done').innerHTML=`<div class="empty">${dq||dcalDay!=null?'검색 결과가 없습니다.':monthOnly?`${mName}에 완료한 업무가 없습니다.`:'완료된 업무가 없습니다.'}</div>`; return; }
   const groups=[], byKey=new Map();     // 묶음 찾기는 Map — 예전 groups.find 는 줄 수 × 묶음 수
   for(const it of list){
-    const g=doneGroupOf(it.doneAt, now);
-    let grp=byKey.get(g.key);
-    if(!grp){ grp=Object.assign({items:[]}, g); groups.push(grp); byKey.set(g.key, grp); }
+    const k=gkey(it.doneAt);
+    let grp=byKey.get(k);
+    if(!grp){ grp=Object.assign({items:[]}, doneGroupOf(it.doneAt, now)); groups.push(grp); byKey.set(k, grp); }
     grp.items.push(it);
   }
   groups.sort((a,b)=>b.order-a.order);
@@ -349,6 +370,10 @@ function mergeCards(targetId, sourceId){
   const beforeT=JSON.parse(JSON.stringify(t));            // 실행 취소용 원본 보관
   const beforeS=JSON.parse(JSON.stringify(s));
   const srcIdx=S.items.indexOf(s);
+  /* 점검 라운드 3: 어느 쪽이든 임시저장분(양식에 쓰다 저장하지 않고 닫은 것)이 있으면 받는 쪽 임시저장분도 같은 규칙으로 합친다.
+     그대로 두면 받는 쪽 양식을 열 때 합치기 전 사본이 되살아나 [저장] 한 번에 끌려온 업무의 메모·관련인·하위 업무가 사라지고
+     (끌려온 업무는 이미 지워졌다), 끌려온 쪽 임시저장분은 주인 없이 버려졌다. */
+  const undoDrafts=mergeDrafts(t, s, mergeItems);
   S.items[S.items.indexOf(t)]=mergeItems(t,s);
   S.items.splice(S.items.indexOf(s),1);
   persist();
@@ -356,6 +381,7 @@ function mergeCards(targetId, sourceId){
     const i=S.items.findIndex(x=>x.id===targetId);
     if(i>=0) S.items[i]=beforeT; else S.items.push(beforeT);
     if(!S.items.some(x=>x.id===sourceId)) S.items.splice(Math.min(srcIdx,S.items.length),0,beforeS);
+    undoDrafts();
     persist();
   });
 }
@@ -418,7 +444,9 @@ export function initRender(){
   const dcEl=$('done-cal');
   if(dcEl) dcEl.addEventListener('click',e=>{
     const nav=e.target.closest('[data-dcalnav]');
-    if(nav){ const d=new Date(dcalY, dcalM+Number(nav.dataset.dcalnav), 1); dcalY=d.getFullYear(); dcalM=d.getMonth(); renderDone(); return; }
+    if(nav){ const d=new Date(dcalY, dcalM+Number(nav.dataset.dcalnav), 1); dcalY=d.getFullYear(); dcalM=d.getMonth();
+      const n=new Date(); dcalPinned=!(dcalY===n.getFullYear() && dcalM===n.getMonth());   // 이번 달로 돌아오면 다시 따라간다
+      renderDone(); return; }
     const day=e.target.closest('[data-dcalday]');
     if(day){ const t=Number(day.dataset.dcalday); dcalDay = dcalDay===t ? null : t; renderDone(); }
   });
@@ -458,9 +486,21 @@ export function initRender(){
     if(ds){ e.stopPropagation(); const it=S.items.find(x=>x.id==ds.dataset.item);
       const i=it ? (it.subs||[]).findIndex(s=>s.id==ds.dataset.delsub) : -1;
       if(i<0||it.done) return;
-      const removed=it.subs[i]; it.subs.splice(i,1); persist();
+      const removed=it.subs[i]; it.subs.splice(i,1);
+      /* 임시저장분에 같은 하위 업무가 있으면 거기서도 뺀다 — 남기면 양식을 열어 [저장]할 때 지운 줄이 되살아난다(form.js editDrafts) */
+      let dSub=null, dSubAt=0;                // 임시저장분에서 뺀 줄(양식에서 고쳤을 수 있다)과 그 자리 — 실행 취소가 그 줄만 되넣는다
+      const undoDraft=editDrafts([it.id], d=>{
+        const j=(d.subs||[]).findIndex(x=>x.id===removed.id); if(j<0) return undefined;
+        dSub=d.subs[j]; dSubAt=j;
+        return {...d, subs:d.subs.filter((_,n)=>n!==j)};
+      }, d=>{                              // 그 뒤 양식에 더 쓴 임시저장분 — 그 사이 쓴 글은 남기고 지운 줄만 제자리로(이미 있으면 그대로)
+        const subs=(d.subs||[]).slice(); if(!dSub || subs.some(x=>x.id===dSub.id)) return undefined;
+        subs.splice(Math.min(dSubAt, subs.length), 0, dSub);
+        return {...d, subs};
+      });
+      persist();
       showToast('하위 업무 삭제함',()=>{ const cur=S.items.find(x=>x.id===it.id); if(!cur||cur.done) return;
-        cur.subs.splice(Math.min(i,cur.subs.length),0,removed); persist(); });
+        cur.subs.splice(Math.min(i,cur.subs.length),0,removed); undoDraft(); persist(); });
       return; }
     /* v3.6.0: 완료 업무는 읽기 전용으로 연다 — 저장이 완료 업무 행을 다시 쓰지 않으므로
        여기서 고치면 그 변경이 조용히 사라진다. 고치려면 [되살려서 수정]으로 먼저 되살린다. */

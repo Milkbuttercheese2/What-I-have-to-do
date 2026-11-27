@@ -7,7 +7,7 @@ import {setupEnv} from '../helpers/env.js';
 /* Date 도 모의한다 — v2.6.4 '뜨자마자 온 blur 무시' 가드가 Date.now() 로 시간을 재기 때문 */
 mock.timers.enable({apis:['setTimeout','setInterval','Date']});
 const env = setupEnv({html: 'capture.html'});
-const {initCaptureWin} = await import('../../src/capture-win.js');
+const {initCaptureWin, hitText} = await import('../../src/capture-win.js');
 initCaptureWin();
 
 const inp = env.document.getElementById('cap-inp');
@@ -632,4 +632,18 @@ test('메모 넘기기가 실패하면 입력칸에 되돌리고 진단 로그�
     const log = env.invokeCalls.filter(c=>c.cmd==='client_log').at(-1);
     assert.deepEqual(log.args, {tag:'cap-emit-memo', msg:'no main'});
   } finally { ev.emitTo = orig; mock.timers.tick(400); reset(); }
+});
+
+test('라운드 2 성능: 검색 결과 줄 글 — 짧은 메모는 그대로, 긴 메모는 CSS 처럼 공백을 접고 앞 400자만(보이는 글은 같다)', () => {
+  assert.equal(hitText(''), '(메모 없음)');
+  assert.equal(hitText(undefined), '(메모 없음)');
+  assert.equal(hitText('  짧은\n메모  '), '  짧은\n메모  ', '짧으면 손대지 않는다');
+  const long = '\n\n  제목 줄\n' + '가나다 '.repeat(300);
+  const t = hitText(long);
+  assert.equal(t.length, 400);
+  assert.ok(t.startsWith('제목 줄 가나다 가나다'), '맨 앞 공백은 없애고 줄바꿈·연속 공백은 한 칸으로');
+  assert.equal(hitText(' '.repeat(1000) + '뒤에 글'), '뒤에 글', '공백만 길게 있던 메모도 보이는 글이 남는다');
+  const emo = hitText('😀'.repeat(300));
+  assert.ok(!/[\uD800-\uDBFF]$/.test(emo), '서로게이트 짝을 가르지 않는다');
+  assert.equal(hitText('a\u3000b'.repeat(200)).slice(0, 6), 'a\u3000ba\u3000b', 'CSS 가 접지 않는 공백(전각·NBSP)은 그대로');
 });

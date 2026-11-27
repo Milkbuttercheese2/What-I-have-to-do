@@ -281,6 +281,18 @@ pub fn run() {
 
             let (conn, db_path, backups_dir, note) = match attempt(&base_dir) {
                 Ok(result) => result,
+                /* 점검 라운드 3: 더 새 버전의 앱이 만든 데이터 — 기본 위치로 갈아타지 않는다(그러면 옛 버전이 빈 데이터로 켜져
+                   두 곳에 나뉘어 쌓인다). 손대지 않고 알리고 끈다(같은 '실행 불가' 창). */
+                Err(e @ db::error::DbError::TooNew { .. }) => {
+                    db::log_line(&base_dir, &format!("start REFUSED: {e} · {}", db::exe_desc()).replace('\n', " / "));
+                    let _ = app
+                        .dialog()
+                        .message(format!("데이터베이스를 열 수 없어 앱을 시작할 수 없습니다.\n\n{e}"))
+                        .kind(MessageDialogKind::Error)
+                        .title("실행 불가")
+                        .blocking_show();
+                    std::process::exit(1);
+                }
                 Err(e) => {
                     let attempted = base_dir.display().to_string();
                     eprintln!(

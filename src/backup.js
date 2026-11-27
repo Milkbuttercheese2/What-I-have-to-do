@@ -49,7 +49,8 @@ export function reconcileImported(){
 const XLSX_BUSY_AT=500;   // 엑셀로 내보내기: 이 건수부터 '만드는 중' 토스트를 먼저 띄운다
 export function initBackup(){
   /* 엑셀로 내보내기 — 2026-11-27 개편: 보기 좋은 업무 목록(구역별 묶음·기한 색·줄바꿈) + 연락처·파일 + 메모 전문 + 원자료.
-     파일을 만드는 일은 순수 모듈 xlsx-export.js 가 한다(범위·원자료 열은 예전과 같다 — tests/unit/xlsx-export.test.js).
+     파일을 만드는 일은 순수 모듈 xlsx-export.js 가 한다(내보내는 범위와 원자료 시트의 열 순서·값은 예전과 같고, 열 이름 셋만
+     v3.9.0 표준용어로 바뀌었다: 마감시각→기한, 세부진행→하위 업무 진행, 세부내역→하위 업무 내역 — tests/unit/xlsx-export.test.js).
      예전엔 32,767자를 넘는 메모가 하나라도 있으면 XLSX.write 가 던져 파일이 통째로 안 나왔다 — 이제 셀마다 자른다. */
   $('xlsx').addEventListener('click', async ()=>{
     const items=S.items, count=exportableItems(items).length;
@@ -131,12 +132,21 @@ export function initBackup(){
       /* 복원은 번호표를 올린다(v3.3.7) — 새 번호를 받아 두지 않으면 아래 persist() 가 옛 번호로 저장해
          '낡은 화면'으로 거절되고, 비상 덤프 + "다른 창이 바꿨다"는 거짓 안내 + 새로고침이 뒤따른다. */
       if(typeof version==='number') S.dataVersion=version;
+      /* 시작 때 읽기가 실패한 세션(F1 게이트가 닫힌 채)에서도 이 복원은 시작 안내가 권하는 길이다. 그 세션의 업무는 하나도
+         저장된 적이 없는 것(잠긴 동안 미니 창 등으로 적은 것)뿐이라, 첫 읽기(main.js)와 같은 규칙으로 복원분 뒤에 붙여 지킨다. */
+      const unsaved = S.loaded ? [] : S.items.filter(p=>!migrated.some(l=>l.id===p.id));
       // DB 복원이 성공한 뒤에만 메모리 상태를 갈아끼운다
-      S.items=migrated;
+      S.items=migrated.concat(unsaved);
+      /* DB 와 화면이 이제 같은 데이터이므로 게이트를 연다 — 열지 않으면 복원 뒤 고친 것이 모두 말없이 저장되지 않았다(배너도 없이). */
+      S.loaded=true;
       /* v3.6.0: 복원은 DB 를 통째로 갈아끼운다(backup_import 는 전체 교체). 그 전에 쌓인
          '완료 업무 변경 표시'는 이제 없는 데이터를 가리키므로 반드시 비운다 — 남겨두면
          다음 저장에서 deletedDone 으로 나가 **id 가 겹치는 엉뚱한 완료 업무를 지운다.** */
       S.doneDirty.clear();
+      /* 위에서 붙인 저장된 적 없는 업무 가운데 완료한 것은 다시 표시한다 — 증분 저장은 완료 업무를 doneDirty 에 있을 때만 보내므로,
+         빼면 화면에는 있는데 DB 에 들어가지 않아 다음 시작에 사라진다(첫 읽기는 doneDirty 를 비우지 않아 그대로 저장된다).
+         이 업무들은 복원분과 id 가 겹치지 않는 것만 골랐으니 위 ⚠️(엉뚱한 업무 지우기)에 걸리지 않는다. */
+      for(const p of unsaved) if(p.done) S.doneDirty.add(p.id);
       S.imported.fields=payload.fields;
       S.imported.presets=payload.presets;
       S.imported.idKinds=payload.idKinds;

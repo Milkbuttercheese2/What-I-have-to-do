@@ -27,7 +27,7 @@ import {registerView, showView} from './views.js';
 import {docKind, extOf, openLabel, unzip, hwpxHtml, pptxHtml, docxHtml, hwpText, docThumb, zipList, xlsxBook, isTextKind, IMG_MIME, MEDIA_MIME, mdHtml, csvHtml, codeLang, codeHtml, highlightBlocks, CODE_HL_MAX, parseCsv, toCsv, csvEditHtml, renderPdf, loadRhwp, renderHwp} from './docs-view.js';
 import {cardHtml, persist} from './render.js';
 import {placeOf} from './placement.js';
-import {openForm} from './form.js';
+import {openForm, editDrafts, mapFormFiles} from './form.js';
 import {topId} from './modals.js';
 import {syncGSearch} from './gsearch.js';
 import {logged, logWarn} from './logs.js';
@@ -653,6 +653,12 @@ export function relinkFiles(items, oldPaths, newBase){
   }
   return changed;
 }
+/* 점검 라운드 3: 업무 링크를 고칠 때 임시저장분(쓰다 닫은 양식)과 지금 열린 양식(옆 칸 양식일 수 있다)의 링크 칸도 같이 고친다 —
+   안 고치면 그 양식을 [저장]할 때 옛 경로가 되돌아와 링크가 다시 깨진다(form.js editDrafts) */
+function relinkDraftsAndForm(oldPaths, newBase){
+  editDrafts(null, d=>{ const c={...d}; return relinkFiles([c], oldPaths, newBase).length ? c : undefined; });
+  mapFormFiles(p=>{ const x={files:[p]}; return relinkFiles([x], oldPaths, newBase).length ? x.files[0] : p; });
+}
 /* 파일 링크 경로 → 문서 폴더 안이면 {i, rel}, 아니면 null (양식의 [문서] 단추) */
 export function docTarget(path){
   const n=norm(path); if(!n) return null;
@@ -677,6 +683,7 @@ async function applyMoved(i, from, to){
   if(shown && shown.i===i) shown.rel=movedRel(shown.rel, from, to);
   const changed=relinkFiles(S.items, folderPaths(i, from), basePath(i, to));
   for(const it of changed) if(it.done) S.doneDirty.add(it.id);       // 종료 업무 링크도 저장에 실리게(증분 저장 규칙)
+  relinkDraftsAndForm(folderPaths(i, from), basePath(i, to));
   for(const k of [...kids.keys()]){ const p=parseKey(k); if(p.i===i && (p.rel===from || p.rel.startsWith(from+'/') || p.rel===parentOf(from) || p.rel===parentOf(to))) kids.delete(k); }
   open=new Set([...open].map(k=>movedKey(k, i, from, to)));
   keepOpen();
@@ -708,6 +715,7 @@ async function applyRootMoved(i, base, to){
   const rs=docRoots(), nu=rootMovedPath(rs[i], base, to);
   const changed=relinkFiles(S.items, folderPaths(i, ''), nu);
   for(const it of changed) if(it.done) S.doneDirty.add(it.id);
+  relinkDraftsAndForm(folderPaths(i, ''), nu);
   S.settings.docRoots=rs.map((p,j)=>j===i ? nu : p);
   saveSettings(); rootsFor=null;
   if(changed.length) persist();

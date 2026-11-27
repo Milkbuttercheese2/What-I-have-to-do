@@ -114,3 +114,34 @@ test('v3.7.0 알림 끄기(설정 세그먼트 → applyAlarmOn): 떠 있는 알
   assert.equal($('alarmBg').classList.contains('on'), false);         // 꺼져 있으면 다시 안 뜬다
   S.settings.alarmOn = true; applyAlarmOn();                          // 켤 때는 아무것도 닫지 않는다
 });
+
+/* 점검 라운드 5(라운드 4 의심 3): 알림창이 떠 있는 동안 업무 목록이 통째로 바뀌면(JSON 복원) [확인]이 옛 객체에 적혀, 20초 뒤 같은 알림이
+   다시 울렸다. 실제 순서 — [백업에서 복원]의 파일 고르기 창을 여는 동안 알림이 울려 앱 창에 알림창이 뜨고, 파일을 고른 뒤 확인 창이 그 위에
+   떠 복원을 마치면 밑에 남은 알림창의 [확인]이 바뀌기 전 객체를 가리킨다. 이제 [확인]은 번호로 지금 업무·하위 업무를 다시 찾아 적는다. */
+test('알림창이 떠 있는 동안 JSON 복원으로 업무 목록이 바뀌어도 [확인]이 먹는다 — 20초 뒤 다시 울리지 않는다', async () => {
+  const {initBackup} = await import('../../src/backup.js');
+  const {initPresets} = await import('../../src/presets.js');
+  initPresets(); initBackup();
+  await env.resetS(); S.loaded = true;
+  const due = iso(-5), mid = iso(-3), subId = newId();
+  const saved = {id:newId(), memo:'회신 기한', f:{due}, subs:[{id:subId, title:'중간 점검', mid, done:false, al:{}}], contacts:[], ids:[], files:[], al:{}};
+  S.items.push(mk(JSON.parse(JSON.stringify(saved))));
+  let pick; env.onInvoke('import_backup_file', () => new Promise(r => { pick = r; }));   // 파일 고르기 창이 떠 있는 동안
+  env.onInvoke('backup_import', () => 2);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:3}));
+  $('bkImp').click(); await env.flush();
+  checkAlarms();                                                       // 그 사이 20초 점검이 울린다
+  assert.ok($('alarmBg').classList.contains('on'));
+  env.answerConfirm(true);
+  pick({kind:'Json', content: JSON.stringify({items:[saved]})});       // 같은 업무가 든 백업 — 새 객체로 바뀐다
+  await env.flush(8);
+  assert.notEqual(S.items[0], undefined);
+  $('alarmOk').click(); await env.flush();
+  assert.equal(S.items[0].al.due, true, '지금 업무에 확인이 적힌다');
+  assert.equal(S.items[0].subs[0].al.mid, true, '지금 하위 업무에도');
+  mock.timers.tick(20000);
+  assert.equal($('alarmBg').classList.contains('on'), false, '20초 뒤 다시 울리지 않는다');
+  env.onInvoke('import_backup_file', () => ({kind:'Cancelled'}));
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});

@@ -371,3 +371,25 @@ test('v3.8.18 전화번호부 줄: 소속은 묶음 머리줄에만 · 업무 �
   $('pb-list').querySelector('[data-pbid="1"]').click();
   assert.equal($('pb-side').querySelectorAll('[data-pbedit="1"],[data-pbswap="1"],[data-pbdel="1"]').length, 3, '고른 사람 칸 머리에 있다');
 });
+
+test('라운드 2 성능: 사람을 눌러도 목록 줄을 새로 만들지 않고 .sel 만 옮긴다 · 업무가 바뀌었으면 새로 그린다', async () => {
+  await env.resetS(); S.loaded = true; $('view-phone').classList.add('on');
+  adoptPhonebook([{id:1, who:'가가', org:'가과', phone:'010-1111-1111'},{id:2, who:'나나', org:'가과', phone:'010-2222-2222'}]);
+  S.items.push({id:101, memo:'a', done:false, f:{}, contacts:[{who:'가가', org:'가과', phone:'010-1111-1111'}], ids:[], subs:[], al:{}});
+  renderPhonebook();
+  const row1 = $('pb-list').querySelector('[data-pbid="1"]'), row2 = $('pb-list').querySelector('[data-pbid="2"]');
+  row1.click();
+  assert.equal($('pb-list').querySelector('[data-pbid="1"]'), row1, '같은 줄(노드)이 남는다');
+  assert.deepEqual([...$('pb-list').querySelectorAll('.pb-item.sel')].map(x=>x.dataset.pbid), ['1']);
+  row2.click();
+  assert.deepEqual([...$('pb-list').querySelectorAll('.pb-item.sel')].map(x=>x.dataset.pbid), ['2'], '고른 줄 표시가 옮겨 간다');
+  assert.match($('pb-side').textContent, /나나/);
+  /* 업무가 바뀌면(나나에게 업무가 생김) 줄을 새로 그려 수·순서가 맞고 고른 표시는 그대로 */
+  S.items.push({id:102, memo:'b', done:false, f:{}, contacts:[{who:'나나', org:'가과', phone:'010-2222-2222'}], ids:[], subs:[], al:{}},
+               {id:103, memo:'c', done:false, f:{}, contacts:[{who:'나나', org:'가과', phone:'010-2222-2222'}], ids:[], subs:[], al:{}});
+  renderPhonebook();
+  assert.notEqual($('pb-list').querySelector('[data-pbid="2"]'), row2, '내용이 바뀌면 새로 넣는다');
+  assert.deepEqual([...$('pb-list').querySelectorAll('.pb-item')].map(x=>x.dataset.pbid), ['2','1'], '업무 수 많은 사람이 위로');
+  assert.deepEqual([...$('pb-list').querySelectorAll('.pb-item.sel')].map(x=>x.dataset.pbid), ['2']);
+  assert.equal($('pb-list').querySelector('[data-pbid="2"] .pb-cnt').textContent, '업무 2');
+});

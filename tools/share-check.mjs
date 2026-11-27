@@ -104,6 +104,17 @@ ok(m1.marks.every(m => m.prevBottom !== null && m.y >= m.prevBottom - 0.5 && m.y
 ok(m1.marks.every(m => Math.abs(m.w - m1.hlW) < 1), `양식 메모: 선 폭 = 메모 칸 폭 (${m1.marks.map(m => m.w.toFixed(1)).join(', ')} / ${m1.hlW.toFixed(1)})`);
 ok(m1.moved < 0.01, `양식 메모: 선 표시를 빼도 백드롭 글자 자리 그대로 (최대 ${m1.moved.toFixed(3)}px)`);
 await shot('공유-화면-4-구역제목.png');
+/* 메모 칸을 끝까지 내려도 선(·태그 하이라이트)이 글과 같은 자리 — 예전엔 글 칸(textarea)이 inline-block 이라 감싼 칸 아래에 틈이 생겨
+   백드롭 층이 글 칸보다 6px 컸고, 끝까지 내리면 백드롭이 6px 덜 내려가 선이 구역 제목 글자를 그었다(칸 아래 테두리 밖으로도 비어져 나옴) */
+await openForm({...BASE, id: 8999, memo: SECTION_MEMO + '\n' + Array.from({length: 30}, (_, i) => i % 6 === 2 ? `[구역 ${i}]` : `${i}번째 줄`).join('\n')});
+await page.waitForTimeout(300);
+const btm = await page.evaluate(() => { const ta = document.getElementById('fm-memo'), hl = document.getElementById('fm-memo-hl');
+  ta.scrollTop = 1e6; ta.dispatchEvent(new Event('scroll'));
+  const tr = ta.getBoundingClientRect(), hr = hl.getBoundingClientRect(), bw = parseFloat(getComputedStyle(ta).borderBottomWidth);
+  return {st: [ta.scrollTop, hl.scrollTop], ch: [ta.clientHeight, hl.clientHeight], over: hr.bottom - (tr.bottom - bw)}; });
+ok(btm.st[0] > 0 && Math.abs(btm.st[0] - btm.st[1]) < 0.5 && Math.abs(btm.ch[0] - btm.ch[1]) <= 1 && btm.over <= 0.5,   // 높이는 배율 반올림으로 1px 차이 허용(WebView2 실측)
+  `양식 메모: 끝까지 내려도 백드롭이 글 칸과 같은 자리 (scrollTop ${btm.st.join('/')}, 높이 ${btm.ch.join('/')}, 칸 아래로 ${btm.over.toFixed(1)}px)`);
+await openForm({...BASE, id: 9000, memo: SECTION_MEMO}); await page.waitForTimeout(300);   // 2쪽 보기는 처음 메모로
 
 /* ── 2 2쪽 보기 ── */
 await page.click('#fm-book'); await page.waitForTimeout(700);
@@ -170,6 +181,20 @@ await page.click('#share-contacts'); await page.waitForTimeout(100);
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);
 ok(await page.evaluate(() => !document.getElementById('shareModal').classList.contains('on') && document.getElementById('formPanel').classList.contains('on')), 'ESC: 미리 보기만 닫히고 양식으로');
 
+/* XML 에 못 쓰는 글자(워드에서 붙여 넣은 세로 탭·제어 문자·짝 없는 서로게이트)가 든 메모도 그림이 나온다
+   (예전엔 "그림을 만들지 못했습니다: The source image cannot be decoded" / "URI malformed") */
+await openForm({...BASE, id: 9004}); await page.waitForTimeout(200);
+await page.evaluate(() => { const m = document.getElementById('fm-memo');
+  m.value = '워드에서 붙여 넣은 글' + String.fromCharCode(11) + '둘째 줄\n제어' + String.fromCharCode(1, 12, 31) + ' 문자\n반쪽 ' + String.fromCharCode(0xD83D) + ' 이모지';
+  m.dispatchEvent(new Event('input', {bubbles: true})); });
+await page.click('#fm-share'); await page.waitForTimeout(300);
+await page.evaluate(() => { window.__saved = []; document.getElementById('share-save').click(); });
+const badOk = await page.waitForFunction(() => window.__saved.length > 0 || document.getElementById('appDialog')?.classList.contains('on'), null, {timeout: 30000})
+  .then(() => page.evaluate(() => window.__saved.length > 0 ? 'PNG' : document.getElementById('dlg-msg').textContent));
+ok(badOk === 'PNG', `XML 에 못 쓰는 글자(세로 탭·제어 문자·짝 없는 서로게이트)가 든 메모도 그림이 나온다 (${badOk})`);
+await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+if (badOk !== 'PNG') { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+
 /* ── 긴 업무(관련인 5명·하위 업무 7개·구역 셋) — 접기와 펼치기 ── */
 const LONG = {id: 9002, memo: '청사 전기설비 유지관리 용역 장기계속 2차 계약\n1차 계약이 12월 말에 끝나 2차 계약을 맺어야 합니다. 과업지시서 변경분과 노임단가 조정이 걸려 있습니다.\n[검토할 것]\n과업지시서 3장 점검 주기 변경이 계약금액에 주는 영향\n노임단가 조정률 산출 근거와 적용 시점\n1차 계약 정산분과 2차 착수 시점이 겹치는지\n장기계속계약 차수별 계약금액 배분\n하자담보책임기간 승계 여부\n[통화 내용]\n운영지원과 윤소이 주무관: 과업지시서 수정본은 다음 주 월요일까지.\n재무과 최민재 사무관: 노임단가 조정은 내년 1월 공표 기준으로.\n[참고]\n2025년 1차 계약 결과 보고(계약번호 2025-0412)',
   f: {received: at(-3, 9, 30), due: at(0, now.getHours() + 1, 0)},
@@ -202,13 +227,28 @@ const HUGE = {id: 9003, memo: '아주 긴 메모\n' + ('가나다라마바사아
 await openForm(HUGE); await page.waitForTimeout(300);
 const t0 = Date.now(); await page.click('#fm-share'); await page.waitForTimeout(300);
 const openMs = Date.now() - t0;
-for (const k of await page.evaluate(() => [...document.querySelectorAll('#share-stage .sh-fold')].map(b => b.dataset.fold))) { await page.click(`#share-stage .sh-fold[data-fold="${k}"]`); await page.waitForTimeout(80); }
+/* 접힌 칸을 하나씩 펼친다 — 펼칠 때마다 다시 찾는다(메모를 펼쳐 위 한도를 다 쓰면 뒤 구역은 '구역 N개 더 있음'으로 빠져 단추가 없어진다) */
+for (let guard = 0; guard < 20; guard++) {
+  const k = await page.evaluate(() => document.querySelector('#share-stage .sh-fold:not(.open)')?.dataset.fold);
+  if (!k) break; await page.click(`#share-stage .sh-fold[data-fold="${k}"]`); await page.waitForTimeout(80);
+}
 await page.waitForTimeout(6000);                                  // 펼칠 때마다 미리 만들던 그림이 끝나기를 기다린 뒤
 await page.click('#share-contacts'); await page.waitForTimeout(50);  // 새 상태 → 그림 한 장을 처음부터 만드는 시간
 const ph = await savePng(OUT ? '공유-긴-내용-모두-펼침.png' : ''); const pngMs = ph.ms;   // [파일로 저장]을 누른 때부터 저장 명령이 불릴 때까지(그림 만들기 + 바이트 꾸리기)
 ok(ph.h <= 16000 && ph.w <= 1280, `모두 펼친 아주 긴 업무: 그림 ${ph.w}×${ph.h}px (위 한도 16000), 한 장 만들기 ${pngMs}ms, 창 열기 ${openMs}ms`);
 ok(pngMs < 5000, '아주 긴 업무도 5초 안에 그림 한 장을 만든다');
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+
+/* 줄바꿈 없는 5만 자 메모·구역 1000개 — 접힌 그대로도 그림 폭이 줄지 않는다
+   (예전엔 제목·구역 수에 한도가 없어 그림이 279×16000·66×16000px 로 줄어 읽을 수 없었다) */
+for (const [nm, memo] of [['줄바꿈 없는 5만 자 메모', '가나다라마바사 아자차카타파하 공고문 규격 정정 '.repeat(2000).slice(0, 50000)],
+  ['구역 1000개 메모', '구역 많은 메모\n' + Array.from({length: 1000}, (_, i) => `[구역 ${i}]\n${i}번 구역 첫 줄`).join('\n')]]) {
+  await openForm({...BASE, id: 9005 + nm.length, memo, subs: [], contacts: [], ids: []}); await page.waitForTimeout(200);
+  await page.click('#fm-share'); await page.waitForTimeout(300);
+  const pp = await savePng('');
+  ok(pp.w === 1280 && pp.h < 8000, `${nm}: 접힌 그대로 그림 ${pp.w}×${pp.h}px (폭 그대로·높이 한도 안)`);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+}
 
 /* ── 좁은 창(375px·560px): 미리 보기가 가로로 넘치지 않는다(메모지만 줄여 보인다) · 공유 버튼이 창 안 ── */
 if (!WV2) for (const W of [375, 560]) {

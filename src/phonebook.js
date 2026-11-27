@@ -14,6 +14,7 @@ import {normEntry, entryKey, isComplete, entriesForTag, mapSheetRows, phoneDigit
    render→form→phonebook→render 순환이지만 함수 호출만 오가므로(최상위 사용 없음) 안전하다 —
    CLAUDE.md 규칙 1(기능 모듈은 hoisted 함수 + init*() 만)이 지켜지는 동안. */
 import {persist, dAt} from './render.js';
+import {editDrafts} from './form.js';
 import {registerView} from './views.js';
 import {openModal, closeModal} from './modals.js';
 
@@ -58,6 +59,7 @@ export function renderPhonebook(){
   $('pb-count').textContent=S.phonebook.length;
   const list=sorted().filter(x=>matches(x.e));
   if(!list.length){
+    pbListHtml=null;
     w.innerHTML=`<div class="empty" style="padding:14px">${S.phonebook.length? '일치하는 관련인이 없습니다.' : '저장된 관련인이 없습니다. [＋ 추가]나 [엑셀 가져오기]를 쓰세요.'}</div>`;
     return;
   }
@@ -72,7 +74,7 @@ export function renderPhonebook(){
      '업무 N' 배지는 진행 중인 업무가 있는 사람만 강조(진행), 끝난 업무만 있으면 옅게(끝남), 0건은 글자만 흐리게(없음) */
   const live=relatedCounts(S.items.filter(it=>!it.done));
   const row=({e,n})=>{ const l=live.get(relKeyOf(e))||0;
-    return `<div class="pb-item${e.id===pbSel?' sel':''}" data-pbid="${e.id}" title="누르면 이 관련인과 관련 업무를 보여줍니다">
+    return `<div class="pb-item" data-pbid="${e.id}" title="누르면 이 관련인과 관련 업무를 보여줍니다">
     <span class="pb-who"><span class="pb-avatar" aria-hidden="true">${initial(e)}</span><span class="pb-name">${esc(e.who||'')}</span></span>
     <span class="pb-phone num">${esc(e.phone||'')}</span>
     <span class="pb-email">${esc(e.email||'')}</span><!-- v3.5.1: 없으면 '—' 대신 빈 칸(선택 항목이라 대부분 비어 '—'만 줄줄이 보였다) -->
@@ -80,9 +82,15 @@ export function renderPhonebook(){
       <span class="pb-cnt num ${l?'live':n?'past':'none'}" title="관련 업무 ${n}건 · 진행 ${l} · 완료 ${n-l}">업무 ${n}</span>
     </span>
   </div>`; };
-  w.innerHTML=groups.map(g=>`<section class="pb-group"><div class="pb-ghead"><span>${esc(g.org)}</span><span class="count num">${g.rows.length}명</span></div>`
+  const html=groups.map(g=>`<section class="pb-group"><div class="pb-ghead"><span>${esc(g.org)}</span><span class="count num">${g.rows.length}명</span></div>`
     +g.rows.map(row).join('')+`</section>`).join('');
+  /* 라운드 2 성능: 목록이 지난번과 같으면 다시 넣지 않고 고른 줄 표시(.sel)만 옮긴다 — 사람을 누를 때마다 1,000줄을 새로 만들어
+     배치·그리기에 0.1초 넘게 걸렸다(perf-check pbClick). 내용이 바뀌었으면 예전처럼 새로 넣는다. 결과 DOM 은 예전과 같다 */
+  if(html!==pbListHtml || !w.querySelector('.pb-group')){ w.innerHTML=html; pbListHtml=html; }
+  const was=w.querySelector('.pb-item.sel'), now=pbSel!=null ? w.querySelector(`.pb-item[data-pbid="${pbSel}"]`) : null;
+  if(was!==now){ if(was) was.classList.remove('sel'); if(now) now.classList.add('sel'); }
 }
+let pbListHtml=null;
 
 /* v3.7.1 추가·수정 팝업(#pbEditModal) — 입력 규칙은 그대로, 입력 자리만 화면의 긴 줄에서 팝업으로 옮겼다 */
 function clearPbForm(){
@@ -355,6 +363,9 @@ function applySwap(){
     if(after.done) S.doneDirty.add(after.id);               // 완료 업무도 다시 써야 한다(위 ⚠️)
   }
   if(delFrom) S.phonebook=S.phonebook.filter(x=>x.id!==from.id);
+  /* 임시저장분(쓰다 닫은 양식)에도 같은 바꾸기를 — 안 하면 그 양식을 열어 [저장]할 때 옛 사람이 되살아나고(전화번호부에도 다시 들어간다)
+     메모의 @태그도 옛 이름으로 돌아간다(form.js editDrafts) */
+  const undoDrafts=editDrafts(null, d=>swapPersonIn(d, from, to)||undefined);
   closeSwap();
   persist(); savePb(); renderPhonebook();
   showToast(`업무 ${plan.length}건의 관련인을 바꿨습니다`,()=>{
@@ -362,6 +373,7 @@ function applySwap(){
       const i=S.items.findIndex(x=>x.id===sn.id);
       if(i>=0){ S.items[i]=sn.copy; if(sn.copy.done||S.items[i].done) S.doneDirty.add(sn.id); }
     }
+    undoDrafts();
     S.phonebook=pbBefore;
     persist(); savePb(); renderPhonebook();
   });

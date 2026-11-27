@@ -22,7 +22,7 @@ import {S} from './state.js';
 import {$, showToast} from './dom-utils.js';
 import {topId} from './modals.js';
 import {persist} from './render.js';
-import {openForm, addLinkPaths, formReadonly} from './form.js';
+import {openForm, addLinkPaths, formReadonly, editDrafts} from './form.js';
 import {dropFolderAt, importInto} from './docs.js';
 import {invoke} from './store.js';
 
@@ -77,10 +77,22 @@ export function applyDrop(target, paths){
     const before=(it.files||[]).slice();
     const {files, added}=mergePaths(before, paths);
     if(!added){ showToast('이미 연결된 링크입니다'); return false; }
-    it.files=files; persist();
+    it.files=files;
+    /* 이 업무에 임시저장분이 있으면 거기에도 붙인다 — 안 붙이면 양식을 열어 [저장]할 때 방금 놓은 링크가 빠진다(form.js editDrafts) */
+    /* 실행 취소 때 그 뒤 양식에 더 쓴 임시저장분이면 이번에 붙인 링크만 뺀다(그 사이 쓴 글은 남긴다 — form.js undoDraftEdits) */
+    let addedKeys=new Set();
+    const undoDraft=editDrafts([it.id], d=>{
+      const r=mergePaths(d.files||[], paths); if(!r.added) return undefined;
+      addedKeys=new Set(r.files.slice((d.files||[]).length).map(pathKey));
+      return {...d, files:r.files};
+    }, d=>{
+      const files=(d.files||[]).filter(p=>!addedKeys.has(pathKey(p)));
+      return files.length===(d.files||[]).length ? undefined : {...d, files};
+    });
+    persist();
     const memo=String(it.memo||'').split('\n')[0].slice(0,24);
     showToast(`'${memo||'업무'}'에 링크 ${added}개를 연결했습니다`,()=>{
-      const cur=S.items.find(x=>x.id===target.id); if(cur&&!cur.done){ cur.files=before; persist(); }
+      const cur=S.items.find(x=>x.id===target.id); if(cur&&!cur.done){ cur.files=before; undoDraft(); persist(); }
     });
     return true;
   }

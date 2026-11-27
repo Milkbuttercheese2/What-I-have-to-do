@@ -5,7 +5,7 @@ import {setupEnv} from '../helpers/env.js';
 
 mock.timers.enable({apis:['setTimeout','setInterval']});
 const env = setupEnv();
-const {S} = await import('../../src/state.js');
+const {S, toggleDone} = await import('../../src/state.js');
 const {reconcileImported, initBackup} = await import('../../src/backup.js');
 const {initPresets} = await import('../../src/presets.js');
 initPresets();     // reconcileImported → renderPresets 경로에 프리셋 초기화 필요
@@ -215,4 +215,156 @@ test('내보내기: 임시 상태(초안)는 백업 파일에 담기지 않는�
   assert.equal(out.settings.captureDraft, '');
   assert.deepEqual(out.settings.formDrafts, {});
   assert.equal(out.settings.theme, 'dark');            // 진짜 설정은 그대로 간다
+});
+
+/* 점검 라운드 3: 시작 때 읽기가 실패한 세션(S.loaded=false — "저장된 데이터를 읽지 못했습니다" 안내)에서 안내대로
+   [백업에서 복원](JSON)을 하면, 예전엔 F1 게이트가 닫힌 채로 남아 **복원 뒤 고친 것이 하나도 저장되지 않았다**(배너도 없이 —
+   saveAll 이 조용히 돌아간다). 앱을 닫으면 그 사이 작업이 사라졌다. */
+test('시작 읽기 실패 세션에서 JSON 복원 → 그 뒤 고친 것이 저장된다(F1 게이트가 열린다)', async () => {
+  await env.resetS();                                  // loaded=false = 첫 읽기 실패
+  const {persist} = await import('../../src/render.js');
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:4}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.equal(S.items.length, 1);
+  assert.equal(S.loaded, true, '복원으로 DB 와 화면이 같아졌으니 게이트가 열린다');
+  const first = env.invokeCalls.filter(c=>c.cmd==='save_all');
+  assert.equal(first.length, 1, '복원 직후의 저장(persist)도 나간다');
+  assert.equal(first[0].args.baseVersion, 3, '복원이 준 번호표로');
+  env.invokeCalls.length = 0;
+  S.items[0].memo = '복원 뒤 고침';
+  await persist();
+  await env.flush(4);
+  const saves = env.invokeCalls.filter(c=>c.cmd==='save_all');
+  assert.equal(saves.length, 1, '복원 뒤 고친 것이 저장에 나간다');
+  assert.equal(saves[0].args.items[0].memo, '복원 뒤 고침');
+  assert.equal(saves[0].args.baseVersion, 4, '그 저장이 돌려준 번호표로');
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
+test('시작 읽기 실패 세션에서 적은 메모(저장된 적 없음)는 JSON 복원 뒤에도 남아 저장된다(첫 읽기와 같은 규칙)', async () => {
+  await env.resetS();                                  // loaded=false
+  S.items.push({id:99, memo:'잠긴 동안 미니 창으로 적은 메모', done:false, staged:true, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}});
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:4}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.deepEqual(S.items.map(x=>x.id), [7, 99]);
+  const sent = env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args.items.map(x=>x.id);
+  assert.deepEqual(sent, [7, 99], '복원 직후 저장에 함께 실린다');
+  /* 평소 세션(읽기 성공)의 복원은 예전처럼 통째로 갈아끼운다 */
+  await env.resetS(); S.loaded = true;
+  S.items.push({id:98, memo:'복원 전 업무', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}});
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.deepEqual(S.items.map(x=>x.id), [7]);
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
+/* 점검 라운드 5(독립 검토 01 확정 1): 위 규칙이 완료로 체크한 업무에서는 덜 고쳐져 있었다 — 복원이 S.doneDirty 를 비우는 것이
+   붙이기 뒤라, 증분 저장(완료 업무는 doneDirty 에 있어야 보낸다)이 그 업무를 빼고 보냈다 → DB 에 없음 → 다음 시작에 사라짐. */
+test('시작 읽기 실패 세션에서 적고 그 세션에서 완료한 업무도 JSON 복원 뒤 저장에 실린다(옛 완료 표시는 비운다)', async () => {
+  await env.resetS();                                  // loaded=false = 첫 읽기 실패
+  S.doneDirty.clear();
+  S.doneDirty.add(55);                                 // 복원 전 데이터를 가리키던 옛 표시 — 복원 뒤 deletedDone 으로 나가면 안 된다
+  const it = {id:99, memo:'잠긴 동안 적고 끝낸 업무', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}};
+  S.items.push(it);
+  toggleDone(it);                                      // 카드의 ○ — 저장은 F1 게이트로 조용히 돌아간다
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.onInvoke('save_all', () => ({kind:'Saved', version:4}));
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.deepEqual(S.items.map(x=>x.id), [7, 99], '화면에는 붙어 있다');
+  const last = env.invokeCalls.filter(c=>c.cmd==='save_all').at(-1).args;
+  assert.deepEqual(last.items.map(x=>x.id), [7, 99], '완료한 업무 99 도 저장에 실린다');
+  assert.equal(last.items.find(x=>x.id===99).done, true);
+  assert.deepEqual(last.deletedDone, [], '옛 완료 표시(55)는 비워져 지우기로 나가지 않는다');
+  env.onInvoke('backup_import', () => null);
+  env.onInvoke('save_all', () => undefined);
+});
+
+test('시작 읽기 실패 세션에서 JSON 복원이 실패하면 게이트는 닫힌 채다(빈 화면이 DB 를 덮지 않게)', async () => {
+  await env.resetS();
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => { throw '쓰기 실패'; });
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  assert.equal(S.loaded, false);
+  assert.equal(S.items.length, 0);
+  env.onInvoke('backup_import', () => null);
+});
+
+/* 점검 라운드 3 — 제안(소유자 결정 전이라 todo): 문서 탭 옆 칸 양식은 가림막이 없어 양식을 연 채 [설정] → [백업에서 복원]을 할 수 있다.
+   복원한 데이터에 그 업무가 없으면, 양식의 [저장]은 '고칠 업무가 없음'으로 아무것도 하지 않고 임시저장분까지 지워 쓰던 글이 사라진다.
+   (그 업무가 있으면 반대로 복원 전 화면 내용이 복원한 업무를 덮는다.) 고치려면 복원 때 양식을 어떻게 할지(닫기·새 업무로 남기기)를 정해야 한다. */
+test('복원으로 열린 양식의 업무가 없어지면 [저장]이 쓰던 글을 말없이 버린다', {todo:'제안 — 복원 때 열린 양식 처리(소유자 결정)'}, async () => {
+  const {initForm, openForm} = await import('../../src/form.js');
+  initForm();
+  await env.resetS(); S.loaded = true;
+  const it = {id:41, memo:'복원 전 업무', done:false, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}};
+  S.items.push(it);
+  openForm(it, {dock:true}); await env.flush();
+  $('fm-memo').value = '복원 전 업무 — 쓰던 글';
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content: JSON.stringify({items:[{id:7, memo:'복원분', f:{}, subs:[]}]})}));
+  env.onInvoke('backup_import', () => 3);
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(8);
+  $('fm-save').click(); await env.flush(4);
+  assert.ok(S.items.some(x=>String(x.memo).includes('쓰던 글')), '쓰던 글이 어딘가 남는다');
+  env.onInvoke('backup_import', () => null);
+});
+
+/* 점검 라운드 3: [백업 파일 만들기] → 그 파일로 [백업에서 복원]의 왕복 — 모든 칸이 그대로 backup_import 에 실리는가
+   (하위 업무 순서·담당·알림 상태(확인·미룸 숫자)·관련인 이메일·식별정보·파일 링크·반복 업무·완료 시각·사용자 칸·
+   전화번호부·프리셋·식별정보 명칭·옛 반복 정의·모르는 설정 키). 임시 상태(초안)만 빠진다. */
+test('JSON 백업 왕복: 만든 파일로 복원하면 모든 칸이 그대로 실린다(초안만 빠진다)', async () => {
+  await env.resetS(); S.loaded = true;
+  const items = [
+    {id:1700000000001, memo:'첫 줄\n[구역]\n내용 @김가', owner:'', done:false, doneAt:null, staged:false,
+     f:{received:'2026-11-01T00:00:00.000Z', due:'2026-11-30T09:00:00.000Z', custom1:'사용자 칸'},
+     contacts:[{who:'김가', org:'가과', phone:'010-1111-2222', email:'kim@x.kr'}, {who:'나', org:'', phone:'내선 1234', email:''}],
+     ids:[{kind:'SR번호', val:'SR-1'}, {kind:'자체', val:'X-9'}],
+     subs:[{id:1700000000003, title:'둘째로 적은 것', mid:'2026-11-20T01:00:00.000Z', done:true, al:{mid:true}, owner:'박담당'},
+           {id:1700000000002, title:'첫째로 적은 것', mid:'', done:false, al:{mid:1800000000000}, owner:''}],
+     files:['C:\문서\가.hwp', '\\srv\공유\나.pdf'], al:{due:true}, recur:null, recurId:1700000000099},
+    {id:1700000000010, memo:'반복 부모', owner:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{},
+     recur:{freq:'weekly', dow:[1,3], time:{hh:9, mm:30}, next:'2026-12-01', paused:false}, recurId:null},
+    {id:1700000000020, memo:'완료', owner:'외부', done:true, doneAt:1764200000000, staged:true, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}, recur:null, recurId:null},
+  ];
+  S.items = JSON.parse(JSON.stringify(items));
+  S.fields = [...S.fields, {key:'custom1', label:'사용자 칸', type:'datetime', on:true}];
+  S.presets = [{id:'p1', label:'프리셋', memo:'틀', subs:['가']}];
+  S.idKinds = ['SR번호', '공사관리번호'];
+  S.recurDefs = [{id:5, memo:'옛 정기', freq:'daily', dow:[], time:{hh:8, mm:0}, next:'', paused:true}];
+  S.phonebook = [{id:9, who:'김가', org:'가과', phone:'010-1111-2222', email:'kim@x.kr'}];
+  Object.assign(S.settings, {theme:'dark', uiScale:130, docRoots:['D:\공유'], 옛키:'보존', captureDraft:'쓰다 만 미니 메모', formDrafts:{'1':{at:1, data:{memo:'초안'}}}});
+  const want = {fields:S.fields, presets:S.presets, idKinds:S.idKinds, recurDefs:S.recurDefs, phonebook:S.phonebook,
+                settings:{...S.settings, captureDraft:'', formDrafts:{}}};
+  env.onInvoke('save_text_file', () => true);
+  $('bkExp').click();
+  await env.flush(8);
+  const file = env.invokeCalls.filter(c=>c.cmd==='save_text_file').at(-1).args.content;
+  env.invokeCalls.length = 0;
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content:file}));
+  env.onInvoke('backup_import', () => 9);
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(10);
+  const payload = env.invokeCalls.filter(c=>c.cmd==='backup_import')[0].args.payload;
+  assert.deepEqual(payload.items, items, '업무의 모든 칸 — 순서까지');
+  for(const k of ['fields','presets','idKinds','recurDefs','phonebook']) assert.deepEqual(payload[k], want[k], k);
+  assert.deepEqual(payload.settings, want.settings, '설정 — 모르는 키 보존, 초안만 빠짐');
+  env.onInvoke('backup_import', () => null);
 });

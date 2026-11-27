@@ -473,7 +473,9 @@
      한 값이라도 다르면 하이라이트가 글자와 어긋난다. 스크롤바 폭 차이는
      textarea 쪽 scrollbar-gutter:stable + 백드롭 padding-right 보정으로 맞춘다. */
   .fm-memo-stack{position:relative}
-  .fm-memo-stack .fm-memo{position:relative;z-index:1;background:transparent;scrollbar-gutter:stable}
+  /* display:block — textarea 는 기본이 inline-block 이라 감싼 칸 아래에 글줄 틈(약 6px)이 생겨, inset 으로 칸을 채우는
+     백드롭이 글 칸보다 그만큼 커졌다 → 끝까지 내리면 백드롭이 덜 내려가 구역 제목 선·태그가 6px 아래로 어긋나고 칸 테두리 밖으로 비어져 나왔다 */
+  .fm-memo-stack .fm-memo{display:block;position:relative;z-index:1;background:transparent;scrollbar-gutter:stable}
   #fm-memo-hl{position:absolute;inset:1px;border-radius:8px;background:var(--surface);
     padding:10px calc(12px + 9px) 10px 12px;   /* textarea 패딩 + 스크롤바 거터 9px */
     font-family:inherit;font-size:14px;line-height:1.55;
@@ -1844,6 +1846,10 @@
   }
   /* 넓은 화면 줄 칸 폭 — 이름 8rem · 전화 8.5rem · 이메일 나머지 · 배지 */
   @media(min-width:1081px){ .pb-group .pb-item{grid-template-columns:minmax(0,8rem) 8.5rem minmax(0,1fr) auto} }
+  /* 라운드 2 성능: 넓은 화면의 전화번호부 줄 — 화면 밖 줄은 배치·그리기를 미룬다(완료 탭 .drow 와 같은 방법). 1,000명에서 탭 열기 0.13초 → 0.03초(Edge 실측).
+     24px = 줄의 내용 높이(머리글자 동그라미 24px — 한 줄 줄은 이것으로 정해진다; 줄 높이 41px − 위아래 여백 16 − 윗줄 1, 묶음 첫 줄은 윗줄이 없어 40px).
+     여백 포함 값을 넣으면 화면 밖 줄마다 커져 스크롤 길이가 달라진다. 좁은 폭(≤1080)은 두 줄이라 높이가 글꼴에 따라 달라 넣지 않는다. auto 라 한 번 그린 뒤엔 실제 높이를 기억 */
+  @media(min-width:1081px){ .pb-group .pb-item{content-visibility:auto;contain-intrinsic-size:auto 24px} }
   /* 수정·바꾸기·삭제 = 오른쪽 칸 머리(v3.8.18 소유자 지정). 보조 단추(.btn-tool) 크기, 삭제는 hover 때 빨강 — 줄마다 뜨던 글자 단추 대신 */
   /* 평소엔 감추고, 오른쪽 칸에 마우스를 올렸을 때(또는 키보드 초점)만 잠깐 — 늘 떠 있으면 긴 이름과 겹친다(소유자 지정).
      자리를 차지하지 않고 머리줄 오른쪽(⇥ 왼쪽)에 칸 바탕(--card)으로 겹쳐 뜬다 */

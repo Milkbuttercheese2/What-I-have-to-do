@@ -236,3 +236,40 @@ test('v3.8.16 render: 바뀌지 않은 칸은 카드를 다시 만들지 않는�
   assert.match(planned.textContent, /예정1 고침/);
   assert.strictEqual($('col-inbox').firstElementChild, inboxCard, '다른 칸은 그대로');
 });
+
+test('라운드 2 성능: 바뀐 것 없이 다시 그리면 요약 숫자·칸 수 글자도 그대로 둔다 · 보드 검색은 완료 업무 글을 만들지 않는다', async () => {
+  await env.resetS(); S.loaded = true; setPlaceMode('time');
+  let reads = 0;
+  const done = mk({done:true, doneAt:Date.now()}); Object.defineProperty(done, 'memo', {get(){ reads++; return '완료된 협조 건'; }, enumerable:true});
+  S.items.push(mk({memo:'협조 요청', f:{due:iso(-60)}}), mk({memo:'다른 일', staged:true}), done);
+  render();
+  const m = $('metrics').firstChild, c = $('c-today').firstChild;
+  render();
+  assert.strictEqual($('metrics').firstChild, m, '요약 줄을 다시 쓰지 않는다');
+  assert.strictEqual($('c-today').firstChild, c, '칸 수 글자를 다시 쓰지 않는다');
+  reads = 0;
+  const search = $('search'); search.value = '협조';
+  search.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);
+  assert.equal(reads, 0, '완료 업무는 보드 칸이 아니므로 검색 글을 만들지 않는다');
+  assert.equal($('c-today').textContent, '1'); assert.equal($('c-inbox').textContent, '0');
+  assert.match($('col-today').textContent, /협조 요청/);
+  search.value = ''; search.dispatchEvent(new env.window.Event('input', {bubbles:true})); mock.timers.tick(120);
+  assert.equal($('c-inbox').textContent, '1', '검색을 지우면 그대로 돌아온다');
+});
+
+test('라운드 2 성능: 완료 묶음 열쇠·요약 숫자가 doneGroupOf 와 같다(오늘 0시·월요일 0시 경계 포함)', async () => {
+  const {doneGroupOf, weekStart} = await import('../../src/done-weeks.js');
+  await env.resetS(); S.loaded = true;
+  const now = Date.now(), d0 = new Date(now); d0.setHours(0,0,0,0);
+  const marks = [now, d0.getTime(), d0.getTime()-1, weekStart(now), weekStart(now)-1, weekStart(now)-7*864e5, weekStart(now)-7*864e5-1, null, 0];
+  for(let k=0;k<40;k++) marks.push(now - k*20*36e5);
+  marks.forEach((t,i)=>S.items.push(mk({memo:'완료'+i, done:true, doneAt:t})));
+  const keys = new Map(); let nT=0, nW=0;
+  for(const t of marks){ const g=doneGroupOf(t, now); keys.set(g.key, (keys.get(g.key)||0)+1); if(g.key==='today') nT++; if(g.key==='week') nW++; }
+  renderDone();
+  const shown = new Map([...$('col-done').querySelectorAll('.done-group')].map(s=>[s.dataset.group, Number(s.querySelector('.dg-head .count').textContent)]));
+  assert.deepEqual([...shown.entries()].sort(), [...keys.entries()].sort(), '묶음 열쇠·건수가 같다');
+  assert.equal($('done-metrics').textContent, `${nT}오늘${nT+nW}이번 주`);
+  const labels = [...$('col-done').querySelectorAll('.done-group')].map(s=>[s.dataset.group, s.querySelector('.dg-label').textContent]);
+  for(const [k,l] of labels){ const t=marks.find(x=>doneGroupOf(x, now).key===k); assert.equal(l, doneGroupOf(t, now).label); }
+});

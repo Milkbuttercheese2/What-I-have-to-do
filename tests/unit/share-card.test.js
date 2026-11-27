@@ -132,6 +132,48 @@ test('펼쳐도 위 한도 — 넘는 것은 싣지 않고 "글자로 복사에�
   assert.match(huge.more.label, /글자로 복사에는 다 실림$/);
 });
 
+/* 줄바꿈 없이 붙여 넣은 긴 글 — 예전엔 첫 줄(제목)을 접지 않아 5만 자 한 줄이면 미리 보기가 3만 px, 그림이 폭 279px 로 줄었다 */
+const para = n => ('가나다라마바사 아자차카타파하 공고문 규격 정정 요청 사유서 검토 '.repeat(Math.ceil(n / 30))).slice(0, n);
+const memoLinesOf = b => visualLines(b.title, SHARE_LIMITS.titleCpl) + b.body.reduce((a,l)=>a+visualLines(l),0)
+  + b.sections.reduce((a,s)=>a+visualLines(s.name)+s.lines.reduce((x,l)=>x+visualLines(l),0),0);
+test('위 한도: 줄바꿈 없는 긴 메모 — 제목은 몇 줄까지만 굵게, 나머지는 본문 앞에 "…"로 이어 접는다(잃는 글 없음)', () => {
+  for (const n of [500, 3000, 50000]) {
+    const memo = para(n);
+    for (const open of [new Set(), new Set(['memo'])]) {
+      const b = shareModel({memo}, ctx({open})).blocks[0];
+      assert.ok(visualLines(b.title, SHARE_LIMITS.titleCpl) <= SHARE_LIMITS.titleLines, `제목 ${visualLines(b.title, SHARE_LIMITS.titleCpl)}줄 (${n}자)`);
+      assert.match(b.title, /…$/);
+      assert.ok(b.body[0].startsWith('…'), '본문 맨 앞에 이어서');
+      assert.equal(memo.startsWith(b.title.slice(0, -1)), true, '제목은 메모 첫 줄의 앞부분 그대로');
+      assert.ok(memoLinesOf(b) <= SHARE_LIMITS.titleLines + SHARE_LIMITS.max.memoLines, `메모 칸 ${memoLinesOf(b)}줄 (${n}자, ${open.size?'펼침':'접힘'})`);
+      if (!open.size || n === 50000) assert.ok(b.more && b.more.label, '접힌 줄 수를 적는다');
+    }
+  }
+  const short = shareModel({memo:'짧은 제목\n본문'}, ctx()).blocks[0];
+  assert.equal(short.title, '짧은 제목', '짧은 제목은 그대로');
+  assert.deepEqual(short.body, ['본문']);
+  assert.ok(shareText({memo:para(3000)}, ctx()).includes(para(3000)), '[글자로 복사]는 그대로 전부');
+});
+
+test('위 한도: 구역이 아주 많아도 메모 칸은 한도 안 — 넘는 구역은 싣지 않고 "구역 N개 더 있음"', () => {
+  /* 예전엔 접힌 구역도 수에 제한이 없어 구역 200개면 미리 보기 2만 5천 px, 그림 폭 330px, 1000개면 66px 로 줄었다 */
+  const memo = '구역 많은 메모\n' + Array.from({length:1000}, (_, i) => `[구역 ${i}]\n${i}번 첫 줄\n둘째\n셋째\n넷째`).join('\n');
+  for (const open of [new Set(), new Set(['memo', ...Array.from({length:1000}, (_, i) => 'sec:'+i)])]) {
+    const m = shareModel({memo}, ctx({open})), b = m.blocks[0];
+    assert.ok(memoLinesOf(b) <= SHARE_LIMITS.titleLines + SHARE_LIMITS.max.memoLines + SHARE_LIMITS.secLines, `메모 칸 ${memoLinesOf(b)}줄`);
+    const shown = b.sections.length;
+    assert.ok(shown > 0 && shown < 1000);
+    assert.equal(b.restSections, `구역 ${1000 - shown}개 더 있음 · 글자로 복사에는 다 실림`);
+    assert.ok(m.folded && m.foot.right.startsWith('접힌 내용 있음'));
+    assert.ok(shareHtml(m).includes(`구역 ${1000 - shown}개 더 있음`));
+  }
+  const few = shareModel({memo:'제목\n본문\n[가]\n1\n[나]\n2\n[다]\n3'}, ctx()).blocks[0];
+  assert.equal(few.sections.length, 3, '구역이 몇 개면 모두 싣는다');
+  assert.equal(few.restSections, '');
+  const longName = shareModel({memo:'제목\n본문\n[' + para(3000) + ']\n구역 글'}, ctx()).blocks[0].sections[0];
+  assert.ok(visualLines(longName.name) <= SHARE_LIMITS.secNameLines && longName.name.endsWith('…'), '아주 긴 구역 이름은 줄여 싣는다');
+});
+
 test('연락처·이메일·파일 링크는 기본으로 빠지고, 스위치를 켜면 연락처·이메일만 들어간다', () => {
   const off = shareModel(SAMPLE, ctx()), on = shareModel(SAMPLE, ctx({withContacts:true}));
   const pOff = off.blocks.find(b=>b.kind==='people').rows[0], pOn = on.blocks.find(b=>b.kind==='people').rows[0];
@@ -202,6 +244,27 @@ test('[글자로 복사]는 접지 않고 전부 싣는다', () => {
   assert.ok(t.includes('줄19')); assert.ok(t.includes('s0') && t.includes('s7')); assert.ok(t.includes('과 p5'));
   assert.ok(t.includes('■ 관련소속 · 관련인\n  과 p0\n'), '여럿이면 한 줄씩');
   assert.ok(!t.includes('외 '), '"외 N명" 표시가 없다');
+});
+
+test('마크업은 그림(SVG 속 XHTML)으로도 읽힌다 — XML 에 못 쓰는 글자(제어 문자·짝 없는 서로게이트·U+FFFE)가 든 업무도', async () => {
+  /* 예전엔 메모에 세로 탭(워드에서 붙여 넣은 줄바꿈 \v) 같은 제어 문자가 하나라도 있으면 SVG 를 그림으로 읽지 못해
+     [그림 복사]·[파일로 저장]이 "그림을 만들지 못했습니다"로 실패했고, 짝 없는 서로게이트는 주소 꼴로 바꾸다 URIError 가 났다 */
+  const bad = '\u0000\u0001\u0008\u000b\u000c\u000e\u001f￾￿\ud83d';
+  const d = {memo:`제목${bad}\n본문 세로탭\u000b다음${bad}\n[구역${bad}]\n구역 글${'\udc00'}`,
+    f:{received:T(26,9,10), x:T(27,9,0)},
+    contacts:[{who:`김${bad}`, org:`과${bad}`, phone:`02${bad}`, email:''}], ids:[{kind:`종류${bad}`, val:`값${bad}`}],
+    subs:[{title:`하위${bad}`, mid:'', done:false, owner:`담당${bad}`}]};
+  const fields = [...FIELDS, {key:'x', label:`사용자 칸${bad}`}];
+  const {JSDOM} = await import('jsdom');
+  const dp = new (new JSDOM('')).window.DOMParser();
+  for (const controls of [false, true]) {
+    const html = shareHtml(shareModel(d, ctx({fields, withContacts:true})), {controls});
+    assert.doesNotMatch(html, /[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/u, 'XML 1.0 에 못 쓰는 글자가 남지 않음');
+    assert.doesNotThrow(() => encodeURIComponent(html), '주소 꼴(data:)로 바꿀 수 있음');
+    const doc = dp.parseFromString(`<div xmlns="http://www.w3.org/1999/xhtml">${html}</div>`, 'application/xml');
+    assert.equal(doc.getElementsByTagName('parsererror').length, 0, 'XML 로 읽힘');
+    assert.ok(doc.documentElement.textContent.includes('본문 세로탭다음'), '글은 그대로(못 쓰는 글자만 빠짐)');
+  }
 });
 
 test('날짜 꼴과 파일 이름', () => {

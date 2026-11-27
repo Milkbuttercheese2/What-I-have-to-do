@@ -13,13 +13,25 @@ mod schema;
 pub mod settings;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod perf_tests;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use error::DbResult;
+use error::{DbError, DbResult};
+
+/// 이 버전이 아는 마지막 스키마 번호 — 이보다 큰 DB·백업은 더 새 버전의 앱이 만든 것이다(점검 라운드 3).
+pub const SCHEMA_LATEST: i64 = schema::LATEST;
+
+/// 파일의 스키마 번호(`PRAGMA user_version`). 열 수 없으면 None.
+fn file_schema_version(path: &Path) -> Option<i64> {
+    Connection::open(path)
+        .and_then(|c| c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0)))
+        .ok()
+}
 
 /// Opens (creating if needed) the SQLite database at `path`, applies the
 /// pragmas this app relies on, and runs any pending migrations.
@@ -39,6 +51,14 @@ pub fn open(path: &Path) -> DbResult<Connection> {
     // throughput, and this avoids WAL's -wal/-shm sidecar files, which have
     // been observed to conflict with endpoint AV on gov intranet PCs.
     conn.pragma_update(None, "synchronous", "FULL")?;
+    /* 점검 라운드 3: **더 새 버전의 앱이 만든 DB** 는 손상이 아니다 — 이 버전이 모를 뿐이다. 예전엔 마이그레이션이
+       '번호가 너무 높다'로 실패하면 open_with_recovery 가 그것을 손상으로 보고 **옛 자동 백업으로 덮어**, 옛 exe 를
+       한 번 켜는 것만으로 데이터가 그 옛 시점으로 되돌아갔다(원본은 before-recovery 로 남지만 사용자는 모른다).
+       여기서 따로 알아보고 복구로 보내지 않는다. */
+    let have: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if have > schema::LATEST {
+        return Err(DbError::TooNew { db: have, app: schema::LATEST, path: path.display().to_string() });
+    }
     schema::migrate(&mut conn)?;
     Ok(conn)
 }
@@ -198,13 +218,24 @@ pub fn open_with_recovery(
        해제 지연은 잠깐 뒤 성공하는 경우가 대부분이다. 짧게 몇 번 다시 열어 보고,
        그래도 안 되는 '진짜' 실패만 복구 경로로 보낸다. */
     let mut primary_err = None;
-    for attempt in 0..4 {
-        match open(db_path) {
-            Ok(conn) => return Ok((conn, None)),
-            Err(e) => {
-                eprintln!("DB open attempt {} failed: {e}", attempt + 1);
-                primary_err = Some(e);
-                std::thread::sleep(std::time::Duration::from_millis(400));
+    /* 점검 라운드 3: **0 바이트 DB** 는 SQLite 가 '빈 새 DB'로 연다 — 그래서 파일이 통째로 비워졌을 때(동기화 폴더·
+       백신 격리 뒤 되돌리기·디스크 사고) 앱은 아무 안내 없이 빈 보드로 켜졌고, 그 위의 저장이 자동 백업을 하나씩
+       밀어내 멀쩡한 옛 백업마저 사라져 갔다. 자동 백업이 있는데 DB 가 0 바이트면 이 버전의 앱이 만든 데이터가 비워진
+       것이므로 손상과 같은 복구 길(원본 보관 → 정상 백업으로 복구 → 안내)로 보낸다. 백업이 없으면(진짜 첫 실행) 예전처럼 연다. */
+    let emptied = fs::metadata(db_path).map(|m| m.is_file() && m.len() == 0).unwrap_or(false)
+        && !backups_newest_first(backups_dir).is_empty();
+    if emptied {
+        primary_err = Some(DbError::Io(std::io::Error::other("데이터베이스 파일이 비어 있습니다(0바이트)")));
+    } else {
+        for attempt in 0..4 {
+            match open(db_path) {
+                Ok(conn) => return Ok((conn, None)),
+                Err(e @ DbError::TooNew { .. }) => return Err(e), // 손상이 아니다 — 덮지 않는다(open 주석)
+                Err(e) => {
+                    eprintln!("DB open attempt {} failed: {e}", attempt + 1);
+                    primary_err = Some(e);
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                }
             }
         }
     }
@@ -251,6 +282,11 @@ pub fn open_with_recovery(
                 backup.display()
             );
             continue;
+        }
+        /* 가장 새 정상 백업이 더 새 버전의 앱이 만든 것이면 이 폴더는 지금 더 새 버전이 쓰는 중이다 — 그보다 옛 백업으로
+           되돌리면 그 사이 데이터가 사라진 것처럼 된다. 더 새 버전이 복구하게 두고 덮지 않는다(원본은 위에서 보관했다). */
+        if let Some(v) = file_schema_version(&backup).filter(|v| *v > schema::LATEST) {
+            return Err(DbError::TooNew { db: v, app: schema::LATEST, path: backup.display().to_string() });
         }
         match fs::copy(&backup, db_path).and_then(|_| open(db_path).map_err(std::io::Error::other))
         {
