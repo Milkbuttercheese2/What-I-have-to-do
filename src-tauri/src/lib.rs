@@ -281,7 +281,7 @@ pub fn run() {
 
             let (conn, db_path, backups_dir, note) = match attempt(&base_dir) {
                 Ok(result) => result,
-                /* 점검 라운드 3: 더 새 판의 앱이 만든 데이터 — 기본 위치로 갈아타지 않는다(그러면 옛 판이 빈 데이터로 켜져
+                /* 점검 라운드 3: 더 새 버전의 앱이 만든 데이터 — 기본 위치로 갈아타지 않는다(그러면 옛 버전이 빈 데이터로 켜져
                    두 곳에 나뉘어 쌓인다). 손대지 않고 알리고 끈다(같은 '실행 불가' 창). */
                 Err(e @ db::error::DbError::TooNew { .. }) => {
                     db::log_line(&base_dir, &format!("start REFUSED: {e} · {}", db::exe_desc()).replace('\n', " / "));

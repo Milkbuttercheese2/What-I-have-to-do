@@ -1455,9 +1455,9 @@ fn r3_names(dir: &std::path::Path) -> Vec<String> {
     v
 }
 
-/// 더 새 판의 앱이 만든 DB(스키마 번호가 이 판보다 큼)를 이 판으로 열면 — 예전엔 마이그레이션 실패를 손상으로 보고
+/// 더 새 버전의 앱이 만든 DB(스키마 번호가 이 버전보다 큼)를 이 버전으로 열면 — 예전엔 마이그레이션 실패를 손상으로 보고
 /// **옛 자동 백업으로 덮었다**(2건이던 데이터가 1건으로 되돌아감, 원본은 before-recovery 로만 남음).
-/// 이제 '더 새 판'이라고 알리고 아무것도 바꾸지 않는다.
+/// 이제 '더 새 버전'이라고 알리고 아무것도 바꾸지 않는다.
 #[test]
 fn a_db_from_a_newer_app_is_not_rolled_back_to_an_old_backup() {
     let dir = r3_dir("future");
@@ -1467,19 +1467,19 @@ fn a_db_from_a_newer_app_is_not_rolled_back_to_an_old_backup() {
         let mut c = super::open(&db_path).unwrap();
         items::save_items(&mut c, &sample_items()[..1].to_vec()).unwrap();
     }
-    std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_000000.sqlite")).unwrap(); // 이 판이 만든 옛 백업(1건)
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260101_000000.sqlite")).unwrap(); // 이 버전이 만든 옛 백업(1건)
     {
         let mut c = super::open(&db_path).unwrap();
         items::save_items(&mut c, &sample_items()).unwrap();
-        c.pragma_update(None, "user_version", super::SCHEMA_LATEST + 1).unwrap(); // 더 새 판이 마이그레이션을 하나 더 돌린 DB(2건)
+        c.pragma_update(None, "user_version", super::SCHEMA_LATEST + 1).unwrap(); // 더 새 버전이 마이그레이션을 하나 더 돌린 DB(2건)
     }
-    std::fs::copy(&db_path, backups_dir.join("wmhh_20260201_000000.sqlite")).unwrap(); // 더 새 판이 만든 백업
+    std::fs::copy(&db_path, backups_dir.join("wmhh_20260201_000000.sqlite")).unwrap(); // 더 새 버전이 만든 백업
     let before = std::fs::read(&db_path).unwrap();
 
     assert!(matches!(super::open(&db_path), Err(super::error::DbError::TooNew { .. })));
     let err = super::open_with_recovery(&db_path, &backups_dir).err().expect("열지 않고 알려야 한다");
     assert!(matches!(err, super::error::DbError::TooNew { .. }), "{err}");
-    assert!(err.to_string().contains("더 새 판"), "{err}");
+    assert!(err.to_string().contains("더 새 버전"), "{err}");
     assert_eq!(std::fs::read(&db_path).unwrap(), before, "원본을 한 바이트도 바꾸지 않는다");
     assert_eq!(r3_item_count(&db_path), 2);
     assert_eq!(r3_names(&dir.join("data")), vec!["wmhh.sqlite"], "복구 흔적(before-recovery·broken)도 만들지 않는다");
@@ -1487,7 +1487,7 @@ fn a_db_from_a_newer_app_is_not_rolled_back_to_an_old_backup() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 원본이 정말 깨졌는데 가장 새 정상 백업이 더 새 판의 것이면 — 그보다 옛 백업으로 되돌리지 않는다(더 새 판이 복구하게).
+/// 원본이 정말 깨졌는데 가장 새 정상 백업이 더 새 버전의 것이면 — 그보다 옛 백업으로 되돌리지 않는다(더 새 버전이 복구하게).
 #[test]
 fn recovery_does_not_skip_past_a_newer_apps_backup_to_an_older_one() {
     let dir = r3_dir("future_bk");

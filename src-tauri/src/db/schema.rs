@@ -22,7 +22,7 @@ const SCRIPTS: &[&str] = &[
     include_str!("migrations/008_contact_email.sql"),
 ];
 
-/// 이 판이 아는 마지막 스키마 번호(`PRAGMA user_version`). 이보다 큰 DB 는 **더 새 판의 앱**이 만든 것이다.
+/// 이 버전이 아는 마지막 스키마 번호(`PRAGMA user_version`). 이보다 큰 DB 는 **더 새 버전의 앱**이 만든 것이다.
 pub const LATEST: i64 = SCRIPTS.len() as i64;
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =

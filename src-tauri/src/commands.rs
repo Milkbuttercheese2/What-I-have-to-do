@@ -826,11 +826,11 @@ fn probe_import_db(picked_path: &std::path::Path) -> Result<i64, String> {
     if integrity != "ok" {
         return Err(format!("{PICK_BAD}\n\n무결성 검사 결과: {integrity}"));
     }
-    /* 점검 라운드 3: 더 새 판의 앱이 만든 DB 는 이 판이 열지 못한다 — 대기시켜 두면 다음 시작이 '실행 불가'로 멈춘다 */
+    /* 점검 라운드 3: 더 새 버전의 앱이 만든 DB 는 이 버전이 열지 못한다 — 대기시켜 두면 다음 시작이 '실행 불가'로 멈춘다 */
     let picked_version: i64 = check_conn.query_row("PRAGMA user_version", [], |r| r.get(0)).map_err(to_err)?;
     if picked_version > db::SCHEMA_LATEST {
         return Err(format!(
-            "선택한 파일은 이 판보다 새 판의 앱이 만든 데이터베이스라 가져올 수 없습니다(파일 판 {picked_version}, 이 앱 {}).\n(현재 데이터는 변경되지 않았습니다 — 새 판의 앱에서 가져오세요.)",
+            "선택한 파일은 이 버전보다 새 버전의 앱이 만든 데이터베이스라 복원할 수 없습니다(파일 버전 {picked_version}, 이 앱 {}).\n(현재 데이터는 변경되지 않았습니다 — 새 버전의 앱에서 복원하세요.)",
             db::SCHEMA_LATEST
         ));
     }
@@ -853,7 +853,7 @@ fn probe_import_db(picked_path: &std::path::Path) -> Result<i64, String> {
 
 #[cfg(test)]
 mod import_probe_tests {
-    /// 점검 라운드 3: 더 새 판의 앱이 만든 DB 는 대기시키지 않는다(다음 시작이 '실행 불가'로 멈추므로). 이 판·옛 판의 DB 는 그대로 받는다.
+    /// 점검 라운드 3: 더 새 버전의 앱이 만든 DB 는 대기시키지 않는다(다음 시작이 '실행 불가'로 멈추므로). 이 버전·옛 버전의 DB 는 그대로 받는다.
     #[test]
     fn a_newer_apps_db_is_refused_before_staging() {
         let dir = std::env::temp_dir().join(format!("wmhh_test_r3_import_{}", std::process::id()));
@@ -863,7 +863,7 @@ mod import_probe_tests {
         assert_eq!(super::probe_import_db(&p), Ok(0));
         {
             let c = rusqlite::Connection::open(&p).unwrap();
-            c.pragma_update(None, "user_version", 3).unwrap();       // 옛 판 DB 꼴 — 받는다(다음 시작에 올린다)
+            c.pragma_update(None, "user_version", 3).unwrap();       // 옛 버전 DB 꼴 — 받는다(다음 시작에 올린다)
         }
         assert_eq!(super::probe_import_db(&p), Ok(0));
         {
@@ -871,7 +871,7 @@ mod import_probe_tests {
             c.pragma_update(None, "user_version", crate::db::SCHEMA_LATEST + 1).unwrap();
         }
         let e = super::probe_import_db(&p).unwrap_err();
-        assert!(e.contains("새 판의 앱이 만든") && e.contains("변경되지 않았습니다"), "{e}");
+        assert!(e.contains("새 버전의 앱이 만든") && e.contains("변경되지 않았습니다"), "{e}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
