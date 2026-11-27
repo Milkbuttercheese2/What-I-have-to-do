@@ -398,6 +398,19 @@ function setMode(m){
   if(search) runSearch($id('cap-search').value.trim());
 }
 
+/* 결과 줄 글 — 줄은 한 줄 말줄임(.cap-hit-txt nowrap·ellipsis)이라 메모 앞쪽 수십 자만 보인다. 그런데 메모를 통째로 넣으면
+   브라우저가 보이지 않는 뒤쪽까지 글자 모양을 잡아, 긴 메모가 섞인 100건에서 그리기 한 번에 30ms 가까이 들었다(라운드 2 perf-check capSearch).
+   긴 메모만 CSS 가 하는 그대로 공백을 접고(스페이스·탭·줄바꿈 연속 → 한 칸, 맨 앞 공백 없음) 앞 HIT_CHARS 자에서 자른다 — 보이는 글은 같다.
+   짧은 메모는 예전 그대로 넣는다 */
+const HIT_CHARS=400;
+export function hitText(m){
+  if(!m) return '(메모 없음)';
+  if(m.length<=HIT_CHARS) return m;
+  let s=m.replace(/[ \t\n\r\f]+/g,' '); if(s.charAt(0)===' ') s=s.slice(1);
+  if(s.length<=HIT_CHARS) return s;
+  let k=HIT_CHARS; const c=s.charCodeAt(k-1); if(c>=0xD800&&c<=0xDBFF) k--;    // 서로게이트 짝을 가르지 않는다
+  return s.slice(0,k);
+}
 async function runSearch(q){
   const seq=++searchSeq;
   const iw=$id('cap-items');
@@ -411,7 +424,7 @@ async function runSearch(q){
   const items=await invoke('quick_search',{query:q}).catch(()=>[]);
   if(seq!==searchSeq) return;               // 그 사이 새 검색어 입력됨
   iw.innerHTML=items.length?items.map(h=>
-    `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(h.memo||'(메모 없음)')}</span></div>`
+    `<div class="cap-hit${h.done?' done':''}" data-item="${h.id}"><span class="cap-tag ${h.done?'done':'ongoing'}">${h.done?'완료':'진행'}</span><span class="cap-hit-txt">${esc(hitText(h.memo))}</span></div>`
   ).join(''):'<div class="cap-empty">일치하는 업무 없음</div>';
   if(!items.length) return;
   /* v2.6.7: 검색만 했을 때는 아무 줄도 고르지 않는다(하이라이트 없음).
