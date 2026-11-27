@@ -526,6 +526,61 @@ fn client_log_line(tag: &str, msg: &str) -> String {
     format!("client {}: {}", if tag.is_empty() { "?" } else { &tag }, msg)
 }
 
+/// 점검 라운드 3: 진단 로그(wmhh.log)에 업무 내용(이름·번호·메모·식별정보)이 새지 않는지 — 실제 명령 길로 로그 줄을 만들어 본다.
+#[cfg(test)]
+mod log_privacy_tests {
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Mutex;
+
+    use crate::db::model::{Contact, Identifier, Item};
+    use crate::AppDb;
+
+    fn secret_item(id: i64) -> Item {
+        let mut it: Item = serde_json::from_value(serde_json::json!({"id": id})).unwrap();
+        it.memo = "비밀메모 김민원 주민번호 900101".into();
+        it.contacts = vec![Contact { who: "김민원".into(), org: "민원과".into(), phone: "010-9876-5432".into(), email: "kim@secret.kr".into() }];
+        it.ids = vec![Identifier { kind: "SR번호".into(), val: "SR-777777".into() }];
+        it.files = vec!["C:\\민원\\김민원_신청서.hwp".into()];
+        it
+    }
+
+    #[test]
+    fn log_lines_carry_counts_and_events_but_no_item_content() {
+        let dir = std::env::temp_dir().join(format!("wmhh_test_r3_log_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db_path = dir.join("data").join("wmhh.sqlite");
+        let conn = crate::db::open(&db_path).unwrap();
+        let state = AppDb {
+            conn: Mutex::new(conn),
+            db_path: db_path.clone(),
+            backups_dir: dir.join("backups"),
+            base_dir: dir.clone(),
+            app_config_dir: dir.join("cfg"),
+            integrity_ok: AtomicBool::new(true),
+        };
+        // 건수가 바뀐 저장 · 낡은 화면의 저장(거절) · 복원 · 무결성 잠금 중 읽기 — 로그를 남기는 길들
+        let saved = super::save_all_now(&state, vec![secret_item(1), secret_item(2)], None, Some(0)).unwrap();
+        assert!(matches!(saved, super::SaveResult::Saved { .. }));
+        let stale = super::save_all_now(&state, vec![secret_item(3)], None, Some(0)).unwrap();
+        assert!(matches!(stale, super::SaveResult::Stale { .. }));
+        let payload = crate::db::backup::export_payload(&state.conn()).unwrap();
+        super::backup_import_now(&state, payload).unwrap();
+        state.integrity_ok.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(super::load_all_now(&state).is_err());
+        crate::db::log_line(&dir, &super::client_log_line("cap-emit-memo", "event channel closed"));
+        let log = std::fs::read_to_string(dir.join("wmhh.log")).unwrap();
+        eprintln!("{log}");
+        assert!(log.contains("save items 0 -> 2"), "{log}");
+        assert!(log.contains("STALE save rejected"), "{log}");
+        assert!(log.contains("load_all REFUSED"), "{log}");
+        for secret in ["김민원", "민원과", "010-9876", "9876", "kim@secret", "SR-777777", "비밀메모", "900101", "신청서"] {
+            assert!(!log.contains(secret), "로그에 업무 내용 '{secret}' 이 들어 있다:\n{log}");
+        }
+        drop(state);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 #[cfg(test)]
 mod client_log_tests {
     #[test]
