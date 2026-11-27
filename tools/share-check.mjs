@@ -227,13 +227,28 @@ const HUGE = {id: 9003, memo: '아주 긴 메모\n' + ('가나다라마바사아
 await openForm(HUGE); await page.waitForTimeout(300);
 const t0 = Date.now(); await page.click('#fm-share'); await page.waitForTimeout(300);
 const openMs = Date.now() - t0;
-for (const k of await page.evaluate(() => [...document.querySelectorAll('#share-stage .sh-fold')].map(b => b.dataset.fold))) { await page.click(`#share-stage .sh-fold[data-fold="${k}"]`); await page.waitForTimeout(80); }
+/* 접힌 칸을 하나씩 펼친다 — 펼칠 때마다 다시 찾는다(메모를 펼쳐 위 한도를 다 쓰면 뒤 구역은 '구역 N개 더 있음'으로 빠져 단추가 없어진다) */
+for (let guard = 0; guard < 20; guard++) {
+  const k = await page.evaluate(() => document.querySelector('#share-stage .sh-fold:not(.open)')?.dataset.fold);
+  if (!k) break; await page.click(`#share-stage .sh-fold[data-fold="${k}"]`); await page.waitForTimeout(80);
+}
 await page.waitForTimeout(6000);                                  // 펼칠 때마다 미리 만들던 그림이 끝나기를 기다린 뒤
 await page.click('#share-contacts'); await page.waitForTimeout(50);  // 새 상태 → 그림 한 장을 처음부터 만드는 시간
 const ph = await savePng(OUT ? '공유-긴-내용-모두-펼침.png' : ''); const pngMs = ph.ms;   // [파일로 저장]을 누른 때부터 저장 명령이 불릴 때까지(그림 만들기 + 바이트 꾸리기)
 ok(ph.h <= 16000 && ph.w <= 1280, `모두 펼친 아주 긴 업무: 그림 ${ph.w}×${ph.h}px (위 한도 16000), 한 장 만들기 ${pngMs}ms, 창 열기 ${openMs}ms`);
 ok(pngMs < 5000, '아주 긴 업무도 5초 안에 그림 한 장을 만든다');
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+
+/* 줄바꿈 없는 5만 자 메모·구역 1000개 — 접힌 그대로도 그림 폭이 줄지 않는다
+   (예전엔 제목·구역 수에 한도가 없어 그림이 279×16000·66×16000px 로 줄어 읽을 수 없었다) */
+for (const [nm, memo] of [['줄바꿈 없는 5만 자 메모', '가나다라마바사 아자차카타파하 공고문 규격 정정 '.repeat(2000).slice(0, 50000)],
+  ['구역 1000개 메모', '구역 많은 메모\n' + Array.from({length: 1000}, (_, i) => `[구역 ${i}]\n${i}번 구역 첫 줄`).join('\n')]]) {
+  await openForm({...BASE, id: 9005 + nm.length, memo, subs: [], contacts: [], ids: []}); await page.waitForTimeout(200);
+  await page.click('#fm-share'); await page.waitForTimeout(300);
+  const pp = await savePng('');
+  ok(pp.w === 1280 && pp.h < 8000, `${nm}: 접힌 그대로 그림 ${pp.w}×${pp.h}px (폭 그대로·높이 한도 안)`);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+}
 
 /* ── 좁은 창(375px·560px): 미리 보기가 가로로 넘치지 않는다(메모지만 줄여 보인다) · 공유 버튼이 창 안 ── */
 if (!WV2) for (const W of [375, 560]) {

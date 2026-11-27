@@ -19,6 +19,9 @@ export const SHARE_LIMITS={
   subsOpen:3,      // 하위 업무 — 이보다 많으면 남은 것 3개만, 끝낸 것은 모두 접음
   ids:3,           // 식별정보
   cpl:38,          // 그림 한 줄에 드는 한글 글자 수 어림(13px 한글 11.2px · 글 칸 442px → 39, 띄어쓰기에서 끊기는 몫을 덜어 38)
+  titleLines:3,    // 제목(메모 첫 줄) — 줄바꿈 없이 붙여 넣은 긴 글이면 이만큼(어림 줄)만 굵게, 나머지는 본문 앞에 '…'로 이어 접는다
+  titleCpl:30,     // 제목 한 줄 글자 수 어림(14px 굵게는 13px 보통보다 넓다 — Edge 실측 한 줄 약 30, 띄어쓰기에서 끊기는 몫 포함)
+  secNameLines:2,  // 구역 이름([제목]) — 아주 길면 이만큼(어림 줄)으로 줄여 싣는다
   /* 모두 펼쳐도 그림이 지나치게 커지지 않게 하는 위 한도(설계서 9-5). 넘는 것은 그림에 싣지 않고 수를 적는다 — [글자로 복사]에는 다 실린다 */
   max:{memoLines:60, people:25, subs:25, ids:10},   // 모두 펼쳐도 그림 높이 CSS 3천 px 안팎(2.5배로 7~8천 px) — 만드는 데 몇 초 안
 
@@ -119,13 +122,27 @@ export function shareModel(d, ctx){
     return {lines:f.lines, more:mk(key, foldLines(src, budget).hidden>0, isOpen, f.hidden>0?`아래 ${f.hidden}줄 더 있음`:'')};
   };
 
-  /* 1 메모 */
+  /* 1 메모 — 제목·구역 이름·구역 수에도 위 한도를 둔다(예전엔 줄바꿈 없는 5만 자 메모나 구역 수백 개면 그림이 수만 px 로 커져
+     캔버스 한도에 맞추느라 폭이 수십~수백 px 로 줄었다). 넘는 것은 말없이 자르지 않고 '…'·수를 적는다 */
   const mm=splitMemo(d.memo);
   if(!mm.title) blocks.push({kind:'memo', empty:true, title:'', body:[], sections:[]});
   else {
-    const body=lineMore('memo', mm.body, L.memoLines);
-    const sections=mm.sections.map((s,n)=>({name:s.name, ...lineMore('sec:'+n, s.lines, L.secLines)}));
-    blocks.push({kind:'memo', empty:false, title:mm.title, body:body.lines, more:body.more, sections});
+    let title=mm.title, bodySrc=mm.body;
+    if(visualLines(title, L.titleCpl)>L.titleLines){
+      const head=cutUnits(title, L.titleLines*L.titleCpl-1).replace(/\s+$/,'');
+      bodySrc=['…'+title.slice(head.length).replace(/^\s+/,''), ...bodySrc]; title=head+'…';
+    }
+    const body=lineMore('memo', bodySrc, L.memoLines);
+    const sections=[]; let restSec=0;
+    mm.sections.forEach((s,n)=>{
+      if(memoUsed>=L.max.memoLines){ restSec++; return; }
+      const name=visualLines(s.name)>L.secNameLines ? cutUnits(s.name, L.secNameLines*L.cpl-1).replace(/\s+$/,'')+'…' : s.name;
+      memoUsed+=visualLines(name);                    // 구역 이름 줄도 메모 칸의 줄 수에 센다
+      sections.push({name, ...lineMore('sec:'+n, s.lines, L.secLines)});
+    });
+    if(restSec) folded=true;
+    blocks.push({kind:'memo', empty:false, title, body:body.lines, more:body.more, sections,
+      restSections: restSec ? `구역 ${restSec}개 더 있음 · 글자로 복사에는 다 실림` : ''});
   }
 
   /* 2 하위 업무 — 양식의 줄 순서. 많으면(SHARE_LIMITS.subsOpen 초과) 남은 것만 앞에서부터, 끝낸 것은 모두 접음 */
@@ -214,6 +231,7 @@ export function shareHtml(model, opts){
       for(const s of b.sections){
         inner+=`<div class="shc-part">${head(s.name, s.more, controls)}${s.lines.length?`<div class="shc-memo">${lines(s.lines)}</div>`:''}${moreChip(s.more)}</div>`;
       }
+      if(b.restSections) inner+=moreChip({label:b.restSections});
       sec('', inner);
     } else if(b.kind==='subs'){
       const rows=b.rows.map(r=>`<div class="shc-sub${r.done?' d':''}"><span class="shc-chk${r.done?' on':''}"></span><span class="shc-st">${E(r.title)}</span>${r.meta?`<span class="shc-sm">${E(r.meta)}</span>`:''}</div>`).join('');
