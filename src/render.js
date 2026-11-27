@@ -155,9 +155,12 @@ export function metricsOf(items, now){
 function renderMetrics(){
   const el=$('metrics'); if(!el) return;
   const m=metricsOf(S.items);
-  el.innerHTML=`<span><b>${m.active}</b>진행 중 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 업무</span>`
-    +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`;
+  putCol(el, `<span><b>${m.active}</b>진행 중 업무</span><span class="m-todo"><b>${m.todo}</b>오늘 업무</span>`
+    +`<span class="m-ok"><b>${m.doneToday}</b>오늘 완료</span><span class="${m.overdue?'m-warn':''}"><b>${m.overdue}</b>시각 지남</span>`);
 }
+/* 라운드 2 성능: 숫자 칸도 바뀔 때만 쓴다 — 같은 값이라도 다시 쓰면 그 자리를 새로 칠하고, 그러면 브라우저가 보드 전체(카드 1천 장)의
+   합성 층을 다시 나눠(Layerize) 60초 자동 다시 그리기 한 번에 0.1초 가까이 들었다(perf-check render60) */
+function putText(el, v){ if(el && el.textContent!==String(v)) el.textContent=v; }
 /* v3.8.16 보드 칸은 지난번과 같은 HTML 이면 다시 넣지 않는다 — 카드를 하나 체크·저장할 때 바뀌지 않은 칸까지
    카드를 전부 다시 만들어(업무 1천 건: 그리기 200ms 넘게) 1분마다 도는 자동 다시 그리기도 같은 비용을 냈다.
    칸 안 카드 DOM 을 직접 바꾸는 곳(끌기 표시 .dragging·.merge-over·.drop-on)은 끝날 때 스스로 지운다. */
@@ -187,24 +190,34 @@ export function render(){
   if(placeMode()==='owner'){
     /* 시간·담당자 모드(5열) — 필터·정렬은 시간 모드와 동일, 배치만 placeOwner 결과 */
     const cols={inbox:[],metoday:[],othtoday:[],meplan:[],othplan:[]};
-    S.items.filter(onBoard).filter(matchesQ).forEach(it=>{ const p=placeOf(it); if(cols[p])cols[p].push(it); });
+    boardFill(cols);
     for(const k of ['inbox','metoday','othtoday','meplan','othplan']){
       const list=cols[k].sort(sorter);
-      $('c5-'+k).textContent=list.length;
+      putText($('c5-'+k), list.length);
       putCol($('col5-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':(k==='inbox'?'자유 입력이 여기 쌓입니다.':'해당 업무가 없습니다.')}</div>`);
     }
     renderHidden();
     return;
   }
   const cols={inbox:[],today:[],doing:[],planned:[]};
-  S.items.filter(onBoard).filter(matchesQ).forEach(it=>{ const p=placeOf(it); if(cols[p])cols[p].push(it); });
+  boardFill(cols);
   const EMPTY={inbox:'자유 입력이 여기 쌓입니다.',today:'오늘 기한·점검 건이 없습니다.<br><b>여유 있는 날</b>',doing:'진행 중인 업무가 없습니다.',planned:'예정 건이 없습니다.'};
   for(const k of ['inbox','today','doing','planned']){
     const list=cols[k].sort(sorter);
-    $('c-'+k).textContent=list.length;
+    putText($('c-'+k), list.length);
     putCol($('col-'+k), list.length?list.map(it=>cardHtml(it,k)).join(''):`<div class="empty">${q?'검색 결과가 없습니다.':EMPTY[k]}</div>`);
   }
   renderHidden();
+}
+/* 보드 칸 채우기 — 칸(배치)을 먼저 보고, 보드 칸에 들어갈 업무만 검색어와 견준다(라운드 2 성능).
+   예전엔 완료 업무까지 모든 업무의 검색 글(메모 전체 소문자)을 만든 뒤 배치를 봐서, 완료가 1만 건이면 글자 하나에 0.07초를 썼다.
+   어느 칸에 어떤 순서로 들어가는지는 예전과 같다(같은 순서로 넣고, 칸 안 정렬은 부르는 쪽 sorter) */
+function boardFill(cols){
+  for(const it of S.items){
+    if(!onBoard(it)) continue;
+    const p=placeOf(it);
+    if(cols[p] && matchesQ(it)) cols[p].push(it);
+  }
 }
 /* v3.7.0 속도: 달력·완료는 **보이고 있을 때만** 다시 그린다. 안 보일 땐 탭을 열 때 views.js 가 그 화면의
    render(renderCal·renderDone)를 부르므로 늘 최신으로 열린다. 예전엔 저장할 때마다 완료 업무 전부와
