@@ -104,6 +104,17 @@ ok(m1.marks.every(m => m.prevBottom !== null && m.y >= m.prevBottom - 0.5 && m.y
 ok(m1.marks.every(m => Math.abs(m.w - m1.hlW) < 1), `양식 메모: 선 폭 = 메모 칸 폭 (${m1.marks.map(m => m.w.toFixed(1)).join(', ')} / ${m1.hlW.toFixed(1)})`);
 ok(m1.moved < 0.01, `양식 메모: 선 표시를 빼도 백드롭 글자 자리 그대로 (최대 ${m1.moved.toFixed(3)}px)`);
 await shot('공유-화면-4-구역제목.png');
+/* 메모 칸을 끝까지 내려도 선(·태그 하이라이트)이 글과 같은 자리 — 예전엔 글 칸(textarea)이 inline-block 이라 감싼 칸 아래에 틈이 생겨
+   백드롭 층이 글 칸보다 6px 컸고, 끝까지 내리면 백드롭이 6px 덜 내려가 선이 구역 제목 글자를 그었다(칸 아래 테두리 밖으로도 비어져 나옴) */
+await openForm({...BASE, id: 8999, memo: SECTION_MEMO + '\n' + Array.from({length: 30}, (_, i) => i % 6 === 2 ? `[구역 ${i}]` : `${i}번째 줄`).join('\n')});
+await page.waitForTimeout(300);
+const btm = await page.evaluate(() => { const ta = document.getElementById('fm-memo'), hl = document.getElementById('fm-memo-hl');
+  ta.scrollTop = 1e6; ta.dispatchEvent(new Event('scroll'));
+  const tr = ta.getBoundingClientRect(), hr = hl.getBoundingClientRect(), bw = parseFloat(getComputedStyle(ta).borderBottomWidth);
+  return {st: [ta.scrollTop, hl.scrollTop], ch: [ta.clientHeight, hl.clientHeight], over: hr.bottom - (tr.bottom - bw)}; });
+ok(btm.st[0] > 0 && btm.st[0] === btm.st[1] && btm.ch[0] === btm.ch[1] && btm.over <= 0.5,
+  `양식 메모: 끝까지 내려도 백드롭이 글 칸과 같은 자리 (scrollTop ${btm.st.join('/')}, 높이 ${btm.ch.join('/')}, 칸 아래로 ${btm.over.toFixed(1)}px)`);
+await openForm({...BASE, id: 9000, memo: SECTION_MEMO}); await page.waitForTimeout(300);   // 2쪽 보기는 처음 메모로
 
 /* ── 2 2쪽 보기 ── */
 await page.click('#fm-book'); await page.waitForTimeout(700);
