@@ -35,7 +35,7 @@ const server = http.createServer((req, res) => {
     res.end(buf);
   });
 });
-await new Promise(r => server.listen(0, r));
+await new Promise(r => server.listen(0, '127.0.0.1', r));   /* 이 PC 안에서만 — 빈 포트 */
 const port = server.address().port;
 const url = p => `http://127.0.0.1:${port}/${p}`;
 
@@ -47,11 +47,14 @@ const INIT = `(()=>{
   const mk=o=>Object.assign({id:1,memo:'',owner:'',f:{received:iso,due:''},contacts:[],ids:[],subs:[],files:[],done:false,staged:false,al:{},recur:null,recurId:null},o);
   const items=[
     mk({id:1,memo:'시설관리과 요청 — 청사 전기설비 유지관리 용역 계약변경 사유 검토',staged:true}),
-    mk({id:2,memo:'청사 전기설비 유지관리 용역 계약변경 검토 후 회계과에 회신',f:{received:iso,due:at(0,17,0)},
+    /* v3.9.0 메모 구역 제목([통화 내용]·[남은 일])과 공유 메모지의 접기('아래 1줄 더 있음')가 그림에 보이게 쓴 메모 */
+    mk({id:2,memo:'청사 전기설비 유지관리 용역 계약변경 검토 후 회계과에 회신\\n[통화 내용]\\n시설관리과 김계약 주무관: 변압기 교체 범위가 늘어 계약금액 조정이 필요함\\n변경 사유서와 산출내역은 내일까지 메일로 받기로 함\\n[남은 일]\\n산출내역 단가를 원 계약과 대조\\n설계변경 승인 여부 확인\\n회계과에 검토 의견 회신\\n계약변경 품의 올리기',
+      f:{received:iso,due:at(0,17,0)},
       contacts:[{who:'김계약 주무관',org:'시설관리과',phone:'02-0000-1201',email:'g.contract@example.go.kr'}],
       ids:[{kind:'계약번호',val:'2026-시설-용역-014'}],
       files:['C:\\\\조달계약\\\\2026\\\\전기설비_용역_계약변경_검토서.xlsx'],
-      subs:[{id:21,title:'계약변경 사유서와 산출내역 대조',mid:at(0,16,0),done:false,al:null,owner:''}]}),
+      subs:[{id:21,title:'계약변경 사유서와 산출내역 대조',mid:at(0,16,0),done:false,al:null,owner:''},
+            {id:22,title:'회계과에 검토 의견 회신',mid:at(1,10,0),done:false,al:null,owner:''}]}),
     mk({id:3,memo:'청사 청소용역 입찰 제안서 평가자료 준비',f:{received:iso,due:at(4,10,0)},
       subs:[{id:30,title:'평가위원 위촉 공문 발송',mid:at(-1,10,0),done:true,al:null,owner:''},
             {id:31,title:'제안서 평가표 배부 여부 확인',mid:at(1,9,30),done:false,al:null,owner:'박조달 주무관'}]}),
@@ -82,7 +85,7 @@ const INIT = `(()=>{
       if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
       if(c==='pick_file_path')return 'C:\\\\조달계약\\\\2026\\\\입찰공고_정정사유서.hwp';
       return null;}},
-    app:{getVersion:async()=>'3.7.5'},   /* 설명서 그림의 헤더 버전 — 스크린샷을 다시 뽑을 때 함께 올린다 */
+    app:{getVersion:async()=>'3.9.0'},   /* 설정 맨 아래 버전 — 설명서 첫머리 'vX.Y.Z 기준'과 같게, 다시 뽑을 때 함께 올린다 */
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,maximize:noop,minimize:noop,toggleMaximize:noop,close:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};
@@ -138,7 +141,8 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
 }
 /* ---- 5. form.png : 양식(채워진 상태) -------------------------------- */
 {
-  const page = await open({width: 1180, height: 900});
+  /* 양식 전체(파일 링크 줄까지)가 창에 들어오는 높이 — 모자라면 아래 단추 줄이 링크 줄을 덮고 패널 밖 바탕이 찍힌다 */
+  const page = await open({width: 1180, height: 1240});
   await page.click('.card:has-text("계약변경 검토 후 회계과에 회신")'); await page.waitForTimeout(600);
   await shotEl(page, '#formPanel .fm-inner', 'form.png');
   await page.close();
@@ -236,6 +240,99 @@ const shotPage = (page, file, clip) => page.screenshot({path: path.join(OUT, fil
   await shotPage(page, 'capture-search.png');
   await page.close();
   console.log('capture-search.png');
+}
+
+/* ---- 14. memo-sections.png : 메모 구역 제목 가로선(v3.9.0) ------------ */
+{
+  const page = await open({width: 1180, height: 900});
+  await page.click('.card:has-text("계약변경 검토 후 회계과에 회신")'); await page.waitForTimeout(600);
+  await shotEl(page, '#formPanel .fm-memo-wrap', 'memo-sections.png');
+  await page.close();
+  console.log('memo-sections.png');
+}
+/* ---- 15. share.png : 업무 공유 미리 보기(v3.9.0) ------------------------ */
+{
+  const page = await open({width: 1180, height: 1000});
+  await page.click('.card:has-text("계약변경 검토 후 회계과에 회신")'); await page.waitForTimeout(600);
+  await page.click('#fm-share'); await page.waitForTimeout(800);
+  await shotEl(page, '#shareModal .share-modal', 'share.png');
+  await page.close();
+  console.log('share.png');
+}
+/* ---- 16. xlsx-list.png : 엑셀로 내보낸 파일의 첫 시트(v3.9.0) ------------
+   한셀·엑셀 창을 찍지 않는다(다른 창이 비쳐 찍힐 수 있다). 앱의 buildXlsx 로 실제 .xlsx 바이트를 만들고,
+   그 파일을 SheetJS(값·열 너비·줄 높이·병합)와 꾸러미 안 styles.xml·sheet1.xml(셀 꾸밈 번호)로 다시 읽어
+   엑셀 화면처럼(열 머리·줄 번호·시트 탭) 그린 뒤 찍는다. 눈금선은 첫 시트 설정대로(showGridLines=0) 그리지 않는다. */
+{
+  const page = await open({width: 1400, height: 900});
+  await page.evaluate(async () => {
+    const {needXlsx} = await import('/dom-utils.js');
+    const {S} = await import('/state.js');
+    const {buildXlsx} = await import('/xlsx-export.js');
+    await needXlsx();
+    const X = window.XLSX;
+    const bytes = buildXlsx(X, S.items, {now: new Date()});
+    const wb = X.read(bytes, {type: 'array', cellStyles: true});   /* cellStyles 를 줘야 !cols·!rows 를 읽는다 */
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const z = X.CFB.read(bytes, {type: 'array'});
+    const xmlOf = p => new DOMParser().parseFromString(new TextDecoder().decode(X.CFB.find(z, p).content), 'application/xml');
+    const kids = (doc, tag) => [...doc.getElementsByTagName(tag)[0].children];
+    const one = (el, tag) => el.getElementsByTagName(tag)[0];
+    const rgb = el => el && el.getAttribute('rgb') ? '#' + el.getAttribute('rgb').slice(2) : null;
+    const sx = xmlOf('/xl/styles.xml');
+    const fonts = kids(sx, 'fonts').map(f => ({b: !!one(f, 'b'), sz: +one(f, 'sz').getAttribute('val'), c: rgb(one(f, 'color'))}));
+    const fills = kids(sx, 'fills').map(f => rgb(one(f, 'fgColor')));
+    const side = (b, n) => { const e = one(b, n); const st = e && e.getAttribute('style'); return st ? `${st === 'thick' ? 3 : 1}px solid ${rgb(one(e, 'color')) || '#000'}` : ''; };
+    const borders = kids(sx, 'borders').map(b => ({l: side(b, 'left'), r: side(b, 'right'), t: side(b, 'top'), bt: side(b, 'bottom')}));
+    const xfs = kids(sx, 'cellXfs').map(x => { const a = one(x, 'alignment');
+      return {f: fonts[+x.getAttribute('fontId')], fill: fills[+x.getAttribute('fillId')], b: borders[+x.getAttribute('borderId')],
+        wrap: a && a.getAttribute('wrapText') === '1', v: (a && a.getAttribute('vertical')) || 'bottom', h: (a && a.getAttribute('horizontal')) || 'left'}; });
+    const styleOf = {};
+    for (const c of xmlOf('/xl/worksheets/sheet1.xml').getElementsByTagName('c')) styleOf[c.getAttribute('r')] = +(c.getAttribute('s') || 0);
+    const cols = ws['!cols'].map(c => Math.round((c.wch || c.width || 8.43) * 7 + 5));
+    const rows = ws['!rows'] || [];
+    const merges = ws['!merges'] || [];
+    const range = X.utils.decode_range(ws['!ref']);
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    let html = '<table class="xl"><colgroup><col style="width:42px">' + cols.map(w => `<col style="width:${w}px">`).join('') + '</colgroup>';
+    html += '<tr class="xh"><td class="xc"></td>' + cols.map((_, c) => `<td class="xc">${X.utils.encode_col(c)}</td>`).join('') + '</tr>';
+    let used = 0;
+    for (let r = 0; r <= range.e.r; r++) {
+      const hpx = Math.round(((rows[r] && rows[r].hpt) || 15) * 4 / 3);
+      if (used + hpx > 640) break;
+      used += hpx;
+      html += `<tr style="height:${hpx}px"><td class="xc xn">${r + 1}</td>`;
+      for (let c = 0; c < cols.length; c++) {
+        const m = merges.find(m => m.s.r <= r && r <= m.e.r && m.s.c <= c && c <= m.e.c);
+        if (m && (m.s.r !== r || m.s.c !== c)) continue;
+        const ref = X.utils.encode_cell({r, c}), cell = ws[ref], x = xfs[styleOf[ref] || 0];
+        const css = [`font-size:${x.f.sz}pt`, `color:${x.f.c || '#000'}`, x.f.b ? 'font-weight:700' : '', x.fill ? `background:${x.fill}` : '',
+          x.b.l && `border-left:${x.b.l}`, x.b.r && `border-right:${x.b.r}`, x.b.t && `border-top:${x.b.t}`, x.b.bt && `border-bottom:${x.b.bt}`,
+          `vertical-align:${x.v === 'center' ? 'middle' : x.v}`, `text-align:${x.h}`, x.wrap ? 'white-space:pre-wrap' : 'white-space:pre'].filter(Boolean).join(';');
+        const span = m ? ` colspan="${m.e.c - m.s.c + 1}"` : '';
+        html += `<td${span} style="${css}"><div class="xv" style="max-height:${hpx - 2}px">${cell ? esc(cell.v) : ''}</div></td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    const tabs = wb.SheetNames.map((n, i) => `<span class="xt${i ? '' : ' on'}">${esc(n)}</span>`).join('');
+    document.body.innerHTML = `<div id="xlshot"><div class="xgrid">${html}</div><div class="xtabs">${tabs}</div></div>`;
+    const st = document.createElement('style');
+    st.textContent = `body{margin:0;background:#fff} #xlshot{display:inline-block;background:#fff;font-family:'Malgun Gothic','맑은 고딕',sans-serif}
+      .xgrid{overflow:hidden} table.xl{border-collapse:collapse;table-layout:fixed}
+      table.xl td{padding:1px 4px;overflow:hidden;line-height:1.33}
+      .xv{overflow:hidden}
+      td.xc{background:#f3f3f3;color:#555;font-size:9pt;text-align:center;vertical-align:middle;border:1px solid #d4d4d4;padding:0}
+      tr.xh{height:20px} td.xn{font-size:9pt}
+      .xtabs{display:flex;gap:2px;border-top:1px solid #d4d4d4;background:#f3f3f3;padding:0 0 0 44px;font-size:9pt}
+      .xt{padding:4px 14px;color:#444;border-right:1px solid #d4d4d4}
+      .xt.on{background:#fff;color:#1d6f42;font-weight:700;border-bottom:2px solid #1d6f42}`;
+    document.head.appendChild(st);
+  });
+  await page.waitForTimeout(300);
+  await shotEl(page, '#xlshot', 'xlsx-list.png');
+  await page.close();
+  console.log('xlsx-list.png');
 }
 
 await browser.close();
