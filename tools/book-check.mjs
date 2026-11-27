@@ -4,14 +4,19 @@
 // (playwright-core 는 다른 도구처럼 `npm install --no-save playwright-core`)
 import http from "node:http"; import fs from "node:fs"; import path from "node:path"; import { pathToFileURL, fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."); const ROOT = path.join(REPO, "src");
-const { makeInit, BOOK_MEMO } = await import(pathToFileURL(path.join(REPO, "docs/소개영상/원본/sample-data.mjs")).href);
+const { makeInit } = await import(pathToFileURL(path.join(REPO, "docs/소개영상/원본/sample-data.mjs")).href);
+/* 예시 메모는 여기서 짓는다(지어낸 회의 메모). 예전엔 소개영상 원본(sample-data.mjs)의 BOOK_MEMO 를 썼는데, v3.8.8 에서 그 내보내기가
+   없어져 undefined 8개 = 빈 줄뿐인 메모로 1쪽만 나와 3)에서 둘째 쪽이 없어 실패했다(기준 커밋에서도). 소개영상 원본은 고치지 않는다 */
+const BOOK_MEMO = ["청사관리 통합용역 기술평가위원회 회의 메모", "",
+  ...Array.from({ length: 8 }, (_, k) => [`${k + 1}. 안건 ${k + 1}`,
+    ...Array.from({ length: 6 }, (_, j) => `- ${k + 1}-${j + 1} 위원 질의와 제안사 답변을 적는다. 과업 범위·인력 배치·장비 목록·안전 관리 계획을 하나씩 확인함.`), ""]).flat()].join("\n");
 const INIT = makeInit(fs.readFileSync(path.join(REPO, "tools/guide-shots.mjs"), "utf8"));
 const pw = await import(pathToFileURL(path.join(REPO, "node_modules/playwright-core/index.js")).href);
 const chromium = (pw.default && pw.default.chromium) || pw.chromium;
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2" };
 const server = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split("?")[0]); if (p === "/") p = "/index.html";
   fs.readFile(path.join(ROOT, p), (e, b) => { if (e) { r.writeHead(404); r.end(); return; } r.writeHead(200, { "Content-Type": MIME[path.extname(p)] || "application/octet-stream" }); r.end(b); }); });
-await new Promise((r) => server.listen(0, r));
+await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const b = await chromium.launch({ channel: "msedge" });
 const page = await b.newPage({ viewport: { width: 1477, height: 830 } });
 page.on("pageerror", (e) => console.log("ERR", e.message));
@@ -20,7 +25,9 @@ await page.goto(`http://127.0.0.1:${server.address().port}/index.html`, { waitUn
 await page.waitForTimeout(800);
 await page.evaluate(() => document.querySelector('#view-board5 .card .card-memo, #view-board .card .card-memo').click());
 await page.waitForTimeout(400);
-const ORIG = Array(8).fill(BOOK_MEMO).join("\n\n");
+/* 꽉 찬 쪽이 여럿이어야 밀기·당기기·쪽 경계를 볼 수 있다 — 예시 메모(소개영상 원본, 여기서 고치지 않는다)가 짧아져
+   8번 이어 붙여도 1쪽뿐이라 3)에서 둘째 쪽이 없어 실패했다. 6천 자 넘게 되풀이하고, 3쪽 이상인지 먼저 본다 */
+const ORIG = Array(Math.max(8, Math.ceil(6000 / (BOOK_MEMO.length + 2)))).fill(BOOK_MEMO).join("\n\n");
 await page.evaluate((t) => { const m = document.getElementById("fm-memo"); m.value = t; m.dispatchEvent(new Event("input", { bubbles: true })); }, ORIG);
 await page.click("#fm-book"); await page.waitForTimeout(800);
 let fails = 0; const ok = (c, msg) => { console.log((c ? "PASS " : "FAIL ") + msg); if (!c) fails++; };
@@ -28,7 +35,7 @@ const state = () => page.evaluate(() => { const tas = [...document.querySelector
   return { n: tas.length, joined: tas.map(t => t.value).join(""), memo: document.getElementById("fm-memo").value,
     over: tas.map((t, i) => t.scrollHeight > t.clientHeight + 1 ? i : -1).filter(i => i >= 0), caret: (() => { const a = document.activeElement, i = tas.indexOf(a); return i < 0 ? null : tas.slice(0, i).reduce((s, t) => s + t.value.length, 0) + a.selectionStart; })() }; });
 const s0 = await state();
-ok(s0.joined === ORIG && s0.over.length === 0, `처음: ${s0.n}쪽, 원문 일치, 넘친 쪽 없음`);
+ok(s0.joined === ORIG && s0.over.length === 0 && s0.n >= 3, `처음: ${s0.n}쪽(3쪽 이상), 원문 일치, 넘친 쪽 없음`);
 // 1) 첫 쪽 가운데에 400자를 키 단위로 입력(꽉 찬 쪽 → 밀림 발생)
 const INS = "가나다라마바사아자차 ".repeat(40);
 const at = await page.evaluate(() => { const t = document.querySelector("#book-pages .book-ta"); t.focus(); const p = Math.floor(t.value.length / 2); t.setSelectionRange(p, p); return p; });
