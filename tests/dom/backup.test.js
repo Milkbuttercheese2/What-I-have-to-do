@@ -278,3 +278,46 @@ test('복원으로 열린 양식의 업무가 없어지면 [저장]이 쓰던 �
   assert.ok(S.items.some(x=>String(x.memo).includes('쓰던 글')), '쓰던 글이 어딘가 남는다');
   env.onInvoke('backup_import', () => null);
 });
+
+/* 점검 라운드 3: [백업 파일 만들기] → 그 파일로 [백업에서 복원]의 왕복 — 모든 칸이 그대로 backup_import 에 실리는가
+   (하위 업무 순서·담당·알림 상태(확인·미룸 숫자)·관련인 이메일·식별정보·파일 링크·반복 업무·완료 시각·사용자 칸·
+   전화번호부·프리셋·식별정보 명칭·옛 반복 정의·모르는 설정 키). 임시 상태(초안)만 빠진다. */
+test('JSON 백업 왕복: 만든 파일로 복원하면 모든 칸이 그대로 실린다(초안만 빠진다)', async () => {
+  await env.resetS(); S.loaded = true;
+  const items = [
+    {id:1700000000001, memo:'첫 줄\n[구역]\n내용 @김가', owner:'', done:false, doneAt:null, staged:false,
+     f:{received:'2026-11-01T00:00:00.000Z', due:'2026-11-30T09:00:00.000Z', custom1:'사용자 칸'},
+     contacts:[{who:'김가', org:'가과', phone:'010-1111-2222', email:'kim@x.kr'}, {who:'나', org:'', phone:'내선 1234', email:''}],
+     ids:[{kind:'SR번호', val:'SR-1'}, {kind:'자체', val:'X-9'}],
+     subs:[{id:1700000000003, title:'둘째로 적은 것', mid:'2026-11-20T01:00:00.000Z', done:true, al:{mid:true}, owner:'박담당'},
+           {id:1700000000002, title:'첫째로 적은 것', mid:'', done:false, al:{mid:1800000000000}, owner:''}],
+     files:['C:\문서\가.hwp', '\\srv\공유\나.pdf'], al:{due:true}, recur:null, recurId:1700000000099},
+    {id:1700000000010, memo:'반복 부모', owner:'', done:false, doneAt:null, staged:false, f:{}, contacts:[], ids:[], subs:[], files:[], al:{},
+     recur:{freq:'weekly', dow:[1,3], time:{hh:9, mm:30}, next:'2026-12-01', paused:false}, recurId:null},
+    {id:1700000000020, memo:'완료', owner:'외부', done:true, doneAt:1764200000000, staged:true, f:{}, contacts:[], ids:[], subs:[], files:[], al:{}, recur:null, recurId:null},
+  ];
+  S.items = JSON.parse(JSON.stringify(items));
+  S.fields = [...S.fields, {key:'custom1', label:'사용자 칸', type:'datetime', on:true}];
+  S.presets = [{id:'p1', label:'프리셋', memo:'틀', subs:['가']}];
+  S.idKinds = ['SR번호', '공사관리번호'];
+  S.recurDefs = [{id:5, memo:'옛 정기', freq:'daily', dow:[], time:{hh:8, mm:0}, next:'', paused:true}];
+  S.phonebook = [{id:9, who:'김가', org:'가과', phone:'010-1111-2222', email:'kim@x.kr'}];
+  Object.assign(S.settings, {theme:'dark', uiScale:130, docRoots:['D:\공유'], 옛키:'보존', captureDraft:'쓰다 만 미니 메모', formDrafts:{'1':{at:1, data:{memo:'초안'}}}});
+  const want = {fields:S.fields, presets:S.presets, idKinds:S.idKinds, recurDefs:S.recurDefs, phonebook:S.phonebook,
+                settings:{...S.settings, captureDraft:'', formDrafts:{}}};
+  env.onInvoke('save_text_file', () => true);
+  $('bkExp').click();
+  await env.flush(8);
+  const file = env.invokeCalls.filter(c=>c.cmd==='save_text_file').at(-1).args.content;
+  env.invokeCalls.length = 0;
+  env.onInvoke('import_backup_file', () => ({kind:'Json', content:file}));
+  env.onInvoke('backup_import', () => 9);
+  env.answerConfirm(true);
+  $('bkImp').click();
+  await env.flush(10);
+  const payload = env.invokeCalls.filter(c=>c.cmd==='backup_import')[0].args.payload;
+  assert.deepEqual(payload.items, items, '업무의 모든 칸 — 순서까지');
+  for(const k of ['fields','presets','idKinds','recurDefs','phonebook']) assert.deepEqual(payload[k], want[k], k);
+  assert.deepEqual(payload.settings, want.settings, '설정 — 모르는 키 보존, 초안만 빠짐');
+  env.onInvoke('backup_import', () => null);
+});
