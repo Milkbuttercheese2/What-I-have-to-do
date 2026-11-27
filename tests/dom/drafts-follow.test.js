@@ -200,6 +200,23 @@ test('메모 합치기 [실행 취소]: 그 뒤 받는 쪽 양식에 더 쓰고 
   assert.equal(draftOf(A.id)?.data.memo, '가 + 가에 쓰던 초안', '끌려온 쪽 임시저장분은 제자리로');
 });
 
+/* 점검 라운드 5(독립 검토 01 변이 확인): editDrafts 의 `lastWritten=null` 을 지켜 본 테스트가 없었다. 약속 — 양식이 열린 채 그 업무의
+   임시저장분이 밖에서 바뀌어도, 양식을 닫으면 임시저장분은 양식에 보이는 내용(사용자가 마지막으로 본 것)이 된다. 빼면 '방금 쓴 것과 같다'로
+   보고 쓰기를 건너뛰어, 사용자가 본 적 없는 내용이 임시저장분으로 남는다. */
+test('양식이 열린 채 그 임시저장분이 밖에서 바뀌어도, 닫으면 임시저장분은 양식에 보이는 내용이다', async () => {
+  await fresh();
+  const {editDrafts} = await import('../../src/form.js');
+  const a = mk({memo:'원래'});
+  S.items.push(a);
+  openForm(a); await env.flush();
+  $('fm-memo').value = '양식에 쓴 글'; input($('fm-memo'));
+  mock.timers.tick(700); await env.flush();            // 입력이 멈춰 임시저장
+  assert.equal(draftOf(a.id).data.memo, '양식에 쓴 글');
+  editDrafts([a.id], d=>({...d, memo:'밖에서 바꾼 글'}));
+  closeForm(); await env.flush();
+  assert.equal(draftOf(a.id).data.memo, '양식에 쓴 글');
+});
+
 test('인물 바꾸기 [실행 취소]: 그 뒤 양식에 더 쓰고 닫은 글은 남는다', async () => {
   await fresh();
   adoptPhonebook([{id:11, who:'김철수', org:'행정과', phone:'010-1111-1111'}, {id:12, who:'이영희', org:'세무과', phone:'010-2222-2222'}]);

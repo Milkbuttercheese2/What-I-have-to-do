@@ -1247,6 +1247,28 @@ test('이름 바뀜으로 링크를 고칠 때 임시저장분과 열린 양식�
   closeForm();
 });
 
+/* 점검 라운드 5(독립 검토 01 변이 확인): 위와 같은 도우미를 부르는 두 번째 길 — 문서 폴더(맨 위 줄) 자체가 옮겨졌을 때. 되돌려도 실패하는 테스트가 없었다. */
+test('문서 폴더 자체가 옮겨질 때도 임시저장분과 열린 양식의 링크가 새 경로로 — [저장]해도 옛 경로가 돌아오지 않는다', async () => {
+  const {openForm, closeForm} = await import('../../src/form.js');
+  await env.resetS(); S.loaded = true;
+  S.settings.docRoots=['W:\\팀\\가'];
+  fakeFs(()=>({'0:':[{name:'a.txt',rel:'a.txt',dir:false,size:1,mtime:1}]}));
+  const shut=mk({memo:'쓰다 닫음', files:['W:\\팀\\가\\a.txt']});
+  const open=mk({memo:'열린 양식', files:['W:\\팀\\가\\a.txt', 'C:\\딴곳\\b.txt']});
+  S.items.push(shut, open);
+  S.settings.formDrafts={[String(shut.id)]:{at:1, data:{memo:'쓰다 닫음 + 고침', f:{}, contacts:[], ids:[], subs:[], files:['W:\\팀\\가\\a.txt']}}};
+  await openDocs();
+  openForm(open, {dock:true}); await env.flush(4);
+  env.fireEvent('wmhh://doc-root-moved', {root:0, base:'W:\\팀\\가', to:'W:\\팀\\나'}); await env.flush(14);
+  assert.deepEqual(S.settings.docRoots, ['W:\\팀\\나']);
+  assert.deepEqual(S.settings.formDrafts[String(shut.id)].data.files, ['W:\\팀\\나\\a.txt'], '임시저장분');
+  assert.equal(S.settings.formDrafts[String(shut.id)].data.memo, '쓰다 닫음 + 고침', '나머지는 그대로');
+  assert.deepEqual([...doc.querySelectorAll('#fm-files .ffile-path')].map(i=>i.value), ['W:\\팀\\나\\a.txt', 'C:\\딴곳\\b.txt'], '열린 양식');
+  click($('fm-save')); await env.flush(4);
+  assert.deepEqual(open.files, ['W:\\팀\\나\\a.txt', 'C:\\딴곳\\b.txt'], '[저장]해도 옛 경로가 돌아오지 않는다');
+  closeForm();
+});
+
 test('문서 폴더 자체 이름: 바깥(doc-root-moved)·앱 안(맨 위 줄 이름 바꾸기 → doc_rename_root) 모두 목록·업무 링크가 따라간다', async () => {
   await env.resetS(); S.loaded = true;
   S.settings.docRoots=['W:\\팀\\가'];
