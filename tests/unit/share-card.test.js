@@ -68,7 +68,7 @@ test('접기: 관련인 2명까지 보이고 "외 N명"', () => {
   assert.equal(b2.rows.length, 2); assert.equal(b2.more, null, '2명은 접을 것이 없다');
   const m5 = shareModel(many(5), ctx()), b5 = m5.blocks.find(b=>b.kind==='people');
   assert.equal(b5.rows.length, 2); assert.equal(b5.more.label, '외 3명'); assert.equal(b5.more.open, false);
-  assert.equal(m5.folded, true); assert.match(m5.foot.right, /^접힌 내용 있음 · /);
+  assert.equal(m5.folded, true); assert.equal(m5.foot.right, '접힌 내용 있음', '바닥줄 오른쪽은 접힌 내용 표시만');
   const o5 = shareModel(many(5), ctx({open:new Set(['people'])})).blocks.find(b=>b.kind==='people');
   assert.equal(o5.rows.length, 5); assert.equal(o5.more.label, ''); assert.equal(o5.more.open, true, '펼친 칸은 [접기]');
   assert.deepEqual(b5.rows.map(r=>r.who), ['사람0','사람1'], '양식에 적힌 순서대로');
@@ -179,8 +179,11 @@ test('연락처·이메일·파일 링크는 기본으로 빠지고, 스위치�
   const pOff = off.blocks.find(b=>b.kind==='people').rows[0], pOn = on.blocks.find(b=>b.kind==='people').rows[0];
   assert.deepEqual(pOff, {org:'시설과', who:'김서준 주무관', extra:''});
   assert.deepEqual(pOn, {org:'시설과', who:'김서준 주무관', extra:'02-000-0000 · kim@example.go.kr'});
-  assert.equal(off.foot.right, '연락처·이메일·파일 링크는 뺌');
-  assert.equal(on.foot.right, '파일 링크는 뺌');
+  /* 2026-11-28 소유자 지정: 바닥줄에 '…는 뺌'을 적지 않는다(접힌 것이 없으면 오른쪽은 비어 있다). 그림·글자 어디에도 '뺌'이 없다 */
+  assert.equal(off.foot.right, '');
+  assert.equal(on.foot.right, '');
+  for(const m of [off, on]) assert.ok(!shareHtml(m).includes('뺌'), '메모지에 "…는 뺌" 없음');
+  for(const w of [false, true]) assert.ok(!shareText(SAMPLE, ctx({withContacts:w})).includes('뺌'), '글자로 복사에도 없음');
   for(const m of [off, on]) assert.ok(!shareHtml(m).includes('정정요청'));
   assert.ok(!shareHtml(off).includes('02-000-0000') && !shareHtml(off).includes('kim@'));
   assert.ok(shareHtml(on).includes('02-000-0000'));
@@ -292,4 +295,20 @@ test('그림 색은 늘 밝은 테마 — styles.css :root(밝게) 토큰과 같
     assert.ok(m, `--${k} 가 :root 에 있다`);
     assert.equal(m[1].toLowerCase(), v.toLowerCase(), `--${k}`);
   }
+});
+
+/* 2026-11-28 소유자 지정: 본문은 검정, 나머지(항목명·식별정보·관련인·시간)는 회색 하나, 관련인 이름도 굵게 하지 않는다 */
+test('글자 색: 본문 검정 · 식별정보·관련인·시각 회색 · 관련인 이름 보통 굵기', async () => {
+  const {shareCss} = await import('../../src/share-card.js');
+  const css = shareCss('x'), rule = sel => { const i = css.indexOf(sel + '{'); return i < 0 ? '' : css.slice(i, css.indexOf('}', i)); };
+  assert.match(rule('.shc-memo'), /color:var\(--sh-ink\)/, '메모 본문·구역 본문 검정');
+  assert.doesNotMatch(rule('.shc-title'), /color:/, '제목은 기본(검정)');
+  assert.doesNotMatch(rule('.shc-st'), /color:/, '하위 업무 제목은 기본(검정)');
+  for (const sel of ['.shc-h', '.shc-kv .k', '.shc-kv .v', '.shc-val', '.shc-sm', '.shc-hd span', '.shc-ft'])
+    assert.match(rule(sel), /color:var\(--sh-ink-soft\)/, `${sel} 회색`);
+  assert.match(rule('.shc-val b.imm'), /color:var\(--sh-tag-imm-fg\)/, '임박한 기한의 붉은 표시는 그대로');
+  assert.equal(rule('.shc-kv b'), '', '관련인 이름 굵게 규칙 없음');
+  const html = shareHtml(shareModel(SAMPLE, ctx({withContacts:true})));
+  assert.ok(!/<b>[^<]*김서준/.test(html) && html.includes('<span class="who">김서준 주무관</span>'), '관련인 이름은 <b> 로 감싸지 않는다');
+  assert.ok(!/\*\*/.test(shareText(SAMPLE, ctx({withContacts:true}))), '글자로 복사에도 굵게 표시 없음');
 });

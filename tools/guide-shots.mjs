@@ -85,7 +85,7 @@ const INIT = `(()=>{
       if(c==='save_phonebook'){store.phonebook=(a&&a.phonebook)||store.phonebook;return null;}
       if(c==='pick_file_path')return 'C:\\\\조달계약\\\\2026\\\\입찰공고_정정사유서.hwp';
       return null;}},
-    app:{getVersion:async()=>'3.9.1'},   /* 설정 맨 아래 버전 — 설명서 첫머리 'vX.Y.Z 기준'과 같게, 다시 뽑을 때 함께 올린다 */
+    app:{getVersion:async()=>'3.9.2'},   /* 설정 맨 아래 버전 — 설명서 첫머리 'vX.Y.Z 기준'과 같게, 다시 뽑을 때 함께 올린다 */
     event:{listen:async()=>()=>{},emit:noop,emitTo:noop,once:async()=>()=>{}},
     window:{getCurrentWindow:()=>({hide:noop,show:noop,setSize:noop,maximize:noop,minimize:noop,toggleMaximize:noop,close:noop,setFocus:noop,label:'main'})}};
   window.Notification={permission:'granted',requestPermission:async()=>'granted'};

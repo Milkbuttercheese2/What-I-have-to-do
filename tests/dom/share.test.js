@@ -64,6 +64,9 @@ test('공유 버튼 → 미리 보기 창, ESC 로 미리 보기만 닫히고 �
   for(const id of ['share-img','share-text','share-save']) assert.ok($(id), id);
   assert.equal($('share-img').textContent, '그림 복사');
   assert.ok($('share-img').classList.contains('btn-ok'), '[그림 복사]가 주 동작');
+  /* 2026-11-28 단추 규칙: 이 창을 연 까닭인 [그림 복사]만 '할 일이 생김'(녹색), 나머지는 흰 단추 */
+  assert.ok($('share-img').classList.contains('ready'), '[그림 복사]는 창이 뜨자마자 녹색');
+  for(const id of ['share-text','share-save']) assert.equal($(id).classList.contains('ready'), false, `${id} 는 흰 단추`);
   env.document.dispatchEvent(new env.window.KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
   closeTop();                                         // main.js 의 ESC 처리와 같은 길(맨 위 한 장)
   assert.equal($('shareModal').classList.contains('on'), false);
@@ -103,7 +106,9 @@ test('저장 전 고친 내용이 실린다(메모·관련인) · 연락처·파
   assert.ok(!st.textContent.includes('02-000-0000'), '연락처는 기본으로 뺌');
   assert.ok(!st.textContent.includes('k@example.go.kr'), '이메일은 기본으로 뺌');
   assert.ok(!st.textContent.includes('정정요청'), '파일 링크는 싣지 않음');
+  assert.ok(!st.querySelector('.shc-ft').textContent.includes('뺌'), '바닥줄에 "…는 뺌" 없음(2026-11-28 소유자 지정)');
   $('share-contacts').checked=true; $('share-contacts').dispatchEvent(new env.window.Event('change', {bubbles:true}));
+  assert.ok(!$('share-stage').querySelector('.shc-ft').textContent.includes('뺌'), '연락처를 넣어도 "파일 링크는 뺌" 없음');
   assert.ok($('share-stage').textContent.includes('02-000-0000'));
   assert.ok($('share-stage').textContent.includes('k@example.go.kr'));
   assert.ok(!$('share-stage').textContent.includes('정정요청'), '스위치를 켜도 파일 링크는 안 들어감');
@@ -114,8 +119,9 @@ test('[펼치기]/[접기]: 누르면 그 칸이 다 실리고 단추 글이 바
   await fresh();
   const it=item({contacts:Array.from({length:5},(_,i)=>({who:`사람${i} 주무관`, org:`부서${i}`, phone:'', email:''}))}); S.items.push(it); openForm(it);
   $('fm-share').click();
-  const st=$('share-stage'), count=()=>st.querySelectorAll('.shc-kv b').length;
+  const st=$('share-stage'), count=()=>st.querySelectorAll('.shc-kv .who').length;
   assert.equal(count(), 2);
+  assert.equal(st.querySelectorAll('.shc-kv b').length, 0, '관련인 이름은 굵게 하지 않는다(2026-11-28 소유자 지정)');
   assert.ok([...st.querySelectorAll('.shc-more span')].some(s=>s.textContent==='외 3명'));
   st.querySelector('.sh-fold[data-fold="people"]').click();
   assert.equal(count(), 5);

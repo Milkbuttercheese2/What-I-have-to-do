@@ -974,7 +974,8 @@
     background:var(--surface);margin:0 -22px 12px;padding:16px 16px 12px 22px;border-bottom:1px solid var(--line-soft);border-radius:16px 16px 0 0}
   .fm-head h3{margin:0;font-size:16px;color:var(--ink);letter-spacing:-.01em;white-space:nowrap}
   .fm-head .fm-x{margin-left:auto}
-  .fm-x{flex:none;width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:var(--ink-soft);font-size:20px;line-height:1;cursor:pointer}
+  /* 닫기(×) — 2026-11-28: 공유 아이콘과 한 창에 놓이므로 같은 본문 글자색(--ink). 모든 팝업의 × 가 이 하나를 쓴다 */
+  .fm-x{flex:none;width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:var(--ink);font-size:20px;line-height:1;cursor:pointer}
   .fm-x:hover{background:var(--chip-bg);color:var(--ink)}
   .fm-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
   .fm-label-row .fm-label{margin:0}
@@ -1269,8 +1270,9 @@
   .toast-ic{flex:none;width:20px;height:20px;border-radius:50%;background:var(--focus);position:relative}
   .toast-ic::after{content:"";position:absolute;left:7px;top:4px;width:4px;height:8px;border:solid var(--on-accent);border-width:0 2px 2px 0;transform:rotate(45deg)}
   #toast-msg{min-width:0;line-height:1.45}
-  .toast button{flex:none;border:0;border-radius:8px;background:var(--chip-bg);color:var(--ink-2);font-size:12.5px;font-weight:600;padding:6px 12px}
-  .toast button:hover{background:var(--slate-bg);color:var(--focus)}
+  /* [실행 취소] — 2026-11-28 단추 규칙(늘 흰 단추): 흰 면 + 1px 테두리, 테두리만큼 위아래 여백을 줄여 높이는 그대로 */
+  .toast button{flex:none;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink-2);font-size:12.5px;font-weight:600;padding:5px 12px}
+  .toast button:hover{background:var(--card);border-color:var(--focus);color:var(--focus)}
 
   /* 전화번호부 추가·수정 팝업 v3.7.1 — 양식과 같은 이름표 위 · 입력칸 아래(.fm-field) */
   #pbEditModal{z-index:72}
@@ -1596,19 +1598,30 @@
     border-top:1px solid var(--line-soft);margin:14px -22px 0;padding:14px 22px 0}
   .fm-inner .fm-files-wrap{padding-bottom:14px}
   .fm-inner .fm-actions{margin-top:0}
-  /* 단추 모양 통일(v3.8.4 소유자 지정 — 양식의 [＋ 추가] 모양을 기준으로): 보조 단추는 전부
-     **흰 면(--card) · 가는 테두리(--line) · 10px(아이콘 단추 8px)**. hover = 테두리·글자가 강조색.
-     주 단추(초록 [저장]·[＋ 입력])와 탭·세그먼트(알약)는 그대로. 새 보조 단추는 이 목록에 넣을 것. */
-  .btn-tool,.btn-cancel,.btn-form,.btn-snooze,.fsub-add,.fm-inner .fsub-add,.fm-mini,.ffile-browse,.ffile-doc,.preset,
+  /* 단추 모양 통일 — 단추 모양의 단일 출처(디자인 정책 §8).
+     v3.8.4 소유자 지정: 보조 단추는 양식의 [＋ 추가] 모양(흰 면 · 가는 테두리).
+     2026-11-28 소유자 지정: "버튼은 다 흰색, 녹색은 **할 일이 생겼을 때만**" — 주 동작([저장]·[＋ 입력]·[닫기])·[✓ 업무 완료]·
+     [↺ 다시 진행]도 평소엔 같은 흰 단추다. 평소 = **흰 면(--card) · 1px 테두리(--line) · --ink-2 글자 · 10px(아이콘 단추 8px)**,
+     마우스·키보드 초점 = 테두리·글자가 강조색(--focus).
+     '할 일이 생김' = `.ready`(청록 솔리드) — JS 가 dom-utils.setReady 로 켜고 끈다(켜는 때는 정책 §8 목록). 테두리 두께가 같아
+     녹색이 켜지고 꺼져도 단추 크기는 그대로다. 탭·세그먼트·스위치(알약, 켜짐 = 청록)는 이 규칙 밖. 새 단추는 이 목록에 넣을 것. */
+  .btn,.btn-tool,.btn-cancel,.btn-form,.btn-snooze,.fsub-add,.fm-inner .fsub-add,.fm-mini,.ffile-browse,.ffile-doc,.preset,
   .cal-nav button,.dcal-nav,.dcal-clear,.dv-pdf-bar .seg-btn,.dv-sheets .seg-btn{
     background:var(--card);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;font-family:inherit;font-weight:600;cursor:pointer;box-shadow:none}
-  .btn-tool:hover,.btn-cancel:hover,.btn-form:hover,.btn-snooze:hover,.fsub-add:hover,.fm-inner .fsub-add:hover,.fm-mini:hover,.ffile-browse:hover,.ffile-doc:hover,.preset:hover,
+  .btn:hover,.btn:focus-visible,.btn-tool:hover,.btn-cancel:hover,.btn-form:hover,.btn-snooze:hover,.fsub-add:hover,.fm-inner .fsub-add:hover,.fm-mini:hover,.ffile-browse:hover,.ffile-doc:hover,.preset:hover,
   .cal-nav button:hover,.dcal-nav:hover,.dcal-clear:hover,.dv-pdf-bar .seg-btn:hover,.dv-sheets .seg-btn:hover{
     background:var(--card);border-color:var(--focus);color:var(--focus)}
+  .btn.ready{background:var(--focus);border-color:var(--focus);color:var(--on-accent)}
+  .btn.ready:hover,.btn.ready:focus-visible{background:var(--focus-strong);border-color:var(--focus-strong);color:var(--on-accent)}
+  /* 누를 수 없음 = 흰 면 + 흐린 글자(녹색이 켜져 있어도 흰 꼴로) — '할 일이 생김'과 섞이지 않게 맨 뒤 */
+  .btn:disabled,.btn:disabled:hover,.btn.ready:disabled,.btn.ready:disabled:hover{background:var(--card);border-color:var(--line);color:var(--ink-2);opacity:.5;cursor:default}
+  /* 프리셋 단추(알약): 이름과 ×를 한 덩어리로 감싼 쪽이 흰 면·테두리를 갖는다. 테두리 1px 만큼 위아래 여백을 줄여 높이는 그대로 */
+  .preset-wrap,.preset-wrap:hover{background:var(--card);border:1px solid var(--line)}
+  .preset-wrap:hover{border-color:var(--focus)}
+  .preset-wrap .preset,.preset-wrap .preset:hover{background:transparent;border:0;padding-top:4px;padding-bottom:4px}
   .fsub-add,.fm-inner .fsub-add,.fm-mini{height:28px;padding:0 12px;font-size:12.5px;display:inline-flex;align-items:center}
   .dcal-nav,.dv-pdf-bar .seg-btn,.dt-unroot,.dt-caret{border-radius:8px}
   .dv-sheets .seg-btn.on{border-color:var(--focus);color:var(--focus);background:var(--slate-bg)}
-  .btn-tool:disabled,.btn-cancel:disabled{opacity:.5;cursor:default}
   /* ── v3.8.4 보드 위쪽 한 줄: 입력부 상자 폐지 — [＋ 입력]은 탭 줄, 프리셋은 요약 줄 오른쪽 ── */
   .head-right .btn-new{order:0;height:32px;padding:0 14px;font-size:13px;border-radius:10px;flex:none}
   .strip{align-items:center}
@@ -1882,9 +1895,10 @@
   .book-page .book-ta{position:relative;z-index:1}
 
   /* 업무 공유(소유자 지정) — 양식 아래 단추 줄의 왼쪽 끝, 아이콘 전용 미니 버튼(34×34 · 모서리 8px · 흰 면 · 가는 테두리, 정책 §8).
-     아이콘 색은 글자 색을 따라간다(어두운 테마도 그대로). hover = 테두리·아이콘이 강조색(단추 모양 통일 규칙과 같다) */
+     아이콘 색은 글자 색을 따라간다 — 2026-11-28 소유자 지정으로 회색이 아니라 본문 글자색(--ink, 어두운 테마는 그 토큰의 밝은 값).
+     hover = 테두리·아이콘이 강조색(단추 모양 통일 규칙과 같다). 늘 흰 단추('할 일이 생김'이 없다) */
   .fm-share{flex:none;width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;
-    background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--ink-soft);cursor:pointer;font-family:inherit}
+    background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--ink);cursor:pointer;font-family:inherit}
   .fm-share:hover,.fm-share:focus-visible{border-color:var(--focus);color:var(--focus);outline:none}
   .fm-share svg{width:16px;height:16px;display:block}
   @media(max-width:700px){ .fm-actions .fm-share + .fm-draft{flex:1 1 calc(100% - 42px)} }   /* 좁은 창: 공유와 임시저장 표시가 한 줄, 단추는 다음 줄 */
@@ -1892,6 +1906,16 @@
   #shareModal{z-index:75}
   .share-modal{max-width:calc(512px + 46px)}
   .share-stage{max-height:calc(100vh - 34px - 96px - 170px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;border-radius:10px;border:1px solid var(--line);margin-top:10px}
-  .share-opt{margin:12px 2px 0}
+  /* '연락처도 넣기'(2026-11-28 소유자 지정): 글자는 메모지 항목명과 같은 회색(--ink-soft), 상자 테두리도 같은 회색, 켜면 청록.
+     왼쪽 끝 = 위 메모지 판(.share-stage)·아래 첫 단추([글자로 복사])의 왼쪽 끝 — 옆 여백 0, 상자의 기본 바깥 여백도 0.
+     상자·글자 사이 7px·세로 가운데는 다른 체크 줄(.pbsw-opt)과 같다. 상자는 운영체제 모양이 아니라 직접 그린다(테두리 색을 토큰으로 주려고) */
+  .share-opt{margin:12px 0 0;color:var(--ink-soft)}
+  .share-opt input{appearance:none;-webkit-appearance:none;margin:0;flex:none;width:16px;height:16px;box-sizing:border-box;
+    border:1.5px solid var(--ink-soft);border-radius:4px;background:var(--card);display:inline-grid;place-content:center;cursor:pointer}
+  .share-opt input::after{content:"";width:4px;height:8px;border:solid var(--on-accent);border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg);opacity:0}
+  .share-opt input:checked{background:var(--focus);border-color:var(--focus)}
+  .share-opt input:checked::after{opacity:1}
+  .share-opt input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+  .share-opt:hover input:not(:checked){border-color:var(--focus)}
   .share-actions{flex-wrap:wrap}
   .share-sp{flex:1 1 0}

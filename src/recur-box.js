@@ -5,7 +5,7 @@
    예정일 도래분 생성(runRecurSpawn)을 담당한다.
    ========================================================================= */
 import {S, makeItem} from './state.js';
-import {$, esc, escAttr, showToast, appAlert, appConfirm} from './dom-utils.js';
+import {$, esc, escAttr, showToast, appAlert, appConfirm, setReady} from './dom-utils.js';
 import {fmtT, parseTimeStr} from './datetime.js';
 import {isValidRecur, recurLabel, spawnLabel, initialNext, spawnDueOccurrences, DOW_KO} from './recur.js';
 import {persist, render} from './render.js';
@@ -58,6 +58,11 @@ function sameSchedule(a,b){
   return Number(a.days)===Number(b.days);   // (구 데이터) every — 신규 입력에선 안 나옴
 }
 
+/* [등록]·[수정 저장]의 '할 일이 생김' — 공통 내용이 있고, 새로 쓰거나 불러온 뒤 바뀐 것(내용·주기·생성 시점)이 있을 때만 녹색 */
+let rcBase='';
+const rcSig = () => JSON.stringify([$('rc-memo').value.trim(), collectRecur()]);
+function syncRcSave(){ setReady($('rc-save'), !!$('rc-memo').value.trim() && rcSig()!==rcBase); }
+
 function resetInput(){
   editingParentId=null;
   $('rc-new-head').textContent='＋ 새 반복 업무';
@@ -71,6 +76,7 @@ function resetInput(){
   $('rc-save').textContent='등록';
   $('rc-cancel-edit').style.display='none';
   refreshTypeVis();
+  rcBase=rcSig(); syncRcSave();
 }
 function fillForEdit(p){
   editingParentId=p.id;
@@ -87,6 +93,7 @@ function fillForEdit(p){
   $('rc-save').textContent='수정 저장';
   $('rc-cancel-edit').style.display='';
   refreshTypeVis();
+  rcBase=rcSig(); syncRcSave();
 }
 
 function renderList(){
@@ -144,7 +151,10 @@ export function initRecurBox(){
   $('recurClose').addEventListener('click', closeRecurModal);
   $('recurModal').addEventListener('click',e=>{ if(e.target.id==='recurModal') closeRecurModal(); });
   $('rc-type').addEventListener('change', refreshTypeVis);
-  $('rc-dow').addEventListener('click',e=>{ const b=e.target.closest('.recur-dow-btn'); if(b) b.classList.toggle('on'); });
+  $('rc-dow').addEventListener('click',e=>{ const b=e.target.closest('.recur-dow-btn'); if(b){ b.classList.toggle('on'); syncRcSave(); } });
+  const rcBox=$('rc-memo').closest('.ps-new');                 // 입력칸·고르기 어디서 바꿔도(input·change 는 위로 올라온다)
+  rcBox.addEventListener('input', syncRcSave);
+  rcBox.addEventListener('change', syncRcSave);
   $('rc-time').addEventListener('blur',e=>{ const n=normTime(e.target.value.trim()); if(n) e.target.value=n; });   // 0930 → 09:30 즉시 반영
   $('rc-spawn-time').addEventListener('blur',e=>{ const n=normTime(e.target.value.trim()); if(n) e.target.value=n; });
   $('rc-save').addEventListener('click', saveParent);

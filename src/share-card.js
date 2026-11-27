@@ -192,7 +192,9 @@ export function shareModel(d, ctx){
   return {
     head:{left:'업무 공유', stamp:fmtStamp(ctx.now), done:doneStamp},
     blocks,
-    foot:{left:'뭐하려 했더라에서 공유', right:[folded?'접힌 내용 있음':'', ctx.withContacts?'파일 링크는 뺌':'연락처·이메일·파일 링크는 뺌'].filter(Boolean).join(' · ')},
+    /* 오른쪽은 '접힌 내용 있음'만(받는 사람이 빠진 것이 있다는 것을 알아야 한다). 예전의 "연락처·이메일·파일 링크는 뺌"·"파일 링크는 뺌"은
+       2026-11-28 소유자 지정으로 없앴다 — 받는 사람에게는 쓸모없는 말이다 */
+    foot:{left:'뭐하려 했더라에서 공유', right:folded?'접힌 내용 있음':''},
     folded,
   };
 }
@@ -242,7 +244,7 @@ export function shareHtml(model, opts){
       sec('', head('식별정보', b.more, controls)+`<div class="shc-kv">${b.rows.map(r=>`<span class="k">${E(r.kind)}</span><span class="v">${E(r.val)}</span>`).join('')}</div>`+moreChip(b.more));
     } else if(b.kind==='people'){
       sec('', head('관련소속 · 관련인', b.more, controls, b.total>SHARE_LIMITS.people?`${b.total}명`:'')
-        +`<div class="shc-kv">${b.rows.map(r=>`<span class="k">${E(r.org)}</span><span class="v"><b>${E(r.who)}</b>${r.extra?`<small> · ${E(r.extra)}</small>`:''}</span>`).join('')}</div>`+moreChip(b.more));
+        +`<div class="shc-kv">${b.rows.map(r=>`<span class="k">${E(r.org)}</span><span class="v"><span class="who">${E(r.who)}</span>${r.extra?`<small> · ${E(r.extra)}</small>`:''}</span>`).join('')}</div>`+moreChip(b.more));
     }
   }
   out.push(`</div><div class="shc-ft"><span>${E(model.foot.left)}</span><span>${E(model.foot.right)}</span></div></div></div>`);
@@ -253,7 +255,11 @@ export function shareHtml(model, opts){
    값은 styles.css :root(밝게)의 토큰을 그대로 옮긴 것 — tests/unit/share-card.test.js 가 둘이 같은지 본다. */
 export const SHARE_TOKENS={ink:'#131a24','ink-soft':'#687284','ink-2':'#3a4453',line:'#e0e5eb','line-soft':'#eceff3',paper:'#f2f4f7',card:'#ffffff',sunk:'#f7f8fa',focus:'#2a7c6e','chip-bg':'#eceff3','tag-imm-bg':'#fbe3dd','tag-imm-fg':'#c0392b'};
 /* 메모지 모양 — 디자인 정책의 글자 크기 11·12·13·14px, 카드 모서리 12px·1px 테두리, 동그라미 체크 18px, 칸 이름 11px/600.
-   단계 색 토막은 넣지 않는다(받는 사람에게 뜻이 없다). 폭은 고정: 카드 480px + 바깥 여백 16px(앱 바탕색). */
+   단계 색 토막은 넣지 않는다(받는 사람에게 뜻이 없다). 폭은 고정: 카드 480px + 바깥 여백 16px(앱 바탕색).
+   글자 색은 두 가지뿐(2026-11-28 소유자 지정): 본문(메모 제목·메모 본문·구역 본문·하위 업무 제목) = 검정(--sh-ink),
+   그 밖(항목명·구역 제목·식별정보 이름과 값·관련소속·관련인·연락처·접수시각·기한·하위 업무 시각·맨 위 기준 시각·바닥줄) = 회색 하나(--sh-ink-soft,
+   흰 바탕 대비 4.85:1 · 바닥줄 바탕 --sh-sunk 위 4.57:1 · 알약(--sh-chip-bg) 위 4.21:1). 색으로 강조하는 것은 임박한 기한의 붉은 표시 하나.
+   관련인 이름도 소속과 같은 회색·보통 굵기(소유자 지정 — 굵은 표시 없음). */
 export const SHARE_W=480+16*2;
 export function shareCss(fontFamily){
   const v=Object.entries(SHARE_TOKENS).map(([k,x])=>`--sh-${k}:${x}`).join(';');
@@ -274,7 +280,7 @@ text-align:left;line-height:normal;letter-spacing:0;font-size:13px;font-weight:4
 .shc-h{display:flex;align-items:center;gap:6px;min-height:18px;font-size:11px;font-weight:600;color:var(--sh-ink-soft);letter-spacing:.04em}
 .shc-cnt{font-size:11px;font-weight:500;letter-spacing:0;line-height:1.6;padding:0 7px;border-radius:999px;background:var(--sh-chip-bg);color:var(--sh-ink-soft);font-variant-numeric:tabular-nums}
 .shc-title{font-size:14px;font-weight:700;line-height:1.5;margin-top:4px;overflow-wrap:anywhere;white-space:pre-wrap}
-.shc-memo{font-size:13px;line-height:1.6;color:var(--sh-ink-2);margin-top:2px}
+.shc-memo{font-size:13px;line-height:1.6;color:var(--sh-ink);margin-top:2px}
 .shl{white-space:pre-wrap;overflow-wrap:anywhere}
 .shc-none{font-size:13px;line-height:1.6;color:var(--sh-ink-soft);margin-top:4px}
 .shc-part{border-top:1px solid var(--sh-line-soft);margin-top:9px;padding-top:8px}
@@ -287,13 +293,12 @@ text-align:left;line-height:normal;letter-spacing:0;font-size:13px;font-weight:4
 .shc-st{flex:1;min-width:0;font-size:13px;line-height:1.55;overflow-wrap:anywhere}
 .shc-sub.d .shc-st{color:var(--sh-ink-soft);text-decoration:line-through}
 .shc-sm{flex:none;max-width:52%;font-size:12px;line-height:1.7;color:var(--sh-ink-soft);font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
-.shc-val{font-size:13px;line-height:1.6;margin-top:4px;font-variant-numeric:tabular-nums}
+.shc-val{font-size:13px;line-height:1.6;margin-top:4px;color:var(--sh-ink-soft);font-variant-numeric:tabular-nums}
 .shc-val b{font-weight:700}
 .shc-val b.imm{color:var(--sh-tag-imm-fg);background:var(--sh-tag-imm-bg);border-radius:999px;padding:1px 7px;margin-left:-7px}
 .shc-kv{display:grid;grid-template-columns:minmax(0,110px) minmax(0,1fr);gap:2px 10px;font-size:13px;line-height:1.6;margin-top:4px;font-variant-numeric:tabular-nums}
 .shc-kv .k{color:var(--sh-ink-soft);overflow-wrap:anywhere}
-.shc-kv .v{overflow-wrap:anywhere}
-.shc-kv b{font-weight:600}
+.shc-kv .v{color:var(--sh-ink-soft);overflow-wrap:anywhere}
 .shc-kv small{font-size:12px;color:var(--sh-ink-soft)}
 .shc-ft{display:flex;justify-content:space-between;gap:12px;padding:7px 18px 8px;background:var(--sh-sunk);border-top:1px solid var(--sh-line-soft);font-size:11px;color:var(--sh-ink-soft)}
 .shc-ft span:last-child{text-align:right}`;

@@ -3,7 +3,7 @@
    ========================================================================= */
 import {S} from './state.js';
 import {STORE} from './store.js';
-import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm} from './dom-utils.js';
+import {$, esc, escAttr, enableDragReorder, appAlert, appConfirm, setReady} from './dom-utils.js';
 import {openForm} from './form.js';
 import {openModal, closeModal} from './modals.js';
 
@@ -19,7 +19,7 @@ export function renderPresets(){
 }
 
 /* 프리셋 관리 모달 — 설정 메뉴(settings-menu.js)에서 연다 */
-export function openPresetModal(){ renderPresetList(); clearPresetForm(); renderIdKindList(); openModal('presetModal',{save:()=>$('np-save').click()}); }
+export function openPresetModal(){ renderPresetList(); clearPresetForm(); renderIdKindList(); syncIdkAdd(); openModal('presetModal',{save:()=>$('np-save').click()}); }
 
 /* 식별번호 명칭 관리 */
 function renderIdKindList(){
@@ -39,6 +39,12 @@ function renderPresetList(){
     </div><button class="ps-edit" data-edit="${i}">수정</button><button class="ps-del" data-del="${i}">삭제</button></div>`).join('');
 }
 let editingPresetId=null;
+/* [프리셋 저장]의 '할 일이 생김' — 버튼 이름이 있고, 새로 만들거나 불러온 뒤 바뀐 것이 있을 때만 녹색.
+   기준(presetBase)은 비우거나 불러올 때의 입력칸 내용이다 */
+let presetBase='';
+const presetSig = () => JSON.stringify([$('np-label').value.trim(), $('np-sum').value.trim(), [...$('np-subs').querySelectorAll('input[type=text]')].map(i=>i.value.trim()).filter(Boolean)]);
+function syncPresetSave(){ setReady($('np-save'), !!$('np-label').value.trim() && presetSig()!==presetBase); }
+function syncIdkAdd(){ setReady($('idk-add'), !!$('idk-new').value.trim()); }
 function loadPresetIntoForm(idx){
   const p=S.presets[idx]; if(!p)return;
   editingPresetId=p.id;
@@ -47,17 +53,19 @@ function loadPresetIntoForm(idx){
   $('np-save').textContent='프리셋 수정 저장';
   $('np-new-head').textContent='✎ 프리셋 수정 중';
   $('np-cancel-edit').style.display='inline-block';
+  presetBase=presetSig(); syncPresetSave();
   $('np-label').focus();
 }
 function addPresetSubRow(val){
   const row=document.createElement('div'); row.className='fsub-row';
   row.innerHTML=`<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>
     <input type="text" placeholder="하위 업무" value="${escAttr(val||'')}"><button class="rm" title="삭제">×</button>`;
-  row.querySelector('.rm').addEventListener('click',()=>row.remove());
+  row.querySelector('.rm').addEventListener('click',()=>{ row.remove(); syncPresetSave(); });
   $('np-subs').appendChild(row);
 }
 function clearPresetForm(){ $('np-label').value=''; $('np-sum').value=''; $('np-subs').innerHTML=''; editingPresetId=null;
-  $('np-save').textContent='프리셋 저장'; if($('np-new-head'))$('np-new-head').textContent='＋ 새 프리셋 만들기'; if($('np-cancel-edit'))$('np-cancel-edit').style.display='none'; }
+  $('np-save').textContent='프리셋 저장'; if($('np-new-head'))$('np-new-head').textContent='＋ 새 프리셋 만들기'; if($('np-cancel-edit'))$('np-cancel-edit').style.display='none';
+  presetBase=presetSig(); syncPresetSave(); }
 
 export function initPresets(){
   $('presets').addEventListener('click',async e=>{
@@ -81,9 +89,12 @@ export function initPresets(){
     if(!v){ $('idk-new').focus(); return; }
     if(v==='기타'){ await appAlert("'기타'는 항상 자동 포함되므로 추가할 수 없습니다."); return; }
     if(S.idKinds.includes(v)){ await appAlert('이미 있는 명칭입니다.'); return; }
-    S.idKinds.push(v); saveIdKinds(); $('idk-new').value=''; renderIdKindList(); $('idk-new').focus();
+    S.idKinds.push(v); saveIdKinds(); $('idk-new').value=''; syncIdkAdd(); renderIdKindList(); $('idk-new').focus();
   });
   $('idk-new').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();$('idk-add').click();} });
+  $('idk-new').addEventListener('input',syncIdkAdd);
+  /* 프리셋 입력칸(이름·메모·하위 업무 줄) 어디에 써도 — input 은 위로 올라온다 */
+  $('np-label').closest('.ps-new').addEventListener('input',syncPresetSave);
   enableDragReorder($('idKindList'), '.idk-item', '.drag-handle', (container)=>{
     const order=[...container.querySelectorAll('.idk-item')].map(el=>el.dataset.idk);
     S.idKinds.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
