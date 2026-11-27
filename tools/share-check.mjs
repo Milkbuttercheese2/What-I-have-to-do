@@ -112,7 +112,7 @@ const btm = await page.evaluate(() => { const ta = document.getElementById('fm-m
   ta.scrollTop = 1e6; ta.dispatchEvent(new Event('scroll'));
   const tr = ta.getBoundingClientRect(), hr = hl.getBoundingClientRect(), bw = parseFloat(getComputedStyle(ta).borderBottomWidth);
   return {st: [ta.scrollTop, hl.scrollTop], ch: [ta.clientHeight, hl.clientHeight], over: hr.bottom - (tr.bottom - bw)}; });
-ok(btm.st[0] > 0 && btm.st[0] === btm.st[1] && btm.ch[0] === btm.ch[1] && btm.over <= 0.5,
+ok(btm.st[0] > 0 && Math.abs(btm.st[0] - btm.st[1]) < 0.5 && Math.abs(btm.ch[0] - btm.ch[1]) <= 1 && btm.over <= 0.5,   // 높이는 배율 반올림으로 1px 차이 허용(WebView2 실측)
   `양식 메모: 끝까지 내려도 백드롭이 글 칸과 같은 자리 (scrollTop ${btm.st.join('/')}, 높이 ${btm.ch.join('/')}, 칸 아래로 ${btm.over.toFixed(1)}px)`);
 await openForm({...BASE, id: 9000, memo: SECTION_MEMO}); await page.waitForTimeout(300);   // 2쪽 보기는 처음 메모로
 
